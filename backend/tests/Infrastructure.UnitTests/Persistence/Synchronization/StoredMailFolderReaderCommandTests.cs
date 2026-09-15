@@ -8,7 +8,6 @@ using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Synchronization;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -66,7 +65,6 @@ public sealed class StoredMailFolderReaderCommandTests
 
         // Assert
         Assert.Contains(nameof(MailFolderEntity.MailboxAccountId), NarrowingIn(command), StringComparison.Ordinal);
-        Assert.Contains(nameof(MailFolderEntity.UserId), NarrowingIn(command), StringComparison.Ordinal);
     }
 
     /// <summary>The counts are one grouped aggregate over the mail, which is the whole reason this is a query and not a walk.</summary>
@@ -130,7 +128,7 @@ public sealed class StoredMailFolderReaderCommandTests
     {
         var inbox = new MailFolderIdentity(Work, MailFolderAlias.Create("inbox"));
 
-        return MailboxScope.Create(SyntheticMailUser.Deployment, [Work], [inbox]);
+        return MailboxScope.Create([Work], [inbox]);
     }
 
     /// <summary>Returns the select list, which is where an aggregate sits and where a narrowing does not.</summary>

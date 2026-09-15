@@ -227,8 +227,8 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at, or `400` naming the row to correct when the stored declaration is not one of settings. |
 | `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
 | `DELETE /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.erase` | Erases the account, every assignment to it, and every message this deployment holds for it. **This cannot be undone.** |
-| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns an account nobody else is assigned to the user named by `userId`. An account somebody else holds is refused, because an account is served to one user at a time. |
-| `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases the mail stored for them under the account. **Ending the last one erases the account and every message this deployment holds for it.** |
+| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns the account to the user named by `userId`, beside whoever else is already assigned it. Assigning it to somebody who already holds it writes nothing. |
+| `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases what that user authored under the account, their drafts and their standing instructions; the mail itself stays whole while anybody else is assigned. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. A row whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
 | `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
@@ -1277,7 +1277,7 @@ switches are the record's `EndpointAccess:McpEndpoint` and `EndpointAccess:Clien
 changes them too, and `mfctl user show` reads them back once either has been written:
 
 ```json
-{ "Language": "English", "EndpointAccess": { "McpEndpoint": "false" } }
+{ "EndpointAccess": { "McpEndpoint": "false" } }
 ```
 
 Whichever of the two writes them, the commit that stores the record copies both onto the user's row in the same
@@ -1452,8 +1452,8 @@ over exactly that set.
 | `mfctl account show --account <id>` | Reads one account's declaration, secrets redacted |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file, assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id>` | Opens that declaration in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
-| `mfctl account assign --account <id> --user <id>` | Assigns an account nobody else is assigned to that user, and is refused for one somebody else holds |
-| `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing the account and its mail when it was the last one |
+| `mfctl account assign --account <id> --user <id>` | Assigns an account to that user, beside whoever else is already assigned it |
+| `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing what they authored there, and erasing the account and its mail when it was the last one |
 | `mfctl account delete --account <id>` | Erases the account and every message this deployment holds for it |
 
 `--user` on `add` is optional on a deployment holding one person, exactly as on the user commands. `unassign` and
@@ -1470,6 +1470,7 @@ account by from then on.
   "EmailAddress": "alex@example.test",
   "DisplayName": "Work mail",
   "Host": "imap.example.test",
+  "Language": "English",
   "UserName": "alex@example.test",
   "Secrets": { "Password": { "Name": "alex-work-password", "SecretReference": "file:/etc/mailfathom/secrets/alex-work-password" } }
 }
@@ -1484,14 +1485,13 @@ naming the address:
 Another mail account already holds 'alex@example.test', and one address is held by one account in this deployment, so nothing was written.
 ```
 
-**An account is served to one user at a time.** Assigning an account somebody else is already assigned is refused, so
-`mfctl account assign` places an account nobody holds. The guarantee is a unique index over the assignment's account
-rather than a read before the write, so two writers assigning one unheld account to two users at once cannot both
-succeed, and the one that loses is refused the same way:
-
-```
-This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written.
-```
+**A mailbox is served to every user it is assigned to.** `mfctl account assign` adds an assignment beside the ones
+already there, so one mailbox read by several people is one account with one copy of its mail rather than a mailbox
+each. The assignment is the row, and assigning an account to somebody who already holds it writes nothing rather than
+failing. [ADR
+0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+is the decision, and what it costs a user is stated under the per-user ceilings there: a shared account counts in full
+against every assigned user's ceiling, and work on it proceeds only while every one of them is under theirs.
 
 **A person adding a mailbox is never told who holds its address.** Adding a mailbox from [the
 client](client-endpoint.md#the-record-routes) creates an account assigned to that person and nobody else, and an address

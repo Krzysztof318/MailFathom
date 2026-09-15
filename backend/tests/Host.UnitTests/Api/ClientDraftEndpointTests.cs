@@ -403,7 +403,7 @@ public sealed class ClientDraftEndpointTests
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite);
 
         return new MailDraftDirectory(
-            OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(Work)),
+            AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(Work)),
             drafts,
             contents ?? new InMemoryMailDraftContentStore(),
             new HeaderReadingOutgoingMailText(),
@@ -446,7 +446,8 @@ public sealed class ClientDraftEndpointTests
     private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(user, Work),
+            Work,
+            user,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [],
             "a draft",

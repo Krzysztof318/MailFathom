@@ -429,7 +429,7 @@ public sealed class ClientMailTimelineEndpointTests
         int attachmentCount = 0) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+            Account = MailAccountId.Create("work"),
             FolderAlias = MailFolderAlias.Create("INBOX"),
             Subject = subject,
             SentAt = FirstJuly,
@@ -504,7 +504,7 @@ public sealed class ClientMailTimelineEndpointTests
     private MailTimelineBrowser Browser()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())

@@ -44,7 +44,6 @@ public sealed class PromptInjectionResistanceTests
     private const string Query = "what did the insurer agree to pay";
 
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 

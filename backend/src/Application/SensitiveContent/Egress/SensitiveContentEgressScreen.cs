@@ -82,8 +82,8 @@ public sealed class SensitiveContentEgressScreen
     /// into the values to screen, for one — never as permission to let the act happen unscreened, which is what calling
     /// the screen already does when it is inactive.
     /// </remarks>
-    public bool IsActiveFor(MailAccountIdentity account) =>
-        this.postures.ForAccount(account.Id).ScreensAnything;
+    public bool IsActiveFor(MailAccountId account) =>
+        this.postures.ForAccount(account).ScreensAnything;
 
     /// <summary>Screens every text of one act, and reports the first thing that stops it.</summary>
     /// <param name="egressPoint">Where the texts were about to go.</param>
@@ -108,13 +108,13 @@ public sealed class SensitiveContentEgressScreen
     /// </remarks>
     public Task<SensitiveContentEgressRefusal?> ScreenAsync(
         SensitiveContentEgressPoint egressPoint,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
-        var posture = this.postures.ForAccount(account.Id);
+        var posture = this.postures.ForAccount(account);
 
         return texts.Count > 0 && posture is { ScreensAnything: true, Redactor: { } active }
             ? this.ScreenEachAsync(active, posture.Screening, egressPoint, account, texts, cancellationToken)
@@ -125,11 +125,15 @@ public sealed class SensitiveContentEgressScreen
         SensitiveContentRedactor active,
         SensitiveContentScreeningPolicy policy,
         SensitiveContentEgressPoint egressPoint,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
-        using var operation = this.telemetry.BeginGuardedOperation(egressPoint, account.User, cancellationToken);
+        using var operation = this.telemetry.BeginGuardedOperation(
+            egressPoint,
+            user: null,
+            account,
+            cancellationToken);
 
         try
         {

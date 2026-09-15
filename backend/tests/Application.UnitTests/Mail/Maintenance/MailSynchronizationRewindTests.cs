@@ -26,8 +26,8 @@ namespace MailFathom.Application.UnitTests.Mail.Maintenance;
 /// </remarks>
 public sealed class MailSynchronizationRewindTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -226,12 +226,12 @@ public sealed class MailSynchronizationRewindTests
     {
         private readonly HashSet<MailFolderAlias> present = [.. foldersHoldingProgress];
 
-        public List<(MailAccountIdentity Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
+        public List<(MailAccountId Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
 
         public List<IPersistenceSession> Sessions { get; } = [];
 
         public Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderResolutionId folderResolutionId,
             CancellationToken cancellationToken) =>
             Task.FromResult(
@@ -241,7 +241,7 @@ public sealed class MailSynchronizationRewindTests
 
         public Task SaveCheckpointAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderResolutionId folderResolutionId,
             SynchronizationCheckpoint? expectedCheckpoint,
             SynchronizationCheckpoint checkpoint,
@@ -260,7 +260,7 @@ public sealed class MailSynchronizationRewindTests
 
         public Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderAlias? folderAlias,
             CancellationToken cancellationToken)
         {

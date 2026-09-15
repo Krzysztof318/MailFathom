@@ -6,7 +6,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Persistence.Emails;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -77,7 +76,6 @@ public sealed class StoredEmailSummaryRowTests
 
     private static StoredEmailSummaryRow RowWith(MachineAuthorshipBand band, double likelihood) => new(
         Guid.CreateVersion7(),
-        SyntheticMailUser.Deployment.Value,
         "primary",
         "INBOX",
         ThreadId: null,

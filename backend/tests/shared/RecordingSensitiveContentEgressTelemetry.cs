@@ -6,6 +6,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -58,10 +59,11 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId user,
+        MailUserId? user,
+        MailAccountId? account,
         CancellationToken cancellationToken)
     {
-        var operation = new GuardedOperation(egressPoint, user, cancellationToken);
+        var operation = new GuardedOperation(egressPoint, user, account, cancellationToken);
         this.operations.Add(operation);
 
         return operation;
@@ -78,18 +80,23 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 
     /// <summary>One guarded operation and what was reported into it before its scope was closed.</summary>
     /// <param name="egressPoint">Where the texts this operation guarded were going.</param>
-    /// <param name="user">Whose mail the operation was publishing.</param>
+    /// <param name="user">The user whose whole mail the operation was publishing, where it was one.</param>
+    /// <param name="account">The mailbox the operation was publishing, where it was one.</param>
     /// <param name="cancellationToken">The token the consumer opened the operation with, which a test reads to tell a shutdown apart.</param>
     internal sealed class GuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId user,
+        MailUserId? user,
+        MailAccountId? account,
         CancellationToken cancellationToken) : ISensitiveContentGuardScope
     {
         /// <summary>Gets where the texts this operation guarded were going.</summary>
         public SensitiveContentEgressPoint EgressPoint => egressPoint;
 
-        /// <summary>Gets whose mail the operation was publishing.</summary>
-        public MailUserId User => user;
+        /// <summary>Gets the user whose whole mail the operation was publishing, where it was one.</summary>
+        public MailUserId? User => user;
+
+        /// <summary>Gets the mailbox the operation was publishing, where it was one.</summary>
+        public MailAccountId? Account => account;
 
         /// <summary>Gets the token the consumer opened the operation with.</summary>
         public CancellationToken CancellationToken => cancellationToken;

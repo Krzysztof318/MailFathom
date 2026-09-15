@@ -12,15 +12,13 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 [RequiresIntegrationCoverage]
 internal sealed class MailboxAccountEntity
 {
-    public required string Id { get; set; }
-
-    /// <summary>The user this mailbox belongs to, which leads the key and the axis every read of its mail is narrowed by.</summary>
+    /// <summary>Gets or sets the account's generated identifier, which is the whole of what identifies the mailbox.</summary>
     /// <remarks>
-    /// A relational column rather than a value inside the user's document, so ownership, lookup, uniqueness, and
-    /// cascade erasure are decided by the database rather than by a predicate over JSON. It is half of what identifies
-    /// the account: <see cref="Id" /> alone names one mailbox within this user and a different one within another.
+    /// Unique across the deployment, so this row is the mailbox rather than one reader's copy of it: the mail
+    /// beneath it is one copy whichever users are assigned the account, and whose mail those rows are follows from
+    /// the assignments rather than from a column here.
     /// </remarks>
-    public required Guid UserId { get; set; }
+    public required string Id { get; set; }
 
     /// <summary>Gets or sets which copy of the mailbox is the truth, which is <see cref="MailAccountCustodyPhase.Mirrored" /> for every account nothing has switched.</summary>
     public MailAccountCustodyPhase CustodyPhase { get; set; }

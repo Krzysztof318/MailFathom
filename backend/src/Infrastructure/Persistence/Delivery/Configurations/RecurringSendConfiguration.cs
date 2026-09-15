@@ -50,10 +50,14 @@ internal sealed class RecurringSendConfiguration : IEntityTypeConfiguration<Recu
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(declaration => declaration.ConcurrencyVersion).IsRowVersion();
 
+        // The account leads the identity because the declaration belongs to the mailbox, and the author stays behind
+        // it because a recurring send keeps whoever declared it: two people declaring from one shared mailbox under
+        // the same requester identity are two declarations rather than one. Every lookup against it is an equality on
+        // all four columns, so the order costs nothing and keeps the account the way in, as it is everywhere else.
         entity.HasIndex(declaration => new
         {
-            declaration.UserId,
             declaration.MailboxAccountId,
+            declaration.UserId,
             declaration.RequesterOrigin,
             declaration.RequesterIdentity,
         })

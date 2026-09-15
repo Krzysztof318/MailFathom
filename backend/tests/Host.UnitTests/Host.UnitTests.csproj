@@ -17,10 +17,13 @@
     <!-- Every administrative route builds the use case behind it, and every one of those asks who reached it. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
     <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
+    <Compile Include="..\shared\SyntheticMailAccount.cs" Link="SyntheticMailAccount.cs" />
+    <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
     <!-- An embedding run resolves whose mail the message is before it reads a ceiling, so a worker composed here
          needs the same answer the synchronizer's tests arrange. -->
     <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
-    <Compile Include="..\shared\InMemoryUserStoredContentLedger.cs" Link="InMemoryUserStoredContentLedger.cs" />
+    <Compile Include="..\shared\InMemoryAccountStoredContentLedger.cs" Link="InMemoryAccountStoredContentLedger.cs" />
     <Compile Include="..\shared\InMemoryStoredContentClaimStore.cs" Link="InMemoryStoredContentClaimStore.cs" />
     <Compile Include="..\shared\InMemoryProviderPaceMarker.cs" Link="InMemoryProviderPaceMarker.cs" />
     <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
@@ -35,7 +38,7 @@
     <Compile Include="..\shared\SyntheticReplica.cs" Link="SyntheticReplica.cs" />
     <!-- The draft routes take a file in and read a draft back, so the two client-facing acts a request decides
          anything about are exercised over the same in-memory account the application suite writes drafts into. -->
-    <Compile Include="..\shared\OwnedMailAccountCatalogs.cs" Link="OwnedMailAccountCatalogs.cs" />
+    <Compile Include="..\shared\AssignedMailAccountCatalogs.cs" Link="AssignedMailAccountCatalogs.cs" />
     <Compile Include="..\shared\InMemoryMailDraftStore.cs" Link="InMemoryMailDraftStore.cs" />
     <Compile Include="..\shared\InMemoryMailDraftContentStore.cs" Link="InMemoryMailDraftContentStore.cs" />
     <Compile Include="..\shared\InMemoryOutgoingEmailStore.cs" Link="InMemoryOutgoingEmailStore.cs" />

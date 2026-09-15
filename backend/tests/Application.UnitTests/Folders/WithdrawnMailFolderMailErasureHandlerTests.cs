@@ -9,7 +9,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -21,8 +20,7 @@ public sealed class WithdrawnMailFolderMailErasureHandlerTests
 {
     private const int MaxEmailsPerPass = 500;
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly EraseWithdrawnMailFolderMailJobPayload FirstPass =
         EraseWithdrawnMailFolderMailJobPayload.For(Account, MailFolderAlias.Create("projects"));
@@ -103,7 +101,7 @@ public sealed class WithdrawnMailFolderMailErasureHandlerTests
         var store = Substitute.For<IStoredMailFolderMirrorStore>();
         store.EraseFolderMirrorAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderAlias>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())

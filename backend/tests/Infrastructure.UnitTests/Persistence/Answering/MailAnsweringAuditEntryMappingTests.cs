@@ -6,7 +6,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Answering;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Answering;
@@ -96,7 +95,7 @@ public sealed class MailAnsweringAuditEntryMappingTests
         {
             Id = MailAnsweringAuditEntryId.Create(Guid.CreateVersion7(StartedAt)),
             RunId = MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+            AccountId = MailAccountId.Create("work"),
             Emails =
             [
                 new MailAnsweringAuditedEmail(StoredEmailId.Create(EmailIdentityAt(1)), 0, WasCited: false),

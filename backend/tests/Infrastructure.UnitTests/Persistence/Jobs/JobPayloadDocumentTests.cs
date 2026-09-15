@@ -10,18 +10,16 @@ using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Jobs;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Jobs;
 
 public sealed class JobPayloadDocumentTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("account-a");
 
     private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
-        SyntheticMailUser.Deployment,
         EmailOccurrenceId.Create(
             MailAccountId.Create("account-a"),
             new MailFolderResolutionId(
@@ -78,7 +76,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
+            """{"accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
             document);
     }
 
@@ -92,7 +90,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","emailRecordId":"0199a0c0-0000-7000-8000-000000000001"}""",
+            """{"accountId":"account-a","emailRecordId":"0199a0c0-0000-7000-8000-000000000001"}""",
             document);
         Assert.Equal(StoredEmailPayload, restored);
     }
@@ -109,7 +107,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a"}""",
+            """{"accountId":"account-a"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.RunScheduledMailRules, document));
     }
@@ -131,7 +129,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","outgoingRecordId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            """{"accountId":"account-a","outgoingRecordId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.DispatchHeldSend, document));
     }
@@ -153,27 +151,26 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            """{"accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.SendRecurringOccurrence, document));
     }
 
     /// <summary>
-    /// A document that names an account and no user is refused rather than resolved to whichever user the deployment
-    /// happens to hold, which is what keeps a queued job from performing one user's work against another's account.
+    /// A document that names no account at all is refused rather than resolved to whichever mailbox the deployment
+    /// happens to hold, which is what keeps a queued job from performing one mailbox's work against another's.
     /// </summary>
     /// <remarks>
-    /// The refusal is why the migration that put the user on the queue row writes it into the document beside it: a
-    /// claim reads a batch of rows and maps them together, so a document the previous release wrote would otherwise
-    /// take every job claimed beside it with it and the queue would never drain.
+    /// The account is the whole of a payload's reference to the mail graph — no user stands beside it, because mail
+    /// belongs to the mailbox and who reads it is the assignment relation the handler resolves when it runs.
     /// </remarks>
     [Fact]
-    public void Deserialize_AnAccountDocumentCarryingNoUser_IsRefusedRatherThanResolved()
+    public void Deserialize_AnAccountDocumentNamingNoAccount_IsRefusedRatherThanResolved()
     {
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() => JobPayloadDocument.Deserialize(
             JobType.RunScheduledMailRules,
-            """{"accountId":"account-a"}"""));
+            """{}"""));
     }
 
     /// <summary>A segment of a sweep is a place in a listing and nothing about a message, and it survives the round trip.</summary>

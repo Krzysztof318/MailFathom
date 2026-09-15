@@ -116,12 +116,11 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
             jobs = jobs.Where(job => job.JobType == jobTypeName);
         }
 
-        if (query.Account is { } account)
+        if (query.AccountId is { } account)
         {
-            var userValue = account.User.Value;
-            var accountValue = account.Id.Value;
+            var accountValue = account.Value;
 
-            jobs = jobs.Where(job => job.UserId == userValue && job.MailboxAccountId == accountValue);
+            jobs = jobs.Where(job => job.MailboxAccountId == accountValue);
         }
 
         // The keyset boundary is the pair the order is taken on, so a job that stopped in the same instant as the last

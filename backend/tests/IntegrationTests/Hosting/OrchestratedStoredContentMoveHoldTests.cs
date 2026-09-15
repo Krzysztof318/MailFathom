@@ -115,7 +115,6 @@ public sealed class OrchestratedStoredContentMoveHoldTests(MailFathomOrchestrati
             {
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
                     session,
-                    SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, FolderAlias, rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

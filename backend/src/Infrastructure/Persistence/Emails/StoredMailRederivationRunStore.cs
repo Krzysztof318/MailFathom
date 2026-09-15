@@ -5,7 +5,6 @@
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -30,15 +29,13 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var user = scope.Account.User.Value;
-        var account = scope.Account.Id.Value;
+        var account = scope.Account.Value;
         var folder = KeyedFolderOf(scope);
 
         var recorded = await dbContext.MailRederivationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.UserId == user
-                    && run.MailboxAccountId == account
+                run => run.MailboxAccountId == account
                     && run.FolderAlias == folder,
                 cancellationToken);
 
@@ -55,13 +52,12 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
         ArgumentNullException.ThrowIfNull(run);
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var user = run.Scope.Account.User.Value;
-        var account = run.Scope.Account.Id.Value;
+        var account = run.Scope.Account.Value;
         var folder = KeyedFolderOf(run.Scope);
 
         // FindAsync resolves a row this session already staged from the change tracker, so a session that writes the
         // run twice updates one row rather than inserting a second under the same key.
-        var recorded = await sessionContext.MailRederivationRuns.FindAsync([user, account, folder], cancellationToken);
+        var recorded = await sessionContext.MailRederivationRuns.FindAsync([account, folder], cancellationToken);
 
         if (recorded is null)
         {
@@ -69,8 +65,6 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
             {
                 MailboxAccountId = account,
 
-                // Written from the scope the request resolved, which named the user beside the identifier.
-                UserId = user,
                 FolderAlias = folder,
             };
 
@@ -88,9 +82,7 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
     {
         RunId = StoredMailRederivationRunId.Create(recorded.RunId),
         Scope = new StoredMailScope(
-            MailAccountIdentity.Create(
-                MailUserId.Create(recorded.UserId),
-                MailAccountId.Create(recorded.MailboxAccountId)),
+            MailAccountId.Create(recorded.MailboxAccountId),
             recorded.FolderAlias is { Length: > 0 } alias ? MailFolderAlias.Create(alias) : null),
         RequestedAt = recorded.RequestedAt,
         SegmentCount = recorded.SegmentCount,

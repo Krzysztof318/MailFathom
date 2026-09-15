@@ -5,7 +5,6 @@
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -73,16 +72,14 @@ public sealed class StoredEmailTombstoneTests
 
     private static StoredEmailEntity CreateEmail()
     {
-        var account = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "personal" };
+        var account = new MailboxAccountEntity { Id = "personal" };
 
         return new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = account.Id,
             MailFolder = new MailFolderEntity
             {
-                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = account.Id,
                 MailboxAccount = account,
                 Alias = "inbox",

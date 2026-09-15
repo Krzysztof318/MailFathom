@@ -6,7 +6,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Mutations;
@@ -126,7 +125,7 @@ public sealed class MailboxMutationRecordTests
         // Arrange
         var record = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.Copy(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, Archive),
+            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
         };
 
         // Act
@@ -143,7 +142,7 @@ public sealed class MailboxMutationRecordTests
         // Arrange
         var record = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.Copy(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, Archive),
+            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
         };
 
         // Act
@@ -161,14 +160,14 @@ public sealed class MailboxMutationRecordTests
         var delete = CompletedRelocation() with
         {
             Request = MailboxMutationRequest.Delete(
-                LocalEmail, SyntheticMailUser.Deployment,
+                LocalEmail,
                 SourceOccurrence(),
                 Requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
         };
         var setSeen = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, isSeen: true),
+            Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen: true),
         };
 
         // Act
@@ -327,7 +326,7 @@ public sealed class MailboxMutationRecordTests
         // Arrange
         var record = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, isSeen: true),
+            Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen: true),
         };
 
         // Act
@@ -376,7 +375,7 @@ public sealed class MailboxMutationRecordTests
         var delete = CompletedRelocation() with
         {
             Request = MailboxMutationRequest.Delete(
-                LocalEmail, SyntheticMailUser.Deployment,
+                LocalEmail,
                 SourceOccurrence(),
                 Requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -384,7 +383,7 @@ public sealed class MailboxMutationRecordTests
         };
         var setSeen = delete with
         {
-            Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, isSeen: true),
+            Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen: true),
         };
 
         // Act
@@ -475,7 +474,7 @@ public sealed class MailboxMutationRecordTests
         };
         var copy = UnacknowledgedNativeRelocation() with
         {
-            Request = MailboxMutationRequest.Copy(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, Archive),
+            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
             SourceRemovalObservedAt = observedAt,
         };
 
@@ -509,7 +508,7 @@ public sealed class MailboxMutationRecordTests
     private static MailboxMutationRecord CompletedRelocation() => new()
     {
         Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RecordedAt)),
-        Request = MailboxMutationRequest.Relocate(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, Archive),
+        Request = MailboxMutationRequest.Relocate(LocalEmail, SourceOccurrence(), Requester, Archive),
         Stage = MailboxMutationStage.Completed,
         IsAudited = false,
         RequiresSourceRemoval = true,
@@ -767,7 +766,7 @@ public sealed class MailboxMutationRecordTests
         var record = CompletedRelocation() with
         {
             Request = MailboxMutationRequest.SetKeywords(
-                LocalEmail, SyntheticMailUser.Deployment,
+                LocalEmail,
                 SourceOccurrence(),
                 Requester,
                 AuthoredMailKeywords.None),
@@ -911,14 +910,14 @@ public sealed class MailboxMutationRecordTests
 
     private static MailboxMutationRecord CompletedSeenStateChange(bool isSeen) => CompletedRelocation() with
     {
-        Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, isSeen),
+        Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen),
         RequiresSourceRemoval = false,
         Placement = RemoteEmailPlacement.NotReported(),
     };
 
     private static MailboxMutationRecord CompletedFlaggedStateChange(bool isFlagged) => CompletedRelocation() with
     {
-        Request = MailboxMutationRequest.SetFlagged(LocalEmail, SyntheticMailUser.Deployment, SourceOccurrence(), Requester, isFlagged),
+        Request = MailboxMutationRequest.SetFlagged(LocalEmail, SourceOccurrence(), Requester, isFlagged),
         RequiresSourceRemoval = false,
         Placement = RemoteEmailPlacement.NotReported(),
     };
@@ -929,10 +928,10 @@ public sealed class MailboxMutationRecordTests
         var occurrence = SourceOccurrence();
 
         var request = mutation == MailboxMutation.AddKeywords
-            ? MailboxMutationRequest.AddKeywords(LocalEmail, SyntheticMailUser.Deployment, occurrence, Requester, authored)
+            ? MailboxMutationRequest.AddKeywords(LocalEmail, occurrence, Requester, authored)
             : mutation == MailboxMutation.RemoveKeywords
-                ? MailboxMutationRequest.RemoveKeywords(LocalEmail, SyntheticMailUser.Deployment, occurrence, Requester, authored)
-                : MailboxMutationRequest.SetKeywords(LocalEmail, SyntheticMailUser.Deployment, occurrence, Requester, authored);
+                ? MailboxMutationRequest.RemoveKeywords(LocalEmail, occurrence, Requester, authored)
+                : MailboxMutationRequest.SetKeywords(LocalEmail, occurrence, Requester, authored);
 
         return CompletedRelocation() with
         {

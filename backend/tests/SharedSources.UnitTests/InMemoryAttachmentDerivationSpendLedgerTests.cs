@@ -42,6 +42,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
+        ledger.SeedDeployment(Period, AttachmentDerivationStep.Extraction, 4_608);
         ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
         ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another, 512);
 
@@ -62,8 +63,8 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
-        ledger.Seed(Period, AttachmentDerivationStep.Description, SyntheticMailUser.Deployment, 3);
+        ledger.SeedDeployment(Period, AttachmentDerivationStep.Extraction, 4_096);
+        ledger.SeedDeployment(Period, AttachmentDerivationStep.Description, 3);
 
         // Act
         var described = await ledger.ReadDeploymentConsumedAsync(
@@ -73,6 +74,41 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
 
         // Assert
         Assert.Equal(3, described);
+    }
+
+    /// <summary>
+    /// What a shared mailbox read is what one call opened, however many people are assigned it. The charge counts in
+    /// full against each of them, so a deployment total taken as their sum would refuse a mailbox three people share
+    /// after a third of the octets the operator declared.
+    /// </summary>
+    [Fact]
+    public async Task RecordSpendAsync_AChargeAgainstTwoUsers_MovesTheDeploymentTotalOnceAndEachUserInFull()
+    {
+        // Arrange
+        var ledger = new InMemoryAttachmentDerivationSpendLedger();
+
+        // Act
+        await ledger.RecordSpendAsync(
+            Session(),
+            Period,
+            AttachmentDerivationStep.Extraction,
+            [SyntheticMailUser.Deployment, SyntheticMailUser.Another],
+            4_096,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deployment = await ledger.ReadDeploymentConsumedAsync(
+            Period,
+            AttachmentDerivationStep.Extraction,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(4_096, deployment);
+        Assert.Equal(
+            4_096,
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+        Assert.Equal(
+            4_096,
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another)]);
     }
 
     [Fact]
@@ -103,14 +139,14 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailUser.Deployment,
+            [SyntheticMailUser.Deployment],
             1_000,
             TestContext.Current.CancellationToken);
         await ledger.RecordSpendAsync(
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailUser.Deployment,
+            [SyntheticMailUser.Deployment],
             24,
             TestContext.Current.CancellationToken);
 
@@ -132,7 +168,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Description,
-            SyntheticMailUser.Deployment,
+            [SyntheticMailUser.Deployment],
             0,
             TestContext.Current.CancellationToken);
 
@@ -151,7 +187,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailUser.Deployment,
+            [SyntheticMailUser.Deployment],
             -1,
             TestContext.Current.CancellationToken));
     }

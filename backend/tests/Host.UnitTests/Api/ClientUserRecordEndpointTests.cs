@@ -25,15 +25,15 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientUserRecordEndpointTests
 {
-    /// <summary>A record of a user's language and nothing else, which is what a provisioning leaves behind.</summary>
-    private const string LanguageOnlyRecord = """{"Language":"English"}""";
+    /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
+    private const string EmptyRecord = "{}";
 
     [Fact]
     public async Task ReadAsync_AUserSignedIn_HandsThemTheirOwnRecordAndTheVersionAChangeIsAcceptedAgainst()
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 2);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 2);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReadAsync(
@@ -56,10 +56,10 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
         deployment.Holding(
             SyntheticMailUser.Another,
-            LanguageOnlyRecord,
+            EmptyRecord,
             version: 9,
             Mailbox(SyntheticMailUser.Another, "not-theirs"));
 
@@ -116,7 +116,7 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -148,7 +148,7 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 4);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 4);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
@@ -175,7 +175,7 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 8);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 8);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
@@ -218,7 +218,7 @@ public sealed class ClientUserRecordEndpointTests
         // Act
         var result = await ClientUserRecordEndpoint.SaveAsync(
             deployment.Records,
-            new UserRecordSaveRequest(-1, LanguageOnlyRecord),
+            new UserRecordSaveRequest(-1, EmptyRecord),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -236,14 +236,14 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 6);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 6);
 
         // Act
         var result = await ClientUserRecordEndpoint.SaveAsync(
             deployment.Records,
             new UserRecordSaveRequest(
                 6,
-                """{ "Language": "English", "MailAccounts": [ { "DisplayName": "archive", "Host": "imap.example.test" } ] }"""),
+                """{ "MailAccounts": [ { "DisplayName": "archive", "Language": "English", "Host": "imap.example.test" } ] }"""),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -282,7 +282,7 @@ public sealed class ClientUserRecordEndpointTests
         var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
         var archive = Mailbox(SyntheticMailUser.Deployment, "archive");
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1, primary, archive);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary, archive);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveMailAccountAsync(
@@ -320,7 +320,7 @@ public sealed class ClientUserRecordEndpointTests
         // Arrange
         var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1, primary);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddFolderAsync(
@@ -346,7 +346,7 @@ public sealed class ClientUserRecordEndpointTests
         // Arrange
         var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1, primary);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddFolderAsync(
@@ -386,7 +386,7 @@ public sealed class ClientUserRecordEndpointTests
         // Arrange
         var primary = Mailbox(SyntheticMailUser.Deployment, "primary", folderAlias: "INBOX/OLD");
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1, primary);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
@@ -488,7 +488,7 @@ public sealed class ClientUserRecordEndpointTests
         // Arrange
         var primary = Mailbox(SyntheticMailUser.Deployment, "primary", folderAlias: "INBOX");
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1, primary);
+        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
@@ -510,6 +510,7 @@ public sealed class ClientUserRecordEndpointTests
           {
             "EmailAddress": "{{name}}@example.test",
             "DisplayName": "{{name}}",
+            "Language": "English",
             "Host": "imap.example.test",
             "UserName": "{{name}}@example.test",
             "Secrets": { "Password": { "Name": "{{name}}-password", "SecretReference": "file:/run/secrets/user-{{user.Value:D}}-{{name}}" } }
@@ -532,6 +533,7 @@ public sealed class ClientUserRecordEndpointTests
             name,
             $$"""
               {
+                "Language": "English",
                 "Host": "imap.example.test",
                 "UserName": "{{name}}@example.test",
                 "Secrets": { "Password": { "Name": "{{name}}-password", "SecretReference": "file:/run/secrets/user-{{user.Value:D}}-{{name}}" } }{{folders}}

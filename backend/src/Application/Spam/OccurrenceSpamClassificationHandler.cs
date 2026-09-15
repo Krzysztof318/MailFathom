@@ -58,9 +58,9 @@ public sealed class OccurrenceSpamClassificationHandler : IJobHandler
                 nameof(payload));
         }
 
-        var account = occurrence.ToAccountIdentity();
+        var account = occurrence.ToAccountId();
         var storedEmailId = await this.emails.FindStoredEmailIdAsync(
-            account.User,
+            account,
             occurrence.ToOccurrenceId(),
             cancellationToken);
 

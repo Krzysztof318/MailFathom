@@ -2,12 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Signals;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -18,14 +20,14 @@ namespace MailFathom.Host.UnitTests.Signals;
 /// <summary>Covers which connections a signal is addressed to, what is sent to them, and what a failed send does to the run that raised it.</summary>
 public sealed class SignalRClientSignalChannelTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
-    /// <summary>A signal reaches its user's group alone, under the one method name a client keys its handler by, as the payload rather than as itself.</summary>
+    /// <summary>A signal reaches the assigned user's group, under the one method name a client keys its handler by, as the payload rather than as itself.</summary>
     [Fact]
-    public async Task PublishAsync_ASignal_SendsItsRenderingToTheUsersGroupUnderTheOnePublishedMethod()
+    public async Task PublishAsync_ASignal_SendsItsRenderingToTheAssignedUsersGroupUnderTheOnePublishedMethod()
     {
         // Arrange
         var group = Substitute.For<IClientProxy>();
@@ -49,12 +51,12 @@ public sealed class SignalRClientSignalChannelTests
         await channel.PublishAsync(ClientSignal.MailArrived(Account, Inbox, newEmailCount: 3), CancellationToken.None);
 
         // Assert
-        clients.Received(1).Group(ClientSignalHub.GroupOf(Account.User));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Deployment));
         Assert.Equal(ClientSignalHub.SignalMethod, method);
         Assert.NotNull(sent);
         var payload = Assert.IsType<ClientSignalPayload>(Assert.Single(sent));
         Assert.Equal(ClientSignalKind.MailArrived.Name, payload.Kind);
-        Assert.Equal(Account.Id.Value, payload.Account);
+        Assert.Equal(Account.Value, payload.Account);
         Assert.Equal(Inbox.Value, payload.Folder);
         Assert.Equal(3, payload.Count);
     }
@@ -81,11 +83,70 @@ public sealed class SignalRClientSignalChannelTests
             Arg.Any<CancellationToken>());
     }
 
-    private static SignalRClientSignalChannel ChannelOver(IHubClients clients)
+    /// <summary>Builds the channel over a deployment assigning the mailbox to whoever the test named.</summary>
+    /// <remarks>
+    /// The scope factory is a real one rather than a substitute, because the channel resolves the assignment relation
+    /// per signal from a scope of its own — that is what makes an assignment change between two signals visible to
+    /// the second — and a substituted factory would prove the wiring against itself.
+    /// </remarks>
+    /// <summary>
+    /// One mailbox assigned to two people wakes both of their clients. The recipients are resolved from the
+    /// assignment relation at the moment the signal is published rather than carried on the signal, so a mailbox
+    /// somebody was assigned after a run started still reaches them.
+    /// </summary>
+    [Fact]
+    public async Task PublishAsync_ASignalNamingAMailboxAssignedToTwoUsers_ReachesBothTheirGroups()
+    {
+        // Arrange
+        var group = Substitute.For<IClientProxy>();
+        var clients = Substitute.For<IHubClients>();
+        clients.Group(Arg.Any<string>()).Returns(group);
+        var channel = ChannelOver(
+            clients,
+            new StubMailAccountAssignments()
+                .Assigning(SyntheticMailUser.Deployment, Account)
+                .Assigning(SyntheticMailUser.Another, Account));
+
+        // Act
+        await channel.PublishAsync(ClientSignal.FoldersChanged(Account), CancellationToken.None);
+
+        // Assert
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Deployment));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Another));
+    }
+
+    /// <summary>A mailbox assigned to nobody reaches nobody, which is what an empty assignment answer has to mean.</summary>
+    [Fact]
+    public async Task PublishAsync_ASignalNamingAMailboxAssignedToNobody_SendsNothing()
+    {
+        // Arrange
+        var group = Substitute.For<IClientProxy>();
+        var clients = Substitute.For<IHubClients>();
+        clients.Group(Arg.Any<string>()).Returns(group);
+        var channel = ChannelOver(clients, new StubMailAccountAssignments());
+
+        // Act
+        await channel.PublishAsync(ClientSignal.FoldersChanged(Account), CancellationToken.None);
+
+        // Assert
+        Assert.Empty(clients.ReceivedCalls());
+        Assert.Empty(group.ReceivedCalls());
+    }
+
+    private static SignalRClientSignalChannel ChannelOver(
+        IHubClients clients,
+        IMailAccountAssignments? assignments = null)
     {
         var hub = Substitute.For<IHubContext<ClientSignalHub>>();
         hub.Clients.Returns(clients);
 
-        return new SignalRClientSignalChannel(hub, NullLogger<SignalRClientSignalChannel>.Instance);
+        var services = new ServiceCollection();
+        services.AddSingleton(assignments
+            ?? new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account));
+
+        return new SignalRClientSignalChannel(
+            hub,
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<SignalRClientSignalChannel>.Instance);
     }
 }

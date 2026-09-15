@@ -60,8 +60,8 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     /// </remarks>
     private static readonly TimeSpan RaiseInterval = TimeSpan.FromMilliseconds(250);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -100,7 +100,7 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
 
         // Assert
         Assert.Equal(signal.Kind.Name, payload.GetProperty("kind").GetString());
-        Assert.Equal(Account.Id.Value, payload.GetProperty("account").GetString());
+        Assert.Equal(Account.Value, payload.GetProperty("account").GetString());
         Assert.Equal(Inbox.Value, payload.GetProperty("folder").GetString());
         Assert.Equal(3, payload.GetProperty("count").GetInt32());
     }

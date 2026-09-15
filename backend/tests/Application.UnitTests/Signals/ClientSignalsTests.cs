@@ -16,11 +16,11 @@ namespace MailFathom.Application.UnitTests.Signals;
 /// <summary>Covers what a window of statements folds into, whose connections it reaches, and what a deployment with no channel holds.</summary>
 public sealed class ClientSignalsTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
-    private static readonly MailAccountIdentity SomebodyElsesAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("work"));
+    private static readonly MailAccountId AnotherAccount =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -76,9 +76,14 @@ public sealed class ClientSignalsTests
             [.. channel.Published.Select(signal => signal.Folder!.Value.Value).Order(StringComparer.Ordinal)]);
     }
 
-    /// <summary>Two users synchronizing at once are two statements, each naming only its own user.</summary>
+    /// <summary>Two mailboxes synchronizing at once are two statements, each naming only its own mailbox.</summary>
+    /// <remarks>
+    /// The fold is by the mailbox rather than by a reader of it, because an arrival is the mailbox's: two people
+    /// assigned one mailbox are told about one arrival rather than two, and the channel is what turns that one
+    /// statement into a delivery per assigned reader.
+    /// </remarks>
     [Fact]
-    public async Task Publish_TheSameChangeForTwoUsers_KeepsEachUsersSignalToThatUser()
+    public async Task Publish_ArrivalsInTwoMailboxes_KeepsEachMailboxesSignalToThatMailbox()
     {
         // Arrange
         var channel = new RecordingClientSignalChannel();
@@ -87,7 +92,7 @@ public sealed class ClientSignalsTests
 
         // Act
         signals.Publish(ClientSignal.MailArrived(Account, Inbox, newEmailCount: 1));
-        signals.Publish(ClientSignal.MailArrived(SomebodyElsesAccount, Inbox, newEmailCount: 7));
+        signals.Publish(ClientSignal.MailArrived(AnotherAccount, Inbox, newEmailCount: 7));
 
         clock.Advance(ClientSignals.FoldingWindow);
         await signals.DrainAsync();
@@ -95,11 +100,12 @@ public sealed class ClientSignalsTests
         // Assert
         Assert.Equal(2, channel.Published.Count);
 
-        var mine = Assert.Single(channel.Published, signal => signal.User == SyntheticMailUser.Deployment);
-        var theirs = Assert.Single(channel.Published, signal => signal.User == SyntheticMailUser.Another);
+        var work = Assert.Single(channel.Published, signal => signal.Account == Account);
+        var personal = Assert.Single(channel.Published, signal => signal.Account == AnotherAccount);
 
-        Assert.Equal(1, mine.Count);
-        Assert.Equal(7, theirs.Count);
+        Assert.Equal(1, work.Count);
+        Assert.Equal(7, personal.Count);
+        Assert.All(channel.Published, signal => Assert.Null(signal.User));
     }
 
     /// <summary>The identities two statements named are one set, so a client re-reads each row once.</summary>

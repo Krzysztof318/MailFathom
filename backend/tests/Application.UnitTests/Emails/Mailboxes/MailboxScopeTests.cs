@@ -6,7 +6,6 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
@@ -21,7 +20,7 @@ public sealed class MailboxScopeTests
     public void Create_NoAccountsAndNoFolders_RestrictsNothing()
     {
         // Act
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, accountIds: null, selectedFolders: null);
+        var scope = MailboxScope.Create(accountIds: null, selectedFolders: null);
 
         // Assert
         Assert.Empty(scope.AccountIds);
@@ -33,7 +32,7 @@ public sealed class MailboxScopeTests
     public void Create_EmptyLists_RestrictNothingJustAsAbsentOnesDo()
     {
         // Act
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [], []);
+        var scope = MailboxScope.Create([], []);
 
         // Assert
         Assert.Same(MailboxScope.NothingReadable, scope);
@@ -45,7 +44,6 @@ public sealed class MailboxScopeTests
     {
         // Act
         var scope = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             [Secondary, Primary, Secondary],
             [
                 Folder(Secondary, "SENT"),
@@ -64,7 +62,6 @@ public sealed class MailboxScopeTests
     {
         // Act
         var scope = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             [Primary, Secondary],
             [Folder(Secondary, "JUNK"), Folder(Primary, "JUNK")]);
 
@@ -76,7 +73,7 @@ public sealed class MailboxScopeTests
     public void Create_NamingOnlyFolders_IsStillARestrictedScope()
     {
         // Act
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, accountIds: null, [Folder(Primary, "INBOX")]);
+        var scope = MailboxScope.Create(accountIds: null, [Folder(Primary, "INBOX")]);
 
         // Assert
         Assert.NotSame(MailboxScope.NothingReadable, scope);
@@ -88,7 +85,7 @@ public sealed class MailboxScopeTests
     public void Create_AnAccountNoSelectedFolderNames_StaysInScope()
     {
         // Act
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [Primary, Secondary], [Folder(Primary, "ARCHIVE")]);
+        var scope = MailboxScope.Create([Primary, Secondary], [Folder(Primary, "ARCHIVE")]);
 
         // Assert
         Assert.Equal([Primary, Secondary], scope.AccountIds);
@@ -106,7 +103,7 @@ public sealed class MailboxScopeTests
             .ToArray();
 
         // Act
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], folders);
+        var scope = MailboxScope.Create([Primary], folders);
 
         // Assert
         Assert.Equal(folders.Length, scope.SelectedFolders.Count);
@@ -119,7 +116,7 @@ public sealed class MailboxScopeTests
         // Arrange
         var first = StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
         var second = StoredEmailId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []);
+        var scope = MailboxScope.Create([Primary], []);
 
         // Act
         var narrowed = scope.NarrowedToEmails([second, first, second]);
@@ -136,7 +133,7 @@ public sealed class MailboxScopeTests
         var repeated = Enumerable
             .Repeat(StoredEmailId.Create(new Guid("33333333-3333-3333-3333-333333333333")), MailboxScope.MaximumSelectedEmails + 1)
             .ToArray();
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []);
+        var scope = MailboxScope.Create([Primary], []);
 
         // Act
         var refusal = Assert.Throws<MailboxQueryFilterInvalidException>(() => scope.NarrowedToEmails(repeated));
@@ -151,7 +148,7 @@ public sealed class MailboxScopeTests
     {
         // Arrange
         var thread = EmailThreadId.Create(new Guid("44444444-4444-4444-4444-444444444444"));
-        var scope = MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], [Folder(Primary, "ARCHIVE")]);
+        var scope = MailboxScope.Create([Primary], [Folder(Primary, "ARCHIVE")]);
 
         // Act
         var narrowed = scope.NarrowedToThread(thread);

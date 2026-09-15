@@ -525,7 +525,7 @@ public sealed class StoredEmailResponseAuthoringTests
     /// it: the quotation a reply would carry is the message itself.
     /// </summary>
     [Fact]
-    public async Task AuthorAsync_EmailOfAnAccountTheCallersUserDoesNotOwn_IsRefusedAsNoSuchEmail()
+    public async Task AuthorAsync_EmailOfAnAccountTheCallersUserIsNotAssigned_IsRefusedAsNoSuchEmail()
     {
         // Arrange
         var authoring = AuthoringOver(
@@ -877,7 +877,7 @@ public sealed class StoredEmailResponseAuthoringTests
 
         // Assert
         Assert.True(response.IsAuthored);
-        Assert.Equal(summary.AccountId, response.AccountId);
+        Assert.Equal(summary.Account, response.Account);
     }
 
     /// <summary>
@@ -1074,12 +1074,12 @@ public sealed class StoredEmailResponseAuthoringTests
             attachmentContentReader ?? Substitute.For<IEmailAttachmentContentReader>(),
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
-                OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.AccountId)),
+                AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.Account)),
                 folderParticipation ?? StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
+                    new MailFolderIdentity(answered.Account, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
-            senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
+            senderIdentities ?? SenderIdentitiesFor(answered.Account),
             new NamedRecipientResolver(
                 contacts ?? new InMemoryContactBookStore(),
                 ContactBookOwnerships.For(callerAuthorization)),

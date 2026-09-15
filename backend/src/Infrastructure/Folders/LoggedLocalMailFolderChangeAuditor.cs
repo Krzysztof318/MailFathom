@@ -16,8 +16,8 @@ internal sealed partial class LoggedLocalMailFolderChangeAuditor(ILogger<LoggedL
         ArgumentNullException.ThrowIfNull(change);
 
         this.LogLocalFolderChanged(
-            change.Account.User.Value,
-            change.Account.Id.Value,
+            change.Account.Value,
+            change.ChangedBy.Value,
             change.Folder.Value,
             change.Kind,
             change.ErasedFolderCount,
@@ -28,10 +28,10 @@ internal sealed partial class LoggedLocalMailFolderChangeAuditor(ILogger<LoggedL
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Local folder {FolderId} of account {UserId}/{AccountId} was changed ({ChangeKind}), erasing {ErasedFolderCount} folders, at {OccurredAt}.")]
+        Message = "Local folder {FolderId} of account {AccountId} was changed ({ChangeKind}) by user {ChangedBy}, erasing {ErasedFolderCount} folders, at {OccurredAt}.")]
     private partial void LogLocalFolderChanged(
-        Guid userId,
         string accountId,
+        Guid changedBy,
         Guid folderId,
         MailFolderChangeKind changeKind,
         int erasedFolderCount,

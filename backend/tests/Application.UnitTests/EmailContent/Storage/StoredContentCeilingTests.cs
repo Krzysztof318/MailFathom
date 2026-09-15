@@ -16,12 +16,13 @@ public sealed class StoredContentCeilingTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(200)
-            .Holding(SyntheticMailUser.Deployment, 200);
+            .Holding(SyntheticMailAccount.Deployment, 200)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 800);
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             300,
             TestContext.Current.CancellationToken);
 
@@ -53,7 +54,7 @@ public sealed class StoredContentCeilingTests
         for (var run = 0; run < 4; run++)
         {
             attempts.Add(await ceiling.TryClaimAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticMailAccount.Deployment,
                 400,
                 TestContext.Current.CancellationToken));
         }
@@ -84,11 +85,11 @@ public sealed class StoredContentCeilingTests
 
         // Act
         var first = await oneReplica.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             700,
             TestContext.Current.CancellationToken);
         var second = await anotherReplica.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             700,
             TestContext.Current.CancellationToken);
 
@@ -109,7 +110,7 @@ public sealed class StoredContentCeilingTests
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             200,
             TestContext.Current.CancellationToken);
 
@@ -125,12 +126,41 @@ public sealed class StoredContentCeilingTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(300)
-            .Holding(SyntheticMailUser.Deployment, 300);
+            .Holding(SyntheticMailAccount.Deployment, 300)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 400);
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
+            200,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(attempt.Claim);
+        Assert.Equal(StoredContentBound.User, attempt.ReachedBound);
+    }
+
+    /// <summary>A mailbox two people share counts in full against both, so the one nearest their ceiling decides.</summary>
+    /// <remarks>
+    /// The trade-off ADR 0014 states, and the reason a claim names the account and no user: the payload is one copy
+    /// and there is no share of it to charge each reader. A ceiling charging only the reader who happens to be asked
+    /// first would let a shared mailbox carry a user past their own bound whenever somebody else's run reached it.
+    /// </remarks>
+    [Fact]
+    public async Task TryClaimAsync_ASharedMailboxWhoseSecondReaderIsAtTheirCeiling_IsRefusedForEverybody()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore()
+            .Holding(SyntheticMailAccount.Deployment, 100)
+            .Holding(SyntheticMailAccount.Another, 800)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 1000);
+
+        // Act
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailAccount.Deployment,
             200,
             TestContext.Current.CancellationToken);
 
@@ -146,12 +176,13 @@ public sealed class StoredContentCeilingTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(900)
-            .Holding(SyntheticMailUser.Deployment, 900);
+            .Holding(SyntheticMailAccount.Deployment, 900)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 1000);
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             200,
             TestContext.Current.CancellationToken);
 
@@ -159,19 +190,21 @@ public sealed class StoredContentCeilingTests
         Assert.Equal(StoredContentBound.Deployment, attempt.ReachedBound);
     }
 
-    /// <summary>One user's share is theirs, so another user's payloads never count against it.</summary>
+    /// <summary>One user's share is theirs, so a mailbox nobody assigned them never counts against it.</summary>
     [Fact]
     public async Task TryClaimAsync_AnotherUserHoldingTheirShare_LeavesThisUsersRoomWhole()
     {
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(800)
-            .Holding(SyntheticMailUser.Another, 800);
+            .Holding(SyntheticMailAccount.Another, 800)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 900);
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             700,
             TestContext.Current.CancellationToken);
 
@@ -189,7 +222,7 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore();
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             TestContext.Current.CancellationToken);
 
@@ -209,7 +242,7 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore();
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             400,
             TestContext.Current.CancellationToken);
         var claim = attempt.Claim;
@@ -234,13 +267,13 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore();
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
         var abandoned = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             TestContext.Current.CancellationToken);
         Assert.NotNull(abandoned.Claim);
 
         var refusedWhileHeld = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             TestContext.Current.CancellationToken);
 
@@ -248,7 +281,7 @@ public sealed class StoredContentCeilingTests
         claims.ExpireEveryClaim();
 
         var admittedAfterExpiry = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             TestContext.Current.CancellationToken);
 
@@ -269,7 +302,7 @@ public sealed class StoredContentCeilingTests
 
         // Act
         var attempt = await ceiling.TryClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             TestContext.Current.CancellationToken);
 
@@ -283,7 +316,7 @@ public sealed class StoredContentCeilingTests
     }
 
     [Fact]
-    public async Task TryClaimAsync_AUserNamingNobody_IsRefused()
+    public async Task TryClaimAsync_AnAccountNamingNothing_IsRefused()
     {
         // Arrange
         var ceiling = new StoredContentCeiling(new InMemoryStoredContentClaimStore(), ceilingBytes: 1000);
@@ -305,7 +338,7 @@ public sealed class StoredContentCeilingTests
         // Act
         // Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => ceiling.TryClaimAsync(SyntheticMailUser.Deployment, bytes, TestContext.Current.CancellationToken));
+            () => ceiling.TryClaimAsync(SyntheticMailAccount.Deployment, bytes, TestContext.Current.CancellationToken));
     }
 
     [Fact]

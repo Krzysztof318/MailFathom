@@ -92,12 +92,12 @@ public sealed class MailContactCollector
     /// in flight. An account that collects nothing opens a run whose bound is zero, which costs nothing: the settings
     /// are read again per message and stop the work before the bound is ever asked.
     /// </remarks>
-    public ContactCollectionRun OpenRun(MailAccountIdentity account, MailFolderSpecialUse? folderRole) =>
+    public ContactCollectionRun OpenRun(MailAccountId account, MailFolderSpecialUse? folderRole) =>
         new(
             account,
             folderRole,
             new ContactCollectionBudget(
-                this.settingsReader.GetContactCollectionSettings(account.Id).MaxContactsPerRun));
+                this.settingsReader.GetContactCollectionSettings(account).MaxContactsPerRun));
 
     /// <summary>Records whoever one committed message says the account corresponds with.</summary>
     /// <param name="metadata">What was read out of the message that was just stored.</param>
@@ -122,7 +122,7 @@ public sealed class MailContactCollector
         ArgumentNullException.ThrowIfNull(run);
 
         var account = run.Account;
-        var settings = this.settingsReader.GetContactCollectionSettings(account.Id);
+        var settings = this.settingsReader.GetContactCollectionSettings(account);
 
         if (!settings.IsEnabled || CollectedRoleIn(run.FolderRole) is not { } role)
         {
@@ -152,7 +152,7 @@ public sealed class MailContactCollector
     /// holds, which is the ordinary case once a book has filled, costs one lookup and nothing else.
     /// </remarks>
     private async Task<bool> RecordAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         EmailAddress address,
         EmailAddressRole role,
         ContactCollectionSettings settings,
@@ -214,7 +214,7 @@ public sealed class MailContactCollector
     /// first one and counting it would be asking the database to confirm what the caller is holding.
     /// </remarks>
     private async Task<bool> HasWrittenOftenEnoughAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         EmailAddress address,
         int minimumMessages,
         CancellationToken cancellationToken) =>

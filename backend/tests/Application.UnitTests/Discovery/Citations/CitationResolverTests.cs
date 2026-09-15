@@ -424,14 +424,14 @@ public sealed class CitationResolverTests
         IReadOnlyList<EmailSummary> summaries) => new(
         accountCatalog,
         StubMailFolderParticipation.Mapping(
-            [.. summaries.Select(summary => new MailFolderIdentity(summary.AccountId, summary.FolderAlias))]),
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]),
         StubJunkMailFolderCatalog.None,
         StubMailFolderMappings.ResolvingNothing);
 
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
         catalog.User.Returns(SyntheticMailUser.Deployment);
 
         return catalog;

@@ -40,14 +40,6 @@ internal sealed class StoredEmailEntity
     /// </summary>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account this message belongs to.</summary>
-    /// <remarks>
-    /// Carried beside the account rather than reached through it, because every read of this table narrows on the
-    /// user first and an index cannot lead with a column that lives behind a join. It is written once with the
-    /// row, from the account the write had already resolved, and nothing repoints an account at another user.
-    /// </remarks>
-    public required Guid UserId { get; set; }
-
     public long MailFolderId { get; set; }
 
     /// <summary>

@@ -4,10 +4,8 @@
 
 using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
@@ -59,7 +57,7 @@ internal sealed class InMemoryRecurringSendStore(TimeProvider? timeProvider = nu
         ArgumentNullException.ThrowIfNull(request);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(draftByteLength);
 
-        var identity = IdentityOf(request.Account.Id.Value, request.Requester);
+        var identity = IdentityOf(request.Account.Value, request.Requester);
 
         if (this.identities.TryGetValue(identity, out var existing))
         {
@@ -69,7 +67,8 @@ internal sealed class InMemoryRecurringSendStore(TimeProvider? timeProvider = nu
         var declared = new RecurringSend
         {
             Id = RecurringSendId.Create(Guid.CreateVersion7()),
-            Account = request.Account,
+            AccountId = request.Account,
+            User = request.Author,
             Requester = request.Requester,
             Recipients = request.Recipients,
             Schedule = request.Schedule,
@@ -98,7 +97,7 @@ internal sealed class InMemoryRecurringSendStore(TimeProvider? timeProvider = nu
                 .Take(limit)
                 .Select(declaration => new RecurringSendDeclaration(
                     declaration.Id,
-                    MailAccountIdentity.Create(SyntheticMailUser.Deployment, declaration.AccountId),
+                    declaration.AccountId,
                     declaration.Schedule)),
         ];
 

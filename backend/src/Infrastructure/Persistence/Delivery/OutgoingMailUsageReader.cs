@@ -27,7 +27,7 @@ internal sealed class OutgoingMailUsageReader(MailFathomDbContext dbContext) : I
 {
     /// <inheritdoc />
     public async Task<OutgoingMailUsage> ReadUsageSinceAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset periodStart,
         CancellationToken cancellationToken)
     {

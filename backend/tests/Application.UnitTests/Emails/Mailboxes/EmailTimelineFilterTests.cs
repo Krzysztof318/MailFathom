@@ -6,7 +6,6 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
@@ -67,11 +66,9 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var accountsInOneOrder = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             [MailAccountId.Create("primary"), MailAccountId.Create("secondary")],
             selectedFolders: null);
         var accountsInTheOther = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             [MailAccountId.Create("secondary"), MailAccountId.Create("primary"), MailAccountId.Create("primary")],
             selectedFolders: null);
 
@@ -89,11 +86,9 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var oneAliasCarryingTheSeparator = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             accountIds: null,
             [Folder("ARCHIVE,SENT"), Folder("TRASH")]);
         var theSameNamesSplitDifferently = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             accountIds: null,
             [Folder("ARCHIVE"), Folder("SENT,TRASH")]);
 
@@ -125,10 +120,9 @@ public sealed class EmailTimelineFilterTests
         var variants = new[]
         {
             FilterWith(scope: MailboxScope.Create(
-                SyntheticMailUser.Deployment,
                 [MailAccountId.Create("primary")],
                 selectedFolders: null)),
-            FilterWith(scope: MailboxScope.Create(SyntheticMailUser.Deployment, null, [Folder("ARCHIVE")])),
+            FilterWith(scope: MailboxScope.Create( null, [Folder("ARCHIVE")])),
             FilterWith(senderAddress: "anna@example.test"),
             FilterWith(recipientAddress: "anna@example.test"),
             FilterWith(subjectFragment: "invoice"),

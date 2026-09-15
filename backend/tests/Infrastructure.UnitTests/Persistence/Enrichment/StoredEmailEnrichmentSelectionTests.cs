@@ -10,7 +10,6 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Enrichment;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Enrichment;
@@ -31,8 +30,6 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Enrichment;
 /// </remarks>
 public sealed class StoredEmailEnrichmentSelectionTests
 {
-    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
-
     private static readonly DateTimeOffset Now = new(2026, 9, 6, 10, 0, 0, TimeSpan.Zero);
 
     private static readonly MailFolderIdentity WorkInbox = new(
@@ -327,7 +324,6 @@ public sealed class StoredEmailEnrichmentSelectionTests
         [
             .. StoredEmailEnrichmentStore.Selecting(
                 new[] { email }.AsQueryable(),
-                User,
                 "work",
                 folders ?? [WorkInbox],
                 readsAttachments,
@@ -339,15 +335,13 @@ public sealed class StoredEmailEnrichmentSelectionTests
     {
         var email = new StoredEmailEntity
         {
-            UserId = User,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                UserId = User,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { UserId = User, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,
@@ -390,7 +384,6 @@ public sealed class StoredEmailEnrichmentSelectionTests
     {
         StoredEmailId = email.Id,
         StoredEmail = email,
-        UserId = email.UserId,
         MailboxAccountId = email.MailboxAccountId,
         MailFolder = email.MailFolder,
         Mutation = MailboxMutation.Relocate.Name,

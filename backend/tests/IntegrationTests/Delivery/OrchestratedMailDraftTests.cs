@@ -184,6 +184,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             async (scope, session, token) => opened = await scope.GetRequiredService<IMailDraftStore>().OpenAsync(
                 session,
                 SyntheticMailAccount.Account,
+                SyntheticMailAccount.User,
                 OutgoingEmailRequester.Command($"provenance-{Guid.NewGuid():N}"),
                 recipients,
                 "Provenance survives a revision",
@@ -232,6 +233,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
                 opened = await drafts.OpenAsync(
                     session,
                     SyntheticMailAccount.Account,
+                    SyntheticMailAccount.User,
                     OutgoingEmailRequester.Command(subject),
                     [RecipientAtTheMailbox()],
                     subject,
@@ -292,8 +294,8 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
     [
         .. (await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailDraftStore>().ReadForUserAsync(
-                SyntheticMailAccount.Account.User,
-                SyntheticMailAccount.Account.Id,
+                SyntheticMailAccount.User,
+                SyntheticMailAccount.Account,
                 maxCount: 50,
                 token),
             cancellationToken)).Select(draft => draft.Id),
@@ -319,6 +321,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         return services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailDraftBook>().SaveAsync(
                 SyntheticMailAccount.Account,
+                SyntheticMailAccount.User,
                 OutgoingEmailRequester.Command(subject),
                 new ComposedMailDraft([RecipientAtTheMailbox()], subject, messageId, MimeOf(subject, messageId)),
                 revises,
@@ -331,7 +334,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         OrchestratedMailFathomServices services,
         MailDraftId draftId,
         CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailDraftPromotion>().PromoteAsync(draftId, token),
+            (scope, token) => scope.GetRequiredService<MailDraftPromotion>().PromoteAsync(draftId, SyntheticMailAccount.User, token),
             [MailFathomPermission.MailSend],
             cancellationToken);
 

@@ -112,9 +112,6 @@ public enum MailAccountWriteResult
 
     /// <summary>The write would have changed nothing, such as an assignment that already stands.</summary>
     NothingToChange = 4,
-
-    /// <summary>The account is already assigned to another user, and an account is served to one user at a time.</summary>
-    AssignedElsewhere = 5,
 }
 
 /// <summary>What ending one assignment did.</summary>

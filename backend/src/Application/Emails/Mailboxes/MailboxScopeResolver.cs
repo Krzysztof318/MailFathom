@@ -19,15 +19,15 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// one differently would publish mail through the query that got it wrong while the others stayed correct.
 /// </para>
 /// <para>
-/// The user is the third thing settled here, and it is settled twice over. It reaches the resolution that runs before
-/// the query — the accounts a request is resolved against are the accounts the caller's user owns, so an account
-/// belonging to somebody else is refused rather than narrowed away — and it also reaches the query itself, as the first
-/// term of the predicate and the column every index that predicate is planned against leads with. The two are not
-/// alternatives: the resolution is what refuses without disclosing, and the term is what makes the account value being
-/// compared say whose account it is. That is why this type reads the caller-scoped catalog and no other, for both
-/// answers: a resolver holding both catalogs would be one substitution away from answering a caller out of the
-/// deployment's whole account set, and a resolver taking the user from anywhere but the catalog that listed the
-/// accounts could narrow on a user those accounts do not belong to.
+/// The assignment is the third thing settled here, and it is settled twice over. It reaches the resolution that runs
+/// before the query — the accounts a request is resolved against are the accounts the caller's user is assigned, so a
+/// mailbox nobody assigned them is refused rather than narrowed away — and it also reaches the query
+/// itself, as the account term of the predicate and the column every index that predicate is planned against leads
+/// with. The two are not alternatives: the resolution is what refuses without disclosing, and the term is what keeps a
+/// query from reading past the accounts that survived it. No mail row names a user, so the term is the assigned
+/// accounts rather than the user beside them. That is why this type reads the caller-scoped catalog and no other, for
+/// both answers: a resolver holding both catalogs would be one substitution away from answering a caller out of the
+/// deployment's whole account set.
 /// </para>
 /// </remarks>
 public sealed class MailboxScopeResolver
@@ -38,7 +38,7 @@ public sealed class MailboxScopeResolver
     private readonly MailFolderReferenceResolver folderReferences;
 
     /// <summary>Initializes the resolver.</summary>
-    /// <param name="accountCatalog">Answers which accounts the user this work is acting for owns.</param>
+    /// <param name="accountCatalog">Answers which accounts the user this work is acting for is assigned.</param>
     /// <param name="folderParticipation">Answers which folders a tool may read from.</param>
     /// <param name="junkFolders">Answers which folder each account advertises as its junk folder.</param>
     /// <param name="folderReferences">Turns the alias or the role a request named into the folder of an account it means.</param>
@@ -61,37 +61,38 @@ public sealed class MailboxScopeResolver
     }
 
     /// <summary>Resolves what a request named into the scope a query runs with.</summary>
-    /// <param name="accountSelectors">The text a request named accounts with, or empty for every account the caller's user owns.</param>
+    /// <param name="accountSelectors">The text a request named accounts with, or empty for every account the caller's user is assigned.</param>
     /// <param name="folders">The folders a request named, each by alias or by role, or empty for every folder.</param>
     /// <param name="junkMail">Whether the caller asked for the account's junk folder, which defaults to it being left out.</param>
     /// <returns>The scope a query runs with.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, which the deployment administrator and this process's own identity both are.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user is not assigned, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailFolderRoleUnmappedException">Thrown when the request names a role no account in scope maps a folder with.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="junkMail" /> is not a defined member.</exception>
     /// <remarks>
     /// <para>
     /// An account may be named by the identifier the deployment generated for it or by the display name it is published under, and this is
-    /// where the two become one identity. Resolution happens against the accounts the caller's user owns rather than at
-    /// a protocol boundary, so text naming nothing is refused by the same rule and with the same failure as an identifier
+    /// where the two become one identity. Resolution happens against the accounts the caller's user is assigned rather
+    /// than at a protocol boundary, so text naming nothing is refused by the same rule and with the same failure as an identifier
     /// the deployment stopped serving and as one belonging to somebody else — a caller cannot learn from the refusal
     /// which of the three it was holding, so a refusal enumerates neither spellings nor other users' mailboxes.
     /// </para>
     /// <para>
-    /// An account the caller's user does not own is refused before anything is read, rather than narrowed away by a
+    /// An account the caller's user is not assigned is refused before anything is read, rather than narrowed away by a
     /// predicate: a narrowed predicate would answer with an empty result, and an empty result tells a caller that the
     /// name they used exists. The resolved identities are what the scope is built from, so the same account named two
     /// ways is one query with one continuation cursor.
     /// </para>
     /// <para>
-    /// A request that names no account is restricted to the accounts the user owns rather than left unrestricted. Two
-    /// separate things make that necessary: removing an account from configuration leaves its stored rows in place, so an
+    /// A request that names no account is restricted to the accounts the user is assigned rather than left
+    /// unrestricted. Two separate things make that necessary: removing an account from configuration leaves its stored rows in place, so an
     /// absent account predicate would keep publishing mail from an account this deployment no longer serves, and the rows
-    /// of every other user are in the same table. A user who owns nothing therefore resolves to a scope that reads
-    /// nothing rather than to an empty account list, because an empty list is read as unrestricted by every narrowing
-    /// site — <see cref="MailboxScope.Create" /> answers <see cref="MailboxScope.NothingReadable" /> for exactly that
-    /// reason. The resolved accounts, not the requested ones, take part in a continuation cursor's fingerprint.
+    /// of every other user are in the same table. A user assigned nothing therefore resolves to
+    /// <see cref="MailboxScope.NothingReadable" /> rather than to a scope carrying an empty account list: the account
+    /// containment is composed unconditionally, so an empty list admits no row, but such a scope would still carry the
+    /// deployment's folder decisions and read as a scope over every mailbox's folders. Leaving early is what keeps the
+    /// two apart. The resolved accounts, not the requested ones, take part in a continuation cursor's fingerprint.
     /// </para>
     /// <para>
     /// The folders a tool may read are named here, once, rather than by each read model — which is what makes "no tool
@@ -134,11 +135,11 @@ public sealed class MailboxScopeResolver
                 "A read either reaches into the junk folder or leaves it out, and no other value names an answer.");
         }
 
-        var ownedAccounts = this.accountCatalog.OwnedAccounts;
+        var assignedAccounts = this.accountCatalog.AssignedAccounts;
 
-        // Counted before anything is resolved, because the count is the caller's and each resolution walks the owned
-        // accounts or that account's folders. The scope's own limits are reused rather than second ones invented for
-        // the text the identities arrive as.
+        // Counted before anything is resolved, because the count is the caller's and each resolution walks the
+        // assigned accounts or that account's folders. The scope's own limits are reused rather than second ones
+        // invented for the text the identities arrive as.
         MailboxQueryFilterInvalidException.ThrowIfCountExceeded(
             accountSelectors.Count,
             MailboxScope.MaximumAccountIds,
@@ -149,18 +150,18 @@ public sealed class MailboxScopeResolver
             "folders");
 
         var requestedAccountIds = accountSelectors
-            .Select(selector => ResolvedAccountId(selector, ownedAccounts))
+            .Select(selector => ResolvedAccountId(selector, assignedAccounts))
             .ToArray();
 
         MailAccountId[] accountsInScope = requestedAccountIds.Length is 0
-            ? [.. ownedAccounts.Select(static account => account.Id)]
+            ? [.. assignedAccounts.Select(static account => account.Id)]
             : requestedAccountIds;
 
-        // A user who owns no account leaves before the folder decisions are applied, because those are the
+        // A user assigned no account leaves before the folder decisions are applied, because those are the
         // deployment's and reach every account it serves. Carrying an empty account list through them would produce a
-        // scope naming no account and admitting every other user's folders, and a scope naming no account is read as
-        // unrestricted by every narrowing site — so the one caller with nothing to read would be the one caller reading
-        // everything. The scope that admits nothing is what such a caller resolves to instead.
+        // scope naming no account while admitting every other mailbox's folders, which reads as a scope over the
+        // deployment rather than over nothing. The scope that admits nothing is what such a caller resolves to
+        // instead, and the predicate's unconditional account containment is the second half of the same answer.
         //
         // The junk-mail answer is still recorded on it, for the reason WithJunkMail records one when no account maps a
         // junk folder: the answer is part of what a continuation cursor was issued for, and a page that reported the
@@ -171,7 +172,6 @@ public sealed class MailboxScopeResolver
         }
 
         var resolvedScope = MailboxScope.Create(
-            this.accountCatalog.User,
             accountsInScope,
             this.ResolvedFolders(accountsInScope, folders));
 
@@ -180,28 +180,39 @@ public sealed class MailboxScopeResolver
             .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
     }
 
-    /// <summary>Gets the user this unit of work is acting for, whose mail every scope resolved here narrows to.</summary>
+    /// <summary>Gets the user this unit of work is acting for, which is what decides the posture its content is scanned under.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
-    /// Published here rather than read from the catalog by each use case, so the user a read narrows to and the user
-    /// its content is scanned under are one answer. It is the user the unit of work is acting for whatever scope was
-    /// resolved, which is why a use case reads it here rather than off the scope: a caller who owns no served account
-    /// resolves to <see cref="MailboxScope.NothingReadable" />, whose own user names nobody, and the difference
-    /// decides whose posture that run's text is scanned under. It is also available before any scope is — what a use
-    /// case needs, since a search reaches a model provider with its query text before it has a page to narrow.
+    /// Published here rather than read from the catalog by each use case, so the accounts a read narrows to and the
+    /// user its content is scanned under are resolved in one place. It is the user the unit of work is acting for whatever scope was
+    /// resolved, which is why a use case reads it here rather than off the scope: no mail row carries a user, so a
+    /// scope names accounts and nothing else, while whose posture a run's text is scanned under is still a question
+    /// about the person in hand. It is also available before any scope is — what a use case needs, since a search
+    /// reaches a model provider with its query text before it has a page to narrow.
     /// </remarks>
     public MailUserId User => this.accountCatalog.User;
+
+    /// <summary>Gets the accounts this unit of work may reach, which is what a read that builds no scope narrows by.</summary>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
+    /// <remarks>
+    /// The same answer <see cref="ReadableScope" /> narrows a query with, published for the reads that reach a row by
+    /// its own generated identifier and build no scope at all: a mutation record, a withdrawal, a release. A caller
+    /// assigned nothing gets an empty list, and a containment test against an empty list reads nothing, which is the
+    /// same fail-closed answer <see cref="MailboxScope.NothingReadable" /> is.
+    /// </remarks>
+    public IReadOnlyList<MailAccountId> AssignedAccounts =>
+        [.. this.accountCatalog.AssignedAccounts.Select(static account => account.Id)];
 
     /// <summary>Reports whether a tool may read one email, given the mailbox it was stored from.</summary>
     /// <param name="accountId">The account the email was read from.</param>
     /// <param name="folderAlias">The folder the email was read from.</param>
-    /// <returns><see langword="true" /> when the user in hand owns that account and a mapping admits that folder to tools.</returns>
+    /// <returns><see langword="true" /> when the user in hand is assigned that account and a mapping admits that folder to tools.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, which is a refusal rather than the <see langword="false" /> a caller with nothing readable is answered with.</exception>
     /// <remarks>
     /// This is <see cref="ReadableScope" /> asked about one email instead of about a query, and it exists because
     /// several reads reach an email by its identifier and build no scope at all. Both questions are answered from the
     /// same catalog and the same folder mapping here, so a folder an operator withheld cannot be readable through one
-    /// entry point and withheld through another, and an account belonging to another user cannot be reachable by
+    /// entry point and withheld through another, and an account this caller is not assigned cannot be reachable by
     /// identifier while it is unreachable by name. It is a mapping being asked to admit the folder rather than a list
     /// being asked whether it names it, so an email stored under an alias no mapping names is unreadable by the same
     /// answer that withholds a mapped folder. A caller that may not read the email is told it was not found rather than
@@ -209,7 +220,7 @@ public sealed class MailboxScopeResolver
     /// exists.
     /// </remarks>
     public bool IsReadableByTools(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.accountCatalog.OwnedAccounts.Any(account => account.Id == accountId)
+        this.accountCatalog.AssignedAccounts.Any(account => account.Id == accountId)
         && this.folderParticipation.GetParticipation(accountId, folderAlias).IsVisibleToTools;
 
     /// <summary>Turns what a request named folders with into the account-and-folder pairs a query is expressed in.</summary>
@@ -253,11 +264,11 @@ public sealed class MailboxScopeResolver
             : throw new MailFolderRoleUnmappedException(folder.Role!.Value);
     }
 
-    /// <summary>Finds the owned account text names, refusing the request when it names none.</summary>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when no account the user owns carries that identifier or display name.</exception>
+    /// <summary>Finds the assigned account text names, refusing the request when it names none.</summary>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when no account the user is assigned carries that identifier or display name.</exception>
     private static MailAccountId ResolvedAccountId(
         MailAccountSelector selector,
-        IReadOnlyList<ServedMailAccount> ownedAccounts) =>
-        ownedAccounts.FirstOrDefault(account => account.IsNamedBy(selector))?.Id
+        IReadOnlyList<ServedMailAccount> assignedAccounts) =>
+        assignedAccounts.FirstOrDefault(account => account.IsNamedBy(selector))?.Id
         ?? throw new MailAccountNotAccessibleException(selector);
 }

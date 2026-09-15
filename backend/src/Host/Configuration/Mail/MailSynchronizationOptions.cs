@@ -12,7 +12,6 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -760,6 +759,11 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 {
+    /// <summary>Every language this build writes in, as one phrase a refusal ends with.</summary>
+    /// <remarks>Composed from the members rather than written out, so a third language added to the enumeration reaches both refusals below without either being edited.</remarks>
+    private static readonly string PublishedLanguages =
+        string.Join(" or ", Enum.GetValues<MailAccountLanguage>().Select(language => $"'{language}'"));
+
     /// <summary>Gets or sets the local account identifier.</summary>
     [Required]
     public string AccountId { get; set; } = string.Empty;
@@ -781,6 +785,42 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </remarks>
     [Required]
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the language this deployment writes about this mailbox's mail in, named as it is spelled in English.</summary>
+    /// <remarks>
+    /// <para>
+    /// Stated by every account being written. Everything else here is something somebody asks for, and absence is the
+    /// answer for a mailbox nobody asked anything of; a language has no such absence, because a derivation about this
+    /// mail comes out in some language whether or not anybody chose it. A record already held is the one case the
+    /// requirement is not asked of, for the reason <see cref="FindMissingLanguageError" /> gives.
+    /// </para>
+    /// <para>
+    /// It is the account's rather than the assigned user's because the mail is one copy and so is everything derived
+    /// from it: a reading written in one of two assigned users' languages is the reading the other one gets, so the
+    /// value is settled where the mail is.
+    /// </para>
+    /// <para>
+    /// Carried as the written name rather than as the resolved value, because the binder that reads an account's
+    /// record reports an unknown member as a refusal naming both values it takes, and a typed property would have made
+    /// the same mistake a binding failure with the configuration binder's own sentence in place of that one.
+    /// </para>
+    /// </remarks>
+    public string? Language { get; set; }
+
+    /// <summary>Gets the language this account states, or <see langword="null" /> where it states none this build writes in.</summary>
+    /// <remarks>
+    /// Read only where the declaration has already been judged, which leaves exactly one way for this to answer
+    /// <see langword="null" />: a record held from before the property existed, whose reader takes
+    /// <see cref="MailAccountLanguage.English" /> for it. The comparison is against the member names and is
+    /// case-insensitive, so a record written by hand is read the way it was typed, and a number is not a language
+    /// however well it would have parsed.
+    /// </remarks>
+    internal MailAccountLanguage? ReadingLanguage => this.Language is { } written
+        ? Enum.GetValues<MailAccountLanguage>()
+            .Where(language => string.Equals(language.ToString(), written, StringComparison.OrdinalIgnoreCase))
+            .Select(language => (MailAccountLanguage?)language)
+            .FirstOrDefault()
+        : null;
 
     /// <summary>Gets or sets the IMAP server host name.</summary>
     public string Host { get; set; } = string.Empty;
@@ -1029,6 +1069,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return result;
         }
 
+        foreach (var result in this.ValidateLanguage())
+        {
+            yield return result;
+        }
+
         // The binder converts a bare number onto an enum without asking whether any member carries it, and
         // ErrorOnUnknownConfiguration does not catch that: it rejects unknown keys and failed conversions, and this
         // conversion succeeds. Left unchecked, an undefined value would reach reconciliation, which treats anything
@@ -1214,6 +1259,50 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         return MailAccountSensitiveContentRules
             .FindRefusals(this.SensitiveContent, deployment, path)
             .Select(refusal => new ValidationResult(refusal, [nameof(this.SensitiveContent)]));
+    }
+
+    /// <summary>Finds the refusal for an account that states no language at all.</summary>
+    /// <returns>One result where <see cref="Language" /> is unstated, empty otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asked of a declaration being written and of no other, which is why it is not among the rules
+    /// <see cref="ValidateForSynchronization(bool)" /> applies. Every account recorded before this property existed
+    /// states no language, and the binding is strict, so no administrator could have added one in advance — refusing
+    /// those at the next start would refuse the start itself, for every user, through the surface they would have
+    /// rewritten the declaration from. A held account stating nothing therefore reads as
+    /// <see cref="MailAccountLanguage.English" />, which is the answer every unresolved read already gives, and states
+    /// a language the first time it is written.
+    /// </para>
+    /// <para>
+    /// The sentence is worded apart from the one <see cref="ValidateLanguage" /> gives because the administrator's
+    /// next act differs: an absence is one line to add, and an unknown name is a value to correct. Both name every
+    /// language this build writes in, so neither leaves anybody guessing at the spelling.
+    /// </para>
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindMissingLanguageError()
+    {
+        if (string.IsNullOrWhiteSpace(this.Language))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.DisplayName}': {nameof(this.Language)} is not stated, and every mail account names the language MailFathom writes about its mail in — the reading on a message row, the statement about a conversation. State {PublishedLanguages}.",
+                [nameof(this.Language)]);
+        }
+    }
+
+    /// <summary>Reports a language this build does not write in.</summary>
+    /// <remarks>
+    /// A value nobody writes in is wrong whichever direction the declaration arrived from, because no release ever
+    /// accepted one: the property binds strictly, so a stored declaration naming <c>German</c> was never committed
+    /// through this binder. The absence is the case that differs, and <see cref="FindMissingLanguageError" /> holds it.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateLanguage()
+    {
+        if (!string.IsNullOrWhiteSpace(this.Language) && this.ReadingLanguage is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.DisplayName}': {nameof(this.Language)} states '{this.Language}', which is not a language MailFathom writes in. It takes {PublishedLanguages}.",
+                [nameof(this.Language)]);
+        }
     }
 
     /// <summary>Reports a spam classification block this account could not be classified under.</summary>
@@ -1660,20 +1749,18 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     }
 
     /// <summary>Builds what this account is published as, or nothing when its configuration cannot name it.</summary>
-    /// <param name="user">The user a configured account belongs to, which configuration itself cannot name.</param>
     /// <returns>The served account, or <see langword="null" /> when the identifier or the display name is unusable.</returns>
     /// <remarks>
     /// The absence is the reload case rather than an ordinary one: startup refuses configuration this returns nothing
     /// for, so the only way to reach it is a reload being rejected while the previous snapshot is still serving.
-    /// The user is a parameter rather than a configured key because no account block names one: an account declared in
-    /// a file belongs to the one user such a deployment holds, and the caller is what knows which that is.
+    /// No user takes part: the identifier is generated and unique across the deployment, so an account is published
+    /// once whoever is assigned it, and who reaches it is the assignment relation's answer rather than this one's.
     /// </remarks>
-    internal ServedMailAccount? CreateServedAccount(MailUserId user)
+    internal ServedMailAccount? CreateServedAccount()
     {
         try
         {
             return new ServedMailAccount(
-                user,
                 MailAccountId.Create(this.AccountId),
                 MailAccountDisplayName.Create(this.DisplayName),
                 this.Mode);

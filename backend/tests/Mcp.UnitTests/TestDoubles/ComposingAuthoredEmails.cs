@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -28,15 +29,17 @@ internal static class ComposingAuthoredEmails
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .Compose(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailUserId?>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
                 OutgoingEmailRequest.Create(
-                    call.ArgAt<MailAccountIdentity>(0),
-                    call.ArgAt<OutgoingEmailRequester>(1),
-                    RecipientsOf(call.ArgAt<AuthoredEmail>(2))),
+                    call.ArgAt<MailAccountId>(0),
+                    call.ArgAt<MailUserId?>(1),
+                    call.ArgAt<OutgoingEmailRequester>(2),
+                    RecipientsOf(call.ArgAt<AuthoredEmail>(3))),
                 InternetMessageId.Mint("example.test"),
                 mime)));
 
@@ -51,7 +54,7 @@ internal static class ComposingAuthoredEmails
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .ComposeDraft(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => MailDraftComposition.Composed(new ComposedMailDraft(

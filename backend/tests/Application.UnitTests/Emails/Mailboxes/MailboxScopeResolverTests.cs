@@ -18,13 +18,11 @@ namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
 public sealed class MailboxScopeResolverTests
 {
     private static readonly ServedMailAccount Work = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-1"),
         MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     private static readonly ServedMailAccount Private = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-2"),
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
@@ -164,7 +162,7 @@ public sealed class MailboxScopeResolverTests
     /// records is the user axis rather than a mapping that admitted nothing to begin with.
     /// </remarks>
     [Fact]
-    public void ReadableScope_AUserWhoOwnsNoAccount_ReadsNothingRatherThanEverything()
+    public void ReadableScope_AUserAssignedNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
         var resolver = ResolverFor(SyntheticMailUser.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
@@ -194,7 +192,7 @@ public sealed class MailboxScopeResolverTests
     [Theory]
     [InlineData(JunkMailInclusion.Included, true)]
     [InlineData(JunkMailInclusion.Excluded, false)]
-    public void ReadableScope_AUserWhoOwnsNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
+    public void ReadableScope_AUserAssignedNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
         JunkMailInclusion junkMail,
         bool recorded)
     {
@@ -215,7 +213,7 @@ public sealed class MailboxScopeResolverTests
     /// belongs to somebody else.
     /// </summary>
     [Fact]
-    public void ReadableScope_AnAccountAnotherUserOwns_IsRefusedTheSameWayAsOneNobodyServes()
+    public void ReadableScope_AnAccountAnotherUserIsAssigned_IsRefusedTheSameWayAsOneNobodyServes()
     {
         // Arrange
         var resolver = ResolverFor(SyntheticMailUser.Another, Work);
@@ -236,18 +234,18 @@ public sealed class MailboxScopeResolverTests
     }
 
     /// <summary>
-    /// Both spellings are unique within their user and nowhere wider, so two users may each call an account the same
-    /// thing. Each of them resolves their own, and the scope says whose by naming the user beside the identifier the
-    /// two share.
+    /// One mailbox assigned to two people is one mailbox, and each of them names it by the identifier or the display
+    /// name the deployment gave it. Both resolve the same account, because the identifier is the account's own and no
+    /// longer a name within somebody's list — which is what makes a shared mailbox shared rather than duplicated.
     /// </summary>
     [Theory]
     [InlineData("shared")]
     [InlineData("The shared mailbox")]
-    public void ReadableScope_TwoUsersHoldingIdenticallyNamedAccounts_EachResolvesTheirOwn(string named)
+    public void ReadableScope_AMailboxAssignedToTwoUsers_ResolvesToTheSameAccountForEach(string named)
     {
         // Arrange
-        var ofOneUser = ResolverOwning(SyntheticMailUser.Deployment, SharedlyNamedAccountOf(SyntheticMailUser.Deployment));
-        var ofAnotherUser = ResolverOwning(SyntheticMailUser.Another, SharedlyNamedAccountOf(SyntheticMailUser.Another));
+        var ofOneUser = ResolverOwning(SyntheticMailUser.Deployment, TheSharedAccount());
+        var ofAnotherUser = ResolverOwning(SyntheticMailUser.Another, TheSharedAccount());
 
         // Act
         var forOneUser = ofOneUser.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
@@ -256,20 +254,18 @@ public sealed class MailboxScopeResolverTests
         // Assert
         Assert.Equal([SharedAccountId], forOneUser.AccountIds);
         Assert.Equal([SharedAccountId], forAnotherUser.AccountIds);
-        Assert.Equal(SyntheticMailUser.Deployment, forOneUser.User);
-        Assert.Equal(SyntheticMailUser.Another, forAnotherUser.User);
     }
 
     /// <summary>
-    /// An account only the other user carries is not a name this user can reach, and the refusal is the one text that
-    /// names nothing meets — so a caller cannot use a name to learn what somebody else was given.
+    /// A mailbox this user is not assigned is not a name they can reach, and the refusal is the one text that
+    /// names nothing meets — so a caller cannot use a name to learn which mailboxes somebody else was assigned.
     /// </summary>
     [Fact]
-    public void ReadableScope_AnAccountOnlyAnotherUserCarries_IsRefusedAsTextNamingNothingIs()
+    public void ReadableScope_AMailboxThisUserIsNotAssigned_IsRefusedAsTextNamingNothingIs()
     {
         // Arrange
-        var studio = SyntheticServedAccount.Of("studio", SyntheticMailUser.Another);
-        var resolver = ResolverOwning(SyntheticMailUser.Deployment, SharedlyNamedAccountOf(SyntheticMailUser.Deployment));
+        var studio = SyntheticServedAccount.Of("studio");
+        var resolver = ResolverOwning(SyntheticMailUser.Deployment, TheSharedAccount());
         var onlyTheOtherUserCarries = MailAccountSelector.Create(studio.Id.Value);
 
         // Act
@@ -284,8 +280,8 @@ public sealed class MailboxScopeResolverTests
             refusedForTheirName.Message);
         Assert.Equal(refusedForNoName.ErrorCode, refusedForTheirName.ErrorCode);
 
-        // The control: the user who does carry that name reaches their own account by it, so the refusal above is the
-        // user axis rather than a name nothing in this deployment is called.
+        // The control: the user who is assigned that mailbox reaches it by the same name, so the refusal above is the
+        // assignment rather than a name nothing in this deployment is called.
         Assert.Equal(
             [studio.Id],
             ResolverOwning(SyntheticMailUser.Another, studio)
@@ -295,7 +291,7 @@ public sealed class MailboxScopeResolverTests
 
     /// <summary>The identity question a tool asks about one folder answers on the same user scope as the listing does.</summary>
     [Fact]
-    public void IsReadableByTools_AnAccountAnotherUserOwns_IsNotReadable()
+    public void IsReadableByTools_AnAccountAnotherUserIsAssigned_IsNotReadable()
     {
         // Arrange
         var inbox = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX"));
@@ -752,14 +748,13 @@ public sealed class MailboxScopeResolverTests
         IMailFolderParticipationReader folderParticipation,
         params ServedMailAccount[] servedAccounts) =>
         new(
-            OwnedMailAccountCatalogs.For(AccessAuthorizations.ForUserGranted(user), servedAccounts),
+            AssignedMailAccountCatalogs.For(AccessAuthorizations.ForUserGranted(user), servedAccounts),
             folderParticipation,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);
 
-    /// <summary>Builds the account both users declare under one identifier and one display name.</summary>
-    private static ServedMailAccount SharedlyNamedAccountOf(MailUserId user) => new(
-        user,
+    /// <summary>Builds the one mailbox both users are assigned, under the identifier the deployment gave it.</summary>
+    private static ServedMailAccount TheSharedAccount() => new(
         SharedAccountId,
         MailAccountDisplayName.Create("The shared mailbox"),
         MailSynchronizationMode.Polling);
@@ -768,7 +763,7 @@ public sealed class MailboxScopeResolverTests
     /// <remarks>
     /// The catalog is substituted here where <see cref="ResolverFor(MailUserId, ServedMailAccount[])" /> composes the
     /// real one, because these claims are about two users each owning something and configuration holds one user —
-    /// <see cref="OwnedMailAccountCatalog" /> answers every configured account to that user and none to anybody else,
+    /// <see cref="AssignedMailAccountCatalog" /> answers every configured account to that user and none to anybody else,
     /// so the arrangement they need cannot be reached through it while accounts are declared in a file. What is under
     /// test is the naming decision the resolver takes over whatever set that port answered with, which is exactly what
     /// stating the set leaves in place.
@@ -777,7 +772,7 @@ public sealed class MailboxScopeResolverTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.User.Returns(user);
-        catalog.OwnedAccounts.Returns([.. ownedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal)]);
+        catalog.AssignedAccounts.Returns([.. ownedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal)]);
 
         return new MailboxScopeResolver(
             catalog,
@@ -793,7 +788,7 @@ public sealed class MailboxScopeResolverTests
         params ServedMailAccount[] servedAccounts)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns(
+        catalog.AssignedAccounts.Returns(
         [
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);

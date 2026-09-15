@@ -6,7 +6,6 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.Payloads;
@@ -20,8 +19,7 @@ namespace MailFathom.Application.UnitTests.Jobs.Payloads;
 /// </remarks>
 public sealed class EraseWithdrawnMailFolderMailJobPayloadTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     [Fact]
     public void ToIdempotencyKey_AnOrdinaryAlias_NamesTheAccountTheFolderAndThePass()

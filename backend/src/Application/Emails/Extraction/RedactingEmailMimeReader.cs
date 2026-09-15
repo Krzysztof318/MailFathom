@@ -50,7 +50,9 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
     /// <param name="inner">The reader that turns raw MIME into normalized metadata.</param>
     /// <param name="guard">The one redaction every derived write shares.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public RedactingEmailMimeReader(IEmailMimeReader inner, SensitiveContentDerivationGuard guard)
+    public RedactingEmailMimeReader(
+        IEmailMimeReader inner,
+        SensitiveContentDerivationGuard guard)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(guard);
@@ -62,17 +64,15 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the body carries, which refuses the derivation.</exception>
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
-        var mailbox = account.Id;
-
         // Read before the scan rather than where the reading is written, and before the scan rather than after it.
         // A posture republished while this message is being scanned then leaves the row stamped with the older one,
         // which reads as stale and is re-derived — the safe direction, where a stamp taken at the write would record a
         // posture the text never went through and the row would never be revisited.
-        var redactedUnder = this.guard.StampFor(mailbox);
+        var redactedUnder = this.guard.StampFor(account);
         var extraction = await this.inner.ReadMetadataAsync(account, rawMime, cancellationToken);
 
         // A message nobody could parse carries no text to redact, and neither does one whose body held no words or
@@ -86,14 +86,14 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
                 : extraction;
         }
 
-        var redactedOriginal = await this.guard.GuardAsync(mailbox, original, cancellationToken);
+        var redactedOriginal = await this.guard.GuardAsync(account, original, cancellationToken);
 
         // Most mail quotes nothing and signs off with nothing, so the two readings are one string and redaction is
         // reproducible over it — scanning it twice would spend a second budget and report a second measurement for one
         // message, which is both the cost and the figure an operator reads the derivation latency from.
         var redactedTrimmed = StringComparer.Ordinal.Equals(original, trimmed)
             ? redactedOriginal
-            : await this.guard.GuardAsync(mailbox, trimmed, cancellationToken);
+            : await this.guard.GuardAsync(account, trimmed, cancellationToken);
 
         return EmailMimeExtractionResult.Extracted(metadata with
         {

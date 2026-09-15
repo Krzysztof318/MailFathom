@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.ThreadStates;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.AI.ThreadStates;
 
@@ -35,7 +35,7 @@ internal sealed class InactiveThreadStateDeriver : IThreadStateDeriver
     /// <inheritdoc />
     public Task<ThreadStateDerivation> DeriveAsync(
         DerivableThread thread,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(thread);

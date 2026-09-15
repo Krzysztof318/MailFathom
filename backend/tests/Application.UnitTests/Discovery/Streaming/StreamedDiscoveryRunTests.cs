@@ -27,7 +27,7 @@ public sealed class StreamedDiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []));
+        MailboxScope.Create([MailAccountId.Create("primary")], []));
 
     private readonly FakeTimeProvider clock = new(DiscoveryRuns.Now);
 

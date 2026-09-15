@@ -61,11 +61,11 @@ configured and the `displayName` they gave it — and **either one names the acc
 matched without regard to case. Quote the display name to a person; the identifier is what other results report and what
 stays stable if the readable name is changed.
 
-**Both names belong to the account's user and are unique within that user rather than across the deployment.** Either
-one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it survives
-a rename. What neither may be treated as is a name for the mailbox on its own: two users may each call an account
-`work`, so a stored name is only ever this user's name and is never compared with one read for somebody else or from a
-second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
+**The identifier names one mailbox across the deployment, and the display name only within the set you are assigned.**
+Either one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it
+survives a rename and is the same name whoever reads it. What the display name may not be treated as is a name for the
+mailbox on its own: two people's accounts may each be called `work`, so a stored display name is only ever a name
+within one person's set and is never compared with one read for somebody else or from a second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
 same refusal whether nothing carries that name or somebody else's mailbox does.
 
 Each account also lists its folders with the same freshness statement a listing carries, and the result says whether
@@ -410,6 +410,13 @@ from the stored message exactly as `reply_to_email` and `forward_email` read the
 is for, so no recipient is required; `send_draft` is where the absence is refused, and the remedy is `update_draft`
 rather than saving again.
 
+**A draft belongs to whoever wrote it, not to the mailbox.** All four tools are scoped to the user the call is acting
+for, so on a mailbox two people are assigned, a draft the other person wrote answers exactly as a draft that never
+existed: `update_draft`, `delete_draft`, and `send_draft` each refuse it that way rather than saying it is somebody
+else's. **The copy in the Drafts folder is the mailbox's, though.** The folder belongs to the account, so on a shared
+mailbox the other person reads the unsent message there as they read everything else it holds, while the draft itself
+stays out of reach to them. Write somewhere else what nobody assigned the mailbox may see.
+
 **These are the only calls here that wait on your mail server**, and for one round trip: the draft is written down
 first and the copy is then put into your Drafts folder, or taken back out of it, while whoever asked is still there.
 So a saved draft comes back saying `filed` when your folder shows it and `held` when it does not — because the server
@@ -627,9 +634,9 @@ which are counts and nothing about what they were spent on.
   saw, with `wasObserved` saying whether any run has looked; reading through MailFathom never changes them. A change you
   asked for with `set_mail_flags` shows up in those fields once the next run has both issued it and read the folder
   back, so a listing taken immediately afterwards still reports the value the server was last seen to hold.
-- **Removing an account erases its stored mail**, with its folders and attachments, and so does unassigning its user,
-  since an account is served to one user at a time. Disabling synchronization does not — the copy already stored stays
-  readable.
+- **Removing an account erases its stored mail**, with its folders and attachments, and so does unassigning its last
+  user; unassigning one of several erases only what that person authored there and leaves the mail for whoever is still
+  assigned. Disabling synchronization erases nothing — the copy already stored stays readable.
 - **What happens to locally stored mail the server deleted is per account**: the default keeps a hidden tombstone,
   and a deployment can choose erasure instead. [IMAP synchronization](../features/imap-synchronization.md) records
   both dispositions.

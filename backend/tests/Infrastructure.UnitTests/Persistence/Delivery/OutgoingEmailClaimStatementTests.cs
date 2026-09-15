@@ -7,7 +7,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Delivery;
@@ -21,8 +20,8 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Delivery;
 /// </remarks>
 public sealed class OutgoingEmailClaimStatementTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
     private static readonly DateTimeOffset ClaimedAt = DateTimeOffset.UnixEpoch.AddHours(9);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
 
@@ -42,25 +41,24 @@ public sealed class OutgoingEmailClaimStatementTests
 
     /// <summary>
     /// The claim takes one account's sends, which is what keeps a pass out of every other account's outbox — and the
-    /// account it names is the pair, so a second user's account of the same configured name is another outbox.
+    /// account it names is the generated identifier, so one outbox serves every user assigned that mailbox.
     /// </summary>
     [Fact]
-    public void Compose_Always_TakesTheUsersAccountItWasAskedAbout()
+    public void Compose_Always_TakesTheAccountItWasAskedAbout()
     {
         // Act
         var statement = Compose();
 
         // Assert
         Assert.Contains(
-            $"""candidate."{nameof(OutgoingEmailEntity.UserId)}" =""",
-            statement.Format,
-            StringComparison.Ordinal);
-        Assert.Contains(
             $"""candidate."{nameof(OutgoingEmailEntity.MailboxAccountId)}" =""",
             statement.Format,
             StringComparison.Ordinal);
-        Assert.Contains(Account.User.Value, statement.GetArguments().OfType<Guid>());
-        Assert.Contains(Account.Id.Value, statement.GetArguments().OfType<string>());
+        Assert.DoesNotContain(
+            nameof(OutgoingEmailEntity.UserId),
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(Account.Value, statement.GetArguments().OfType<string>());
     }
 
     /// <summary>The locking clause is what makes two workers claiming at once take different sends.</summary>

@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -28,8 +29,8 @@ public sealed class InMemoryMailDraftStoreTests
 {
     private static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly IPersistenceSession Session = new IgnoredPersistenceSession();
 
@@ -52,7 +53,7 @@ public sealed class InMemoryMailDraftStoreTests
 
         // Assert
         Assert.Equal(1, draft.Revision);
-        Assert.Equal(Account, draft.Account);
+        Assert.Equal(Account, draft.AccountId);
         Assert.Equal(Moment, draft.ComposedAt);
         Assert.Equal(draft, store.Peek(draft.Id));
         Assert.Single(store.Drafts);
@@ -368,7 +369,7 @@ public sealed class InMemoryMailDraftStoreTests
         var mine = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")));
+            MailAccountId.Create("personal"));
 
         // Act
         var outstanding = await store.ReadOutstandingAsync(
@@ -417,7 +418,8 @@ public sealed class InMemoryMailDraftStoreTests
         var mine = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("work")));
+            MailAccountId.Create("work"),
+            SyntheticMailUser.Another);
 
         // Act
         var held = await store.ReadForUserAsync(
@@ -439,12 +441,12 @@ public sealed class InMemoryMailDraftStoreTests
         var atWork = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")));
+            MailAccountId.Create("personal"));
 
         // Act
         var held = await store.ReadForUserAsync(
             SyntheticMailUser.Deployment,
-            Account.Id,
+            Account,
             maxCount: 10,
             TestContext.Current.CancellationToken);
 
@@ -558,10 +560,12 @@ public sealed class InMemoryMailDraftStoreTests
 
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore store,
-        MailAccountIdentity? account = null) =>
+        MailAccountId? account = null,
+        MailUserId? author = null) =>
         store.OpenAsync(
             Session,
             account ?? Account,
+            author ?? SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command("one-act"),
             [],
             "a draft",

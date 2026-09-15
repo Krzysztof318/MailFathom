@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
@@ -17,10 +16,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record EraseLocalMailFolderMailJobPayload : IJobPayload
 {
-    /// <summary>Gets the user holding the account.</summary>
-    public required Guid UserId { get; init; }
-
-    /// <summary>Gets the account's identifier within that user.</summary>
+    /// <summary>Gets the account's generated identifier.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the folder whose erasure asked for the work.</summary>
@@ -33,18 +29,17 @@ public sealed record EraseLocalMailFolderMailJobPayload : IJobPayload
     [JsonIgnore]
     public JobType JobType => JobType.EraseLocalMailFolderMail;
 
-    /// <summary>Gets the account, named by its user and its identifier.</summary>
+    /// <summary>Gets the account, named by its generated identifier.</summary>
     [JsonIgnore]
-    public MailAccountIdentity Account => MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
+    public MailAccountId Account => MailAccountId.Create(this.AccountId);
 
     /// <summary>States the first pass an erasure owes.</summary>
     /// <param name="account">The account.</param>
     /// <param name="folder">The folder that was erased.</param>
     /// <returns>The payload.</returns>
-    public static EraseLocalMailFolderMailJobPayload For(MailAccountIdentity account, LocalMailFolderId folder) => new()
+    public static EraseLocalMailFolderMailJobPayload For(MailAccountId account, LocalMailFolderId folder) => new()
     {
-        UserId = account.User.Value,
-        AccountId = account.Id.Value,
+        AccountId = account.Value,
         FolderId = folder.Value,
     };
 
@@ -55,5 +50,5 @@ public sealed record EraseLocalMailFolderMailJobPayload : IJobPayload
     /// <summary>Composes the identity that makes one pass run once.</summary>
     /// <returns>The key.</returns>
     public JobIdempotencyKey ToIdempotencyKey() =>
-        JobIdempotencyKey.Create($"{JobType.EraseLocalMailFolderMail.Name}:{this.UserId}:{this.AccountId}:{this.FolderId}:{this.Pass}");
+        JobIdempotencyKey.Create($"{JobType.EraseLocalMailFolderMail.Name}:{this.AccountId}:{this.FolderId}:{this.Pass}");
 }

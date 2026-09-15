@@ -100,7 +100,7 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// that lease expires, so nothing is lost by leaving it to the account's next run.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One account's pass must not stop the loop that serves every other account; each send's own record already carries how far it got, and the account's synchronization run drains what this pass did not.")]
-    private async Task<MailOutboxPassReport> RunPassAsync(MailAccountIdentity account, CancellationToken stoppingToken)
+    private async Task<MailOutboxPassReport> RunPassAsync(MailAccountId account, CancellationToken stoppingToken)
     {
         try
         {
@@ -109,8 +109,8 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
             var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
             var report = await pass.RunAsync(account, stoppingToken);
 
-            this.telemetry.Report(account.Id, report);
-            this.Report(account.Id, report);
+            this.telemetry.Report(account, report);
+            this.Report(account, report);
 
             return report;
         }
@@ -120,13 +120,13 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
-            this.LogPassDeferredAfterConcurrencyConflict(exception, account.Id.Value);
+            this.LogPassDeferredAfterConcurrencyConflict(exception, account.Value);
 
             return MailOutboxPassReport.Empty;
         }
         catch (Exception exception)
         {
-            this.LogPassFailed(exception, account.Id.Value);
+            this.LogPassFailed(exception, account.Value);
 
             return MailOutboxPassReport.Empty;
         }

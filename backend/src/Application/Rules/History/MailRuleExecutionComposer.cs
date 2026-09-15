@@ -25,7 +25,7 @@ namespace MailFathom.Application.Rules.History;
 public static class MailRuleExecutionComposer
 {
     /// <summary>Composes the executions one evaluated email leaves behind.</summary>
-    /// <param name="account">The account whose mail was evaluated, named by its user and its identifier together.</param>
+    /// <param name="account">The account whose mail was evaluated, by its generated identifier together.</param>
     /// <param name="storedEmailId">The local identity of the email.</param>
     /// <param name="evaluation">What the rule set concluded, under the revision it concluded it.</param>
     /// <param name="trigger">Which of the pass's two walks reached the email.</param>
@@ -34,7 +34,7 @@ public static class MailRuleExecutionComposer
     /// <returns>One execution per rule the pass reached, in the order the rules were reached.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public static IReadOnlyList<MailRuleExecution> Compose(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId storedEmailId,
         MailRuleSetEvaluation evaluation,
         MailRuleExecutionTrigger trigger,

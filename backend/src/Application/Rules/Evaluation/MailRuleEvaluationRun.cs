@@ -28,8 +28,8 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// </remarks>
 public sealed record MailRuleEvaluationRun
 {
-    /// <summary>Gets the account whose mail the run walks, named by its user and its identifier together.</summary>
-    public required MailAccountIdentity Account { get; init; }
+    /// <summary>Gets the account whose mail the run walks, by its generated identifier together.</summary>
+    public required MailAccountId Account { get; init; }
 
     /// <summary>Gets when the run was asked for.</summary>
     public required DateTimeOffset RequestedAt { get; init; }

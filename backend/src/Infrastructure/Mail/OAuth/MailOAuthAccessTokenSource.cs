@@ -147,16 +147,16 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// and which user declared it is exactly what the catalog resolved when it published the account.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when no served account carries the identifier, which is an account withdrawn between the run being scheduled and its token being requested.</exception>
-    private MailAccountIdentity AccountIdentityOf(MailOAuthAccountSettings settings)
+    private MailAccountId AccountIdentityOf(MailOAuthAccountSettings settings)
     {
         var accountId = MailAccountId.Create(settings.AccountId);
 
         var served = this.accountCatalog.ServedAccounts
             .FirstOrDefault(account => account.Id == accountId)
             ?? throw new InvalidOperationException(
-                $"Account '{accountId.Value}' is no longer served, so the user its stored credential would be recorded under cannot be named.");
+                $"Account '{accountId.Value}' is no longer served, so its stored credential cannot be recorded against it.");
 
-        return served.Identity;
+        return served.Id;
     }
 
     private static Dictionary<string, string> BuildTokenRequestForm(

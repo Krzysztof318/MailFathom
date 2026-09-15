@@ -20,7 +20,6 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -46,8 +45,8 @@ public sealed class MailRuleEndpointsTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     /// <summary>The account a stored run names, which is the user and the identifier together.</summary>
-    private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
+    private static readonly MailAccountId AccountIdentity =
+        Account;
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailRuleEvaluationRunStore runs = Substitute.For<IMailRuleEvaluationRunStore>();
@@ -480,7 +479,7 @@ public sealed class MailRuleEndpointsTests
         // Assert
         await this.history.Received(1).ReadPageAsync(
             Arg.Is<MailRuleExecutionQuery>(query =>
-                query!.AccountId == Account
+                query!.Account == Account
                 && query.RuleName == "file-invoices"
                 && query.StoredEmailId!.Value.Value == email
                 && query.PageSize == 10),
@@ -517,7 +516,6 @@ public sealed class MailRuleEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

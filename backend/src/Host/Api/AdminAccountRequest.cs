@@ -34,7 +34,7 @@ internal static class AdminAccountRequest
     /// every write an administrative request leads to records whose mail it was about. The catalog is what supplies the
     /// user, so the pair comes from the same lookup that decided the account is served rather than from a second read.
     /// </remarks>
-    internal static MailAccountIdentity? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
+    internal static MailAccountId? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
     {
         if (string.IsNullOrWhiteSpace(account))
         {
@@ -45,7 +45,7 @@ internal static class AdminAccountRequest
 
         return accounts.ServedAccounts
             .FirstOrDefault(served => served.Id == accountId)
-            ?.Identity;
+            ?.Id;
     }
 
     /// <summary>States why the account a request named did not resolve, without echoing an empty one.</summary>
@@ -87,7 +87,7 @@ internal static class AdminAccountRequest
     internal static bool TryResolveFilter(
         string? account,
         IDeploymentMailAccountCatalog accounts,
-        out MailAccountIdentity? accountId,
+        out MailAccountId? accountId,
         [NotNullWhen(false)] out ProblemHttpResult? refusal)
     {
         accountId = null;

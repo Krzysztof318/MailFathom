@@ -3,11 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.ReplyDrafts;
@@ -24,7 +26,8 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// second use case: the permission, the ledger, the egress guard, and the bounds are all the same decisions, and
 /// splitting it would leave two places for a deployment to be turned on. What differs is only that nothing is read —
 /// no conversation, no participants, no sent mail — so the instruction its author typed is the whole of the request
-/// and is required, and the language comes from that person's record rather than from an exchange there is none of.
+/// and is required, and the language is taken from the first mailbox this caller is assigned rather than from the
+/// mailbox an answered message would have named.
 /// </para>
 /// <para>
 /// The correspondence is read under the same scope the conversation screen reads it under — every account this user
@@ -76,7 +79,7 @@ public sealed class MailReplyDrafting
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
-    private readonly IMailUserLanguages languages;
+    private readonly IMailAccountLanguages languages;
     private readonly bool derivesStyleFromSentMail;
 
     /// <summary>Initializes the drafting.</summary>
@@ -85,7 +88,7 @@ public sealed class MailReplyDrafting
     /// <param name="scopeResolver">Decides which accounts and folders the conversation is read across.</param>
     /// <param name="egressGuard">Scans what the draft publishes to a client, where this deployment scans anything.</param>
     /// <param name="authorization">Enforces the permission this drafting is behind.</param>
-    /// <param name="languages">Answers which language this deployment writes for the acting user, which decides a draft answering no correspondence.</param>
+    /// <param name="languages">Answers which language a mailbox is read in, which is the language the draft comes out in.</param>
     /// <param name="derivesStyleFromSentMail">Whether the deployment derives a manner from the account's own sent mail at all.</param>
     /// <exception cref="ArgumentNullException">Thrown when any dependency is <see langword="null" />.</exception>
     public MailReplyDrafting(
@@ -94,7 +97,7 @@ public sealed class MailReplyDrafting
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
-        IMailUserLanguages languages,
+        IMailAccountLanguages languages,
         bool derivesStyleFromSentMail)
     {
         ArgumentNullException.ThrowIfNull(sourceReader);
@@ -175,11 +178,36 @@ public sealed class MailReplyDrafting
             sources,
             Bounded(request.Selection, ReplyDraftRequest.MaximumSelectionLength),
             instruction,
-            this.languages.ForUser(user));
+            this.languages.LanguageOf(this.WrittenFrom(sources)));
 
         var draft = await this.writer.WriteAsync(brief, cancellationToken);
 
         return draft.WasWritten ? await this.GuardedAsync(draft, cancellationToken) : draft;
+    }
+
+    /// <summary>Finds the mailbox a draft is written from, which is what decides the language it comes out in.</summary>
+    /// <remarks>
+    /// <para>
+    /// The answered message's account where there is one, because that is the mailbox the reply will leave from and
+    /// the one whose correspondent is being answered. A composer answering nothing names no message and so no
+    /// mailbox, and takes the first this caller is assigned — deterministic rather than arbitrary, the order the
+    /// catalog answers in being fixed. A caller assigned none is answered with the unset identity, which the port
+    /// reads as an account this deployment does not serve and therefore as English.
+    /// </para>
+    /// <para>
+    /// The assignment listing rather than a resolved scope, because the whole of what is wanted here is one account
+    /// identifier: resolving a scope would walk every assigned account's folders, order them, and fold the junk
+    /// mapping in, and then have all of it discarded but the first identifier.
+    /// </para>
+    /// </remarks>
+    private MailAccountId WrittenFrom(ReplyDraftSources sources)
+    {
+        if (sources.Account is { } answered)
+        {
+            return answered;
+        }
+
+        return this.scopeResolver.AssignedAccounts is [var first, ..] ? first : default;
     }
 
     /// <summary>Reads the conversation one drafting answers, or nothing where this user holds no such message.</summary>

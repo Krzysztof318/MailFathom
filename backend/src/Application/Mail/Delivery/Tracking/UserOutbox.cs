@@ -22,9 +22,9 @@ namespace MailFathom.Application.Mail.Delivery.Tracking;
 /// </para>
 /// <para>
 /// <b>A listing names an account and never the deployment.</b> The narrowing is resolved against the accounts the
-/// caller's user owns, so there is no unnarrowed reading here at all: one that fell back to every account would page
+/// caller's user is assigned, so there is no unnarrowed reading here at all: one that fell back to every account would page
 /// through every user's outgoing mail, which is the deployment-wide catalog a user-facing surface must never
-/// compose. An account another user owns is refused exactly as one nobody configured.
+/// compose. An account another user is assigned is refused exactly as one nobody configured.
 /// </para>
 /// <para>
 /// What the answers may carry is what the administrative reading already settled and for the same reasons. A page
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Mail.Delivery.Tracking;
 /// part of sending rather than a power beside it, which is the same reading the per-caller cancellation takes.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a listing may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user is assigned, and therefore which one a listing may name.</param>
 /// <param name="outgoingEmails">Holds the durable record of every send.</param>
 /// <param name="outbox">Performs the two conditional decisions, in the one place each is decided.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
@@ -56,7 +56,7 @@ public sealed class UserOutbox(
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page, or the reason the request named none.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no user.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user does not own.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user is not assigned.</exception>
     public async Task<UserOutboxPageResult> ReadPageAsync(
         MailAccountSelector account,
         OutgoingEmailStage? stage,
@@ -66,10 +66,10 @@ public sealed class UserOutbox(
     {
         authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        var owned = accountCatalog.OwnedAccounts.FirstOrDefault(candidate => candidate.IsNamedBy(account))
+        var owned = accountCatalog.AssignedAccounts.FirstOrDefault(candidate => candidate.IsNamedBy(account))
             ?? throw new MailAccountNotAccessibleException(account);
 
-        var queryResult = OutboxQuery.Create(owned.Identity, stage, pageSize, cursor);
+        var queryResult = OutboxQuery.Create(owned.Id, stage, pageSize, cursor);
 
         if (queryResult.Query is not { } query)
         {
@@ -87,9 +87,10 @@ public sealed class UserOutbox(
     /// <returns>The record, or <see langword="null" /> when this user has no send under that identifier.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no user.</exception>
     /// <remarks>
-    /// A send of another user's answers exactly as one nobody holds, and so does a send this user's account made
-    /// that a rule asked for: the origin is not part of the scoping here, because the mail leaves this user's own
-    /// mailbox whoever asked for it, and a person watching their outbox is entitled to see what is going out of it.
+    /// A send from an account this user is not assigned answers exactly as one nobody holds. A send one of their own
+    /// accounts made that a rule asked for does not: neither the origin nor the author is part of the scoping here,
+    /// because the mail leaves a mailbox this user is assigned whoever asked for it, and everybody assigned that
+    /// mailbox is entitled to see what is going out of it.
     /// </remarks>
     public async Task<OutgoingEmailRecord?> FindAsync(
         OutgoingEmailId outgoingEmailId,
@@ -99,7 +100,9 @@ public sealed class UserOutbox(
 
         var record = await outgoingEmails.FindAsync(outgoingEmailId, cancellationToken);
 
-        return record is not null && record.Account.User == accountCatalog.User ? record : null;
+        return record is not null && accountCatalog.AssignedAccounts.Any(assigned => assigned.Id == record.AccountId)
+            ? record
+            : null;
     }
 
     /// <summary>Withdraws one of this user's sends, where nothing has begun transmitting it.</summary>

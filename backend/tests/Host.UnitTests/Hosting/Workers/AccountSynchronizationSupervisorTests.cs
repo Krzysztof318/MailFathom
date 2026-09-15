@@ -438,7 +438,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var convergedAfterTheRaise = new TaskCompletionSource();
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 if (Interlocked.Increment(ref convergencePassCount) == 2)
@@ -564,7 +564,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         var folderWasOpened = 0;
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 convergedBeforeAnyFolderWasOpened.TrySetResult(Volatile.Read(ref folderWasOpened) == 0);
@@ -607,7 +607,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var passFailed = new TaskCompletionSource();
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<OutstandingMailboxMutation>>>(_ =>
             {
                 passFailed.TrySetResult();
@@ -647,7 +647,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var convergedAfterTheChangeWasAuthored = new TaskCompletionSource();
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 if (Interlocked.Increment(ref convergencePassCount) == 2)
@@ -661,7 +661,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -677,7 +677,7 @@ public sealed class AccountSynchronizationSupervisorTests
         // Authored from the stage before the held one, so the change lands mid-run at a point this test controls
         // rather than wherever the scheduler happened to put it.
         chunkingStore
-            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 harness.RunSignal.BringForward(MailAccountId.Create("primary"));
@@ -710,14 +710,14 @@ public sealed class AccountSynchronizationSupervisorTests
         // Arrange
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]));
         var releaseTheRun = new TaskCompletionSource();
         var everyEarlierBoundaryPassed = new TaskCompletionSource();
         var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -739,7 +739,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
         // Assert: the pass at the top of the run, and not one of the boundaries behind it.
         await recordStore.Received(1).ReadOutstandingAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
 
@@ -1084,7 +1084,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1126,7 +1126,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var readingReached = new TaskCompletionSource();
         var classificationRunStore = Substitute.For<ISpamClassificationRunStore>();
         classificationRunStore
-            .FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+            .FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 localSteps.Enqueue("classification");
@@ -1136,7 +1136,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1148,7 +1148,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
         var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
         chunkingStore
-            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 localSteps.Enqueue("cut");
@@ -1158,7 +1158,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1193,7 +1193,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1230,7 +1230,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var passFailed = new TaskCompletionSource();
         var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
         chunkingStore
-            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<StoredEmailAwaitingChunking>>>(_ =>
             {
                 passFailed.TrySetResult();
@@ -1265,7 +1265,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1308,7 +1308,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1329,7 +1329,9 @@ public sealed class AccountSynchronizationSupervisorTests
         // Arrange
         // The second run reaching the mail server is what proves the first one finished, which is the moment the
         // signal is raised at: stopping supervision on the first folder instead would leave the cycle interrupted,
-        // and an interrupted cycle deliberately says nothing.
+        // and an interrupted cycle deliberately says nothing. The signal names the mailbox and no user, because a run
+        // is the mailbox's rather than one reader's: who hears about it is the assignment relation, read by the
+        // channel that delivers it.
         var attemptCount = 0;
         var secondRunStarted = new TaskCompletionSource();
         await using var emptyMailbox = CreateEmptyMailbox();
@@ -1363,7 +1365,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var signal = Assert.Single(
             harness.SignalChannel.Published,
             published => published.Kind == ClientSignalKind.AccountState);
-        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
+        Assert.Null(signal.User);
         Assert.Equal(MailAccountId.Create("primary"), signal.Account);
         Assert.Null(signal.Folder);
         Assert.Empty(signal.Emails);
@@ -1524,9 +1526,7 @@ public sealed class AccountSynchronizationSupervisorTests
             services,
             settings,
             clock,
-            MailAccountIdentity.Create(
-                SyntheticMailUser.Deployment,
-                MailAccountId.Create(options.DeclaredAccount(0).AccountId)));
+            MailAccountId.Create(options.DeclaredAccount(0).AccountId));
     }
 
     /// <summary>Holds the one supervisor a test drives, together with what it was composed from.</summary>
@@ -1543,7 +1543,7 @@ public sealed class AccountSynchronizationSupervisorTests
             ServiceProvider services,
             StubSettingsSnapshot<MailSynchronizationOptions> settings,
             FakeTimeProvider clock,
-            MailAccountIdentity account)
+            MailAccountId account)
         {
             this.services = services;
             this.Settings = settings;
@@ -1559,7 +1559,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 settings,
                 this.accountRunSlots,
                 new AccountPushNotificationWatch(
-                    account.Id,
+                    account,
                     services.GetRequiredService<IServiceScopeFactory>(),
                     this.PushLogger,
                     clock),

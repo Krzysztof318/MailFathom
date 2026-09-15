@@ -29,7 +29,7 @@ public sealed class LocalMailFolderModelTests
 
         // Assert
         Assert.Equal(
-            ["UserId", "MailboxAccountId", "ParentId", "NameKey"],
+            ["MailboxAccountId", "ParentId", "NameKey"],
             index.Properties.Select(property => property.Name));
         Assert.True(index.IsUnique);
         Assert.False((bool?)index.FindAnnotation("Npgsql:NullsDistinct")?.Value);
@@ -47,7 +47,7 @@ public sealed class LocalMailFolderModelTests
         var index = FindIndex(PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName, context);
 
         // Assert
-        Assert.Equal(["UserId", "MailboxAccountId", "Role"], index.Properties.Select(property => property.Name));
+        Assert.Equal(["MailboxAccountId", "Role"], index.Properties.Select(property => property.Name));
         Assert.True(index.IsUnique);
         Assert.Equal("\"Role\" IS NOT NULL AND \"ErasedAt\" IS NULL", index.GetFilter());
     }

@@ -3,13 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Notifications;
 
 namespace MailFathom.Application.Notifications;
 
-/// <summary>Turns what a synchronization run observed into what its user is told about it.</summary>
+/// <summary>Turns what a synchronization run observed into what the account's assigned users are told about it.</summary>
 /// <remarks>
 /// <para>
 /// The run is the only producer wired today, and it produces two things: that mail arrived, and that something about
@@ -40,25 +41,39 @@ namespace MailFathom.Application.Notifications;
 /// client draws the bell from that rather than from the next interval. A row the deduplication rule folded into a
 /// standing one is not announced, for the same reason it is not written.
 /// </para>
+/// <para>
+/// A notification is one person's, so a mailbox assigned to several people is one condition raised once for each of
+/// them: the run observed one thing about one account, and each of the people served by it has their own unread list
+/// and their own deduplication. An account assigned to nobody raises nothing, which is the same answer the signal
+/// channel gives — there is nobody the condition is about.
+/// </para>
 /// </remarks>
 public sealed class SynchronizationNotifications
 {
     private readonly INotificationStore store;
+    private readonly IMailAccountAssignments assignments;
     private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the producer from the record it raises into.</summary>
     /// <param name="store">Keeps what is raised.</param>
+    /// <param name="assignments">Answers who a condition about one mailbox is about.</param>
     /// <param name="signals">Tells an open client that a row was written, so a bell is drawn without waiting for an interval.</param>
     /// <param name="timeProvider">Stamps a notification with when the run observed what it describes.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
-    public SynchronizationNotifications(INotificationStore store, ClientSignals signals, TimeProvider timeProvider)
+    public SynchronizationNotifications(
+        INotificationStore store,
+        IMailAccountAssignments assignments,
+        ClientSignals signals,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(assignments);
         ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.store = store;
+        this.assignments = assignments;
         this.signals = signals;
         this.timeProvider = timeProvider;
     }
@@ -76,7 +91,7 @@ public sealed class SynchronizationNotifications
     /// mail arrived rather than how much is waiting, and the mailbox answers the second question when it is opened.
     /// </remarks>
     public Task<bool> ReportArrivedMailAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int newMessageCount,
         CancellationToken cancellationToken)
     {
@@ -112,7 +127,7 @@ public sealed class SynchronizationNotifications
     /// nowhere: there is nothing for the person to open, and the account will try again on its own.
     /// </remarks>
     public Task<bool> ReportIncompleteRunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int failedFolderCount,
         int scheduledFolderCount,
         CancellationToken cancellationToken)
@@ -147,7 +162,7 @@ public sealed class SynchronizationNotifications
     /// until somebody replaces it, so the statement is made once and stays made until it has been read.
     /// </remarks>
     public Task<bool> ReportRefusedCredentialAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         this.RecordAsync(
             account,
@@ -160,7 +175,7 @@ public sealed class SynchronizationNotifications
             cancellationToken);
 
     private async Task<bool> RecordAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         NotificationKind kind,
         string title,
         string body,
@@ -170,7 +185,7 @@ public sealed class SynchronizationNotifications
         CancellationToken cancellationToken)
     {
         var occurredAt = this.timeProvider.GetUtcNow();
-        var accountId = account.Id.Value;
+        var accountId = account.Value;
 
         // An account identifier is the operator's own text and nothing bounds its length, while both places one
         // reaches here are bounded columns. The key reduces an outsized one to a digest of itself; the source line is
@@ -178,31 +193,46 @@ public sealed class SynchronizationNotifications
         // rather than being shown truncated as an account nobody configured.
         var source = accountId.Length <= Notification.MaximumSourceLength ? accountId : null;
 
-        var notification = Notification.Compose(
-            NotificationId.Create(Guid.CreateVersion7(occurredAt)),
-            account.User,
-            kind,
-            title,
-            body,
-            statement,
-            source,
-            target,
-            NotificationDeduplicationKey.For(condition, account.Id.Value),
-            occurredAt);
+        var anyKept = false;
 
-        var kept = await this.store.RecordAsync(notification, cancellationToken);
-
-        if (!kept || !this.signals.Reaches)
+        // One row per assigned user rather than one for the mailbox, because the unread list, the read mark, and the
+        // deduplication window are each one person's. The identity is generated per row for the same reason: two
+        // people told the same thing are two rows either of them may read or dismiss without touching the other's.
+        foreach (var user in this.assignments.UsersAssignedTo(account))
         {
-            return kept;
+            var notification = Notification.Compose(
+                NotificationId.Create(Guid.CreateVersion7(occurredAt)),
+                user,
+                kind,
+                title,
+                body,
+                statement,
+                source,
+                target,
+                NotificationDeduplicationKey.For(condition, account.Value),
+                occurredAt);
+
+            var kept = await this.store.RecordAsync(notification, cancellationToken);
+
+            if (!kept)
+            {
+                continue;
+            }
+
+            anyKept = true;
+
+            if (!this.signals.Reaches)
+            {
+                continue;
+            }
+
+            // The count is read only where a row was actually written and something is listening, so a deployment
+            // serving no client and a run that changed nothing both pay nothing for this.
+            var unreadCount = await this.store.CountUnreadAsync(user, cancellationToken);
+
+            this.signals.Publish(ClientSignal.NotificationRaised(notification, unreadCount));
         }
 
-        // The count is read only where a row was actually written and something is listening, so a deployment serving
-        // no client and a run that changed nothing both pay nothing for this.
-        var unreadCount = await this.store.CountUnreadAsync(account.User, cancellationToken);
-
-        this.signals.Publish(ClientSignal.NotificationRaised(notification, unreadCount));
-
-        return true;
+        return anyKept;
     }
 }

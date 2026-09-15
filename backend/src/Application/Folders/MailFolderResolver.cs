@@ -73,7 +73,7 @@ public sealed class MailFolderResolver
     /// checkpoint, so the new folder is synchronized from its first UID whatever UIDVALIDITY it reports.
     /// </remarks>
     public async Task<MailFolderResolutionResult> ResolveAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping mapping,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ public sealed class MailFolderResolver
         ArgumentNullException.ThrowIfNull(mapping);
 
         var advertisedFolders = await this.remoteFolderCatalog.ListFoldersAsync(
-            account.Id,
+            account,
             transportSecurityPolicy,
             cancellationToken);
 
@@ -133,7 +133,7 @@ public sealed class MailFolderResolver
     /// </para>
     /// </remarks>
     private async Task<RemoteFolderPath?> CreateConfiguredFolderAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping mapping,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -144,7 +144,7 @@ public sealed class MailFolderResolver
         }
 
         return await this.remoteFolderCreator.CreateFolderAsync(
-            account.Id,
+            account,
             mapping.Alias,
             configuredPath,
             transportSecurityPolicy,
@@ -198,7 +198,7 @@ public sealed class MailFolderResolver
     }
 
     private async Task RecordNewBindingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution? previousResolution,
         MailFolderResolution newResolution,
         CancellationToken cancellationToken)
@@ -229,7 +229,7 @@ public sealed class MailFolderResolver
         // audit store would close that by joining the transaction; a log-backed one cannot.
         await this.mappingChangeAuditor.RecordMappingChangeAsync(
             new MailFolderMappingChange(
-                account.Id,
+                account,
                 newResolution.Alias,
                 previousResolution?.RemotePath,
                 newResolution.RemotePath,

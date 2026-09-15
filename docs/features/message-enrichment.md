@@ -33,11 +33,12 @@ The evidence names passages in the same terms the Discover run's citations name 
 message again. A passage the store no longer holds resolves to nothing, which is a mark whose message has been re-cut
 rather than a mark that never had any.
 
-**Every mark is written in the language its reader reads, whatever language the message was in.** That language is
-[the one their own record names](../operations/configuration-sources.md#the-language-a-user-reads) — `English` or
-`Polish` — so a Polish reader's German mail is marked in Polish, and the two readers of one thread read it each in
-their own. A name, a subject, or a phrase quoted out of the message stays as it was written, because a quotation that
-was translated is no longer evidence of anything.
+**Every mark is written in the language the mailbox it was found in is read in, whatever language the message was
+in.** That language is [the one the account's own record names](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language) — `English` or `Polish` — so German mail in a
+mailbox read in Polish is marked in Polish. It is the mailbox's rather than the reader's because the mark is one row:
+a mailbox two people are assigned is enriched once, and both of them read the sentence that one derivation wrote. A
+name, a subject, or a phrase quoted out of the message stays as it was written, because a quotation that was
+translated is no longer evidence of anything.
 
 ## A rule's verdict and a model's are different in the data
 

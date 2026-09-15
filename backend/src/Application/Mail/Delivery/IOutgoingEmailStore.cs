@@ -87,7 +87,7 @@ public interface IOutgoingEmailStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int limit,
         CancellationToken cancellationToken);
 
@@ -114,7 +114,7 @@ public interface IOutgoingEmailStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 
     /// <summary>Takes up to a batch of the account's due sends and leases each of them to one attempt.</summary>
@@ -153,7 +153,7 @@ public interface IOutgoingEmailStore
     /// carries no failure yet, which is what keeps it from writing over the reason a live attempt already recorded, and
     /// it moves no stage: the stage is what says the outcome is unknown.
     /// </remarks>
-    Task<int> MarkUnknownOutcomesAsync(MailAccountIdentity account, CancellationToken cancellationToken);
+    Task<int> MarkUnknownOutcomesAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Gives a held record back after a failure that can clear, claimable again once the instant named has passed.</summary>
     /// <param name="session">The session the write joins.</param>

@@ -151,7 +151,7 @@ internal static class ClientDiscoveryRunEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this user owns.");
+            return Refuse("The account is not one this user is assigned.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
         {
@@ -325,7 +325,7 @@ internal static class ClientDiscoveryRunEndpoints
 
 /// <summary>The question one run is asked, and the mail it may be answered from.</summary>
 /// <param name="Question">What the caller wants to know.</param>
-/// <param name="Accounts">The accounts to read, by identifier or display name, and empty for every account the user owns.</param>
+/// <param name="Accounts">The accounts to read, by identifier or display name, and empty for every account the user is assigned.</param>
 /// <param name="Folders">The folders to read, by alias or as <c>role:Inbox</c>, and empty for every folder.</param>
 /// <param name="Thread">The conversation the question was asked about, or <see langword="null" /> where it was asked about none.</param>
 /// <param name="Emails">The individual messages the question was asked about, and empty where it was asked about none.</param>

@@ -10,7 +10,6 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Discovery.Runs;
@@ -21,7 +20,6 @@ public sealed class PlannedMailRetrievalTests
     private static readonly EmailKnowledgeBounds Bounds = EmailKnowledgeBounds.Default;
 
     private static readonly MailboxScope WholeMailbox = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 

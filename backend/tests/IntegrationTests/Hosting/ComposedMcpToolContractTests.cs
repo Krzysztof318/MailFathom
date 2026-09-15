@@ -125,7 +125,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(
             services,
-            MailAccountIdentity.Create(SyntheticMailAccount.User, accountId),
+            accountId,
             FolderAlias,
             FolderAlias,
             cancellationToken);
@@ -133,8 +133,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
 
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session, SyntheticMailAccount.User,
-                SyntheticEmail.RemoteMetadataOf(occurrenceId, SeededSubject),
+                session, SyntheticEmail.RemoteMetadataOf(occurrenceId, SeededSubject),
                 SyntheticEmail.ExtractionOf(
                     occurrenceId,
                     SeededSubject,

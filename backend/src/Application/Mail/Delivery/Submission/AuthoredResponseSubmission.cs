@@ -94,6 +94,7 @@ public sealed class AuthoredResponseSubmission(
 
         var composition = composer.Compose(
             response.Account,
+            authorization.RequireUser(),
             request.Requester,
             response.Email!,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);

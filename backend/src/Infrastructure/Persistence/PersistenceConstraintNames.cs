@@ -33,13 +33,13 @@ internal static class PersistenceConstraintNames
 
     internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
 
-    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_user_account_alias_generation";
+    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_account_alias_generation";
 
     /// <summary>The rule that no two live siblings of a held account's hierarchy share a name.</summary>
-    internal const string LocalMailFolderSiblingNameUniqueIndexName = "ix_local_mail_folders_user_account_parent_name";
+    internal const string LocalMailFolderSiblingNameUniqueIndexName = "ix_local_mail_folders_account_parent_name";
 
     /// <summary>The rule that a held account has one live folder per protected role.</summary>
-    internal const string LocalMailFolderRoleUniqueIndexName = "ix_local_mail_folders_user_account_role";
+    internal const string LocalMailFolderRoleUniqueIndexName = "ix_local_mail_folders_account_role";
 
     internal const string StoredEmailOccurrenceUniqueIndexName = "ix_stored_emails_folder_uidvalidity_uid";
 
@@ -53,7 +53,7 @@ internal static class PersistenceConstraintNames
     /// walks, so every timeline query carries an equality on the account and this index is the plan for all of them.
     /// A user-led index would therefore be one nothing reads, paid for on every message stored.
     /// </remarks>
-    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_user_account_timeline";
+    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_account_timeline";
 
     internal const string StoredEmailFolderTimelineIndexName = "ix_stored_emails_folder_timeline";
 
@@ -62,7 +62,7 @@ internal static class PersistenceConstraintNames
     internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
 
     /// <summary>The order a requested whole-mailbox rule run walks an account's mail in.</summary>
-    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_user_account_identity";
+    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_account_identity";
 
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
@@ -279,20 +279,20 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The index the trail is both read and aged through.</summary>
     internal const string MailboxMutationAuditEntryTimelineIndexName =
-        "ix_mailbox_mutation_audit_entries_user_account_completed";
+        "ix_mailbox_mutation_audit_entries_account_completed";
 
     /// <summary>The constraint that keeps one answering entry per run per account, whatever a repeated append attempts.</summary>
-    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_user_account";
+    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_account";
 
     /// <summary>The index the answering record is both read and aged through.</summary>
     internal const string MailAnsweringAuditEntryTimelineIndexName =
-        "ix_mail_answering_audit_entries_user_account_completed";
+        "ix_mail_answering_audit_entries_account_completed";
 
     /// <summary>The index the rule history is walked and aged through, which is its unfiltered page and its retention.</summary>
-    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_user_account_evaluated";
+    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_account_evaluated";
 
     /// <summary>The index that answers what one rule has been doing, which is the history's second question.</summary>
-    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_user_account_rule_evaluated";
+    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_account_rule_evaluated";
 
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
@@ -457,28 +457,21 @@ internal static class PersistenceConstraintNames
     internal const string JobClaimIndexName = "ix_jobs_claimable";
 
     /// <summary>The index an account's jobs are erased and aged through.</summary>
-    internal const string JobAccountIndexName = "ix_jobs_user_account";
+    internal const string JobAccountIndexName = "ix_jobs_account";
 
-    /// <summary>The index an enqueue reads one user's latest turn from, filtered to the work that still holds one.</summary>
+    /// <summary>The index an enqueue reads one account's latest turn from, filtered to the work that still holds one.</summary>
     /// <remarks>
     /// Beside the account index rather than folded into it, because the two are read for opposite reasons and are
     /// proportional to different things. That one answers what belongs to an account across everything the queue has
-    /// ever done; this one answers where a user's waiting work has reached, which is a backlog rather than a history,
-    /// and it is read on every enqueue. It carries no account column at all: the user is on the row now, so the latest
-    /// turn is one descending step into this index rather than a maximum over the user's accounts joined together.
+    /// ever done; this one answers where a mailbox's waiting work has reached, which is a backlog rather than a
+    /// history, and it is read on every enqueue. So the latest turn is one descending step into this index, and the
+    /// account leads it because a mailbox assigned to several users still carries one backlog.
     /// </remarks>
-    internal const string JobUserTurnIndexName = "ix_jobs_user_turn";
+    internal const string JobAccountTurnIndexName = "ix_jobs_account_turn";
 
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
 
-    /// <summary>The rule that a queue row names an account and its user together, or names neither.</summary>
-    /// <remarks>
-    /// Stated as a constraint because the foreign key onto the account cannot state it. An account is referenced by
-    /// the pair, both columns are optional on this table, and PostgreSQL leaves a row supplying only one of them
-    /// unchecked — so this is what keeps the reference enforced rather than merely declared.
-    /// </remarks>
-    internal const string JobAccountUserCheckConstraintName = "ck_jobs_account_user";
 
     /// <summary>The key that binds one message identifier of one account to exactly one thread.</summary>
     /// <remarks>
@@ -570,9 +563,9 @@ internal static class PersistenceConstraintNames
     /// <remarks>Stated rather than left to convention because the store reads it: a write that violates it is an address another account holds, which is a refusal rather than a failure.</remarks>
     internal const string MailAccountRecordAddressUniqueIndexName = "ix_settings_mail_accounts_normalized_email_address";
 
-    /// <summary>The index that keeps a mail account assigned to one user at a time.</summary>
-    /// <remarks>Stated rather than left to convention because it is the guarantee the refusal of a second assignment rests on when two administrators assign one account at once.</remarks>
-    internal const string MailAccountAssignmentAccountUniqueIndexName = "ix_mail_account_assignments_mail_account_id";
+    /// <summary>The index that reads an account's assignments, which is how a mailbox names the users it serves.</summary>
+    /// <remarks>Stated rather than left to convention because a migration drops the unique index this name used to carry and recreates it under the same name without the uniqueness, so the name is what ties the two together.</remarks>
+    internal const string MailAccountAssignmentAccountIndexName = "ix_mail_account_assignments_mail_account_id";
 
     /// <summary>The foreign key that ends a user's assignments with the user.</summary>
     internal const string MailAccountAssignmentUserForeignKeyName = "fk_mail_account_assignments_settings_accounts";

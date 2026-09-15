@@ -12,7 +12,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Rules.History;
@@ -21,8 +20,8 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 public sealed class MailRuleExecutionComposerTests
 {
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 4, 2, 9, 30, 0, TimeSpan.Zero);
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
     private static readonly StoredEmailId Email = StoredEmailId.Create(Guid.CreateVersion7());
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
@@ -347,7 +346,7 @@ public sealed class MailRuleExecutionComposerTests
         [
             typeof(MailRuleExecutionId),
             typeof(MailAccountId),
-            typeof(MailAccountIdentity),
+            typeof(MailAccountId),
             typeof(StoredEmailId),
             typeof(MailRuleSetRevision),
             typeof(MailRuleExecutionTrigger),

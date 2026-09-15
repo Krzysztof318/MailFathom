@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -25,7 +24,6 @@ internal static class MailboxMutationAuditEntryMapping
         Id = entry.Id.Value,
         MutationRecordId = entry.MutationRecordId.Value,
         MailboxAccountId = entry.AccountId.Value,
-        UserId = entry.User.Value,
         StoredEmailId = entry.StoredEmailId.Value,
         Mutation = entry.Mutation.Name,
         SourceFolderPath = entry.SourceFolderPath.Value,
@@ -82,7 +80,6 @@ internal static class MailboxMutationAuditEntryMapping
             Id = MailboxMutationAuditEntryId.Create(entity.Id),
             MutationRecordId = MailboxMutationRecordId.Create(entity.MutationRecordId),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
-            User = MailUserId.Create(entity.UserId),
             StoredEmailId = StoredEmailId.Create(entity.StoredEmailId),
             Mutation = mutation,
             SourceFolderPath = sourceFolderPath,

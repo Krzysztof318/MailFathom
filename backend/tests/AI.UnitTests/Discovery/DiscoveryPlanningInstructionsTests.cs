@@ -9,7 +9,6 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.Discovery;
@@ -90,7 +89,7 @@ public sealed class DiscoveryPlanningInstructionsTests
         // Arrange
         var email = Email("33333333-3333-3333-3333-333333333333");
         var scope = MailboxScope
-            .Create(SyntheticMailUser.Deployment, [Primary], [new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"))])
+            .Create([Primary], [new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"))])
             .NarrowedToEmails([email]);
 
         // Act
@@ -103,7 +102,7 @@ public sealed class DiscoveryPlanningInstructionsTests
     }
 
     private static MailboxScope Scope() =>
-        MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []);
+        MailboxScope.Create([Primary], []);
 
     private static StoredEmailId Email(string identity) => StoredEmailId.Create(new Guid(identity));
 }

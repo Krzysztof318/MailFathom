@@ -2,8 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.AttachmentText.Limits;
 
@@ -15,59 +16,153 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// writer another.
 /// </para>
 /// <para>
-/// Two readings exist because two callers ask different questions. A pass reading somebody's mail asks where that user
-/// stands against both ceilings; an administrative surface acts for nobody's mail and asks where the deployment stands,
-/// which is the only question a caller with no user can be answered.
+/// Two readings exist because two callers ask different questions, and the mailbox's is the one a pass asks. Mail
+/// belongs to the account, so a walk holds an account and never a person, while the per-user ceiling still has to
+/// mean something: ADR 0014 counts a shared mailbox in full against every user assigned to it, so reading it
+/// proceeds only while every one of them is under their ceiling, and what it consumed is charged to each. That
+/// fan-out lives here rather than in the pass, so the reading and the charge cannot come to disagree about who a
+/// mailbox is for.
+/// </para>
+/// <para>
+/// The deployment's is the other, and it is what an administrative surface asks: it acts for nobody's mail, so where
+/// the deployment stands is the only question it can be answered.
+/// </para>
+/// <para>
+/// The deployment's figure is not the sum of those per-user charges and is never derived from them. Counting a shared
+/// mailbox in full against each of its users is what the per-user ceiling means, so the per-user figures add up to
+/// more than was read, and a deployment ceiling taken off their sum would stop a mailbox three people share after a
+/// third of what the operator declared. The ledger counts what one reading consumed once, separately.
 /// </para>
 /// </remarks>
 public sealed class AttachmentDerivationSpendGate
 {
     private readonly IAttachmentDerivationSpendLedger ledger;
+    private readonly IMailAccountAssignments assignments;
     private readonly AttachmentDerivationBudget budget;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new gate over one deployment's attachment budget.</summary>
     /// <param name="ledger">Keeps the durable count of what each period has consumed.</param>
+    /// <param name="assignments">Answers who a mailbox is assigned to, which is who its reading is counted against.</param>
     /// <param name="budget">The ceilings and the period they are counted over.</param>
     /// <param name="timeProvider">Decides which period the present moment belongs to.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public AttachmentDerivationSpendGate(
         IAttachmentDerivationSpendLedger ledger,
+        IMailAccountAssignments assignments,
         AttachmentDerivationBudget budget,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(ledger);
+        ArgumentNullException.ThrowIfNull(assignments);
         ArgumentNullException.ThrowIfNull(budget);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.ledger = ledger;
+        this.assignments = assignments;
         this.budget = budget;
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads where one user stands on one step in the current period, which is what a pass consults before it reads.</summary>
+    /// <summary>Reads where one mailbox stands on one step, across every user it is assigned to.</summary>
     /// <param name="derivationStep">The step about to be taken.</param>
-    /// <param name="user">The user whose mail is about to be read.</param>
+    /// <param name="account">The mailbox whose mail is about to be read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The period, what the user and the deployment have consumed, and what each still admits.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <returns>The period, and the strictest standing among the mailbox's users beside the deployment's own.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public async Task<AttachmentDerivationAdmission> ReadCurrentPeriodForAsync(
+    /// <remarks>
+    /// The strictest assigned user decides, because a shared mailbox's mail counts in full against each of them: a
+    /// reading proceeds only while every one is under their ceiling. A mailbox assigned to nobody is refused by the
+    /// same rule read the other way: there is no user for the per-user ceiling to admit, so the answer is an exhausted
+    /// per-user period rather than a fresh one. Admitting it instead would read attachments no caller can reach — every
+    /// caller-facing scope narrows to the accounts somebody is assigned — under no per-user ceiling at all.
+    /// <para>
+    /// ponytail: one indexed read per assigned user, beside a parse and a provider call that cost orders of magnitude
+    /// more. A grouped read is worth writing only if a deployment assigns a mailbox widely enough for it to show.
+    /// </para>
+    /// </remarks>
+    public async Task<AttachmentDerivationAdmission> ReadCurrentPeriodForAccountAsync(
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        if (!user.IsSpecified)
+        var periodStart = this.CurrentPeriodStart();
+        var userCeiling = this.budget.CeilingFor(derivationStep, forUser: true);
+        var deploymentCeiling = this.budget.CeilingFor(derivationStep, forUser: false);
+
+        AttachmentDerivationPeriod? strictestUser = null;
+        AttachmentDerivationPeriod? deployment = null;
+
+        foreach (var user in this.assignments.UsersAssignedTo(account))
         {
-            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
+            var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, user, cancellationToken);
+
+            var standing = this.PeriodOf(derivationStep, periodStart, consumed.UserConsumedUnitCount, userCeiling);
+
+            deployment ??= this.PeriodOf(
+                derivationStep,
+                periodStart,
+                consumed.DeploymentConsumedUnitCount,
+                deploymentCeiling);
+
+            if (strictestUser is null || IsStricter(standing, strictestUser))
+            {
+                strictestUser = standing;
+            }
         }
 
-        var periodStart = this.CurrentPeriodStart();
-        var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, user, cancellationToken);
+        if (deployment is null)
+        {
+            var consumedEverywhere = await this.ledger.ReadDeploymentConsumedAsync(
+                periodStart,
+                derivationStep,
+                cancellationToken);
+
+            deployment = this.PeriodOf(derivationStep, periodStart, consumedEverywhere, deploymentCeiling);
+        }
 
         return new AttachmentDerivationAdmission(
-            this.PeriodOf(derivationStep, periodStart, consumed.UserConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: true)),
-            this.PeriodOf(derivationStep, periodStart, consumed.DeploymentConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: false)));
+            strictestUser ?? this.ExhaustedPeriod(derivationStep, periodStart),
+            deployment);
+    }
+
+    /// <summary>Charges what reading one mailbox's message consumed to every user that mailbox is assigned to.</summary>
+    /// <param name="session">The session committing the readings that work produced.</param>
+    /// <param name="derivationStep">The step the units belong to.</param>
+    /// <param name="account">The mailbox whose mail was read.</param>
+    /// <param name="unitCount">What the work consumed, in that step's own unit.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when every charge has been issued inside the caller's transaction.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
+    /// <remarks>
+    /// Charged to whoever is assigned at the moment the reading happens, and never recharged when an assignment
+    /// changes: consumption is a record of an event rather than a running apportionment. The deployment's own figure
+    /// is charged once by the same write, so a mailbox assigned to nobody still moves it and a mailbox three people
+    /// share moves it by what was read rather than by three times it.
+    /// <para>
+    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
+    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
+    /// was already too late to be useful.
+    /// </para>
+    /// </remarks>
+    public Task RecordAccountSpendAsync(
+        IPersistenceSession session,
+        AttachmentDerivationStep derivationStep,
+        MailAccountId account,
+        long unitCount,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentOutOfRangeException.ThrowIfNegative(unitCount);
+
+        return this.ledger.RecordSpendAsync(
+            session,
+            this.CurrentPeriodStart(),
+            derivationStep,
+            this.assignments.UsersAssignedTo(account),
+            unitCount,
+            cancellationToken);
     }
 
     /// <summary>Reads where the deployment stands on one step, whatever any one user has consumed of it.</summary>
@@ -89,41 +184,15 @@ public sealed class AttachmentDerivationSpendGate
         return this.PeriodOf(derivationStep, periodStart, consumed, this.budget.CeilingFor(derivationStep, forUser: false));
     }
 
-    /// <summary>Charges what reading one message consumed to the period, step, and user it happened for.</summary>
-    /// <param name="session">The session committing the readings that work produced.</param>
-    /// <param name="derivationStep">The step the units belong to.</param>
-    /// <param name="user">The user whose mail was read.</param>
-    /// <param name="unitCount">What the work consumed, in that step's own unit.</param>
-    /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes when the charge has been issued inside the caller's transaction.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
-    /// <remarks>
-    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
-    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
-    /// was already too late to be useful.
-    /// </remarks>
-    public Task RecordSpendAsync(
-        IPersistenceSession session,
-        AttachmentDerivationStep derivationStep,
-        MailUserId user,
-        long unitCount,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
-        }
-
-        return this.ledger.RecordSpendAsync(
-            session,
-            this.CurrentPeriodStart(),
-            derivationStep,
-            user,
-            unitCount,
-            cancellationToken);
-    }
+    // Exhaustion first, because that is what decides whether the work proceeds at all, and the units still admitted
+    // second, so the standing handed back is the one the mailbox actually has rather than whichever assigned user the
+    // scan happened to read first. A period counting against no ceiling admits everything, so it is the loosest there
+    // is and never displaces one that counts.
+    private static bool IsStricter(AttachmentDerivationPeriod candidate, AttachmentDerivationPeriod standing) =>
+        candidate.IsExhausted != standing.IsExhausted
+            ? candidate.IsExhausted
+            : candidate.RemainingUnitCount is { } remaining
+                && (standing.RemainingUnitCount is not { } strictest || remaining < strictest);
 
     private DateTimeOffset CurrentPeriodStart() => this.budget.PeriodStartAt(this.timeProvider.GetUtcNow());
 
@@ -133,4 +202,15 @@ public sealed class AttachmentDerivationSpendGate
         long consumed,
         long ceiling) =>
         new(derivationStep, periodStart, periodStart + this.budget.Period, consumed, ceiling == 0 ? null : ceiling);
+
+    /// <summary>The per-user standing of a mailbox no user is assigned, which admits nothing whatever is configured.</summary>
+    /// <remarks>
+    /// A ceiling of nothing rather than the configured one, because the configured one may be absent and an absent
+    /// ceiling admits everything. There is no user here for a per-user ceiling to be about, so the honest answer is
+    /// that no per-user allowance exists rather than that the deployment declared none.
+    /// </remarks>
+    private AttachmentDerivationPeriod ExhaustedPeriod(
+        AttachmentDerivationStep derivationStep,
+        DateTimeOffset periodStart) =>
+        new(derivationStep, periodStart, periodStart + this.budget.Period, 0, 0);
 }

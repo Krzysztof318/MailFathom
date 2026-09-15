@@ -72,6 +72,6 @@ public sealed class HeldSendDispatchHandler : IJobHandler
             return;
         }
 
-        this.signal.Signal(record.Account);
+        this.signal.Signal(record.AccountId);
     }
 }

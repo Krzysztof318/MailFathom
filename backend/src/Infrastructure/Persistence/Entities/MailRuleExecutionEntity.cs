@@ -43,9 +43,6 @@ internal sealed class MailRuleExecutionEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account the rule was evaluated over.</summary>
-    public required Guid UserId { get; set; }
-
     public Guid StoredEmailId { get; set; }
 
     public required string RuleName { get; set; }

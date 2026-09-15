@@ -286,7 +286,7 @@ internal sealed class MailDraftHarness
     /// <param name="account">The account.</param>
     /// <param name="mapsDraftsFolder">Whether a bound source folder plays the drafts role, which a filing needs.</param>
     /// <returns>The held mailbox, so a test can read what was filed.</returns>
-    internal HeldLocalMailbox HoldAccount(MailAccountIdentity account, bool mapsDraftsFolder = true)
+    internal HeldLocalMailbox HoldAccount(MailAccountId account, bool mapsDraftsFolder = true)
     {
         this.Held = new HeldLocalMailbox(account, this.clock);
 

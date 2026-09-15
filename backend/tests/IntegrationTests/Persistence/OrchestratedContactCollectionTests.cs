@@ -169,8 +169,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 foreach (var seeded in SeededEmails(binding))
                 {
                     await repository.UpsertMetadataAsync(
-                        session, SyntheticMailAccount.User,
-                        seeded.RemoteMetadata,
+                        session, seeded.RemoteMetadata,
                         seeded.Extraction,
                         StoredEmailContentAvailability.Available,
                         token);

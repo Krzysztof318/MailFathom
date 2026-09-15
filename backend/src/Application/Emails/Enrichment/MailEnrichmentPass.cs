@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
@@ -61,7 +61,7 @@ public sealed class MailEnrichmentPass
 
     private readonly IStoredEmailEnrichmentStore enrichmentStore;
     private readonly IEmailEnricher enricher;
-    private readonly IMailUserLanguages languages;
+    private readonly IMailAccountLanguages accountLanguages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -69,29 +69,29 @@ public sealed class MailEnrichmentPass
     /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
     /// <param name="enrichmentStore">Reads what is awaiting a derivation and writes down what one produced.</param>
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
-    /// <param name="languages">Answers which language the account's owner reads, which the readings are written in.</param>
-    /// <param name="egressGuard">States which mailbox the passages are from, so the derivation scans them under that account's posture.</param>
+    /// <param name="accountLanguages">Answers which language the account's mail is read in.</param>
+    /// <param name="egressGuard">Holds the posture the passages are scanned under while the pass runs.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailEnrichmentPass(
         IStoredEmailEnrichmentStore enrichmentStore,
         IEmailEnricher enricher,
-        IMailUserLanguages languages,
+        IMailAccountLanguages accountLanguages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(enrichmentStore);
         ArgumentNullException.ThrowIfNull(enricher);
-        ArgumentNullException.ThrowIfNull(languages);
+        ArgumentNullException.ThrowIfNull(accountLanguages);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.enrichmentStore = enrichmentStore;
         this.enricher = enricher;
-        this.languages = languages;
+        this.accountLanguages = accountLanguages;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
@@ -107,7 +107,7 @@ public sealed class MailEnrichmentPass
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed records stay durable.</exception>
     public async Task<MailEnrichmentPassReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         // The switch is honoured here rather than at composition, so a deployment that has not turned enrichment on runs
@@ -126,9 +126,9 @@ public sealed class MailEnrichmentPass
         // posture it is scanned under and every message in the batch belongs to the one account this pass walks.
         using var actingFor = this.egressGuard.ActingFor(account);
 
-        // Resolved once for the same reason and from the same fact: every message in this batch is one person's, and
-        // what they read is what every reading derived from it is written in.
-        var language = this.languages.ForUser(account.User);
+        // Resolved once for the same reason and from the same fact: every message in this batch is one mailbox's,
+        // and what that mailbox is read in is what every reading derived from it is written in.
+        var language = this.accountLanguages.LanguageOf(account);
 
         var batch = await this.enrichmentStore.GetEmailsAwaitingEnrichmentAsync(
             account,

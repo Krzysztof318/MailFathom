@@ -90,17 +90,17 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Reads the account's folders and the acts each of them allows.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The folders and what may be done to them.</returns>
     public async Task<MailFolderManagement> ReadAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var declared = await this.declarations.AliasesTheAccountDeclaresAsync(account.Id, cancellationToken);
-        var folders = this.mappings.FoldersOf(account.Id);
+        var declared = await this.declarations.AliasesTheAccountDeclaresAsync(account, cancellationToken);
+        var folders = this.mappings.FoldersOf(account);
 
         return new MailFolderManagement(
             [MailFolderAct.Create],
@@ -113,14 +113,14 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Creates a folder on the mail server and declares it.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="parentAlias">The folder to create it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <param name="name">The name as supplied, which a creation naming a role ignores.</param>
     /// <param name="role">The role the folder is to play, or <see langword="null" /> for an ordinary folder.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The created folder, or the refusal.</returns>
     public async Task<MailFolderActOutcome> CreateAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias? parentAlias,
         string? name,
         MailFolderSpecialUse? role,
@@ -128,7 +128,7 @@ public sealed class MirroredMailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
 
-        var folders = this.mappings.FoldersOf(account.Id);
+        var folders = this.mappings.FoldersOf(account);
 
         if (role is { } named && !IsCreatable(folders, named))
         {
@@ -165,15 +165,15 @@ public sealed class MirroredMailFolderEditor
             async () =>
             {
                 var created = await this.creator.CreateFolderBeneathAsync(
-                    account.Id,
+                    account,
                     alias,
                     parentPath,
                     folderName.Value,
                     role,
-                    this.transportPolicies.GetPolicy(account.Id),
+                    this.transportPolicies.GetPolicy(account),
                     cancellationToken);
 
-                return await this.declarations.DeclareAsync(account.Id, alias, created, role, CancellationToken.None);
+                return await this.declarations.DeclareAsync(account, alias, created, role, CancellationToken.None);
             },
             () => new ManagedMailFolder(
                 alias.Value,
@@ -184,13 +184,13 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Renames a folder on the mail server and points its declaration at the new path.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="name">The new name as supplied.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The renamed folder, or the refusal.</returns>
     public async Task<MailFolderActOutcome> RenameAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         string? name,
         CancellationToken cancellationToken)
@@ -224,13 +224,13 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Moves a folder, with everything beneath it, and points its declaration at the new path.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="parentAlias">The folder to move it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The moved folder, or the refusal.</returns>
     public async Task<MailFolderActOutcome> MoveAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         MailFolderAlias? parentAlias,
         CancellationToken cancellationToken)
@@ -274,12 +274,12 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Deletes a folder, on the mail server as well where the account's setting says so.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The folder as it stood at its deletion, or the refusal.</returns>
     public async Task<MailFolderActOutcome> DeleteAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
@@ -292,7 +292,7 @@ public sealed class MirroredMailFolderEditor
             return MailFolderActOutcome.Refused(refusal);
         }
 
-        var disposition = this.deleteDispositions.GetAuthoredFolderDeleteDisposition(account.Id);
+        var disposition = this.deleteDispositions.GetAuthoredFolderDeleteDisposition(account);
         var change = disposition is AuthoredFolderDeleteDisposition.DeleteOnServer
             ? MailFolderChangeKind.Deleted
             : MailFolderChangeKind.MarkedDeleted;
@@ -312,14 +312,14 @@ public sealed class MirroredMailFolderEditor
                 if (disposition is AuthoredFolderDeleteDisposition.DeleteOnServer)
                 {
                     await this.editor.DeleteFolderAsync(
-                        account.Id,
+                        account,
                         folderAlias,
                         acting.Path,
-                        this.transportPolicies.GetPolicy(account.Id),
+                        this.transportPolicies.GetPolicy(account),
                         cancellationToken);
                 }
 
-                return await this.declarations.WithdrawAsync(account.Id, folderAlias, CancellationToken.None);
+                return await this.declarations.WithdrawAsync(account, folderAlias, CancellationToken.None);
             },
             () => deleted,
             erasesStoredMail: disposition is AuthoredFolderDeleteDisposition.DeleteOnServer,
@@ -327,7 +327,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     private async Task<MailFolderActOutcome> CarryOutRenameAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ActableFolder acting,
         RemoteFolderPath? parentPath,
         LocalMailFolderName folderName,
@@ -340,15 +340,15 @@ public sealed class MirroredMailFolderEditor
             async () =>
             {
                 var moved = await this.editor.RenameFolderAsync(
-                    account.Id,
+                    account,
                     acting.Alias,
                     acting.Path,
                     parentPath,
                     folderName.Value,
-                    this.transportPolicies.GetPolicy(account.Id),
+                    this.transportPolicies.GetPolicy(account),
                     cancellationToken);
 
-                return await this.declarations.RepointAsync(account.Id, acting.Alias, moved, CancellationToken.None);
+                return await this.declarations.RepointAsync(account, acting.Alias, moved, CancellationToken.None);
             },
             () => new ManagedMailFolder(acting.Alias.Value, parentAlias, folderName.Value, Role: null, []));
 
@@ -369,7 +369,7 @@ public sealed class MirroredMailFolderEditor
     /// </para>
     /// </remarks>
     private async Task<MailFolderActOutcome> CarryOutAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderChangeKind change,
         Func<Task<MailFolderDeclarationOutcome>> act,
         Func<ManagedMailFolder> describe,
@@ -410,7 +410,7 @@ public sealed class MirroredMailFolderEditor
 
     /// <summary>Queues the first pass over the stored mail of a folder the account no longer declares.</summary>
     /// <returns>Whether the queue was full, so the mail waits for the account's next deletion to queue a pass.</returns>
-    private async Task<bool> QueueStoredMailErasureAsync(MailAccountIdentity account, MailFolderAlias folderAlias)
+    private async Task<bool> QueueStoredMailErasureAsync(MailAccountId account, MailFolderAlias folderAlias)
     {
         var erasure = EraseWithdrawnMailFolderMailJobPayload.For(account, folderAlias);
 
@@ -426,11 +426,11 @@ public sealed class MirroredMailFolderEditor
 
     /// <summary>Finds the folder an act names and refuses the ones this surface does not act on.</summary>
     private async Task<ActableFolder> ResolveActableAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
-        var folders = this.mappings.FoldersOf(account.Id);
+        var folders = this.mappings.FoldersOf(account);
 
         if (folders.FirstOrDefault(folder => folder.Alias == folderAlias) is not { } folder)
         {
@@ -442,7 +442,7 @@ public sealed class MirroredMailFolderEditor
             return ActableFolder.Refused(MailFolderActRefusal.ProtectedRole);
         }
 
-        var declared = await this.declarations.AliasesTheAccountDeclaresAsync(account.Id, cancellationToken);
+        var declared = await this.declarations.AliasesTheAccountDeclaresAsync(account, cancellationToken);
 
         // A folder without a declared path is one found by the role it plays, which the refusal above has already
         // answered; reaching here without one therefore means the deployment's own configuration holds it.

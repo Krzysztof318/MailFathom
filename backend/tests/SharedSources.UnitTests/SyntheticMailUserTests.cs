@@ -7,19 +7,21 @@ using Xunit;
 
 namespace MailFathom.SharedSources.UnitTests;
 
-/// <summary>Covers the two users several suites arrange a refusal between.</summary>
+/// <summary>Covers the users several suites arrange a refusal between.</summary>
 /// <remarks>
-/// The whole value of this helper is that the two are different users and that both name somebody. Either failing
-/// would turn every test asserting that one user cannot read another's mail into a test that passes without asserting
+/// The whole value of this helper is that they are different users and that each names somebody. Either failing would
+/// turn every test asserting that one user cannot read another's mail into a test that passes without asserting
 /// anything, in each of the suites that use it rather than here.
 /// </remarks>
 public sealed class SyntheticMailUserTests
 {
     [Fact]
-    public void Deployment_AndAnother_AreDifferentUsers()
+    public void EveryUser_ComparedWithTheOthers_IsADifferentPerson()
     {
         // Arrange, Act & Assert
         Assert.NotEqual(SyntheticMailUser.Deployment, SyntheticMailUser.Another);
+        Assert.NotEqual(SyntheticMailUser.Deployment, SyntheticMailUser.Third);
+        Assert.NotEqual(SyntheticMailUser.Another, SyntheticMailUser.Third);
     }
 
     [Fact]
@@ -28,6 +30,7 @@ public sealed class SyntheticMailUserTests
         // Arrange, Act & Assert
         Assert.True(SyntheticMailUser.Deployment.IsSpecified);
         Assert.True(SyntheticMailUser.Another.IsSpecified);
+        Assert.True(SyntheticMailUser.Third.IsSpecified);
     }
 
     /// <summary>Fixed rather than generated, so a failure names the same value on every run.</summary>
@@ -37,5 +40,6 @@ public sealed class SyntheticMailUserTests
         // Arrange, Act & Assert
         Assert.Equal(SyntheticMailUser.Deployment, SyntheticMailUser.Deployment);
         Assert.Equal(SyntheticMailUser.Another, SyntheticMailUser.Another);
+        Assert.Equal(SyntheticMailUser.Third, SyntheticMailUser.Third);
     }
 }

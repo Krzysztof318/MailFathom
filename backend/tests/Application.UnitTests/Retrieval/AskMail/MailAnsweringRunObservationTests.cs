@@ -7,7 +7,6 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Retrieval.AskMail;
@@ -93,6 +92,6 @@ public sealed class MailAnsweringRunObservationTests
 
     private static MailAnsweringRunObservation Observation() => new(
         MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("work")], []),
+        MailboxScope.Create([MailAccountId.Create("work")], []),
         StartedAt);
 }

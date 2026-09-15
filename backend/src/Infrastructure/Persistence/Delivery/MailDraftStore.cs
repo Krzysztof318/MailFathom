@@ -48,7 +48,8 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// <inheritdoc />
     public async Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -67,10 +68,11 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         var entity = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(composedAt),
-            MailboxAccountId = account.Id.Value,
+            MailboxAccountId = account.Value,
 
-            // Written from the identity the caller's own catalog resolved, which is the account this draft belongs to.
-            UserId = account.User.Value,
+            // A draft is what one person is writing, so it keeps its author among the account's assigned users: only
+            // they read it, and erasing them takes it with them wherever the mailbox goes on being served.
+            UserId = writtenBy.Value,
             RequesterOrigin = author.Origin,
             RequesterIdentity = author.Identity,
             Subject = subject,
@@ -163,18 +165,16 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// pass files the current revision over it.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int maxCount,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         var entities = await this.ReadDrafts()
-            .Where(draft => draft.UserId == userValue
-                && draft.MailboxAccountId == accountValue
+            .Where(draft => draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
                     || draft.PromotedToOutgoingEmailId != null
                     || (draft.FiledRevision != draft.Revision
@@ -193,8 +193,10 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// <inheritdoc />
     /// <remarks>
     /// Narrowed on the user first and the account second, which is the order the index over this table leads with, so
-    /// a user's listing is a range scan whether or not it names an account. Drafts on their way out are left out at
-    /// the database rather than filtered afterwards: what a person means by their drafts is what they can still edit.
+    /// a user's listing is a range scan whether or not it names an account. The user is the narrowing rather than a
+    /// decoration: a draft belongs to the mailbox but is read by whoever wrote it and by nobody else assigned to that
+    /// mailbox, which is what ADR 0014 says a draft is. Drafts on their way out are left out at the database rather
+    /// than filtered afterwards: what a person means by their drafts is what they can still edit.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
         MailUserId user,

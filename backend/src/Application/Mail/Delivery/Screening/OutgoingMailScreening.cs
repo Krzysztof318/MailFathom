@@ -65,7 +65,7 @@ public sealed class OutgoingMailScreening(
     /// </para>
     /// </remarks>
     public async Task<SensitiveContentEgressRefusal?> FindRefusalAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {

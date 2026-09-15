@@ -120,7 +120,7 @@ internal static class MailboxMaintenanceEndpoints
         var storedEmailCount = await rewind.AssessAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRewindAssessmentResponse(
-            resolution.Account.Id.Value,
+            resolution.Account.Value,
             resolution.Folder?.Value,
             storedEmailCount));
     }
@@ -154,7 +154,7 @@ internal static class MailboxMaintenanceEndpoints
         var rewound = await rewind.RewindAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRewindResponse(
-            resolution.Account.Id.Value,
+            resolution.Account.Value,
             resolution.Folder?.Value,
             [.. rewound.Select(alias => alias.Value)]));
     }
@@ -223,7 +223,7 @@ internal static class MailboxMaintenanceEndpoints
         var run = await runs.FindAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRederivationStateResponse(
-            resolution.Account.Id.Value,
+            resolution.Account.Value,
             resolution.Folder?.Value,
             run is null ? null : MailboxRederivationRunResponse.For(run)));
     }

@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Access;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Microsoft.EntityFrameworkCore;
@@ -22,25 +21,23 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 internal sealed class PersistedMailOwnership(MailFathomDbContext dbContext) : IMailOwnership
 {
     /// <inheritdoc />
-    public async Task<MailAccountIdentity> ReadStoredEmailAccountAsync(
+    public async Task<MailAccountId> ReadStoredEmailAccountAsync(
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
         var storedId = storedEmailId.Value;
 
-        var owner = await dbContext.StoredEmails
+        var accountId = await dbContext.StoredEmails
             .AsNoTracking()
             .Where(email => email.Id == storedId)
-            .Select(email => new { email.UserId, email.MailboxAccountId })
+            .Select(email => email.MailboxAccountId)
             .SingleOrDefaultAsync(cancellationToken);
 
         // A message that is not there is a defect rather than a state: whatever is asking holds an identifier it read
         // from this database, so an absent row means the message was erased under it.
-        return owner is not null
-            ? MailAccountIdentity.Create(
-                MailUserId.Create(owner.UserId),
-                MailAccountId.Create(owner.MailboxAccountId))
+        return accountId is { } account
+            ? MailAccountId.Create(account)
             : throw new InvalidOperationException(
-                $"No message is stored under '{storedEmailId.Value}', so the account whose bound and posture its work is judged by cannot be established.");
+                $"No message is stored under '{storedEmailId.Value}', so the mailbox whose bounds its work is charged against cannot be established.");
     }
 }

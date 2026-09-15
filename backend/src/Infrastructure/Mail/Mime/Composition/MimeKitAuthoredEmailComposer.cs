@@ -6,6 +6,7 @@ using System.Buffers;
 using System.Text;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -64,7 +65,8 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
     /// <inheritdoc />
     public AuthoredEmailComposition Compose(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId? author,
         OutgoingEmailRequester requester,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities)
@@ -75,13 +77,14 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         return AsOutgoing(
             account,
+            author,
             requester,
             this.ComposeMessage(account, authored, capabilities, requireRecipients: true));
     }
 
     /// <inheritdoc />
     public MailDraftComposition ComposeDraft(
-        MailAccountIdentity account,
+        MailAccountId account,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities)
     {
@@ -92,17 +95,17 @@ internal sealed class MimeKitAuthoredEmailComposer(
     }
 
     /// <summary>Runs the whole composition, from the refusals that need nothing built to the bytes that were built.</summary>
-    /// <param name="account">The account the message is composed as, named by its user and its identifier.</param>
+    /// <param name="account">The account the message is composed as, by its generated identifier.</param>
     /// <param name="authored">What somebody wrote.</param>
     /// <param name="capabilities">What the servers involved are known to support.</param>
     /// <param name="requireRecipients">Whether a message addressed to nobody is refused, which a send is and a draft is not.</param>
     private MailDraftComposition ComposeMessage(
-        MailAccountIdentity account,
+        MailAccountId account,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities,
         bool requireRecipients)
     {
-        if (senderIdentities.FindSenderIdentity(account.Id) is not { } sender)
+        if (senderIdentities.FindSenderIdentity(account) is not { } sender)
         {
             return Refused(AuthoredEmailRefusalReason.SenderUnconfigured, AuthoredEmailField.Sender);
         }
@@ -145,7 +148,8 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
     /// <inheritdoc />
     public AuthoredEmailComposition RecomposeAsOccurrence(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> draftMime,
@@ -160,7 +164,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
             throw new ArgumentException("A recurring send's occasion is composed from the stored draft.", nameof(draftMime));
         }
 
-        if (senderIdentities.FindSenderIdentity(account.Id) is not { } sender)
+        if (senderIdentities.FindSenderIdentity(account) is not { } sender)
         {
             return AuthoredEmailComposition.Refused(
                 AuthoredEmailRefusalReason.SenderUnconfigured,
@@ -209,6 +213,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
             // question rather than this one.
             return AsOutgoing(
                 account,
+                author,
                 requester,
                 this.Serialize(
                     message,
@@ -645,7 +650,8 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// no counterpart for: it carries the idempotency identity a delivery is protected by, and a draft has none.
     /// </remarks>
     private static AuthoredEmailComposition AsOutgoing(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId? author,
         OutgoingEmailRequester requester,
         MailDraftComposition composition)
     {
@@ -656,6 +662,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         var request = OutgoingEmailRequest.Create(
             account,
+            author,
             requester,
             [.. message.Recipients.Select(static recipient => recipient.Recipient)]);
 

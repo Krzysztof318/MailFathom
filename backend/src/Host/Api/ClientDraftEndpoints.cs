@@ -37,7 +37,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// <b>Every route is scoped to the caller's own user</b>, and a draft another user holds answers exactly as one
 /// nobody holds. A save names the account it belongs to and that name is resolved against the accounts the caller's
-/// user owns; every other act names a draft, and <see cref="UserMailDrafts" /> and <see cref="MailDraftDirectory" />
+/// user is assigned; every other act names a draft, and <see cref="UserMailDrafts" /> and <see cref="MailDraftDirectory" />
 /// are where an identifier becomes a draft this user holds before anything acts on it.
 /// </para>
 /// <para>
@@ -151,7 +151,7 @@ internal static class ClientDraftEndpoints
     }
 
     /// <summary>Serves the drafts the acting user is writing, newest edit first.</summary>
-    /// <param name="account">The account to narrow to, by its identifier or its display name, or <see langword="null" /> for every account the user owns.</param>
+    /// <param name="account">The account to narrow to, by its identifier or its display name, or <see langword="null" /> for every account the user is assigned.</param>
     /// <param name="directory">Reads the drafts, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the drafts, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.drafts.write</c>.</returns>
@@ -174,7 +174,7 @@ internal static class ClientDraftEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this user owns.");
+            return Refuse("The account is not one this user is assigned.");
         }
     }
 
@@ -470,7 +470,7 @@ internal static class ClientDraftEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this user owns.");
+            return Refuse("The account is not one this user is assigned.");
         }
         catch (SensitiveContentScannerUnavailableException refusal)
         {

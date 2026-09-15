@@ -91,7 +91,7 @@ public sealed class MailboxChangeReleaser
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerCall);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.User, recordIds, cancellationToken);
+        var held = await this.records.ReadAsync(this.scopeResolver.AssignedAccounts, recordIds, cancellationToken);
 
         var releasable = held
             .Where(record => record.Request.Mutation == MailboxMutation.Delete && this.IsReadable(record))
@@ -112,7 +112,7 @@ public sealed class MailboxChangeReleaser
                 // reads every record again and would otherwise report the losing attempt's answers beside the winner's.
                 released = await this.records.ReleaseAsync(
                     session,
-                    this.scopeResolver.User,
+                    this.scopeResolver.AssignedAccounts,
                     releasable,
                     attemptCancellationToken);
             },

@@ -22,8 +22,8 @@ namespace MailFathom.Application.UnitTests.Accounts;
 /// </remarks>
 public sealed class MailboxRefreshTokenRecorderTests
 {
-    private static readonly MailAccountIdentity Workspace =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("workspace"));
+    private static readonly MailAccountId Workspace =
+        MailAccountId.Create("workspace");
 
     private readonly IMailboxRefreshTokenStore store = Substitute.For<IMailboxRefreshTokenStore>();
 
@@ -31,11 +31,11 @@ public sealed class MailboxRefreshTokenRecorderTests
     public async Task RecordAsync_AServedAccount_StoresTheTokenAgainstIt()
     {
         // Arrange
-        var recorder = this.RecorderServing(Workspace.Id);
+        var recorder = this.RecorderServing(Workspace);
         using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
 
         // Act
-        await recorder.RecordAsync(Workspace.Id, refreshToken, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken);
 
         // Assert
         await this.store.Received(1).SaveTokenAsync(Workspace, refreshToken, Arg.Any<CancellationToken>());
@@ -45,7 +45,7 @@ public sealed class MailboxRefreshTokenRecorderTests
     public async Task RecordAsync_AnAccountThisDeploymentDoesNotServe_IsRefusedWithoutStoringAnything()
     {
         // Arrange
-        var recorder = this.RecorderServing(Workspace.Id);
+        var recorder = this.RecorderServing(Workspace);
         var unknown = MailAccountId.Create("archive");
         using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
 
@@ -56,7 +56,7 @@ public sealed class MailboxRefreshTokenRecorderTests
         // Assert
         Assert.Equal(MailAccountSelector.For(unknown), failure.RequestedAccount);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -71,7 +71,7 @@ public sealed class MailboxRefreshTokenRecorderTests
 
         // Act, Assert
         await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
-            () => recorder.RecordAsync(Workspace.Id, refreshToken, TestContext.Current.CancellationToken));
+            () => recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -82,13 +82,13 @@ public sealed class MailboxRefreshTokenRecorderTests
     public async Task RecordAsync_TheSameAccountTwice_WritesBothThroughToTheStoreThatReplaces()
     {
         // Arrange
-        var recorder = this.RecorderServing(Workspace.Id);
+        var recorder = this.RecorderServing(Workspace);
         using var first = MailboxRefreshToken.FromText("the-first-token");
         using var second = MailboxRefreshToken.FromText("the-second-token");
 
         // Act
-        await recorder.RecordAsync(Workspace.Id, first, TestContext.Current.CancellationToken);
-        await recorder.RecordAsync(Workspace.Id, second, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(Workspace, first, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(Workspace, second, TestContext.Current.CancellationToken);
 
         // Assert
         await this.store.Received(1).SaveTokenAsync(Workspace, first, Arg.Any<CancellationToken>());
@@ -99,11 +99,11 @@ public sealed class MailboxRefreshTokenRecorderTests
     public async Task RecordAsync_NoToken_IsRejectedBeforeTheAccountIsEvenLookedUp()
     {
         // Arrange
-        var recorder = this.RecorderServing(Workspace.Id);
+        var recorder = this.RecorderServing(Workspace);
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => recorder.RecordAsync(Workspace.Id, refreshToken: null!, TestContext.Current.CancellationToken));
+            () => recorder.RecordAsync(Workspace, refreshToken: null!, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
@@ -113,17 +113,17 @@ public sealed class MailboxRefreshTokenRecorderTests
         // Arrange
         var recorder = this.RecorderServing(
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead),
-            Workspace.Id);
+            Workspace);
         using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            recorder.RecordAsync(Workspace.Id, refreshToken, TestContext.Current.CancellationToken));
+            recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -138,7 +138,7 @@ public sealed class MailboxRefreshTokenRecorderTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            recorder.RecordAsync(Workspace.Id, refreshToken, TestContext.Current.CancellationToken));
+            recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);

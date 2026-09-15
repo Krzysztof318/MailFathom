@@ -13,8 +13,8 @@ using ModelContextProtocol.Server;
 
 namespace MailFathom.Mcp.Tools.Drafts;
 
-/// <summary>Publishes the <c>send_draft</c> tool over <see cref="MailDraftPromotion" />.</summary>
-/// <param name="promotion">Queues the draft as an ordinary send, and refuses it where it cannot be queued.</param>
+/// <summary>Publishes the <c>send_draft</c> tool over <see cref="UserMailDrafts" />.</summary>
+/// <param name="promotion">Queues a draft of the caller's own user as an ordinary send, and refuses it where it cannot be queued.</param>
 /// <remarks>
 /// <para>
 /// This is the tool the other three exist to be safe without. It sends real mail, so it carries every requirement a
@@ -52,7 +52,7 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// </remarks>
 [McpServerToolType]
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
-internal sealed class SendDraftTool(MailDraftPromotion promotion)
+internal sealed class SendDraftTool(UserMailDrafts promotion)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
@@ -118,7 +118,7 @@ internal sealed class SendDraftTool(MailDraftPromotion promotion)
         string draftId,
         CancellationToken cancellationToken = default)
     {
-        var record = await promotion.PromoteAsync(
+        var record = await promotion.SendAsync(
             AuthoredMailArguments.HeldDraft(draftId),
             cancellationToken);
 

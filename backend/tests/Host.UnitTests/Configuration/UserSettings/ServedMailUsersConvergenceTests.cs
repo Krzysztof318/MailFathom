@@ -22,7 +22,8 @@ namespace MailFathom.Host.UnitTests.Configuration.UserSettings;
 /// </summary>
 public sealed class ServedMailUsersConvergenceTests
 {
-    private const string LanguageOnly = """{"Language":"English"}""";
+    /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
+    private const string EmptyRecord = "{}";
 
     private static readonly MailUserId Alex = MailUserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
 
@@ -60,7 +61,7 @@ public sealed class ServedMailUsersConvergenceTests
     {
         // Arrange
         var roster = ServingAlexAt(version: 2);
-        var documents = Holding([new UserSettingsDocument(Alex, "alex", LanguageOnly, 3) { MailAccounts = [WorkMailbox] }]);
+        var documents = Holding([new UserSettingsDocument(Alex, "alex", EmptyRecord, 3) { MailAccounts = [WorkMailbox] }]);
 
         // Act
         await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
@@ -80,7 +81,7 @@ public sealed class ServedMailUsersConvergenceTests
     {
         // Arrange
         var roster = ServingAlexAt(version: 2);
-        var documents = Holding((Alex, LanguageOnly, 2));
+        var documents = Holding((Alex, EmptyRecord, 2));
 
         // Act
         await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
@@ -96,7 +97,7 @@ public sealed class ServedMailUsersConvergenceTests
         // Arrange
         var roster = new ServedMailUsers();
         roster.Resolved([]);
-        var documents = Holding((Alex, LanguageOnly, 2));
+        var documents = Holding((Alex, EmptyRecord, 2));
 
         // Act
         await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
@@ -131,7 +132,7 @@ public sealed class ServedMailUsersConvergenceTests
     {
         // Arrange
         var roster = ServingAlexAt(version: 2);
-        var documents = Holding((Alex, """{"Language":"English","NothingBindsThis":true}""", 3));
+        var documents = Holding((Alex, """{"NothingBindsThis":true}""", 3));
         var log = new RecordingLogger<ServedMailUsersConvergence>();
         var heldBack = new HeldBackRecords();
         var convergence = Convergence(documents, roster, log, heldBack);
@@ -164,7 +165,7 @@ public sealed class ServedMailUsersConvergenceTests
             Document = """{"Host":"imap.example.test","NothingBindsThis":true}""",
         };
         var documents = Holding(
-            [new UserSettingsDocument(Alex, "alex", LanguageOnly, 3) { MailAccounts = [WorkMailbox, unbindable] }]);
+            [new UserSettingsDocument(Alex, "alex", EmptyRecord, 3) { MailAccounts = [WorkMailbox, unbindable] }]);
 
         // Act
         await Convergence(documents, roster, heldBack: heldBack)
@@ -188,7 +189,7 @@ public sealed class ServedMailUsersConvergenceTests
         heldBack.Replace(Alex, [new HeldBackRecord(HeldBackRecordKind.User, Alex.Value, "alex", 3, ["stale"])]);
 
         // Act
-        await Convergence(Holding((Alex, LanguageOnly, 4)), roster, heldBack: heldBack)
+        await Convergence(Holding((Alex, EmptyRecord, 4)), roster, heldBack: heldBack)
             .ConvergeAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -220,7 +221,7 @@ public sealed class ServedMailUsersConvergenceTests
     public async Task ConvergeAsync_BeforeTheStartupGateSettledARoster_ReadsNothing()
     {
         // Arrange
-        var documents = Holding((Alex, LanguageOnly, 2));
+        var documents = Holding((Alex, EmptyRecord, 2));
 
         // Act
         await Convergence(documents, new ServedMailUsers()).ConvergeAsync(TestContext.Current.CancellationToken);

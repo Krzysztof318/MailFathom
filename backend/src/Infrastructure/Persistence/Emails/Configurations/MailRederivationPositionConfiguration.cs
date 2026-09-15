@@ -20,10 +20,10 @@ internal sealed class MailRederivationPositionConfiguration : IEntityTypeConfigu
     public void Configure(EntityTypeBuilder<MailRederivationPositionEntity> entity)
     {
         entity.ToTable("mail_rederivation_positions");
-        // The user leads the key for the reason it leads every other structure an account identifier appears in:
-        // the identifier names one mailbox within its user, so a cursor keyed without it would have two users'
-        // walks of their own `work` share one row.
-        entity.HasKey(position => new { position.UserId, position.MailboxAccountId, position.FolderAlias })
+        // The account leads the key and no user stands ahead of it: the identifier is generated and names one
+        // mailbox across the deployment, so one folder of one mailbox is one cursor however many users are
+        // assigned the account — which is what a re-derivation of the one stored copy needs it to be.
+        entity.HasKey(position => new { position.MailboxAccountId, position.FolderAlias })
             .HasName(PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName);
         entity.Property(position => position.MailboxAccountId).HasMaxLength(128);
         entity.Property(position => position.FolderAlias).HasMaxLength(128);

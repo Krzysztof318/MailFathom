@@ -421,7 +421,11 @@ one leaves every stored vector exactly as comparable as it was.
   window, in the same unit, and is unset by default. It exists because the aggregate ceiling is otherwise the only
   thing bounding spend: on a deployment serving several users, one person's backfill can consume the whole window
   before anybody else's arriving mail is embedded. What each user has spent is recorded on its own row, so the ledger
-  answers both questions from one key without a second count.
+  answers both questions from one key without a second count. Mail belongs to the mailbox rather than to a person, so
+  spend on a mailbox several people are assigned is charged to each of them in full and admitted only while every one
+  of them is under the ceiling; a shared mailbox is wholly each assigned user's mail, and
+  [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+  states that rather than dividing the window between them.
 
 A fifth block sits beside those four in the same section and counts something else. `Embeddings:AttachmentText` bounds
 what reading a document attachment costs to *parse* rather than what its text costs to send: a per-attachment cost over

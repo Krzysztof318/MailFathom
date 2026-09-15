@@ -17,7 +17,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class FakeEmailThreadStore
 {
-    private readonly Dictionary<(MailAccountIdentity Account, string Identifier), EmailThreadId> bindings = [];
+    private readonly Dictionary<(MailAccountId Account, string Identifier), EmailThreadId> bindings = [];
     private readonly Dictionary<EmailThreadId, ThreadState> threads = [];
     private readonly Dictionary<StoredEmailId, MailState> mail = [];
     private readonly TimeProvider timeProvider;
@@ -40,7 +40,7 @@ internal sealed class FakeEmailThreadStore
     /// <param name="referencedInternetMessageIds">The ancestors it refers to, in header order.</param>
     /// <returns>The email as assembly sees it.</returns>
     public ThreadedEmail Add(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId storedEmailId,
         string? internetMessageId,
         string? answeredInternetMessageId = null,
@@ -72,18 +72,18 @@ internal sealed class FakeEmailThreadStore
     public EmailThreadId? MergedInto(EmailThreadId threadId) => this.threads[threadId].MergedInto;
 
     private sealed record ThreadState(
-        MailAccountIdentity Account,
+        MailAccountId Account,
         DateTimeOffset AssembledAt,
         EmailThreadId? MergedInto);
 
-    private sealed record MailState(MailAccountIdentity Account, ThreadedEmail Email, EmailThreadId? ThreadId);
+    private sealed record MailState(MailAccountId Account, ThreadedEmail Email, EmailThreadId? ThreadId);
 
     /// <summary>The port surface, kept apart from the state so a test reads the state directly.</summary>
     private sealed class Adapter(FakeEmailThreadStore state) : IEmailThreadStore
     {
         public Task<IReadOnlyList<EmailThreadBinding>> FindBindingsAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             IReadOnlyList<string> identifiers,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<EmailThreadBinding>>(
@@ -98,7 +98,7 @@ internal sealed class FakeEmailThreadStore
 
         public Task<EmailThreadId> StartThreadAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             CancellationToken cancellationToken)
         {
             var assembledAt = state.timeProvider.GetUtcNow();
@@ -111,7 +111,7 @@ internal sealed class FakeEmailThreadStore
 
         public Task BindIdentifiersAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             IReadOnlyList<string> identifiers,
             EmailThreadId threadId,
             CancellationToken cancellationToken)

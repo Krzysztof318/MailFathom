@@ -77,7 +77,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
@@ -102,7 +102,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             using var message = await this.loadMessage(parsingPass, cancellationToken);
 
             return EmailMimeExtractionResult.Extracted(
-                await this.ExtractMetadataAsync(account.Id, message, cancellationToken));
+                await this.ExtractMetadataAsync(account, message, cancellationToken));
         }
         catch (FormatException)
         {

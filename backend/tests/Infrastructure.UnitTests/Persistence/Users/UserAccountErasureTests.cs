@@ -53,6 +53,7 @@ public sealed class UserAccountErasureTests
                 "outgoing_emails",
                 "recurring_sends",
                 "spam_classification_runs",
+                "stored_content_claims",
             ],
             tables);
     }

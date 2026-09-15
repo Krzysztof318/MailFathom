@@ -5,7 +5,6 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Domain.Accounts;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.DeadLetters;
@@ -86,11 +85,11 @@ public sealed class DeadLetteredJobQueryTests
     {
         // Arrange
         var account = MailAccountId.Create("work");
-        var first = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, MailAccountIdentity.Create(SyntheticMailUser.Deployment, account), 10, null).Query!;
+        var first = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, account, 10, null).Query!;
         var cursor = DeadLetteredJobCursor.After(StoppedAt, Job, first.FilterFingerprint);
 
         // Act
-        var result = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, MailAccountIdentity.Create(SyntheticMailUser.Deployment, account), 25, cursor);
+        var result = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, account, 25, cursor);
 
         // Assert
         Assert.Equal(DeadLetteredJobQueryOutcome.Accepted, result.Outcome);

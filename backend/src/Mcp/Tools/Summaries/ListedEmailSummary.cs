@@ -118,8 +118,8 @@ internal sealed record ListedEmailSummary
         return new ListedEmailSummary
         {
             StoredEmailId = summary.StoredEmailId.ToString(),
-            AccountId = summary.AccountId.Value,
-            AccountDisplayName = accountNames.For(summary.AccountId),
+            AccountId = summary.Account.Value,
+            AccountDisplayName = accountNames.For(summary.Account),
             FolderAlias = summary.FolderAlias.Value,
             ThreadId = summary.ThreadId?.ToString(),
             InternetMessageId = summary.InternetMessageId,

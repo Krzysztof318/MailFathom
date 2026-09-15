@@ -16,7 +16,11 @@ public sealed class LoggedLocalMailFolderChangeAuditorTests
 {
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 13, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A folder name is text a person typed, so the record names the folder by its identity and carries nothing else about it.</summary>
+    /// <summary>
+    /// A folder name is text a person typed, so the record names the folder by its identity and carries nothing else
+    /// about it. Who changed it is named beside the mailbox rather than derived from it: a mailbox several people are
+    /// assigned is changed by one of them, and a record naming only the mailbox could not say which.
+    /// </summary>
     [Fact]
     public async Task RecordAsync_AnErasure_RecordsIdentitiesAndTheKindAndNoFolderName()
     {
@@ -25,7 +29,8 @@ public sealed class LoggedLocalMailFolderChangeAuditorTests
         var auditor = CreateAuditor(logs);
         var folder = LocalMailFolderId.Create(Guid.CreateVersion7(OccurredAt));
         var change = new LocalMailFolderChange(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
+            MailAccountId.Create("primary"),
+            SyntheticMailUser.Deployment,
             folder,
             MailFolderChangeKind.Erased,
             ErasedFolderCount: 3,
@@ -39,10 +44,11 @@ public sealed class LoggedLocalMailFolderChangeAuditorTests
 
         Assert.Equal(LogLevel.Information, record.Level);
         Assert.Equal(
-            ["AccountId", "ChangeKind", "ErasedFolderCount", "FolderId", "OccurredAt", "UserId"],
+            ["AccountId", "ChangeKind", "ChangedBy", "ErasedFolderCount", "FolderId", "OccurredAt"],
             record.Properties.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(folder.Value, record.Properties["FolderId"]);
         Assert.Equal("primary", record.Properties["AccountId"]);
+        Assert.Equal(SyntheticMailUser.Deployment.Value, record.Properties["ChangedBy"]);
         Assert.Equal(MailFolderChangeKind.Erased, record.Properties["ChangeKind"]);
         Assert.Equal(3, record.Properties["ErasedFolderCount"]);
     }

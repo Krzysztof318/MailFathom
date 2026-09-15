@@ -64,7 +64,7 @@ internal sealed class MailRuleEvaluationStore(
     /// both backfills leave one out: applying a rule to mail nothing may read is work with no reader.
     /// </remarks>
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetEmailsAwaitingFirstEvaluationAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
@@ -77,7 +77,7 @@ internal sealed class MailRuleEvaluationStore(
 
     /// <inheritdoc />
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetStoredEmailsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
@@ -154,15 +154,14 @@ internal sealed class MailRuleEvaluationStore(
     /// </remarks>
     private async Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadCandidatesAsync(
         IQueryable<StoredEmailEntity> emails,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var resumeAfterId = resumeAfter?.Value;
 
         // Scoped to the folders a mapping mirrors, which withdraws two kinds of row at once from a pass that walks
@@ -183,8 +182,7 @@ internal sealed class MailRuleEvaluationStore(
             .Where(email => email.FiledFromOutgoingEmailId == null)
             // The user leads the pair, which is both what makes the account term unambiguous and what lets this walk
             // run on ix_stored_emails_user_account_identity rather than on a scan the identity order is sorted out of.
-            .Where(email => email.UserId == userId
-                && email.MailboxAccountId == mailboxAccountId
+            .Where(email => email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)
             .Take(batchSize)
@@ -229,7 +227,7 @@ internal sealed class MailRuleEvaluationStore(
                 StoredEmailId.Create(candidate.Id),
                 candidate is { UidValidity: { } uidValidity, Uid: { } uid }
                     ? EmailOccurrenceId.Create(
-                        account.Id,
+                        account,
                         new MailFolderResolutionId(
                             MailFolderAlias.Create(candidate.Alias),
                             MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),

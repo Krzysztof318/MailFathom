@@ -35,7 +35,7 @@ divergence neither copy would look wrong for on its own.
 
 | Field | Meaning | Absent means |
 |---|---|---|
-| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account the caller's user owns |
+| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account the caller is assigned |
 | `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder those accounts map and let tools read |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -145,7 +145,7 @@ same user's accounts already carries as an identifier or as a display name fails
 choose between two matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
 
 The generated identifier is unique across the whole deployment, and the display name alone is unique only within one
-user. Resolution runs against the accounts the caller's user owns, so two users each calling an account `Work mail` is
+user. Resolution runs against the accounts the caller is assigned, so two users each calling an account `Work mail` is
 no ambiguity at all, and neither of them can name the other's account by its identifier either. A client storing the
 identifier stores a deployment-wide key for the mailbox; a client storing the display name stores this user's name for
 it, and one that compared that name with a name read for somebody else — another user, or a second deployment — would
@@ -153,7 +153,7 @@ be comparing two values that were never in one naming space.
 
 ### Which accounts an unscoped request reads
 
-Naming no account means every account the caller's user owns, and the request is narrowed to that set before anything
+Naming no account means every account the caller is assigned, and the request is narrowed to that set before anything
 is read rather than left without an account predicate. The two are not the same: the rows of every other user's accounts are
 in the same table, so an absent predicate would publish mail the caller's user is not served. Switching `MailSynchronization:Enabled` off is a
 different matter and hides nothing — it stops runs from fetching mail, and the copy already stored stays readable.

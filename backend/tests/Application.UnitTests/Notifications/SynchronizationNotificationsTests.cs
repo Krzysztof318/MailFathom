@@ -16,13 +16,17 @@ namespace MailFathom.Application.UnitTests.Notifications;
 /// <summary>Covers what a synchronization run tells its user, and what it deliberately says nothing about.</summary>
 public sealed class SynchronizationNotificationsTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
-    private static readonly MailAccountIdentity SecondAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId SecondAccount =
+        MailAccountId.Create("personal");
 
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A condition about a mailbox is a condition about whoever is assigned it, so both mailboxes have a reader.</summary>
+    private static readonly StubMailAccountAssignments Assignments = new StubMailAccountAssignments()
+        .Assigning(SyntheticMailUser.Deployment, Account, SecondAccount);
 
     /// <summary>A run that commits forty messages is one arrival to somebody who was away, not forty.</summary>
     [Fact]
@@ -88,7 +92,7 @@ public sealed class SynchronizationNotificationsTests
 
         // Assert
         var notification = Assert.Single(store.Recorded);
-        Assert.Equal(Account.Id.Value, notification.Source);
+        Assert.Equal(Account.Value, notification.Source);
         Assert.Equal(NotificationTargetKind.Screen, notification.Target.Kind);
         Assert.Null(notification.Target.Message);
     }
@@ -126,7 +130,7 @@ public sealed class SynchronizationNotificationsTests
         // Assert
         Assert.Equal(2, store.Recorded.Count);
         Assert.Equal(
-            [Account.Id.Value, SecondAccount.Id.Value],
+            [Account.Value, SecondAccount.Value],
             store.Recorded.Select(notification => notification.Source));
     }
 
@@ -254,10 +258,12 @@ public sealed class SynchronizationNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        var notifications = CreateNotifications(store);
-        var outsized = MailAccountIdentity.Create(
-            SyntheticMailUser.Deployment,
-            MailAccountId.Create(new string('w', 400)));
+        var outsized = MailAccountId.Create(new string('w', 400));
+        var notifications = new SynchronizationNotifications(
+            store,
+            new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, outsized),
+            ClientSignalPublishers.ReachingNobody,
+            new FakeTimeProvider(RunInstant));
 
         // Act
         await notifications.ReportRefusedCredentialAsync(outsized, TestContext.Current.CancellationToken);
@@ -278,7 +284,7 @@ public sealed class SynchronizationNotificationsTests
         var channel = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider(RunInstant);
         await using var signals = new ClientSignals([channel], clock);
-        var notifications = new SynchronizationNotifications(store, signals, clock);
+        var notifications = new SynchronizationNotifications(store, Assignments, signals, clock);
 
         // Act
         await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
@@ -304,7 +310,7 @@ public sealed class SynchronizationNotificationsTests
         var channel = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider(RunInstant);
         await using var signals = new ClientSignals([channel], clock);
-        var notifications = new SynchronizationNotifications(store, signals, clock);
+        var notifications = new SynchronizationNotifications(store, Assignments, signals, clock);
 
         // Act
         await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
@@ -319,5 +325,5 @@ public sealed class SynchronizationNotificationsTests
     }
 
     private static SynchronizationNotifications CreateNotifications(INotificationStore store) =>
-        new(store, ClientSignalPublishers.ReachingNobody, new FakeTimeProvider(RunInstant));
+        new(store, Assignments, ClientSignalPublishers.ReachingNobody, new FakeTimeProvider(RunInstant));
 }

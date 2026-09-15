@@ -9,7 +9,6 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -20,10 +19,10 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 public sealed class MailRuleHistoryRetentionTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
-    private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
+    private static readonly MailAccountId OtherAccount =
+        MailAccountId.Create("personal");
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
 
     private readonly InMemoryMailRuleExecutionStore store = new();
@@ -33,7 +32,7 @@ public sealed class MailRuleHistoryRetentionTests
     public async Task EraseExpiredAsync_ExecutionsOlderThanTheWindow_ErasesThoseAndLeavesTheRest()
     {
         // Arrange
-        await this.ArrangeAsync(Account.Id, Now.AddDays(-31), Now.AddDays(-29), Now.AddHours(-1));
+        await this.ArrangeAsync(Account, Now.AddDays(-31), Now.AddDays(-29), Now.AddHours(-1));
 
         // Act
         var erased = await this.CreateRetention(TimeSpan.FromDays(30))
@@ -51,7 +50,7 @@ public sealed class MailRuleHistoryRetentionTests
     public async Task EraseExpiredAsync_TheSameHistoryAPassLater_ErasesWhatHasSinceOutlivedTheWindow()
     {
         // Arrange
-        await this.ArrangeAsync(Account.Id, Now.AddDays(-29));
+        await this.ArrangeAsync(Account, Now.AddDays(-29));
         var retention = this.CreateRetention(TimeSpan.FromDays(30));
         await retention.EraseExpiredAsync(Account, TestContext.Current.CancellationToken);
 
@@ -72,7 +71,7 @@ public sealed class MailRuleHistoryRetentionTests
     public async Task EraseExpiredAsync_AWindowOfZeroOrLess_ErasesNothing(int days)
     {
         // Arrange
-        await this.ArrangeAsync(Account.Id, Now.AddYears(-5));
+        await this.ArrangeAsync(Account, Now.AddYears(-5));
 
         // Act
         var erased = await this.CreateRetention(TimeSpan.FromDays(days))
@@ -88,7 +87,7 @@ public sealed class MailRuleHistoryRetentionTests
     public async Task EraseExpiredAsync_AnotherAccountsExpiredHistory_LeavesItAlone()
     {
         // Arrange
-        await this.ArrangeAsync(OtherAccount.Id, Now.AddDays(-31));
+        await this.ArrangeAsync(OtherAccount, Now.AddDays(-31));
 
         // Act
         var erased = await this.CreateRetention(TimeSpan.FromDays(30))
@@ -106,7 +105,7 @@ public sealed class MailRuleHistoryRetentionTests
         // Arrange
         const int backlog = MailRuleHistoryRetention.MaximumExecutionsErasedPerPass + 3;
         await this.ArrangeAsync(
-            Account.Id,
+            Account,
             [.. Enumerable.Range(1, backlog).Select(second => Now.AddDays(-31).AddSeconds(second))]);
 
         // Act
@@ -139,7 +138,7 @@ public sealed class MailRuleHistoryRetentionTests
             [.. evaluatedAt.Select(instant => new MailRuleExecution
             {
                 Id = MailRuleExecutionId.New(),
-                Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId),
+                Account = accountId,
                 StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
                 RuleName = "file-invoices",
                 Revision = Revision,

@@ -35,9 +35,6 @@ internal sealed class MailAnsweringAuditEntryEntity
     /// <summary>Gets or sets the account whose mailbox the run was allowed to read, as a value rather than as an association.</summary>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose mailbox the run was allowed to read, as a value rather than as an association.</summary>
-    public required Guid UserId { get; set; }
-
     /// <summary>Gets or sets this deployment's own configured name for the chat endpoint the run was conducted through.</summary>
     public required string ChatEndpointAlias { get; set; }
 

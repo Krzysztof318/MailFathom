@@ -33,7 +33,7 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:MaxMetadataBatchesPerRun` | int | `10` | 1 – 1000 | reload |
 | `MailSynchronization:MaxContentBytesPerRun` | long | `1073741824` (1 GiB) | 1024 – 1099511627776; how much raw MIME one folder run may fetch before it ends at its checkpoint. Must be at least `MaxRawMimeBytes` | reload |
 | `MailSynchronization:MaxStoredContentBytes` | long | *(none)* | 1024 – `9223372036854775807`; how much storage stored content may occupy before ingestion degrades to metadata only. **The deployment's, not each replica's** — the room a run reserves is held in the content store every replica writes into, so several replicas share this one figure rather than each getting it. Unset means no ceiling, and a deployment that sets neither this nor the per-user ceiling reserves nothing. Must be at least `MaxRawMimeBytes` | reload |
-| `MailSynchronization:MaxStoredContentBytesPerUser` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one user's** mail may occupy before that user's ingestion degrades to metadata only, leaving every other user's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. **The deployment's, not each replica's**, on the same terms as the ceiling above. Unset means no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one mailbox filling the instance. Must be at least `MaxRawMimeBytes` | reload |
+| `MailSynchronization:MaxStoredContentBytesPerUser` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one user's** mail may occupy before that user's ingestion degrades to metadata only, leaving every other user's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. **The deployment's, not each replica's**, on the same terms as the ceiling above. Unset means no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one mailbox filling the instance. A mailbox several users are assigned counts in full against each of them, so its mail is stored only while every one of them is under their share. Must be at least `MaxRawMimeBytes` | reload |
 | `MailSynchronization:MaxInFlightRawMimeBytes` | long | `134217728` (128 MiB) | 1024 – 4294967296; how much raw MIME every folder work unit together may hold in memory. **One process's**, because what it bounds is that process's own memory: a deployment of *n* replicas may hold *n* × this, which is the figure to size a container against. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxReconciledEmailsPerRun` | int | `500` | 1 – 10000 | reload |
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |
@@ -65,6 +65,7 @@ than met later by a run.
 | --- | --- | --- | --- | --- |
 | `…:EmailAddress` | string | — | Required; one `@` between a local part and a domain, no white space, at most 320 characters; unique across the deployment, compared without regard to case or surrounding white space. An account's identifier is generated rather than stated, and a declaration stating `AccountId` is refused | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
+| `…:Language` | enum | — | Required of a declaration being written; `English` or `Polish`, read however it was capitalized. The language everything MailFathom writes about this mailbox's mail comes out in; [the language this mailbox is read in](#the-language-this-mailbox-is-read-in--language) holds the rule and both refusals | reload; the next derivation is written in it |
 | `…:Host` | string | — | Required | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required; an identifier, not a secret | reload |
@@ -179,9 +180,9 @@ display name that another account's identifier or display name already carries; 
 
 **The display-name space belongs to each user's assigned set, and the address space to the deployment.** Two of one
 person's accounts may not share a display name, and two people's accounts may. The address is the opposite: one mailbox
-is held by one account in the whole deployment, and an account is assigned to one user at a time, so one mailbox is one
-account held by one person. Stored mail is keyed by
-the user and the account identifier together, so an ad-hoc SQL statement still names both.
+is held by one account in the whole deployment, however many users are assigned to it, so one mailbox is one account
+and one copy of its mail. Stored mail is keyed by the account identifier alone, so an ad-hoc SQL statement names it and
+no user.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
@@ -262,6 +263,52 @@ schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.
+
+### The language this mailbox is read in — `Language`
+
+`…:Language` is the language every automatic reading of this mailbox's mail comes out in — the [mark on a message
+row](../features/message-enrichment.md), the [statement about a
+conversation](../features/thread-state.md) — whatever language the message itself was written in. It is not a claim
+about the mail, which is mixed by nature, and it changes nothing about an answer to a question somebody asked: that is
+still written in the language the question was.
+
+It is the account's rather than its user's for the reason the two blocks below are: the derived text is one copy. A
+mailbox two people are assigned is enriched once, and the sentence written onto a message row is the sentence both of
+them read, so a value held on the person would have to pick one of them at derivation time and would then be wrong for
+the other.
+
+It settles one thing that is not a derivation: a [reply draft](../features/reply-drafting.md) written for a message
+that answers none. A draft answering a message takes the language of the correspondence it answers, because what
+decides that is who will read it — but a composer opened with nothing in front of it has no correspondence to read,
+and the mailbox it is being written from is the only thing anything is known about. An instruction naming a language
+outranks either.
+
+```json
+{
+  "Language": "Polish"
+}
+```
+
+It is the one key a declaration being written must carry beyond the address, the name, and the server. Two refusals,
+and the next act differs between them:
+
+```
+Account 'The work mailbox': Language is not stated, and every mail account names the language MailFathom writes about
+its mail in — the reading on a message row, the statement about a conversation. State 'English' or 'Polish'.
+```
+
+```
+Account 'The work mailbox': Language states 'German', which is not a language MailFathom writes in. It takes 'English'
+or 'Polish'.
+```
+
+**An account recorded before this release states none, and reads as `English` until it is edited.** The key binds
+strictly, so nobody could have written one in advance, and refusing those accounts at the next start would refuse the
+start itself — for every user, through the surface the line would have been added from. So the requirement is asked of
+a declaration being written and of no other: a held account naming no language is read in English, and states one the
+first time anybody writes it. The operator's action after upgrading is therefore a single
+[`mfctl account edit`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) for each mailbox read in Polish,
+and nothing at all for the rest.
 
 ### Classifying this account's mail — `SpamClassification`
 

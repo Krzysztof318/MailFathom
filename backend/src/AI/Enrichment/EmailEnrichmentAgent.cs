@@ -12,7 +12,7 @@ using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -125,7 +125,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// <inheritdoc />
     public async Task<EmailEnrichmentDerivation> DeriveAsync(
         EnrichableEmail email,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(email);
@@ -214,7 +214,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// </remarks>
     private async Task<ChatModelAnswer?> AskAsync(
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         // One ledger for the whole chain, so a derivation that falls through to the fallback spends the run's
@@ -249,7 +249,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {

@@ -29,6 +29,6 @@ public interface IAttachmentDerivationCoverageReader
     /// request rather than per unit of work.
     /// </remarks>
     Task<AttachmentDerivationCoverage> ReadCoverageAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken);
 }

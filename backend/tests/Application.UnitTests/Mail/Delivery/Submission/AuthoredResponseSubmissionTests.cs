@@ -95,7 +95,7 @@ public sealed class AuthoredResponseSubmissionTests
         var record = await submission.SubmitAsync(Request(), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(summary.AccountId, record.AccountId);
+        Assert.Equal(summary.Account, record.AccountId);
     }
 
     /// <summary>A reply goes where the message asked for answers to go, and the caller never states it.</summary>
@@ -213,7 +213,7 @@ public sealed class AuthoredResponseSubmissionTests
             composer
                 .ReceivedCalls()
                 .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-                .GetArguments()[3]);
+                .GetArguments()[4]);
     }
 
     /// <summary>A retry carrying the key the first call carried reads back that call's record and queues nothing further.</summary>
@@ -495,7 +495,8 @@ public sealed class AuthoredResponseSubmissionTests
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .Compose(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
+                SyntheticMailUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -663,12 +664,12 @@ public sealed class AuthoredResponseSubmissionTests
             ContentReaderOpening(),
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
-                CatalogServing(answered.AccountId),
+                CatalogServing(answered.Account),
                 folderParticipation ?? StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
+                    new MailFolderIdentity(answered.Account, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
-            senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
+            senderIdentities ?? SenderIdentitiesFor(answered.Account),
             new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),
             Bounds(),
             granted);
@@ -711,7 +712,7 @@ public sealed class AuthoredResponseSubmissionTests
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .First(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-        .GetArguments()[2]!;
+        .GetArguments()[3]!;
 
     private static MailResponseSubmissionRequest Request(AuthoredResponseAct act = AuthoredResponseAct.Reply) =>
         new()
@@ -825,7 +826,7 @@ public sealed class AuthoredResponseSubmissionTests
     private static ICallerMailAccountCatalog CatalogServing(MailAccountId accountId)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
 
         return catalog;
     }

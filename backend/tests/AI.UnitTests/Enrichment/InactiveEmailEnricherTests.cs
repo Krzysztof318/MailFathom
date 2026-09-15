@@ -5,7 +5,7 @@
 using MailFathom.AI.Enrichment;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Xunit;
 
@@ -32,7 +32,7 @@ public sealed class InactiveEmailEnricherTests
         // Act
         var derivation = await InactiveEmailEnricher.Instance.DeriveAsync(
             Enrichable(),
-            MailUserLanguage.English,
+            MailAccountLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -55,7 +55,7 @@ public sealed class InactiveEmailEnricherTests
         // Act
         var derivation = await InactiveEmailEnricher.Instance.DeriveAsync(
             withoutPassages,
-            MailUserLanguage.English,
+            MailAccountLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -71,7 +71,7 @@ public sealed class InactiveEmailEnricherTests
 
         // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            InactiveEmailEnricher.Instance.DeriveAsync(Enrichable(), MailUserLanguage.English, cancellation.Token));
+            InactiveEmailEnricher.Instance.DeriveAsync(Enrichable(), MailAccountLanguage.English, cancellation.Token));
     }
 
     private static EnrichableEmail Enrichable() =>

@@ -46,29 +46,17 @@ internal sealed class UserAccountDocumentBinder(
     TimeProvider timeProvider,
     IOptions<SensitiveContentOptions> sensitiveContent)
 {
-    /// <summary>Binds a user's document and judges it and its account blocks as the same kind of arrival.</summary>
-    /// <param name="json">The user's document, as the JSON object their row holds.</param>
-    /// <param name="arrival">Whether this document is being written or is one the deployment already holds.</param>
-    /// <returns>The bound record, or the sentences naming what must change first.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="json" /> is <see langword="null" />, empty, or white space, which is not a document at all.</exception>
-    /// <remarks>
-    /// What a start and an account write both do: the record and the accounts spliced into it arrived together. The
-    /// overload beside it is for the one caller where they did not — a user saving their own record, which carries no
-    /// account block through and so may not be judged by what one of them asks for.
-    /// </remarks>
-    public UserAccountBinding Bind(string json, UserRecordArrival arrival) => this.Bind(json, arrival, arrival);
-
     /// <summary>Binds a user's document and judges the record it produces.</summary>
     /// <param name="json">The user's document, as the JSON object their row holds.</param>
-    /// <param name="arrival">Whether this document is being written or is one the deployment already holds.</param>
     /// <param name="accounts">
-    /// Whether the account blocks spliced into the document are being written too, or are records the deployment
-    /// already holds. The two are stated apart because a write reaches one of them at a time: a user saving their own
-    /// record carries no account block through, and an account being written is composed into a record already held.
+    /// Whether the account blocks spliced into the document are being written, or are records the deployment already
+    /// holds. Every rule an arrival decides is one of theirs, because every setting one decides is the account's: a
+    /// user saving their own record carries no account block through, and an account being written is composed into a
+    /// record already held.
     /// </param>
     /// <returns>The bound record, or the sentences naming what must change first.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="json" /> is <see langword="null" />, empty, or white space, which is not a document at all.</exception>
-    public UserAccountBinding Bind(string json, UserRecordArrival arrival, UserRecordArrival accounts)
+    public UserAccountBinding Bind(string json, UserRecordArrival accounts)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
 
@@ -125,7 +113,7 @@ internal sealed class UserAccountDocumentBinder(
 
             return this.FindMaterialWrittenWhereAReferenceBelongs(document) is { Count: > 0 } material
                 ? UserAccountBinding.Refused(material)
-                : this.Judge(document, arrival, accounts);
+                : this.Judge(document, accounts);
         }
         finally
         {
@@ -241,7 +229,7 @@ internal sealed class UserAccountDocumentBinder(
         new([new JsonStreamConfigurationSource { Stream = json }.Build(new ConfigurationBuilder())]);
 
     /// <summary>Binds the document strictly and puts the record through the rules a mail account is declared under.</summary>
-    private UserAccountBinding Judge(IConfiguration document, UserRecordArrival arrival, UserRecordArrival accounts)
+    private UserAccountBinding Judge(IConfiguration document, UserRecordArrival accounts)
     {
         UserAccountOptions user;
 
@@ -266,17 +254,13 @@ internal sealed class UserAccountDocumentBinder(
         refusals.AddRange(user.FindSynchronizationWindowErrors(
             DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime)));
 
-        if (arrival == UserRecordArrival.BeingWritten)
-        {
-            refusals.AddRange(user.FindMissingLanguageError());
-        }
-
         // Asked of the account blocks alone, because the write that carries them is not the write that carries the
         // record around them: a user saving their own record would otherwise be refused over a posture an operator
-        // widened after the accounts were recorded, which is the one refusal nobody can act on — the record they
-        // would rewrite names no account block at all.
+        // widened after the accounts were recorded, and over a language recorded before the property existed, which
+        // are the refusals nobody can act on — the record they would rewrite names no account block at all.
         if (accounts == UserRecordArrival.BeingWritten)
         {
+            refusals.AddRange(user.FindMissingAccountLanguageErrors());
             refusals.AddRange(user.FindSensitiveContentErrors(sensitiveContent.Value));
         }
 

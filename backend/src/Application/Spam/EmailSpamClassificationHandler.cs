@@ -6,7 +6,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam.Actions;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
 
@@ -70,9 +70,9 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// <inheritdoc />
     /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
     /// <remarks>
-    /// An email nothing is stored under for the payload's user ends the job as done rather than as a failure. Mail can be
+    /// An email nothing is stored under for the payload's account ends the job as done rather than as a failure. Mail can be
     /// erased between the moment a classification was asked for and the moment it runs, and that is the message leaving
-    /// rather than work to attempt again; a user who does not own the email is answered the same way, so no job can
+    /// rather than work to attempt again; an account that does not hold the email is answered the same way, so no job can
     /// classify one person's mail under another's settings.
     /// </remarks>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
@@ -84,8 +84,8 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
                 nameof(payload));
         }
 
-        var account = email.ToAccountIdentity();
-        var classification = await this.ClassifyAsync(account.User, email.ToStoredEmailId(), cancellationToken);
+        var account = email.ToAccountId();
+        var classification = await this.ClassifyAsync(account, email.ToStoredEmailId(), cancellationToken);
 
         if (classification is not null)
         {
@@ -105,12 +105,12 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// not stored — and none of them has anything for the mailbox to be asked about.
     /// </remarks>
     private async Task<SpamClassification?> ClassifyAsync(
-        MailUserId user,
+        MailAccountId account,
         StoredEmailId emailId,
         CancellationToken cancellationToken)
     {
         var result = await this.classifier.ClassifyAsync(
-            user,
+            account,
             emailId,
             SpamClassificationMode.FirstTimeOnly,
             cancellationToken);

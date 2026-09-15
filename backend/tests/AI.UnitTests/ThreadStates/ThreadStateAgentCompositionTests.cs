@@ -5,7 +5,7 @@
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ThreadStates;
 using MailFathom.AI.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -46,9 +46,9 @@ public sealed class ThreadStateAgentCompositionTests
     /// than something only the pure instruction tests would have noticed.
     /// </summary>
     [Theory]
-    [InlineData(MailUserLanguage.English)]
-    [InlineData(MailUserLanguage.Polish)]
-    public async Task Compose_TheThreadStateAgent_CarriesItsOwnInstructionInsideTheEnvelope(MailUserLanguage language)
+    [InlineData(MailAccountLanguage.English)]
+    [InlineData(MailAccountLanguage.Polish)]
+    public async Task Compose_TheThreadStateAgent_CarriesItsOwnInstructionInsideTheEnvelope(MailAccountLanguage language)
     {
         // Arrange
         using var chatClient = ScriptedChatClient.Answering(Answer);
@@ -84,7 +84,7 @@ public sealed class ThreadStateAgentCompositionTests
 
     private static ChatClientAgent AgentOver(
         ScriptedChatClient chatClient,
-        MailUserLanguage language = MailUserLanguage.English) =>
+        MailAccountLanguage language = MailAccountLanguage.English) =>
         ThreadStateAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),

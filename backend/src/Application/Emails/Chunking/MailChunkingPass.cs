@@ -93,7 +93,7 @@ public sealed class MailChunkingPass
     /// durable and the next run resumes by asking the same question.
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed passages stay durable.</exception>
-    public async Task<MailChunkingPassReport> RunAsync(MailAccountIdentity account, CancellationToken cancellationToken)
+    public async Task<MailChunkingPassReport> RunAsync(MailAccountId account, CancellationToken cancellationToken)
     {
         var chunkedCount = 0;
         var refusedCount = 0;

@@ -102,7 +102,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.Equal(0, registry.HeldCount);
     }
 
-    /// <summary>An account this user does not own is refused as a request to change rather than narrowed away in silence.</summary>
+    /// <summary>An account this user is not assigned is refused as a request to change rather than narrowed away in silence.</summary>
     [Fact]
     public void Start_AnAccountThisUserDoesNotOwn_RefusesTheQuestion()
     {
@@ -441,9 +441,9 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     private static MailboxScopeResolver ResolverFor(MailUserId user) =>
         new(
-            OwnedMailAccountCatalogs.For(
+            AssignedMailAccountCatalogs.For(
                 AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),
-                SyntheticServedAccount.Of("primary", user)),
+                SyntheticServedAccount.Of("primary")),
             StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);

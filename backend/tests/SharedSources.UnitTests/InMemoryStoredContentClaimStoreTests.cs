@@ -17,11 +17,14 @@ public sealed class InMemoryStoredContentClaimStoreTests
     public async Task ClaimAsync_RoomUnderBothCeilings_GrantsAClaimAndReservesItsBytes()
     {
         // Arrange
-        var claims = new InMemoryStoredContentClaimStore().HoldingInTotal(100).Holding(SyntheticMailUser.Deployment, 40);
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(100)
+            .Holding(SyntheticMailAccount.Deployment, 40)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             60,
             new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: 500),
             Lifetime,
@@ -42,7 +45,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             100,
             new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null),
             Lifetime,
@@ -55,14 +58,58 @@ public sealed class InMemoryStoredContentClaimStoreTests
     }
 
     [Fact]
-    public async Task ClaimAsync_TheUsersShareHasNoRoom_RefusesAndNamesTheUser()
+    public async Task ClaimAsync_TheShareOfAnAssignedUserHasNoRoom_RefusesAndNamesTheUser()
     {
         // Arrange
-        var claims = new InMemoryStoredContentClaimStore().Holding(SyntheticMailUser.Deployment, 450);
+        var claims = new InMemoryStoredContentClaimStore()
+            .Holding(SyntheticMailAccount.Deployment, 450)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
+            100,
+            new StoredContentCeilings(DeploymentBytes: 100_000, UserBytes: 500),
+            Lifetime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredContentBound.User, record.ReachedBound);
+    }
+
+    /// <summary>A mailbox assigned to nobody has no user figure at all, so only the deployment's ceiling bounds it.</summary>
+    [Fact]
+    public async Task ClaimAsync_AMailboxAssignedToNobody_IsBoundedByTheDeploymentAlone()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore().Holding(SyntheticMailAccount.Deployment, 450);
+
+        // Act
+        var record = await claims.ClaimAsync(
+            SyntheticMailAccount.Deployment,
+            100,
+            new StoredContentCeilings(DeploymentBytes: 100_000, UserBytes: 500),
+            Lifetime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(record.IsGranted);
+    }
+
+    /// <summary>A shared mailbox counts in full against everybody assigned it, so the user closest to their ceiling decides.</summary>
+    [Fact]
+    public async Task ClaimAsync_ASharedMailboxWhoseSecondReaderIsAtTheirCeiling_IsRefusedForEverybody()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore()
+            .Holding(SyntheticMailAccount.Deployment, 50)
+            .Holding(SyntheticMailAccount.Another, 450)
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
+
+        // Act
+        var record = await claims.ClaimAsync(
+            SyntheticMailAccount.Deployment,
             100,
             new StoredContentCeilings(DeploymentBytes: 100_000, UserBytes: 500),
             Lifetime,
@@ -79,11 +126,12 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore();
         var ceilings = new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null);
-        await claims.ClaimAsync(SyntheticMailUser.Deployment, 900, ceilings, Lifetime, TestContext.Current.CancellationToken);
+        await claims.ClaimAsync(
+            SyntheticMailAccount.Deployment, 900, ceilings, Lifetime, TestContext.Current.CancellationToken);
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Another,
+            SyntheticMailAccount.Another,
             200,
             ceilings,
             Lifetime,
@@ -98,13 +146,16 @@ public sealed class InMemoryStoredContentClaimStoreTests
     public async Task ClaimAsync_AnotherUsersClaimIsOutstanding_LeavesThisUsersShareWhole()
     {
         // Arrange
-        var claims = new InMemoryStoredContentClaimStore();
+        var claims = new InMemoryStoredContentClaimStore()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
         var ceilings = new StoredContentCeilings(DeploymentBytes: 100_000, UserBytes: 500);
-        await claims.ClaimAsync(SyntheticMailUser.Another, 450, ceilings, Lifetime, TestContext.Current.CancellationToken);
+        await claims.ClaimAsync(
+            SyntheticMailAccount.Another, 450, ceilings, Lifetime, TestContext.Current.CancellationToken);
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             450,
             ceilings,
             Lifetime,
@@ -121,12 +172,13 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore();
         var ceilings = new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null);
-        await claims.ClaimAsync(SyntheticMailUser.Deployment, 900, ceilings, Lifetime, TestContext.Current.CancellationToken);
+        await claims.ClaimAsync(
+            SyntheticMailAccount.Deployment, 900, ceilings, Lifetime, TestContext.Current.CancellationToken);
 
         // Act
         claims.ExpireEveryClaim();
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             ceilings,
             Lifetime,
@@ -145,7 +197,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
         var claims = new InMemoryStoredContentClaimStore();
         var ceilings = new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null);
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             ceilings,
             Lifetime,
@@ -167,7 +219,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore();
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null),
             Lifetime,
@@ -191,7 +243,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
 
         // Act
         var record = await claims.ClaimAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Deployment,
             900,
             new StoredContentCeilings(DeploymentBytes: null, UserBytes: null),
             Lifetime,
@@ -211,9 +263,11 @@ public sealed class InMemoryStoredContentClaimStoreTests
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => claims.ClaimAsync(SyntheticMailUser.Deployment, 0, ceilings, Lifetime, TestContext.Current.CancellationToken));
+            () => claims.ClaimAsync(
+                SyntheticMailAccount.Deployment, 0, ceilings, Lifetime, TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => claims.ClaimAsync(SyntheticMailUser.Deployment, 10, ceilings, TimeSpan.Zero, TestContext.Current.CancellationToken));
+            () => claims.ClaimAsync(
+                SyntheticMailAccount.Deployment, 10, ceilings, TimeSpan.Zero, TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<ArgumentException>(
             () => claims.ClaimAsync(default, 10, ceilings, Lifetime, TestContext.Current.CancellationToken));
     }

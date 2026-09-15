@@ -25,13 +25,13 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
     private readonly Dictionary<StoredEmailId, LocalMailFolderId> placements = [];
     private readonly List<StoredEmailId> erasedEmails = [];
 
-    internal InMemoryLocalMailFolderStore(MailAccountIdentity account, MailAccountCustodyPhase phase)
+    internal InMemoryLocalMailFolderStore(MailAccountId account, MailAccountCustodyPhase phase)
     {
         this.Account = account;
         this.Phase = phase;
     }
 
-    internal MailAccountIdentity Account { get; }
+    internal MailAccountId Account { get; }
 
     /// <summary>Gets or sets the account's custody phase, which a test moves to arrange an account drained after something was appended.</summary>
     internal MailAccountCustodyPhase Phase { get; set; }
@@ -48,11 +48,11 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task<LocalMailFolderHolding?> ReadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         this.ReadAsync(account, cancellationToken);
 
-    public Task<LocalMailFolderHolding?> ReadAsync(MailAccountIdentity account, CancellationToken cancellationToken) =>
+    public Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken) =>
         Task.FromResult(account == this.Account
             ? this.Phase == MailAccountCustodyPhase.Held
                 ? new LocalMailFolderHolding(this.Phase, [.. this.folders.Values], [.. this.erasedSourceAliases])
@@ -61,7 +61,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task SaveAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyCollection<LocalMailFolder> saved,
         IReadOnlyCollection<LocalMailFolderId> erased,
         CancellationToken cancellationToken)
@@ -93,7 +93,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task PlaceAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         LocalMailFolderId folder,
         CancellationToken cancellationToken)
@@ -112,7 +112,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
     /// </summary>
     public Task<MailFolderAlias?> EraseEmailAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken)
     {
@@ -130,7 +130,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task<LocalMailFolderMailErasure> EraseMailOfErasedFoldersAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         int maxEmails,
         CancellationToken cancellationToken) =>
         Task.FromResult(new LocalMailFolderMailErasure(ErasedEmailCount: 0, EmailsRemain: false));

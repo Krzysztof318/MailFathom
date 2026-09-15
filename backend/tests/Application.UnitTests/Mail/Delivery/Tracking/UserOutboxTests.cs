@@ -19,19 +19,21 @@ using Xunit;
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Tracking;
 
 /// <summary>Covers the outbox one user reads and decides about, and whose sends each act may reach.</summary>
+/// <remarks>
+/// Every act here narrows by the mailboxes the caller is assigned rather than by who queued the send, which is what
+/// makes a shared mailbox's outbox one outbox: a colleague assigned the same mailbox reads and withdraws the sends
+/// made from it, and a caller assigned no mailbox reaches none of them.
+/// </remarks>
 public sealed class UserOutboxTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work);
+    /// <summary>A mailbox this deployment serves that the caller under test is not assigned.</summary>
+    private static readonly MailAccountId Unassigned = MailAccountId.Create("theirs");
 
-    private static readonly MailAccountIdentity TheirAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Another, Work);
-
-    /// <summary>A page is read for the account the request named, narrowed to the caller's own user.</summary>
+    /// <summary>A page is read for the account the request named, narrowed to the mailboxes the caller is assigned.</summary>
     [Fact]
-    public async Task ReadPageAsync_AnAccountThisUserOwns_ReadsThePageForThatAccountAlone()
+    public async Task ReadPageAsync_AMailboxThisUserIsAssigned_ReadsThePageForThatAccountAlone()
     {
         // Arrange
         var operations = Substitute.For<IOutboxOperationStore>();
@@ -52,13 +54,13 @@ public sealed class UserOutboxTests
         // Assert
         Assert.Equal(OutboxQueryOutcome.Accepted, result.Outcome);
         await operations.Received(1).ReadPageAsync(
-            Arg.Is<OutboxQuery>(query => query!.Account == Account),
+            Arg.Is<OutboxQuery>(query => query!.AccountId == Work),
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>An account another user owns is refused exactly as one this deployment does not serve.</summary>
+    /// <summary>A mailbox the caller is not assigned is refused exactly as one this deployment does not serve.</summary>
     [Fact]
-    public async Task ReadPageAsync_AnAccountAnotherUserOwns_IsRefusedBeforeAnythingIsRead()
+    public async Task ReadPageAsync_AMailboxThisUserIsNotAssigned_IsRefusedBeforeAnythingIsRead()
     {
         // Arrange
         var operations = Substitute.For<IOutboxOperationStore>();
@@ -66,7 +68,7 @@ public sealed class UserOutboxTests
 
         // Act
         var refusal = () => outbox.ReadPageAsync(
-            MailAccountSelector.For(MailAccountId.Create("theirs")),
+            MailAccountSelector.For(Unassigned),
             stage: null,
             pageSize: null,
             cursor: null,
@@ -99,13 +101,13 @@ public sealed class UserOutboxTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>A send of another user's answers exactly as one nobody made.</summary>
+    /// <summary>A send from a mailbox the caller is not assigned answers exactly as one nobody made.</summary>
     [Fact]
-    public async Task FindAsync_ASendAnotherUserMade_AnswersAsOneNobodyMade()
+    public async Task FindAsync_ASendFromAMailboxThisUserIsNotAssigned_AnswersAsOneNobodyMade()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var theirs = await QueueAsync(outgoingEmails, TheirAccount);
+        var theirs = await QueueAsync(outgoingEmails, Unassigned);
         var outbox = OutboxOver(outgoingEmails, Substitute.For<IOutboxOperationStore>());
 
         // Act
@@ -115,13 +117,13 @@ public sealed class UserOutboxTests
         Assert.Null(found);
     }
 
-    /// <summary>A send of this user's is read back with what the record carries.</summary>
+    /// <summary>A send from a mailbox the caller is assigned is read back with what the record carries.</summary>
     [Fact]
-    public async Task FindAsync_ASendThisUserMade_AnswersWithTheRecord()
+    public async Task FindAsync_ASendFromAMailboxThisUserIsAssigned_AnswersWithTheRecord()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var mine = await QueueAsync(outgoingEmails, Account);
+        var mine = await QueueAsync(outgoingEmails, Work);
         var outbox = OutboxOver(outgoingEmails, Substitute.For<IOutboxOperationStore>());
 
         // Act
@@ -129,17 +131,17 @@ public sealed class UserOutboxTests
 
         // Assert
         Assert.NotNull(found);
-        Assert.Equal(Account, found!.Account);
+        Assert.Equal(Work, found!.AccountId);
     }
 
-    /// <summary>Withdrawing a send of another user's reports it as unknown rather than reaching the decision.</summary>
+    /// <summary>Withdrawing a send from an unassigned mailbox reports it unknown rather than reaching the decision.</summary>
     [Fact]
-    public async Task CancelAsync_ASendAnotherUserMade_ReportsItUnknownWithoutDeciding()
+    public async Task CancelAsync_ASendFromAMailboxThisUserIsNotAssigned_ReportsItUnknownWithoutDeciding()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var operations = Substitute.For<IOutboxOperationStore>();
-        var theirs = await QueueAsync(outgoingEmails, TheirAccount);
+        var theirs = await QueueAsync(outgoingEmails, Unassigned);
         var outbox = OutboxOver(outgoingEmails, operations);
 
         // Act
@@ -150,14 +152,14 @@ public sealed class UserOutboxTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>Offering a send of another user's again reports it as unknown rather than reaching the decision.</summary>
+    /// <summary>Offering an unassigned mailbox's send again reports it unknown rather than reaching the decision.</summary>
     [Fact]
-    public async Task RequeueAsync_ASendAnotherUserMade_ReportsItUnknownWithoutDeciding()
+    public async Task RequeueAsync_ASendFromAMailboxThisUserIsNotAssigned_ReportsItUnknownWithoutDeciding()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var operations = Substitute.For<IOutboxOperationStore>();
-        var theirs = await QueueAsync(outgoingEmails, TheirAccount);
+        var theirs = await QueueAsync(outgoingEmails, Unassigned);
         var outbox = OutboxOver(outgoingEmails, operations);
 
         // Act
@@ -200,7 +202,11 @@ public sealed class UserOutboxTests
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
 
         return new UserOutbox(
-            OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
+            AssignedMailAccountCatalogs.For(
+                callerAuthorization,
+                new StubMailAccountAssignments().Assigning(callerAuthorization.RequireUser(), Work),
+                SyntheticServedAccount.Of(Work),
+                SyntheticServedAccount.Of(Unassigned)),
             outgoingEmails,
             operations,
             callerAuthorization);
@@ -209,7 +215,7 @@ public sealed class UserOutboxTests
     /// <summary>Writes one queued send down for one account, which is the arrangement every test here starts from.</summary>
     private static async Task<OutgoingEmailId> QueueAsync(
         InMemoryOutgoingEmailStore outgoingEmails,
-        MailAccountIdentity account)
+        MailAccountId account)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
@@ -217,7 +223,8 @@ public sealed class UserOutboxTests
             Substitute.For<IPersistenceSession>(),
             OutgoingEmailRequest.Create(
                 account,
-                OutgoingEmailRequester.Command($"mfctl-{account.User.Value:N}"),
+                SyntheticMailUser.Deployment,
+                OutgoingEmailRequester.Command($"mfctl-{account.Value:N}"),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]),
             OutgoingEmailPrincipal.Of("test-caller"),
             Encoding.ASCII.GetBytes("Subject: a send\r\n\r\nHello.").Length,

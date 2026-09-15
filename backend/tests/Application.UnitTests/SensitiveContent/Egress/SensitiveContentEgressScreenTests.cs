@@ -57,11 +57,11 @@ public sealed class SensitiveContentEgressScreenTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         var screening = ScanningSensitiveContentEgress.Account;
-        var quiet = MailAccountIdentity.Create(screening.User, MailAccountId.Create("secondary"));
+        var quiet = MailAccountId.Create("secondary");
         var screen = new SensitiveContentEgressScreen(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (screening.Id, egress.Postures.ForAccount(screening.Id))),
+                (screening, egress.Postures.ForAccount(screening))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 

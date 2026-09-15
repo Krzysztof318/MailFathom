@@ -71,7 +71,7 @@ public sealed class MailDraftDirectoryTests
 
     /// <summary>An account another user owns is refused exactly as one this deployment does not serve.</summary>
     [Fact]
-    public async Task ReadAsync_AnAccountAnotherUserOwns_IsRefusedAsOneThisUserDoesNotOwn()
+    public async Task ReadAsync_AnAccountAnotherUserIsAssigned_IsRefusedAsOneThisUserIsNotAssigned()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
@@ -178,7 +178,7 @@ public sealed class MailDraftDirectoryTests
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite);
 
         return new MailDraftDirectory(
-            OwnedMailAccountCatalogs.For(
+            AssignedMailAccountCatalogs.For(
                 callerAuthorization,
                 SyntheticServedAccount.Of(Work),
                 SyntheticServedAccount.Of(Personal)),
@@ -196,7 +196,8 @@ public sealed class MailDraftDirectoryTests
         string subject) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(user, accountId),
+            accountId,
+            user,
             OutgoingEmailRequester.Command($"mfctl-{subject}"),
             [],
             subject,

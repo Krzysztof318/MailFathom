@@ -97,7 +97,7 @@ public sealed class MailOutboxPass
     /// its lease back — a pass abandoned mid-batch would leave the sends behind the one that was running held until
     /// their leases expired.
     /// </remarks>
-    public async Task<MailOutboxPassReport> RunAsync(MailAccountIdentity account, CancellationToken stoppingToken)
+    public async Task<MailOutboxPassReport> RunAsync(MailAccountId account, CancellationToken stoppingToken)
     {
         // Before the submission endpoint is asked for, because a draft is written over IMAP and owes nothing to SMTP:
         // an account that reads mail without sending it keeps drafts like any other, and a replacement whose process
@@ -110,7 +110,7 @@ public sealed class MailOutboxPass
         // An account with no submission endpoint has nothing to drain and no policy to drain it under. Asking here
         // keeps a read-only account from claiming work it could never attempt, and what it reports is the drafts it
         // did settle rather than a pass that never ran.
-        if (this.transportSecurityPolicyReader.GetDeliveryPolicy(account.Id) is not { } transportSecurityPolicy)
+        if (this.transportSecurityPolicyReader.GetDeliveryPolicy(account) is not { } transportSecurityPolicy)
         {
             return MailOutboxPassReport.WithDraftsAlone(draftResults);
         }
@@ -172,7 +172,7 @@ public sealed class MailOutboxPass
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The count is the last step of the pass and the only one nothing acts on; letting it throw would discard the delivery and filing outcomes this pass had already durably settled, and report a pass that worked as one that failed.")]
     private async Task<IReadOnlyList<OutboxStageCount>> MeasureOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken stoppingToken)
     {
         try
@@ -238,7 +238,7 @@ public sealed class MailOutboxPass
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft the mailbox could not be brought into step with must not stop the sends this pass was about to claim; the records are unchanged and the next pass reads them again.")]
     private async Task<IReadOnlyList<MailDraftFilingResult>> SettleDraftsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken stoppingToken)
     {
         try

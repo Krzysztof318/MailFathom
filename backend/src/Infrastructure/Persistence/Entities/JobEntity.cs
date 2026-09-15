@@ -48,17 +48,6 @@ internal sealed class JobEntity
     /// </remarks>
     public string? MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user the work belongs to, and <see langword="null" /> when it belongs to none.</summary>
-    /// <remarks>
-    /// Nullable exactly as <see cref="MailboxAccountId" /> is, and for the same reason: work no mailbox asked
-    /// for belongs to nobody's mail. The two together are the foreign key onto the account, an account being
-    /// identified by its user and its identifier — and because both halves are optional, PostgreSQL leaves a row
-    /// supplying only one of them unchecked, which is why <c>ck_jobs_account_user</c> states that the user is
-    /// present for exactly the rows the account is. Carrying it here rather than reaching it through the account is
-    /// also what lets the fair claim rank one user's waiting work on an index rather than through a join.
-    /// </remarks>
-    public Guid? UserId { get; set; }
-
     public MailboxAccountEntity? MailboxAccount { get; set; }
 
     public JobState State { get; set; }

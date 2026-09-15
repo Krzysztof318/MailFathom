@@ -31,7 +31,7 @@ public sealed record MailboxMutationAuditQuery
     public const int MaximumPageSize = 200;
 
     private MailboxMutationAuditQuery(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
@@ -47,9 +47,7 @@ public sealed record MailboxMutationAuditQuery
     }
 
     /// <summary>Gets the account whose trail is read.</summary>
-    public MailAccountIdentity Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account.Id;
+    public MailAccountId Account { get; }
 
     /// <summary>Gets the mutation the page is narrowed to, or the unspecified default when every mutation is served.</summary>
     public MailboxMutation Mutation { get; }
@@ -86,7 +84,7 @@ public sealed record MailboxMutationAuditQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailboxMutationAuditQueryResult Create(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
@@ -124,13 +122,12 @@ public sealed record MailboxMutationAuditQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account.Id.Value,
+            account.Value,
             mutation.IsSpecified ? mutation.Name : null,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
             completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));

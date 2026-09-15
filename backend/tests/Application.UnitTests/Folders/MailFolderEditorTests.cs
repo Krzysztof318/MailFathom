@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
@@ -28,8 +29,7 @@ namespace MailFathom.Application.UnitTests.Folders;
 /// </summary>
 public sealed class MailFolderEditorTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly MailFolderAlias Projects = MailFolderAlias.Create("projects");
 
@@ -50,7 +50,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var management = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([MailFolderAct.Create], management!.AllowedActs);
@@ -67,7 +67,7 @@ public sealed class MailFolderEditorTests
         deployment.Declares(MailFolderMapping.ToRemotePath(Projects, RemoteFolderPath.Create("Projects", '/')));
 
         // Act
-        var management = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(["Projects"], management!.Folders.Select(folder => folder.Name));
@@ -86,6 +86,34 @@ public sealed class MailFolderEditorTests
         Assert.Null(management);
     }
 
+    /// <summary>
+    /// The account arrives as a generated identifier and neither editor beneath knows who asked, so this is the one
+    /// place an act is narrowed to the caller's own mailboxes. A mailbox somebody else is assigned answers exactly as
+    /// one this deployment never served, so a refusal tells nobody which mailboxes exist beside their own.
+    /// </summary>
+    [Theory]
+    [InlineData(MailAccountCustodyPhase.Held)]
+    [InlineData(MailAccountCustodyPhase.Mirrored)]
+    public async Task CreateAsync_AnAccountTheCallerIsNotAssigned_IsRefusedAsMissingWithoutReachingTheMailbox(
+        MailAccountCustodyPhase phase)
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(phase);
+        deployment.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("theirs"))]);
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(
+            Account,
+            parentId: null,
+            "Projects",
+            role: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.AccountMissing, outcome.Refusal);
+        Assert.Equal(0, deployment.Store.SaveCount);
+    }
+
     [Fact]
     public async Task CreateAsync_AHeldAccount_CreatesTheFolderInTheLocalHierarchy()
     {
@@ -93,7 +121,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Created, outcome.Change);
@@ -110,7 +138,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             parentId: null,
             name: null,
             MailFolderSpecialUse.Archive,
@@ -132,7 +160,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             "not-an-identifier",
             "Projects",
             role: null,
@@ -148,11 +176,11 @@ public sealed class MailFolderEditorTests
     {
         // Arrange
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
-        var created = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var created = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Act
         var outcome = await deployment.Editor.MoveAsync(
-            Account.Id,
+            Account,
             created.Folder!.Id,
             "not-an-identifier",
             TestContext.Current.CancellationToken);
@@ -169,7 +197,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             "",
             "Projects",
             role: null,
@@ -187,7 +215,7 @@ public sealed class MailFolderEditorTests
         deployment.CreatesAt("Projects");
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Created, outcome.Change);
@@ -202,7 +230,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Restoring);
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, Guid.CreateVersion7().ToString(), TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, Guid.CreateVersion7().ToString(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderActRefusal.AccountNotHeld, outcome.Refusal);
@@ -218,7 +246,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(phase);
 
         // Act
-        var outcome = await deployment.Editor.RenameAsync(Account.Id, "   ", "Plans", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.RenameAsync(Account, "   ", "Plans", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderActRefusal.FolderMissing, outcome.Refusal);
@@ -232,7 +260,7 @@ public sealed class MailFolderEditorTests
 
         // Act, Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken));
+            () => deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The use case over both editors, each composed over the doubles its own suite uses.</summary>
@@ -271,6 +299,9 @@ public sealed class MailFolderEditorTests
             var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
             sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+            this.Accounts = Substitute.For<ICallerMailAccountCatalog>();
+            this.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+
             var authorization = AccessAuthorizations.ForUserGranted(
                 SyntheticMailUser.Deployment,
                 granted.Length > 0 ? granted : [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
@@ -294,7 +325,8 @@ public sealed class MailFolderEditorTests
                     this.Signals,
                     Substitute.For<IJobStore>(),
                     authorization),
-                authorization);
+                authorization,
+                this.Accounts);
         }
 
         internal FakeTimeProvider Clock { get; } = new();
@@ -304,6 +336,8 @@ public sealed class MailFolderEditorTests
         internal ClientSignals Signals { get; }
 
         internal MailFolderEditor Editor { get; }
+
+        internal ICallerMailAccountCatalog Accounts { get; }
 
         /// <summary>States what the whole of configuration declares for a mirrored account.</summary>
         internal void Declares(params MailFolderMapping[] declared) => this.folders = declared;

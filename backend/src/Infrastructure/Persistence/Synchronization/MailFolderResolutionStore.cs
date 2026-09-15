@@ -22,21 +22,19 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
 {
     /// <inheritdoc />
     public async Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
         var aliasValue = folderAlias.Value;
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         // Every generation of an alias is kept, because occurrences stay attributable to the folder they came from,
         // so the current binding is the highest generation rather than the only row. The user leads the narrowing, as
         // it leads the index: an alias is MailFathom's own name within one user's account.
         var entity = await readContext.MailFolders
             .AsNoTracking()
-            .Where(folder => folder.UserId == userValue
-                && folder.MailboxAccountId == accountValue
+            .Where(folder => folder.MailboxAccountId == accountValue
                 && folder.Alias == aliasValue)
             .OrderByDescending(folder => folder.ResolutionGeneration)
             .FirstOrDefaultAsync(cancellationToken);
@@ -46,13 +44,12 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
 
     /// <inheritdoc />
     public async Task<MailFolderAlias?> GetAliasBoundToAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath remotePath,
         CancellationToken cancellationToken)
     {
         var pathValue = remotePath.Value;
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         // The generation is compared against the alias's own highest rather than taken as the highest of the rows the
         // path matched: an alias the server has since made MailFathom rebind still holds its earlier generation naming
@@ -62,12 +59,10 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         // states: a binding written before the server reported a delimiter names the folder one written after names.
         var alias = await readContext.MailFolders
             .AsNoTracking()
-            .Where(folder => folder.UserId == userValue
-                && folder.MailboxAccountId == accountValue
+            .Where(folder => folder.MailboxAccountId == accountValue
                 && folder.RemotePath == pathValue
                 && folder.ResolutionGeneration == readContext.MailFolders
-                    .Where(binding => binding.UserId == folder.UserId
-                        && binding.MailboxAccountId == folder.MailboxAccountId
+                    .Where(binding => binding.MailboxAccountId == folder.MailboxAccountId
                         && binding.Alias == folder.Alias)
                     .Max(binding => binding.ResolutionGeneration))
             .OrderBy(folder => folder.Alias)
@@ -80,7 +75,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
     /// <inheritdoc />
     public async Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
@@ -108,7 +103,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         if (MailFolderEntityResolver.ToResolution(existingBinding) != resolution)
         {
             throw new PersistenceConcurrencyConflictException(
-                $"Folder alias {account.Id.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
+                $"Folder alias {account.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
         }
     }
 }

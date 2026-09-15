@@ -16,6 +16,9 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbContext) : IAttachmentDerivationSpendLedger
 {
+    /// <summary>The user column's value on the row carrying the deployment's own total, which names nobody.</summary>
+    private static readonly Guid DeploymentRow = Guid.Empty;
+
     /// <summary>Adds a period's consumption, inserting the row the first time anything is charged to it.</summary>
     /// <remarks>
     /// One statement rather than a read and a write, because the account runs that charge do so in separate
@@ -47,6 +50,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
         CancellationToken cancellationToken)
     {
         var userId = user.Value;
+        var deploymentRow = DeploymentRow;
 
         var totals = await dbContext.AttachmentDerivationSpendPeriods
             .AsNoTracking()
@@ -54,7 +58,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
             .GroupBy(_ => 1)
             .Select(rows => new AttachmentDerivationTotals(
                 rows.Sum(period => period.UserId == userId ? period.ConsumedUnitCount : 0L),
-                rows.Sum(period => period.ConsumedUnitCount)))
+                rows.Sum(period => period.UserId == deploymentRow ? period.ConsumedUnitCount : 0L)))
             .SingleOrDefaultAsync(cancellationToken);
 
         return totals ?? AttachmentDerivationTotals.Unspent;
@@ -64,22 +68,29 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
     public async Task<long> ReadDeploymentConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        CancellationToken cancellationToken) =>
-        await dbContext.AttachmentDerivationSpendPeriods
+        CancellationToken cancellationToken)
+    {
+        var deploymentRow = DeploymentRow;
+
+        return await dbContext.AttachmentDerivationSpendPeriods
             .AsNoTracking()
-            .Where(period => period.PeriodStartsAt == periodStart && period.Step == derivationStep)
+            .Where(period => period.PeriodStartsAt == periodStart
+                && period.Step == derivationStep
+                && period.UserId == deploymentRow)
             .SumAsync(period => period.ConsumedUnitCount, cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        IReadOnlyCollection<MailUserId> users,
         long unitCount,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(users);
         ArgumentOutOfRangeException.ThrowIfNegative(unitCount);
 
         if (unitCount == 0)
@@ -89,11 +100,30 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
 
         var sessionDbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
+        // The deployment's own row first, so what was read is counted once whether the mailbox has one assigned user,
+        // several, or none. The loop is what charges each of them in full, which is the per-user ceiling ADR 0014 asks
+        // for and is deliberately more than was read.
+        await IncrementAsync(sessionDbContext, periodStart, DeploymentRow, derivationStep, unitCount, cancellationToken);
+
+        foreach (var user in users)
+        {
+            await IncrementAsync(sessionDbContext, periodStart, user.Value, derivationStep, unitCount, cancellationToken);
+        }
+    }
+
+    /// <summary>Issues one upsert, which is the whole of what a charge is.</summary>
+    private static Task<int> IncrementAsync(
+        MailFathomDbContext sessionDbContext,
+        DateTimeOffset periodStart,
+        Guid userId,
+        AttachmentDerivationStep derivationStep,
+        long unitCount,
+        CancellationToken cancellationToken) =>
+
         // Every value is a parameter rather than composed text; only the identifiers, which come from the entity's own
         // constants, are part of the statement. The step travels as its name because that is how the column stores it.
-        await sessionDbContext.Database.ExecuteSqlRawAsync(
+        sessionDbContext.Database.ExecuteSqlRawAsync(
             RecordSpendStatement,
-            [periodStart, user.Value, derivationStep.ToString(), unitCount],
+            [periodStart, userId, derivationStep.ToString(), unitCount],
             cancellationToken);
-    }
 }

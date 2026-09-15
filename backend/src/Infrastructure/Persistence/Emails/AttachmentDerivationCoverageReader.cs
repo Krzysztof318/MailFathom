@@ -35,7 +35,7 @@ internal sealed class AttachmentDerivationCoverageReader(
 
     /// <inheritdoc />
     public async Task<AttachmentDerivationCoverage> ReadCoverageAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken)
     {
         // One snapshot for every aggregate below, exactly as the walk reads it: a second reading taken between them
@@ -46,10 +46,9 @@ internal sealed class AttachmentDerivationCoverageReader(
 
         if (account is { } named)
         {
-            var userId = named.User.Value;
-            var mailboxAccountId = named.Id.Value;
+            var mailboxAccountId = named.Value;
 
-            scoped = scoped.Where(email => email.UserId == userId && email.MailboxAccountId == mailboxAccountId);
+            scoped = scoped.Where(email => email.MailboxAccountId == mailboxAccountId);
         }
 
         var reachable = StoredEmailAttachmentTextStore.ReachableEverywhere(

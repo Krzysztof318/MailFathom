@@ -248,7 +248,7 @@ public sealed class ClientMailThreadStateEndpointTests
     {
         var accountId = MailAccountId.Create("work");
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
         catalog.User.Returns(SyntheticMailUser.Deployment);
 
         return new MailThreadStateBrowser(

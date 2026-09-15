@@ -16,35 +16,35 @@ namespace MailFathom.SharedSources.UnitTests;
 /// answered with nothing whoever asked would make all of them pass while proving the opposite of what they claim. Both
 /// answers are asserted here rather than in each suite for that reason.
 /// </remarks>
-public sealed class OwnedMailAccountCatalogsTests
+public sealed class AssignedMailAccountCatalogsTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
     [Fact]
-    public void OwnedAccounts_ForTheUserEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
+    public void AssignedAccounts_ForTheUserEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
     {
         // Arrange
-        var catalog = OwnedMailAccountCatalogs.For(
+        var catalog = AssignedMailAccountCatalogs.For(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
             SyntheticServedAccount.Of(Work));
 
         // Act
-        var owned = catalog.OwnedAccounts;
+        var owned = catalog.AssignedAccounts;
 
         // Assert
         Assert.Equal(Work, Assert.Single(owned).Id);
     }
 
     [Fact]
-    public void OwnedAccounts_ForAnotherUser_AreNone()
+    public void AssignedAccounts_ForAnotherUser_AreNone()
     {
         // Arrange
-        var catalog = OwnedMailAccountCatalogs.For(
+        var catalog = AssignedMailAccountCatalogs.For(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
             SyntheticServedAccount.Of(Work));
 
         // Act
-        var owned = catalog.OwnedAccounts;
+        var owned = catalog.AssignedAccounts;
 
         // Assert
         Assert.Empty(owned);
@@ -52,15 +52,15 @@ public sealed class OwnedMailAccountCatalogsTests
 
     /// <summary>A principal acting for nobody is refused rather than answered, so the two never look alike in a test.</summary>
     [Fact]
-    public void OwnedAccounts_ForAPrincipalActingForNoUser_AreRefused()
+    public void AssignedAccounts_ForAPrincipalActingForNoUser_AreRefused()
     {
         // Arrange
-        var catalog = OwnedMailAccountCatalogs.For(
+        var catalog = AssignedMailAccountCatalogs.For(
             AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminOperate),
             SyntheticServedAccount.Of(Work));
 
         // Act & Assert
-        Assert.Throws<PrincipalNotAuthorizedException>(() => catalog.OwnedAccounts);
+        Assert.Throws<PrincipalNotAuthorizedException>(() => catalog.AssignedAccounts);
     }
 
     /// <summary>The switch is the deployment's and says nothing about who owns what, so it reaches every caller.</summary>
@@ -68,7 +68,7 @@ public sealed class OwnedMailAccountCatalogsTests
     public void SynchronizationEnabled_WhicheverUserAsks_IsTheDeploymentsOwnAnswer()
     {
         // Arrange
-        var catalog = OwnedMailAccountCatalogs.For(
+        var catalog = AssignedMailAccountCatalogs.For(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
             SyntheticServedAccount.Of(Work));
 
@@ -78,16 +78,16 @@ public sealed class OwnedMailAccountCatalogsTests
 
     /// <summary>The order is the deployment's own, so a scope a test resolves from this set is the canonical one.</summary>
     [Fact]
-    public void OwnedAccounts_HoweverATestNamedThem_AreOrderedByIdentifier()
+    public void AssignedAccounts_HoweverATestNamedThem_AreOrderedByIdentifier()
     {
         // Arrange
-        var catalog = OwnedMailAccountCatalogs.For(
+        var catalog = AssignedMailAccountCatalogs.For(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
             SyntheticServedAccount.Of("private"),
             SyntheticServedAccount.Of("archive"));
 
         // Act
-        var owned = catalog.OwnedAccounts;
+        var owned = catalog.AssignedAccounts;
 
         // Assert
         Assert.Equal(["archive", "private"], owned.Select(account => account.Id.Value));

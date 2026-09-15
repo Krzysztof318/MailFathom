@@ -11,7 +11,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -232,15 +231,13 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
             // Stated rather than left at the column's default, so a test asserting which message came back is asserting
             // on an identity: two messages both answering Guid.Empty would make the selection's narrowing unfalsifiable.
             Id = Guid.NewGuid(),
-            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = account.Value,
             MailFolder = new MailFolderEntity
             {
-                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = account.Value,
                 Alias = "INBOX",
                 RemotePath = "INBOX",
-                MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = account.Value },
+                MailboxAccount = new MailboxAccountEntity { Id = account.Value },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,

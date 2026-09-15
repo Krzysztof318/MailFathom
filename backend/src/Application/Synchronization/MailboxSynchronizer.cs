@@ -18,7 +18,6 @@ using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
@@ -41,7 +40,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IStoredEmailContentInventory contentInventory;
-    private readonly IUserStoredContentLedger userContentLedger;
+    private readonly IAccountStoredContentLedger accountContentLedger;
     private readonly IMailOwnership ownership;
     private readonly StoredContentCeiling storedContentCeiling;
     private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
@@ -70,7 +69,7 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IStoredEmailContentInventory contentInventory,
-        IUserStoredContentLedger userContentLedger,
+        IAccountStoredContentLedger accountContentLedger,
         IMailOwnership ownership,
         StoredContentCeiling storedContentCeiling,
         RawMimeMemoryBudget rawMimeMemoryBudget,
@@ -97,7 +96,7 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.contentInventory = contentInventory;
-        this.userContentLedger = userContentLedger;
+        this.accountContentLedger = accountContentLedger;
         this.ownership = ownership;
         this.storedContentCeiling = storedContentCeiling;
         this.rawMimeMemoryBudget = rawMimeMemoryBudget;
@@ -117,7 +116,7 @@ public sealed class MailboxSynchronizer
     }
 
     /// <summary>Synchronizes one configured folder alias without mutating remote mailbox flags.</summary>
-    /// <param name="account">The account to synchronize, named by its user and its identifier.</param>
+    /// <param name="account">The account to synchronize, by its generated identifier.</param>
     /// <param name="folderMapping">What configuration says the alias names.</param>
     /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
     /// <returns>The bounded progress this run committed, or the reason the alias named no remote folder.</returns>
@@ -164,13 +163,13 @@ public sealed class MailboxSynchronizer
     /// </para>
     /// </remarks>
     public async Task<MailboxSynchronizationResult> SynchronizeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping folderMapping,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(folderMapping);
 
-        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account.Id);
+        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account);
 
         var resolutionResult = await this.ResolveFolderAsync(
             account,
@@ -188,12 +187,12 @@ public sealed class MailboxSynchronizer
             folder,
             folderMapping.SpecialUse,
             transportSecurityPolicy,
-            this.synchronizationWindowReader.GetWindow(account.Id),
+            this.synchronizationWindowReader.GetWindow(account),
             cancellationToken);
     }
 
     private async Task<MailboxSynchronizationResult> SynchronizeResolvedFolderAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         MailFolderSpecialUse? folderRole,
         MailTransportSecurityPolicy transportSecurityPolicy,
@@ -216,20 +215,15 @@ public sealed class MailboxSynchronizer
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
 
-        // Whose mail this run is bringing in. A worker acts for nobody, so the user arrives with the account the
-        // supervisor resolved rather than being read off the account table again — and it cannot change while a run is
-        // in flight, which is what let the previous read be one per run.
-        var user = account.User;
-
         // Neither population is measured here any more: what a claim is admitted against is read inside the statement
         // that takes it, so every replica claims against one reading rather than against its own. What this still owes
-        // is the user's counter row where nothing has ever written one — a deployment upgraded before their first
-        // message, or a user provisioned since — because the claim reads that row and an absence would read as an empty
-        // mailbox. The figure it returns is deliberately discarded: it is the derivation that matters, and it happens
-        // once per run rather than once per message.
+        // is the account's counter row where nothing has ever written one — a deployment upgraded before this mailbox
+        // held a message, or an account assigned since — because the claim reads that row and an absence would read as
+        // an empty mailbox. The figure it returns is deliberately discarded: it is the derivation that matters, and it
+        // happens once per run rather than once per message.
         if (this.storedContentCeiling.IsConfiguredPerUser)
         {
-            await this.userContentLedger.ReadStoredContentBytesAsync(user, cancellationToken);
+            await this.accountContentLedger.ReadStoredContentBytesAsync(account, cancellationToken);
         }
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
@@ -323,7 +317,7 @@ public sealed class MailboxSynchronizer
                     }
 
                     if (recognizesFiledSentCopies
-                        && await this.TryCarryFiledSentCopyAsync(account, metadata, filedSentCopies, cancellationToken))
+                        && await this.TryCarryFiledSentCopyAsync(metadata, filedSentCopies, cancellationToken))
                     {
                         processedThroughUid = metadata.OccurrenceId.Uid;
 
@@ -360,7 +354,7 @@ public sealed class MailboxSynchronizer
                         copy,
                         filing,
                         isFiledCopy: filing is not null,
-                        user,
+                        account,
                         budget,
                         collection,
                         storageRefusal,
@@ -497,7 +491,6 @@ public sealed class MailboxSynchronizer
                 account,
                 folder,
                 uidValidity,
-                user,
                 budget,
                 collection,
                 arrivalSource,
@@ -538,7 +531,7 @@ public sealed class MailboxSynchronizer
     /// server what it holds: an account whose folder listing became slow is attributable here and nowhere else.
     /// </remarks>
     private async Task<MailFolderResolutionResult> ResolveFolderAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping folderMapping,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -564,7 +557,7 @@ public sealed class MailboxSynchronizer
     /// here rather than by the caller so that a server slow to answer it is attributable to a stage at all.
     /// </remarks>
     private async Task<(IMailboxSession Session, ImapUidValidity UidValidity)> OpenSessionAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -572,7 +565,7 @@ public sealed class MailboxSynchronizer
         using var phase = this.phaseTelemetry.BeginPhase(MailSynchronizationPhase.OpenSession, cancellationToken);
 
         var session = await this.mailboxSessionFactory.OpenReadOnlyAsync(
-            account.Id,
+            account,
             folder,
             transportSecurityPolicy,
             cancellationToken);
@@ -662,10 +655,9 @@ public sealed class MailboxSynchronizer
     /// </remarks>
     private async Task<DeferredContentRefill> RefillDeferredContentAsync(
         IMailboxSession mailboxSession,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
-        MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         LocalMailFolderArrivalSource arrivalSource,
@@ -697,7 +689,7 @@ public sealed class MailboxSynchronizer
                 placement: null,
                 filing: null,
                 isFiledCopy,
-                user,
+                account,
                 budget,
                 collection,
                 storageAlreadyRefused: null,
@@ -738,7 +730,7 @@ public sealed class MailboxSynchronizer
     /// MailFathom's own work costs one query per batch on a folder nobody writes into and never one per message.
     /// </remarks>
     private async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsInBatchAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
         RemoteEmailMetadataBatch batch,
@@ -777,7 +769,7 @@ public sealed class MailboxSynchronizer
     /// discoveries of both kinds and a second query would double the cost of the case that answers nothing.
     /// </remarks>
     private async Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsInBatchAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
         RemoteEmailMetadataBatch batch,
@@ -805,7 +797,7 @@ public sealed class MailboxSynchronizer
     /// entry is taken out once it has been carried.
     /// </remarks>
     private async Task<Dictionary<string, StoredEmailId>> ReadFiledSentCopiesInBatchAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         bool recognizesFiledSentCopies,
         RemoteEmailMetadataBatch batch,
         CancellationToken cancellationToken)
@@ -871,7 +863,6 @@ public sealed class MailboxSynchronizer
             {
                 carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
                     persistenceSession,
-                    record.User,
                     record.Request.StoredEmailId,
                     occurrenceId,
                     attemptCancellationToken);
@@ -911,7 +902,6 @@ public sealed class MailboxSynchronizer
     /// </para>
     /// </remarks>
     private async Task<bool> TryCarryFiledSentCopyAsync(
-        MailAccountIdentity account,
         RemoteEmailMetadata metadata,
         Dictionary<string, StoredEmailId> filedSentCopies,
         CancellationToken cancellationToken)
@@ -929,7 +919,6 @@ public sealed class MailboxSynchronizer
             {
                 carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
                     persistenceSession,
-                    account.User,
                     filedCopy,
                     metadata.OccurrenceId,
                     attemptCancellationToken);
@@ -952,7 +941,7 @@ public sealed class MailboxSynchronizer
     /// ends a forward advance; what the next run loses by starting without the sequence is one full window scan.
     /// </remarks>
     private async Task<SynchronizationCheckpoint> RecordReconciledModSeqAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         SynchronizationCheckpoint? persistedCheckpoint,
         SynchronizationCheckpoint checkpoint,
@@ -1007,7 +996,7 @@ public sealed class MailboxSynchronizer
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
         bool isFiledCopy,
-        MailUserId user,
+        MailAccountId account,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         StoredContentBound? storageAlreadyRefused,
@@ -1017,7 +1006,6 @@ public sealed class MailboxSynchronizer
         if (!this.WouldFetchContentOf(metadata))
         {
             return await this.RecordOccurrenceWithoutContentAsync(
-                user,
                 metadata,
                 placement,
                 filing,
@@ -1032,7 +1020,6 @@ public sealed class MailboxSynchronizer
         if (storageAlreadyRefused is { } refusedBound)
         {
             return await this.RecordOccurrenceWithoutContentAsync(
-                user,
                 metadata,
                 placement,
                 filing,
@@ -1049,7 +1036,7 @@ public sealed class MailboxSynchronizer
         // written where both can see it. The occurrence is still recorded, so the gap is queryable and a later run with
         // room fetches exactly what this one left.
         var storageAttempt = await this.storedContentCeiling.TryClaimAsync(
-            user,
+            account,
             this.AssumedContentCostOf(metadata),
             cancellationToken);
         await using var storageClaim = storageAttempt.Claim;
@@ -1057,7 +1044,6 @@ public sealed class MailboxSynchronizer
         if (storageClaim is null)
         {
             return await this.RecordOccurrenceWithoutContentAsync(
-                user,
                 metadata,
                 placement,
                 filing,
@@ -1090,7 +1076,6 @@ public sealed class MailboxSynchronizer
             budget.RecordFetched(this.options.MaxRawMimeBytes);
 
             return await this.RecordOccurrenceWithoutContentAsync(
-                user,
                 metadata,
                 placement,
                 filing,
@@ -1106,7 +1091,7 @@ public sealed class MailboxSynchronizer
         // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored with
         // only what the server's envelope reported, and the folder checkpoint still advances past it.
         var extraction = await this.mimeReader.ReadMetadataAsync(
-            MailAccountIdentity.Create(user, content.OccurrenceId.AccountId),
+            content.OccurrenceId.AccountId,
             content.RawMime,
             cancellationToken);
 
@@ -1137,7 +1122,6 @@ public sealed class MailboxSynchronizer
             {
                 storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
-                    user,
                     metadata,
                     extraction.Metadata,
                     StoredEmailContentAvailability.Available,
@@ -1153,7 +1137,7 @@ public sealed class MailboxSynchronizer
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
                 folderSetMoved = await this.localFolderArrivals.PlaceAsync(
                     persistenceSession,
-                    MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
+                    metadata.OccurrenceId.AccountId,
                     storedEmailId,
                     arrivalSource,
                     attemptCancellationToken);
@@ -1166,7 +1150,7 @@ public sealed class MailboxSynchronizer
         // one a client may be sent to read.
         if (folderSetMoved)
         {
-            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+            this.localFolderArrivals.AnnounceFoldersChanged(metadata.OccurrenceId.AccountId);
         }
 
         // Asked for after the commit rather than inside it, because the queue takes no persistence session by design:
@@ -1185,7 +1169,7 @@ public sealed class MailboxSynchronizer
             await this.classificationArrivals.ScheduleAsync(
                 storedEmailId,
                 metadata.OccurrenceId,
-                user,
+                account,
                 cancellationToken);
         }
 
@@ -1206,7 +1190,6 @@ public sealed class MailboxSynchronizer
 
     /// <summary>Records one occurrence from its envelope alone, with the reason its payload is not stored beside it.</summary>
     private async Task<OccurrenceSynchronizationOutcome> RecordOccurrenceWithoutContentAsync(
-        MailUserId user,
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
@@ -1223,7 +1206,6 @@ public sealed class MailboxSynchronizer
             {
                 storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
-                    user,
                     metadata,
                     extractedMetadata: null,
                     availability,
@@ -1233,7 +1215,7 @@ public sealed class MailboxSynchronizer
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
                 folderSetMoved = await this.localFolderArrivals.PlaceAsync(
                     persistenceSession,
-                    MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
+                    metadata.OccurrenceId.AccountId,
                     storedEmailId,
                     arrivalSource,
                     attemptCancellationToken);
@@ -1242,7 +1224,7 @@ public sealed class MailboxSynchronizer
 
         if (folderSetMoved)
         {
-            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+            this.localFolderArrivals.AnnounceFoldersChanged(metadata.OccurrenceId.AccountId);
         }
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
@@ -1306,7 +1288,7 @@ public sealed class MailboxSynchronizer
     // A checkpoint advance is attempted once rather than retried: the intended progress was derived from the state read
     // at the start of the run, so a competing advance invalidates the decision itself instead of only the write.
     private async Task CommitCheckpointAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,

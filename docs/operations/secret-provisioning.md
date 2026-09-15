@@ -37,6 +37,7 @@ record the deployment holds rather than a section of a configuration file, so wh
 {
   "EmailAddress": "mailfathom@example.test",
   "DisplayName": "Personal mail",
+  "Language": "English",
   "Host": "imap.example.test",
   "Port": 993,
   "UserName": "mailfathom@example.test",

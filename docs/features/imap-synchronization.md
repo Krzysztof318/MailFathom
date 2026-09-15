@@ -404,6 +404,8 @@ as the instance ceiling defers everybody's — `ContentAvailability = AwaitingSt
 advancing, the refill pass fetching what was left as soon as there is room — and leaves every other user's run storing
 content whole.
 
+**A mailbox several people are assigned counts in full against every one of them.** Its mail is wholly each of their mail, so nothing is divided between them: work on the account proceeds only while every assigned user is under the ceiling, and the one closest to theirs is what decides. So a user whose own mailboxes have reached their share holds a shared mailbox back for everybody assigned to it, which is the trade-off [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) states rather than an oversight. Dividing the figure between them was declined, because a person's allowance would then move whenever an administrator assigned somebody else to a mailbox they share.
+
 The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
 different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
 that person to wait. A run that left messages for both reasons reports both, one measurement each, so neither remedy
@@ -1827,7 +1829,7 @@ repairs it. `mfctl mailbox rederive-status` reads the run from the row.
 
 **A second replica walks nothing another one is walking.** The request writes the run down on whichever replica
 answered it and walks nothing itself, so which replica walks is decided by the segment. Before its first pass a segment
-takes the lease `mail-rederivation/<user>/<account>/<folder>` in the lease table — `*` standing for the whole account,
+takes the lease `mail-rederivation/<account>/<folder>` in the lease table — `*` standing for the whole account,
 and a scope too long for the table named by a digest, as a supervised account's is — keeps it renewed on the cadence the
 job's own lease is renewed on, and gives it back before it hands the rest on, so the next segment takes it at once on
 whichever replica claims that. A walk of one folder and a walk of the whole account are two runs with two positions,
@@ -1934,6 +1936,7 @@ a configuration source. An account is declared like this:
 {
   "EmailAddress": "mailfathom@example.test",
   "DisplayName": "Personal mail",
+  "Language": "English",
   "Host": "imap.example.test",
   "Port": 993,
   "UserName": "mailfathom@example.test",

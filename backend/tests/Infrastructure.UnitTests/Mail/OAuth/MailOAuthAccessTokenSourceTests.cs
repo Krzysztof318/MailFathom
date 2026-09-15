@@ -31,8 +31,8 @@ public sealed class MailOAuthAccessTokenSourceTests
     private const string Account = "primary";
 
     /// <summary>The account in full, which is what a stored credential is recorded under.</summary>
-    private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create(Account));
+    private static readonly MailAccountId AccountIdentity =
+        MailAccountId.Create(Account);
 
     /// <summary>A public client sends no field at all; an empty one is a value the server evaluates and refuses.</summary>
     [Fact]
@@ -228,15 +228,13 @@ public sealed class MailOAuthAccessTokenSourceTests
         transportFactory.CreateClient(MailOAuthAccessTokenSource.TransportName)
             .Returns(_ => new HttpClient(handler, disposeHandler: false));
 
-        // The user comes off the account this deployment serves rather than off a sole user, because a deployment may
-        // serve several and only the catalog knows whose each configured mailbox is. It is deliberately not the first
-        // user a deployment holds: an implementation that reached for a sole user would answer with that one, and
-        // seeding it here is what makes the stored credential's user an assertion rather than a coincidence.
+        // The catalog is what says the deployment serves this mailbox at all, and a credential is stored against the
+        // account rather than against whoever is assigned it — so an exchange for an account the deployment does not
+        // serve has nowhere to read a refresh token from.
         var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns(
         [
             new ServedMailAccount(
-                SyntheticMailUser.Another,
                 MailAccountId.Create(Account),
                 MailAccountDisplayName.Create("The primary mailbox"),
                 MailSynchronizationMode.Polling),

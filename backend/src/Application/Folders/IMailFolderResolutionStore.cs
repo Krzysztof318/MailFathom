@@ -26,7 +26,7 @@ public interface IMailFolderResolutionStore
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The highest-generation binding, or <see langword="null" /> when the alias has never been bound.</returns>
     Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken);
 
@@ -42,7 +42,7 @@ public interface IMailFolderResolutionStore
     /// since moved off names the folder it used to be.
     /// </remarks>
     Task<MailFolderAlias?> GetAliasBoundToAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath remotePath,
         CancellationToken cancellationToken);
 
@@ -63,7 +63,7 @@ public interface IMailFolderResolutionStore
     /// </remarks>
     Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken);
 }

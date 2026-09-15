@@ -33,7 +33,7 @@ public sealed class DiscoveryRunLauncherTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailUser.Deployment, [], []));
+        MailboxScope.Create([], []));
 
     private readonly FakeTimeProvider clock = new(Now);
 

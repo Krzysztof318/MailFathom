@@ -41,14 +41,13 @@ internal sealed class StoredEmailChunkingStore(
     /// committing a batch sees the next messages rather than the ones it just cut.
     /// </remarks>
     public async Task<IReadOnlyList<StoredEmailAwaitingChunking>> GetEmailsAwaitingChunkingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         // One snapshot for both halves, exactly as the embedding sweep reads it: the predicate narrows the batch and the
         // answer below names which of the gate's decisions admitted each row, so a second reading taken microseconds
         // later could let the query select a row the answer then reported as still waiting.
@@ -56,7 +55,6 @@ internal sealed class StoredEmailChunkingStore(
 
         var candidates = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
-                userId,
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 terms)
@@ -92,7 +90,6 @@ internal sealed class StoredEmailChunkingStore(
 
     /// <summary>Narrows stored mail to the messages the arrival pipeline still owes passages for.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to embedding, which is what decides the cut.</param>
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
@@ -121,15 +118,13 @@ internal sealed class StoredEmailChunkingStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
         AccountScopedMailFolders.Admitting(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
-                .Where(email => email.UserId == userId
-                    && email.MailboxAccountId == mailboxAccountId
+                .Where(email => email.MailboxAccountId == mailboxAccountId
                     // A body passage rather than any passage. email_chunks also holds what an attachment yielded, and
                     // the two passes walk different sets from the front of their own queues, so nothing orders them:
                     // a message whose attachments were read first would read as already cut and never have its body

@@ -7,7 +7,6 @@ using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Authoring;
@@ -15,8 +14,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Authoring;
 /// <summary>Covers what an authoring attempt hands back: the answer and the account it is sent as, or the refusal alone.</summary>
 public sealed class AuthoredResponseTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("primary");
 
     /// <summary>An authored answer carries the message and the account it is sent as, and no refusal.</summary>
     [Fact]
@@ -27,7 +26,7 @@ public sealed class AuthoredResponseTests
 
         // Assert
         Assert.True(response.IsAuthored);
-        Assert.Equal(Account.Id, response.AccountId);
+        Assert.Equal(Account, response.Account);
         Assert.NotNull(response.Email);
         Assert.Null(response.Refusal);
     }
@@ -44,7 +43,7 @@ public sealed class AuthoredResponseTests
         Assert.Null(response.Email);
         Assert.Equal(AuthoredResponseRefusalReason.BoundExceeded, response.Refusal!.Reason);
         Assert.Equal(64, response.Refusal.Bound);
-        Assert.Equal(default, response.AccountId);
+        Assert.Equal(default, response.Account);
     }
 
     /// <summary>An answer is a required value rather than something an authored result may be composed without.</summary>

@@ -203,7 +203,7 @@ public sealed class EmailAttachmentDownloadReader
         // moment, so what either of them reaches is re-decided here: an account the deployment stopped serving, one
         // belonging to another user, and a folder an operator withheld from tools all answer with nothing, exactly as
         // an email that is no longer stored does.
-        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
+        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.Account, summary.FolderAlias))
         {
             return AttachmentDownloadOutcome.NothingToServe();
         }
@@ -261,7 +261,7 @@ public sealed class EmailAttachmentDownloadReader
     /// </para>
     /// </remarks>
     private async Task<AttachmentDownloadOutcome> ScreenedAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken)
     {

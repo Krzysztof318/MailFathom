@@ -47,7 +47,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReader : IEmailMimeReade
 
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {

@@ -69,7 +69,7 @@ public sealed class MailRuleHistoryRetention
     /// A window of zero or less names no boundary at all and erases nothing, which is how a deployment declares that it
     /// keeps its history until the mail it describes is erased and no longer.
     /// </remarks>
-    public Task<int> EraseExpiredAsync(MailAccountIdentity account, CancellationToken cancellationToken)
+    public Task<int> EraseExpiredAsync(MailAccountId account, CancellationToken cancellationToken)
     {
         if (this.options.HistoryRetention <= TimeSpan.Zero)
         {

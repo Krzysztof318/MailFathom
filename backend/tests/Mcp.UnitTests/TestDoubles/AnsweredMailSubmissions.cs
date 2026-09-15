@@ -132,7 +132,7 @@ internal static class AnsweredMailSubmissions
         return (AuthoredEmail)composer
             .ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-            .GetArguments()[2]!;
+            .GetArguments()[3]!;
     }
 
     /// <summary>Builds the summary of the email an answer is anchored to.</summary>
@@ -142,7 +142,7 @@ internal static class AnsweredMailSubmissions
         StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(ServedAccountId)),
+            Account = MailAccountId.Create(ServedAccountId),
             FolderAlias = MailFolderAlias.Create(ReadableFolderAlias),
             InternetMessageId = "<parent@example.test>",
             Subject = "Quarterly report",

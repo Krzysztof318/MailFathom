@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -135,53 +135,20 @@ The mailbox travels as a file rather than as a list of flags: a JSON object stat
 
 At most **256** users may be recorded. A roster that long was generated rather than provisioned, which is worth stopping for on its own.
 
-### The language a user reads
+### What a user's own record carries
 
-Every record names the language MailFathom writes for that person in, and it is the one key a record being written must
-carry. It says what a derivation produced **for** them comes out in — the [mark on a message
-row](../features/message-enrichment.md), the [statement about a
-conversation](../features/thread-state.md) — whatever language the message itself was written in. It is not a claim
-about their mail, which is mixed by nature, and it changes nothing about an answer to a question somebody asked: that
-is still written in the language the question was.
-
-It settles one thing that is not a derivation: a [reply draft](../features/reply-drafting.md) written for a message
-that answers none. A draft answering a message takes the language of the correspondence it answers, because what
-decides that is who will read it — but a composer opened with nothing in front of it has no correspondence to read,
-and the person writing is the only one anything is known about. An instruction naming a language outranks either.
-
-```json
-{
-  "Language": "Polish"
-}
-```
-
-| Key | Required | What it is |
-| --- | --- | --- |
-| `Language` | Yes | `English` or `Polish`, read however it was capitalized. It is the language every automatic reading written for this person comes out in |
-
-`mfctl user add` provisions the record with `English`, so a user is recorded and served without anybody stating
-anything, and [`mfctl user edit`](admin-endpoint.md#users-and-their-records) is where it is changed — one line, and the
-next derivation is written in it. Two refusals, and the administrator's next act differs between them:
-
-```
-Language is not stated, and every user record names the language MailFathom writes for that person in — the reading
-on a message row, the statement about a conversation. State 'English' or 'Polish'.
-```
-
-```
-Language states 'German', which is not a language MailFathom writes in. It takes 'English' or 'Polish'.
-```
-
-**A record committed before this release states none, and reads as `English` until it is edited.** The key binds
-strictly, so nobody could have written one in advance, and refusing those records at the next start would refuse the
-start itself — for every user, through the surface the line would have been added from. So the requirement is asked of
-a record being written and of no other: a held record naming no language is served in English, and states one the first
-time anybody writes it. The operator's action after upgrading is therefore a single `mfctl user edit` for each person
-who reads Polish, and nothing at all for anybody who reads English.
+`mfctl user add` provisions the record stating nothing at all, so a user is recorded and served without anybody
+writing a line of it. What it can carry is one key, and everything else about how their mail is read belongs to the
+mail accounts they are assigned:
 
 | Key | Required | What it is |
 | --- | --- | --- |
 | `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
+
+**The language is the mailbox's rather than the person's.** [The language this mailbox is read
+in](configuration-mail.md#the-language-this-mailbox-is-read-in--language) holds the key, both refusals, and what an
+account recorded before the property existed reads as. A user's record naming `Language` binds nothing and is refused
+as a property nothing binds, exactly as any other unknown setting is.
 
 ### A configuration still declaring users
 
@@ -254,7 +221,7 @@ from your configuration.
 
 One bound holds while several users are served. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all.
 
-**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed, and its address is unique across the deployment, and an account is served to one user at a time, so one mailbox is one account held by one person. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and a start reports it at `Warning`:
+**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed and its address is unique across the deployment, so one mailbox is one account and one copy of its mail however many users are assigned to it. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and a start reports it at `Warning`:
 
 ```
 The user labelled alex is assigned 1 mail accounts that hold no email address, so those mailboxes are not served. State each address with 'mfctl account edit'; 'mfctl account list' names the accounts.
@@ -319,7 +286,6 @@ that states none of it reads as both on — which is every record written before
 
 ```json
 {
-  "Language": "English",
   "EndpointAccess": { "McpEndpoint": false, "ClientEndpoint": true }
 }
 ```

@@ -83,8 +83,7 @@ public sealed class LocalMailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var identity = MailAccountIdentity.Create(this.authorization.RequireUser(), account);
-        var holding = await this.store.ReadAsync(identity, cancellationToken);
+        var holding = await this.store.ReadAsync(account, cancellationToken);
 
         if (holding is not { Phase: MailAccountCustodyPhase.Held }
             || holding.ToTree().MissingProtectedFolders(this.MintId).Count is 0)
@@ -93,7 +92,7 @@ public sealed class LocalMailFolderEditor
         }
 
         return await this.concurrencyRetryPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.SupplyProtectedFoldersAsync(session, identity, attemptCancellationToken),
+            (session, attemptCancellationToken) => this.SupplyProtectedFoldersAsync(session, account, attemptCancellationToken),
             cancellationToken);
     }
 
@@ -157,7 +156,7 @@ public sealed class LocalMailFolderEditor
 
     private async Task<LocalMailFolderHolding?> SupplyProtectedFoldersAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var holding = await this.store.ReadAsync(session, account, cancellationToken);
@@ -181,14 +180,16 @@ public sealed class LocalMailFolderEditor
     }
 
     private async Task<LocalMailFolderEditOutcome> EditAsync(
-        MailAccountId accountId,
+        MailAccountId account,
         MailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
 
-        var account = MailAccountIdentity.Create(this.authorization.RequireUser(), accountId);
+        // Read where the act is authorized rather than where it is recorded, so the audit names whoever asked for the
+        // change rather than whoever the unit of work happens to be acting for by the time the commit has returned.
+        var changedBy = this.authorization.RequireUser();
 
         var decision = await this.concurrencyRetryPolicy.CommitAsync(
             (session, attemptCancellationToken) => this.DecideAndSaveAsync(session, account, act, decide, attemptCancellationToken),
@@ -199,14 +200,14 @@ public sealed class LocalMailFolderEditor
             return LocalMailFolderEditOutcome.Refused(refusal);
         }
 
-        var mailErasureDeferred = await this.AnnounceAsync(account, decision, cancellationToken);
+        var mailErasureDeferred = await this.AnnounceAsync(account, changedBy, decision, cancellationToken);
 
         return new LocalMailFolderEditOutcome(decision.Edit.Folder, decision.Kind, Refusal: null, mailErasureDeferred);
     }
 
     private async Task<LocalMailFolderDecision> DecideAndSaveAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
@@ -264,7 +265,8 @@ public sealed class LocalMailFolderEditor
     /// <summary>Audits and signals a committed act, and queues the first erasure pass of one that erased folders.</summary>
     /// <returns>Whether an erasure found the queue full, so no pass was queued for it.</returns>
     private async Task<bool> AnnounceAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId changedBy,
         LocalMailFolderDecision decision,
         CancellationToken cancellationToken)
     {
@@ -273,6 +275,7 @@ public sealed class LocalMailFolderEditor
         await this.auditor.RecordAsync(
             new LocalMailFolderChange(
                 account,
+                changedBy,
                 folder.Id,
                 decision.Kind!.Value,
                 decision.Edit.Erased.Count,

@@ -29,11 +29,11 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// test pass while proving nothing about it. Seeding it is the work that question asks for.
 /// </para>
 /// <para>
-/// The other half of the claim needs a second account under the user this suite already has, because every statement
-/// the seam issues itself is bounded by a subquery rather than by the cascade — a predicate written against the account
-/// instead of the user would erase one user's mail while answering a request about another's, and a database holding
-/// only the erased user's rows could not tell the two apart. That account stays in the database afterwards, like every
-/// other class's data: it belongs to the user this suite already had, and nothing resolves a user from an account.
+/// The other half of the claim needs a second account assigned to the user this suite already has, because what
+/// decides whether a mailbox is erased is the assignment relation: the erasure takes the accounts the departing user
+/// was the last one assigned and leaves every other one whole. A predicate that had lost that relation would erase
+/// one mailbox while answering a request about another, and a database holding only the erased user's rows could not
+/// tell the two apart. That account stays in the database afterwards, like every other class's data.
 /// </para>
 /// <para>
 /// The contact book is seeded on both sides for a reason of its own: it is the one part of a user's record that
@@ -50,9 +50,16 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture orchestration)
 {
-    private const string ErasedAccount = "user-erasure-account";
+    /// <summary>The mailbox the erased user is the only one assigned, which is therefore erased with them.</summary>
+    /// <remarks>
+    /// Written in the form a deployment generates rather than as a readable name, because the mail graph keys a
+    /// mailbox by the identifier the assignment relation holds as a <c>uuid</c>: an identifier of any other shape
+    /// could carry no assignment, and the erasure reaches an account through exactly that relation.
+    /// </remarks>
+    private const string ErasedAccount = "1b8e2a40-5c31-4f7a-9d02-6ac41e5b7d10";
 
-    private const string SurvivingAccount = "user-erasure-bystander";
+    /// <summary>The mailbox the surviving user is assigned, which the erasure leaves whole.</summary>
+    private const string SurvivingAccount = "2c9f3b51-6d42-4a8b-8e13-7bd52f6c8e21";
 
     private const string AccountIdentifierPropertyName = nameof(MailFolderEntity.MailboxAccountId);
 
@@ -238,10 +245,11 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             UpdatedAt = now,
         });
 
-        var account = new MailboxAccountEntity { Id = ErasedAccount, UserId = userId };
+        var account = new MailboxAccountEntity { Id = ErasedAccount, };
+
+        AssignAccountTo(context, ErasedAccount, userId, now);
         var folder = new MailFolderEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -250,14 +258,12 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var thread = new EmailThreadEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             AssembledAt = now,
         };
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -271,7 +277,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var outgoingEmail = new OutgoingEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
+            UserId = userId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "user-erasure",
             MimeByteLength = RepresentativeRawMime.Length,
@@ -283,7 +289,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         {
             Id = Guid.CreateVersion7(),
             RunId = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             ChatEndpointAlias = "primary",
             InstructionsVersion = "user-erasure",
@@ -311,7 +316,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.EmailThreadIdentifiers.Add(new EmailThreadIdentifierEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             IdentifierHash = new string('a', 64),
             EmailThreadId = thread.Id,
@@ -321,7 +325,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             Id = Guid.CreateVersion7(),
             StoredEmailId = storedEmail.Id,
             StoredEmail = storedEmail,
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -334,7 +337,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         context.MailRuleExecutions.Add(new MailRuleExecutionEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             StoredEmailId = storedEmail.Id,
             RuleName = "user-erasure",
@@ -351,7 +353,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             JobType = "UserErasure",
             IdempotencyKey = $"user-erasure-{account.Id}",
             Payload = "{}",
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             AvailableAt = now,
             TurnAt = now,
@@ -370,7 +371,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             OutgoingEmailId = outgoingEmail.Id,
             OutgoingEmail = outgoingEmail,
             Filing = "SentCopy",
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             FolderAlias = "sent",
             FolderPath = "Sent",
@@ -379,7 +379,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var draft = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
+            UserId = userId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "user-erasure",
             Subject = string.Empty,
@@ -392,7 +392,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         context.RecurringSends.Add(new RecurringSendEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
+            UserId = userId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "user-erasure",
             Schedule = "0 9 * * 1",
@@ -403,7 +403,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         {
             Id = Guid.CreateVersion7(),
             MutationRecordId = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             StoredEmailId = storedEmail.Id,
             Mutation = "SetSeen",
@@ -416,7 +415,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.MailboxRefreshTokens.Add(new MailboxRefreshTokenEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             SealedRefreshToken = [1, 2, 3, 4],
             DataEncryptionKeyId = OrchestratedMailFathomServices.DataEncryptionKeyId,
@@ -424,7 +422,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.MailRederivationPositions.Add(new MailRederivationPositionEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             LastProcessedStoredEmailId = storedEmail.Id,
@@ -432,7 +429,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.MailRederivationRuns.Add(new MailRederivationRunEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             RunId = Guid.CreateVersion7(),
@@ -440,13 +436,11 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.MailRuleEvaluationRuns.Add(new MailRuleEvaluationRunEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             RequestedAt = now,
         });
         context.SpamClassificationRuns.Add(new SpamClassificationRunEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             RequestedAt = now,
             FolderAliases = ["inbox"],
@@ -459,6 +453,38 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         await context.SaveChangesAsync(cancellationToken);
 
         return storedEmail.Id;
+    }
+
+    /// <summary>Records one mail account and assigns it to one user, which is what decides whether an erasure takes it.</summary>
+    /// <remarks>
+    /// Both rows, because the assignment keys onto the account's record rather than onto the mail graph's own row:
+    /// the record is the account as an administrator holds it, and the graph beneath it is keyed by the same
+    /// identifier written as text. Seeding only the graph would leave a mailbox no user is assigned, which the
+    /// erasure reads as nobody's rather than as this user's.
+    /// </remarks>
+    private static void AssignAccountTo(
+        MailFathomDbContext context,
+        string accountId,
+        Guid userId,
+        DateTimeOffset assignedAt)
+    {
+        var id = Guid.Parse(accountId);
+
+        context.MailAccountRecords.Add(new MailAccountRecordEntity
+        {
+            Id = id,
+            DisplayName = $"account-{id:N}",
+            Document = "{}",
+            Version = 1,
+            CreatedAt = assignedAt,
+            UpdatedAt = assignedAt,
+        });
+        context.MailAccountAssignments.Add(new MailAccountAssignmentEntity
+        {
+            UserId = userId,
+            MailAccountId = id,
+            AssignedAt = assignedAt,
+        });
     }
 
     /// <summary>Writes one person into a user's book, with the one address row that hangs off them.</summary>
@@ -531,10 +557,11 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var now = DateTimeOffset.UnixEpoch;
 
-        var account = new MailboxAccountEntity { Id = SurvivingAccount, UserId = userId };
+        var account = new MailboxAccountEntity { Id = SurvivingAccount, };
+
+        AssignAccountTo(context, SurvivingAccount, userId, now);
         var folder = new MailFolderEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -543,14 +570,12 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var thread = new EmailThreadEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             AssembledAt = now,
         };
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -579,7 +604,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var draft = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
+            UserId = userId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "user-erasure-bystander",
             Subject = string.Empty,
@@ -591,7 +616,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         StageAFileOn(context, draft, now);
         context.MailboxRefreshTokens.Add(new MailboxRefreshTokenEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             SealedRefreshToken = [5, 6, 7, 8],
             DataEncryptionKeyId = OrchestratedMailFathomServices.DataEncryptionKeyId,
@@ -599,7 +623,6 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
         context.MailRederivationPositions.Add(new MailRederivationPositionEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             LastProcessedStoredEmailId = storedEmail.Id,

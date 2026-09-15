@@ -28,7 +28,7 @@ public interface ISynchronizationCheckpointStore
     /// new remote folder is synchronized from its first UID.
     /// </remarks>
     Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken);
 
@@ -46,7 +46,7 @@ public interface ISynchronizationCheckpointStore
     /// </exception>
     Task SaveCheckpointAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
@@ -79,7 +79,7 @@ public interface ISynchronizationCheckpointStore
     /// </remarks>
     Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias? folderAlias,
         CancellationToken cancellationToken);
 }

@@ -99,10 +99,11 @@ public sealed class MailDraftPromotion
 
     /// <summary>Queues one draft for delivery, or refuses it naming what stopped it.</summary>
     /// <param name="draftId">The draft to send.</param>
+    /// <param name="writtenBy">The user sending it, who has to be the one the draft was written by.</param>
     /// <param name="cancellationToken">Cancels the reads and the write.</param>
     /// <returns>The durable record the message was written down as.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when no draft is held under that identifier, when the draft names nobody to send it to, or when the stored message exceeds what this deployment sends.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when no draft of <paramref name="writtenBy" />'s is held under that identifier, when the draft names nobody to send it to, or when the stored message exceeds what this deployment sends.</exception>
     /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account, a recipient is one the recipient policy refuses, the period has reached a ceiling, this caller has reached a ceiling of its own, or the draft names a recipient nothing here vouches for.</exception>
     /// <remarks>
     /// <para>
@@ -128,11 +129,17 @@ public sealed class MailDraftPromotion
     /// </remarks>
     public async Task<OutgoingEmailRecord> PromoteAsync(
         MailDraftId draftId,
+        MailUserId writtenBy,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { } draft)
+        // The author is asked here rather than left to the caller's choice of collaborator: ADR 0014 keeps a draft on
+        // its author, so on a mailbox two people are assigned the account no longer says whose message this would
+        // send out of it. A draft somebody else wrote answers as one nobody holds, which is what every other act on
+        // a draft named by identifier answers with.
+        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { } draft
+            || draft.User != writtenBy)
         {
             throw MailDraftRefusedException.NotFound();
         }
@@ -178,7 +185,8 @@ public sealed class MailDraftPromotion
         }
 
         var request = OutgoingEmailRequest.Create(
-            draft.Account,
+            draft.AccountId,
+            draft.User,
             OutgoingEmailRequester.Draft(draftId),
             [.. draft.Recipients.Select(recipient => recipient.Recipient)]);
 

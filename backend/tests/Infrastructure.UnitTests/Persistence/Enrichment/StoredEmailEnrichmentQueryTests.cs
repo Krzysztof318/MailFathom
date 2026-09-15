@@ -47,7 +47,6 @@ public sealed class StoredEmailEnrichmentQueryTests
         // Act
         var sql = StoredEmailEnrichmentStore.Selecting(
                 context.StoredEmails.AsNoTracking(),
-                Guid.CreateVersion7(),
                 "work",
                 [new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))],
                 readsAttachments: true,

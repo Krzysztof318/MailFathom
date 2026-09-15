@@ -154,7 +154,7 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 3);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 3);
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
@@ -192,7 +192,7 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 3);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 3);
         deployment.Store
             .CommitAsync(
                 Arg.Any<MailUserId>(),

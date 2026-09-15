@@ -2,11 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.ReplyDrafts;
 
 /// <summary>Everything one drafting is written from: the correspondence it answers, who is in it, and how its author writes.</summary>
+/// <param name="Account">The mailbox the answered message belongs to, or <see langword="null" /> where the draft answers no correspondence.</param>
 /// <param name="Subject">The subject the conversation is read under, or <see langword="null" /> where no message carried one.</param>
 /// <param name="Messages">The conversation's most recent messages in its own order, which is what the draft is grounded in and cites.</param>
 /// <param name="Participants">The people the conversation names, which is the whole set a proposed recipient may come from.</param>
@@ -22,8 +24,14 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// travels to a provider, and a proposed recipient is answered as a position in this list rather than as text a model
 /// wrote. That is what makes it impossible for a drafting to address a reply to somebody the conversation never named.
 /// </para>
+/// <para>
+/// The account is carried on the same terms as those addresses and for one purpose: the answered message decides which
+/// mailbox the reply is written from, and the language it comes out in is that mailbox's. It reaches no provider, and
+/// naming it here is what keeps the account the answered message's rather than one the caller could state.
+/// </para>
 /// </remarks>
 public sealed record ReplyDraftSources(
+    MailAccountId? Account,
     string? Subject,
     IReadOnlyList<ReplyDraftMessage> Messages,
     IReadOnlyList<ReplyDraftParticipant> Participants,
@@ -35,7 +43,7 @@ public sealed record ReplyDraftSources(
     /// propose, nothing to cite, and no manner to take from an account the request never named. What the draft has
     /// instead is the instruction its author typed, which is why the use case requires one there.
     /// </remarks>
-    public static ReplyDraftSources Nothing { get; } = new(Subject: null, [], [], []);
+    public static ReplyDraftSources Nothing { get; } = new(Account: null, Subject: null, [], [], []);
 }
 
 /// <summary>One message of the conversation as a drafting is shown it.</summary>

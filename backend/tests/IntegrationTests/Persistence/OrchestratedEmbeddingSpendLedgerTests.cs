@@ -135,7 +135,7 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
         await scope.GetRequiredService<IEmbeddingSpendLedger>().RecordSpendAsync(
             session,
             periodStart,
-            user,
+            [user],
             inputCharacterCount,
             cancellationToken);
 

@@ -240,7 +240,7 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, SyntheticMailAccount.User, occurrence, Requester, TargetPath);
+        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, occurrence, Requester, TargetPath);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

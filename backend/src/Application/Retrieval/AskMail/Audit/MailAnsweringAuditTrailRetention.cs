@@ -69,9 +69,9 @@ public sealed class MailAnsweringAuditTrailRetention
     /// names no boundary at all and erases nothing, which is what an account this deployment no longer configures
     /// reports.
     /// </remarks>
-    public Task<int> EraseExpiredAsync(MailAccountIdentity account, CancellationToken cancellationToken)
+    public Task<int> EraseExpiredAsync(MailAccountId account, CancellationToken cancellationToken)
     {
-        var retention = this.settingsReader.GetAnsweringAuditSettings(account.Id).Retention;
+        var retention = this.settingsReader.GetAnsweringAuditSettings(account).Retention;
 
         if (retention <= TimeSpan.Zero)
         {

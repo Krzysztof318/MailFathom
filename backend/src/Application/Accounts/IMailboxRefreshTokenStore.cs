@@ -35,7 +35,7 @@ public interface IMailboxRefreshTokenStore
     /// served from the refresh token its configuration references, which is what keeps a deployment that predates this
     /// store working unchanged.
     /// </remarks>
-    Task<MailboxRefreshToken?> FindTokenAsync(MailAccountIdentity account, CancellationToken cancellationToken);
+    Task<MailboxRefreshToken?> FindTokenAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Stores the refresh token for one account, replacing whatever was stored before.</summary>
     /// <param name="account">The account the token acts for.</param>
@@ -48,5 +48,5 @@ public interface IMailboxRefreshTokenStore
     /// of the database exposes for nothing. The write is idempotent in the account, so storing the same token twice — two
     /// replicas refreshing at once, a retried request — leaves one row rather than a conflict.
     /// </remarks>
-    Task SaveTokenAsync(MailAccountIdentity account, MailboxRefreshToken refreshToken, CancellationToken cancellationToken);
+    Task SaveTokenAsync(MailAccountId account, MailboxRefreshToken refreshToken, CancellationToken cancellationToken);
 }

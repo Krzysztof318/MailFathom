@@ -58,7 +58,7 @@ public sealed class EmailThreadAssembly
 
     /// <summary>Places the email, merging any conversations its identifiers prove were always one.</summary>
     /// <param name="session">The transaction the placement is part of.</param>
-    /// <param name="account">The account whose mail the email is, named by its user and its identifier.</param>
+    /// <param name="account">The account whose mail the email is, by its generated identifier.</param>
     /// <param name="email">The email to place, with the identifiers its headers carried.</param>
     /// <param name="currentThreadId">The conversation the email already belongs to, or <see langword="null" /> when none.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -66,7 +66,7 @@ public sealed class EmailThreadAssembly
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
     public async Task<EmailThreadId> AssembleAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         ThreadedEmail email,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -113,7 +113,7 @@ public sealed class EmailThreadAssembly
     /// </remarks>
     private async Task<EmailThreadId> ThreadOfAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -149,7 +149,7 @@ public sealed class EmailThreadAssembly
     /// <summary>Binds every identifier the email carries that this account did not bind already.</summary>
     private async Task BindMissingAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> identifiers,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId threadId,

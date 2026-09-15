@@ -6,15 +6,14 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.Payloads;
 
 public sealed class ClassifyStoredEmailSpamJobPayloadTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("account-a");
 
     private static readonly StoredEmailId Email =
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001"));
@@ -27,7 +26,7 @@ public sealed class ClassifyStoredEmailSpamJobPayloadTests
         var payload = ClassifyStoredEmailSpamJobPayload.For(Account, Email);
 
         // Assert
-        Assert.Equal(Account, payload.ToAccountIdentity());
+        Assert.Equal(Account, payload.ToAccountId());
         Assert.Equal(Email, payload.ToStoredEmailId());
     }
 
@@ -55,7 +54,6 @@ public sealed class ClassifyStoredEmailSpamJobPayloadTests
         // Arrange
         string[] expected =
         [
-            nameof(ClassifyStoredEmailSpamJobPayload.UserId),
             nameof(ClassifyStoredEmailSpamJobPayload.AccountId),
             nameof(ClassifyStoredEmailSpamJobPayload.EmailRecordId),
             nameof(ClassifyStoredEmailSpamJobPayload.JobType),

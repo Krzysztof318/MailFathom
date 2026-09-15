@@ -28,7 +28,7 @@ public sealed class EmailThreadModelTests
     /// be threaded into the other's conversation.
     /// </remarks>
     [Fact]
-    public void EmailThreadIdentifierModel_Key_IsTheOwnedAccountAndTheDigestUnderTheNameAConflictIsRecognizedBy()
+    public void EmailThreadIdentifierModel_Key_IsTheAccountAndTheDigestUnderTheNameAConflictIsRecognizedBy()
     {
         // Arrange
         using var context = CreateContext();
@@ -39,7 +39,7 @@ public sealed class EmailThreadModelTests
         // Assert
         Assert.NotNull(key);
         Assert.Equal(
-            ["UserId", "MailboxAccountId", "IdentifierHash"],
+            ["MailboxAccountId", "IdentifierHash"],
             key.Properties.Select(property => property.Name));
         Assert.Equal(PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName, key.GetName());
     }
@@ -98,7 +98,7 @@ public sealed class EmailThreadModelTests
             candidate => candidate.Properties.Any(property => property.Name == "MailboxAccountId"));
 
         // Assert
-        Assert.Equal(["UserId", "MailboxAccountId"], reference.Properties.Select(property => property.Name));
+        Assert.Equal(["MailboxAccountId"], reference.Properties.Select(property => property.Name));
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
     }
 

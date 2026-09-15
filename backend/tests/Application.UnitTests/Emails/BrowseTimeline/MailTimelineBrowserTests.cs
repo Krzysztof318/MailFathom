@@ -591,7 +591,7 @@ public sealed class MailTimelineBrowserTests
 
     /// <summary>A user who owns no account reads an empty list rather than every other user's mail.</summary>
     [Fact]
-    public async Task BrowsePageAsync_AUserWhoOwnsNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
+    public async Task BrowsePageAsync_AUserAssignedNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
     {
         // Arrange
         var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));
@@ -694,7 +694,7 @@ public sealed class MailTimelineBrowserTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns(
+        catalog.AssignedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

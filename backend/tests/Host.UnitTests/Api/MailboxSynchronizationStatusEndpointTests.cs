@@ -217,7 +217,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             :
             [
                 new WorkLease(
-                    MailAccountSupervisionScope.For(SyntheticServedAccount.Of(Work).Identity),
+                    MailAccountSupervisionScope.For(Work),
                     WorkLeaseHolder.Create("a-hold"),
                     supervisedBy,
                     HoldExpiresAt),

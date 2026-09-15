@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
@@ -30,8 +31,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientManagedMailFoldersEndpointTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,
@@ -251,6 +251,9 @@ public sealed class ClientManagedMailFoldersEndpointTests
                 SyntheticMailUser.Deployment,
                 [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
 
+            var accounts = Substitute.For<ICallerMailAccountCatalog>();
+            accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+
             this.Editor = new MailFolderEditor(
                 new LocalMailFolderEditor(
                     store,
@@ -270,7 +273,8 @@ public sealed class ClientManagedMailFoldersEndpointTests
                     this.signals,
                     Substitute.For<IJobStore>(),
                     authorization),
-                authorization);
+                authorization,
+                accounts);
         }
 
         internal MailFolderEditor Editor { get; }

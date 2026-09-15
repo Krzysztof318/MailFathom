@@ -39,7 +39,7 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// </para>
 /// <para>
 /// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several mailboxes and each
-/// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountIdentity)" />
+/// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountId)" />
 /// where it is acting on one account, and with <see cref="ActingFor(MailUserId)" /> where it reads across every account
 /// one user is assigned — and every value guarded anywhere inside that flow is read under the posture that names.
 /// Guarding outside such a scope while this deployment scans anything is a defect rather than a permissive default, and
@@ -119,8 +119,8 @@ public sealed class SensitiveContentEgressGuard
     /// derivation enqueued for one account — so the text is judged by the settings written on the account it came out
     /// of and by nothing another of that user's mailboxes asked for.
     /// </remarks>
-    public IDisposable ActingFor(MailAccountIdentity account) =>
-        this.Enter(new MailInScope(account.User, account.Id));
+    public IDisposable ActingFor(MailAccountId account) =>
+        this.Enter(new MailInScope(User: null, account));
 
     /// <summary>States whose mail everything guarded on this flow from here on belongs to.</summary>
     /// <param name="user">The user the use case resolved, across whose accounts every value is read.</param>
@@ -175,7 +175,8 @@ public sealed class SensitiveContentEgressGuard
         var previous = this.currentOperation.Value;
         var scope = this.telemetry.BeginGuardedOperation(
             egressPoint,
-            this.actingFor.Value?.User ?? default,
+            this.actingFor.Value?.User,
+            this.actingFor.Value?.Account,
             cancellationToken);
 
         this.currentOperation.Value = scope;
@@ -354,8 +355,8 @@ public sealed class SensitiveContentEgressGuard
     private SensitiveContentPosture? PostureInScope() => this.actingFor.Value switch
     {
         { Account: { } account } => this.postures.ForAccount(account),
-        { User: var user } => this.postures.AcrossAccountsOf(user),
-        null => null,
+        { User: { } user } => this.postures.AcrossAccountsOf(user),
+        _ => null,
     };
 
     /// <summary>Finds the redaction the mail this flow is acting for is read under, if any is.</summary>
@@ -394,7 +395,7 @@ public sealed class SensitiveContentEgressGuard
     /// <summary>What the mail guarded on this flow belongs to.</summary>
     /// <param name="User">The user the use case resolved, which is what a guarded operation is reported against.</param>
     /// <param name="Account">The one account the flow is acting on, or <see langword="null" /> where it reads across the user's own.</param>
-    private readonly record struct MailInScope(MailUserId User, MailAccountId? Account);
+    private readonly record struct MailInScope(MailUserId? User, MailAccountId? Account);
 
     /// <summary>Keeps one scope current for as long as the use case that resolved it is reading that mail.</summary>
     /// <remarks>

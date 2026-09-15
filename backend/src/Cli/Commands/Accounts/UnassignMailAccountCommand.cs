@@ -66,8 +66,8 @@ internal static class UnassignMailAccountCommand
         if (!CliConfirmation.Agreed(
             context,
             confirmedUpFront,
-            $"Ending the assignment of mail account {accountId:D} erases that user's copy of its mail, and the account itself when nobody else is assigned it, and there is nobody at the terminal to confirm it. Re-run with --yes to state the agreement in the command.",
-            $"End user {user:D}'s assignment to mail account {accountId:D}, erasing its mail for them? [y/N] "))
+            $"Ending the assignment of mail account {accountId:D} erases the drafts and standing instructions that user wrote there, and the account and all of its mail when nobody else is assigned it, and there is nobody at the terminal to confirm it. Re-run with --yes to state the agreement in the command.",
+            $"End user {user:D}'s assignment to mail account {accountId:D}, erasing what they wrote there? [y/N] "))
         {
             context.Console.WriteError("Nothing was erased.");
 

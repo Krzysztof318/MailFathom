@@ -146,7 +146,7 @@ public sealed class SpamActionRecorder
             return SpamActionResult.NotActedOn(SpamActionOutcome.OccurrenceMissing);
         }
 
-        var settings = this.settingsReader.ActionsFor(occurrence.Account.Id);
+        var settings = this.settingsReader.ActionsFor(occurrence.Account);
 
         if (!settings.IsAnyActionEnabled)
         {
@@ -244,7 +244,7 @@ public sealed class SpamActionRecorder
             return FilingDecision.Refused(SpamActionOutcome.PreviouslyFiled);
         }
 
-        return this.PlanFiling(occurrence.Account.Id, destination);
+        return this.PlanFiling(occurrence.Account, destination);
     }
 
     /// <summary>Builds the filing, carrying what becomes of the local copy exactly when the destination is unmirrored.</summary>
@@ -303,7 +303,6 @@ public sealed class SpamActionRecorder
                             session,
                             MailboxMutationRequest.SetSeen(
                                 occurrence.Id,
-                                occurrence.User,
                                 occurrence.Occurrence,
                                 requester,
                                 isSeen: true),
@@ -320,7 +319,6 @@ public sealed class SpamActionRecorder
                             session,
                             MailboxMutationRequest.Relocate(
                                 occurrence.Id,
-                                occurrence.User,
                                 occurrence.Occurrence,
                                 requester,
                                 plan.Destination.Path,

@@ -30,8 +30,8 @@ public sealed class SpamActionRecorderTests
     private static readonly StoredEmailId Email =
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-0000000090a0"));
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("acct-1");
 
     private static readonly MailAccountId AnotherAccount = MailAccountId.Create("acct-2");
 
@@ -182,7 +182,7 @@ public sealed class SpamActionRecorderTests
         // Arrange
         this.MapUnmirroredJunk("Spam");
         this.dispositions
-            .GetAuthoredDeleteDisposition(Account.Id)
+            .GetAuthoredDeleteDisposition(Account)
             .Returns(AuthoredDeleteEmailDisposition.EraseLocalCopy);
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: true, marksJunkRead: false));
 
@@ -403,7 +403,7 @@ public sealed class SpamActionRecorderTests
     {
         // Arrange
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.Full));
         var recorder = this.Recorder(FilingAndMarkingRead());
 
@@ -422,7 +422,7 @@ public sealed class SpamActionRecorderTests
         // Arrange
         this.MapUnmirroredJunk("Spam");
         this.dispositions
-            .GetAuthoredDeleteDisposition(Account.Id)
+            .GetAuthoredDeleteDisposition(Account)
             .Throws(new InvalidOperationException("The account is no longer configured."));
         var recorder = this.Recorder(FilingAndMarkingRead());
 
@@ -440,9 +440,9 @@ public sealed class SpamActionRecorderTests
         // Arrange
         var elsewhere = MailFolderAlias.Create("QUARANTINE");
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(elsewhere, RemoteFolderPath.Create("Quarantine")));
-        this.bindings.Bind(Account.Id, elsewhere, "Quarantine");
+        this.bindings.Bind(Account, elsewhere, "Quarantine");
         var recorder = this.Recorder(SpamActionSettings.Create(
             filesJunk: true,
             marksJunkRead: false,
@@ -466,9 +466,9 @@ public sealed class SpamActionRecorderTests
         // Arrange
         var elsewhere = MailFolderAlias.Create("QUARANTINE");
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(elsewhere, RemoteFolderPath.Create("Quarantine")));
-        this.bindings.Bind(Account.Id, elsewhere, "Quarantine");
+        this.bindings.Bind(Account, elsewhere, "Quarantine");
 
         var states = new InMemoryLocalEmailStateStore(Account);
         states.Store(
@@ -635,9 +635,8 @@ public sealed class SpamActionRecorderTests
         uint uid = 4401,
         MailAccountId? account = null) => new(
         Email,
-        Account.User,
         EmailOccurrenceId.Create(
-            account ?? Account.Id,
+            account ?? Account,
             new MailFolderResolutionId(folderAlias, MailFolderResolutionGeneration.First),
             ImapUidValidity.Create(9),
             ImapUid.Create(uid)),
@@ -652,7 +651,7 @@ public sealed class SpamActionRecorderTests
     private void MapUnmirroredJunk(string remotePath)
     {
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.MappedOnly));
         this.advertisedFolders.Add(new RemoteFolder(
             RemoteFolderPath.Create(remotePath),
@@ -663,9 +662,9 @@ public sealed class SpamActionRecorderTests
     private void MapMirroredJunk(string remotePath)
     {
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.Full));
-        this.bindings.Bind(Account.Id, Junk, remotePath);
+        this.bindings.Bind(Account, Junk, remotePath);
     }
 
     private SpamActionRecorder Recorder(
@@ -694,7 +693,7 @@ public sealed class SpamActionRecorderTests
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
         settingsReader.ActionsFor(Arg.Any<MailAccountId>()).Returns(SpamActionSettings.None);
-        settingsReader.ActionsFor(settingsOf ?? Account.Id).Returns(settings);
+        settingsReader.ActionsFor(settingsOf ?? Account).Returns(settings);
         this.settingsReader = settingsReader;
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

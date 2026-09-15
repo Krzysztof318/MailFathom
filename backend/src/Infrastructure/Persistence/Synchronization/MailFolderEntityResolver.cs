@@ -22,12 +22,11 @@ internal static class MailFolderEntityResolver
 {
     public static async Task<MailFolderEntity?> FindAsync(
         MailFathomDbContext dbContext,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
-        var user = account.User.Value;
-        var accountId = account.Id.Value;
+        var accountId = account.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
 
@@ -37,8 +36,7 @@ internal static class MailFolderEntityResolver
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.MailFolders,
             dbContext.MailFolders,
-            candidate => candidate.UserId == user
-                && candidate.MailboxAccountId == accountId
+            candidate => candidate.MailboxAccountId == accountId
                 && candidate.Alias == alias
                 && candidate.ResolutionGeneration == generation,
             cancellationToken);
@@ -46,23 +44,23 @@ internal static class MailFolderEntityResolver
 
     public static async Task<MailFolderEntity> GetRequiredAsync(
         MailFathomDbContext dbContext,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken) =>
         await FindAsync(dbContext, account, folderResolutionId, cancellationToken)
         ?? throw new InvalidOperationException(
-            $"Folder alias {account.Id.Value}/{folderResolutionId} has no recorded binding, so nothing can be stored under it.");
+            $"Folder alias {account.Value}/{folderResolutionId} has no recorded binding, so nothing can be stored under it.");
 
     public static async Task<MailFolderEntity> AddAsync(
         MailFathomDbContext dbContext,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
         // The account is keyed by the identity itself, so FindAsync already resolves a pending insert without a query.
-        // The key is the user and the identifier in that order, which is the order MailAccountIdentity states them in.
+        // The key is the user and the identifier in that order, which is the order MailAccountId states them in.
         var accountRow = await dbContext.MailboxAccounts.FindAsync(
-            [account.User.Value, account.Id.Value],
+            [account.Value],
             cancellationToken);
 
         // The row is composed rather than looked up when it is not there yet, and the user comes from the identity the
@@ -72,11 +70,10 @@ internal static class MailFolderEntityResolver
 
         var folder = new MailFolderEntity
         {
-            MailboxAccountId = account.Id.Value,
+            MailboxAccountId = account.Value,
 
             // Taken from the identity this binding was resolved under: the folder is the first row of the mail graph
             // and every row beneath it inherits the user from here.
-            UserId = account.User.Value,
             Alias = resolution.Alias.Value,
             ResolutionGeneration = resolution.Generation.Value,
             RemotePath = resolution.RemotePath.Value,
@@ -95,9 +92,9 @@ internal static class MailFolderEntityResolver
     /// key. The user is not minted here and not read here either: it arrived with the account, so what an operator
     /// configured decides whose mail this is rather than the order in which folders happened to bind.
     /// </remarks>
-    private static MailboxAccountEntity AddedAccount(MailFathomDbContext dbContext, MailAccountIdentity account)
+    private static MailboxAccountEntity AddedAccount(MailFathomDbContext dbContext, MailAccountId account)
     {
-        var added = new MailboxAccountEntity { Id = account.Id.Value, UserId = account.User.Value };
+        var added = new MailboxAccountEntity { Id = account.Value };
 
         dbContext.MailboxAccounts.Add(added);
 

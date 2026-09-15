@@ -27,8 +27,8 @@ public sealed class MailboxRefreshTokenEndpointTests
     private static readonly MailAccountId Workspace = MailAccountId.Create("workspace");
 
     /// <summary>The account the credential is recorded against, which is the user and the identifier together.</summary>
-    private static readonly MailAccountIdentity WorkspaceIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Workspace);
+    private static readonly MailAccountId WorkspaceIdentity =
+        Workspace;
 
     private readonly IMailboxRefreshTokenStore store = Substitute.For<IMailboxRefreshTokenStore>();
 
@@ -70,7 +70,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         Assert.Contains("'archive'", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -99,7 +99,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }

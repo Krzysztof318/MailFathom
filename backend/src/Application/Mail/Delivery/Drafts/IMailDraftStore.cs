@@ -37,7 +37,8 @@ public interface IMailDraftStore
 {
     /// <summary>Writes down a new draft, at the revision its first stored message is.</summary>
     /// <param name="session">The session the write joins, which is the one the message is stored in.</param>
-    /// <param name="account">The account the draft belongs to, named by its user and its identifier.</param>
+    /// <param name="account">The account the draft belongs to, by its generated identifier.</param>
+    /// <param name="writtenBy">The user writing it, who is the one person among the account's assigned users who reads it.</param>
     /// <param name="author">The authored act that wrote it.</param>
     /// <param name="recipients">The people it is addressed to, which may be nobody, each with where its address came from.</param>
     /// <param name="subject">The subject line the composed message carries.</param>
@@ -48,7 +49,8 @@ public interface IMailDraftStore
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="author" />, or <paramref name="recipients" /> is <see langword="null" />.</exception>
     Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -172,7 +174,7 @@ public interface IMailDraftStore
     /// bounded query rather than a session.
     /// </remarks>
     Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int maxCount,
         CancellationToken cancellationToken);
 

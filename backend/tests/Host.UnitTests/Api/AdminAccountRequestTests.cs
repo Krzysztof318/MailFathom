@@ -6,7 +6,6 @@ using MailFathom.Application.Accounts;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
@@ -25,8 +24,8 @@ public sealed class AdminAccountRequestTests
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
     /// <summary>The account a resolution answers with, which names the user as well as the identifier.</summary>
-    private static readonly MailAccountIdentity WorkIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work);
+    private static readonly MailAccountId WorkIdentity =
+        Work;
 
     /// <summary>The ordinary case: a name this deployment serves resolves to its identifier.</summary>
     [Fact]
@@ -208,7 +207,6 @@ public sealed class AdminAccountRequestTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

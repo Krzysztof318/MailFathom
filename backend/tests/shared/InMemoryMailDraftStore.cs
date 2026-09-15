@@ -48,7 +48,8 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     /// <inheritdoc />
     public Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -59,7 +60,8 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         var draft = new MailDraftRecord
         {
             Id = MailDraftId.Create(Guid.CreateVersion7(composedAt)),
-            Account = account,
+            AccountId = account,
+            User = writtenBy,
             Author = author,
             Recipients = [.. recipients],
             Subject = subject,
@@ -126,7 +128,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         Task.FromResult<IReadOnlyList<MailDraftRecord>>(
         [
             .. this.drafts.Values
-                .Where(draft => draft.Account.User == user)
+                .Where(draft => draft.User == user)
                 .Where(draft => account is not { } narrowed || draft.AccountId == narrowed)
                 .Where(draft => !draft.IsDiscarded && draft.PromotedTo is null)
                 .OrderByDescending(draft => draft.RevisedAt)
@@ -209,13 +211,13 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int maxCount,
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<MailDraftRecord>>(
         [
             .. this.drafts.Values
-                .Where(draft => draft.Account == account && draft.HasOutstandingServerWork)
+                .Where(draft => draft.AccountId == account && draft.HasOutstandingServerWork)
                 .OrderBy(draft => draft.RevisedAt)
                 .ThenBy(draft => draft.Id.Value)
                 .Take(maxCount),

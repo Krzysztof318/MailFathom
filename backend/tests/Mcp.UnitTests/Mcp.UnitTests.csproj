@@ -22,6 +22,8 @@
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\SyntheticMailAccount.cs" Link="SyntheticMailAccount.cs" />
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
     <!-- A draft's record and the message it is are one decision, so the two stores that hold them are linked together
          and into every suite that writes a draft: Application.UnitTests proves the use cases, and this one the tools
          over them. -->

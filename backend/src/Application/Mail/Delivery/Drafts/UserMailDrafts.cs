@@ -15,15 +15,15 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <para>
 /// It is the user's counterpart of <see cref="MailDraftBook" /> and <see cref="MailDraftPromotion" />, exactly as
 /// <see cref="Tracking.UserOutbox" /> is the user's counterpart of the administrative outbox, and it differs from
-/// them in one thing: whose drafts each act may reach. Those two admit an act on the grant alone, which is what a
-/// deployment holding one user needs and not what a user-facing surface may rely on; this is where an identifier
-/// becomes a draft the caller's own user holds before any of them is asked to act on it.
+/// them in one thing: it says who the caller is acting for. Each act those two perform asks the author for itself,
+/// so a caller wired straight to one of them cannot reach a draft it did not write; this is where the user the
+/// caller is acting for is resolved once and handed to whichever of them the act belongs to.
 /// </para>
 /// <para>
 /// <b>A draft another user holds answers exactly as one nobody holds.</b> There is no refusal that separates the two
-/// cases and no timing that does either, which is the rule every user-facing read here follows. Writing a draft is
-/// already scoped without this, because a save names the account it belongs to and that name is resolved against the
-/// accounts the caller's user owns; what needed scoping is every act that names a draft and nothing else.
+/// cases and no timing that does either, which is the rule every act on a draft follows, here and in the two types
+/// below. The comparison is against the draft's own recorded author rather than against the accounts listing, so an
+/// account unassigned since the draft was written still resolves to the person who wrote it.
 /// </para>
 /// <para>
 /// Each act asks for its own grant rather than for one grant covering all three. Giving a draft up is writing it,
@@ -32,13 +32,11 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </para>
 /// </remarks>
 /// <param name="accountCatalog">Says which user the caller is acting for, which is what a draft is scoped against.</param>
-/// <param name="drafts">Holds the durable account of every draft.</param>
 /// <param name="book">Performs the two acts on the draft itself, in the one place each is decided.</param>
 /// <param name="promotion">Turns a draft into an ordinary send, in the one place that is decided.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant the act it asked for needs.</param>
 public sealed class UserMailDrafts(
     ICallerMailAccountCatalog accountCatalog,
-    IMailDraftStore drafts,
     MailDraftBook book,
     MailDraftPromotion promotion,
     AccessAuthorization authorization)
@@ -55,9 +53,7 @@ public sealed class UserMailDrafts(
     {
         authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
-        await this.RequireOwnAsync(draftId, cancellationToken);
-
-        return await book.DiscardAsync(draftId, cancellationToken);
+        return await book.DiscardAsync(draftId, accountCatalog.User, cancellationToken);
     }
 
     /// <summary>Queues one of this user's drafts for delivery, which is the only act here that reaches anybody else.</summary>
@@ -73,24 +69,6 @@ public sealed class UserMailDrafts(
     {
         authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        await this.RequireOwnAsync(draftId, cancellationToken);
-
-        return await promotion.PromoteAsync(draftId, cancellationToken);
-    }
-
-    /// <summary>Requires that the identifier names a draft the caller's own user holds.</summary>
-    /// <remarks>
-    /// The user is compared against the draft's own recorded user rather than against the accounts listing, so an
-    /// account withdrawn from the record since the draft was written still resolves to the person who wrote it. What
-    /// state the draft is in is not judged here at all: each act has its own answer to a draft already given up or
-    /// already promoted, and this settles only whose draft it is.
-    /// </remarks>
-    private async Task RequireOwnAsync(MailDraftId draftId, CancellationToken cancellationToken)
-    {
-        if (await drafts.FindAsync(draftId, cancellationToken) is not { } draft
-            || draft.Account.User != accountCatalog.User)
-        {
-            throw MailDraftRefusedException.NotFound();
-        }
+        return await promotion.PromoteAsync(draftId, accountCatalog.User, cancellationToken);
     }
 }

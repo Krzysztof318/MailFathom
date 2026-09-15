@@ -383,8 +383,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
         // The two users' mail interleaves in the order the walk visits it, which is what makes stepping past one of
         // them a different thing from ending the run.
         var messages = AddMessagesAwaitingEmbedding(world, count: 4, passagesEach: 1);
-        ownership.Owns(messages[0], SyntheticMailUser.Another);
-        ownership.Owns(messages[2], SyntheticMailUser.Another);
+        ownership.Owns(messages[0], SyntheticMailAccount.Another);
+        ownership.Owns(messages[2], SyntheticMailAccount.Another);
         var backfill = world.CreateBackfill();
 
         // Act
@@ -439,6 +439,10 @@ public sealed class StoredEmailEmbeddingBackfillTests
         IMailOwnership? ownership = null,
         InMemoryEmbeddingSpendLedger? spendLedger = null)
     {
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
+
         var embeddingStore = new InMemoryEmailEmbeddingStore();
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(
@@ -465,6 +469,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
                 concurrencyRetryPolicy,
                 new EmbeddingSpendGate(
                     spendLedger ?? new InMemoryEmbeddingSpendLedger(),
+                    assignments,
                     spendBudget ?? EmbeddingSpendBudget.Unbounded,
                     new FakeTimeProvider(PeriodStart)),
                 UnpacedEmbedding(),

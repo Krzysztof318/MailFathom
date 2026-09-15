@@ -37,7 +37,7 @@ public interface IStoredEmailEnrichmentStore
     /// save nothing.
     /// </remarks>
     Task<IReadOnlyList<EnrichableEmail>> GetEmailsAwaitingEnrichmentAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         int maximumPassagesPerEmail,
         CancellationToken cancellationToken);

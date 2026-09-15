@@ -12,7 +12,6 @@ using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -58,7 +57,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -80,7 +79,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -105,7 +104,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -127,7 +126,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -147,7 +146,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -183,7 +182,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -209,7 +208,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -238,7 +237,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -259,7 +258,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.Reclassify,
             TestContext.Current.CancellationToken);
@@ -283,7 +282,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -312,7 +311,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -341,7 +340,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -365,7 +364,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -391,7 +390,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var result = await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -411,7 +410,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -432,7 +431,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         await classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -455,7 +454,7 @@ public sealed class EmailSpamClassifierTests
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => classifier.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             (SpamClassificationMode)7,
             TestContext.Current.CancellationToken));
@@ -501,13 +500,13 @@ public sealed class EmailSpamClassifierTests
 
         // Act
         var archived = await inTheArchive.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Archive,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
 
         var classified = await inTheClassifiedMailbox.ClassifyAsync(
-            SyntheticMailUser.Deployment,
+            Account,
             Occurrence,
             SpamClassificationMode.FirstTimeOnly,
             TestContext.Current.CancellationToken);
@@ -566,7 +565,7 @@ public sealed class EmailSpamClassifierTests
     {
         var emailReader = Substitute.For<IClassifiableEmailReader>();
         emailReader
-            .FindAsync(Arg.Any<MailUserId>(), Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .FindAsync(Arg.Any<MailAccountId>(), Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(withEmail ? email ?? new ClassifiableEmail(Occurrence, Account, Inbox) : null);
 
         this.contentStore

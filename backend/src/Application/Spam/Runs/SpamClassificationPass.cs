@@ -102,7 +102,7 @@ public sealed class SpamClassificationPass
     }
 
     /// <summary>Takes one bounded pass over the account's requested run, where it has one.</summary>
-    /// <param name="account">The account whose run is carried, named by its user and its identifier.</param>
+    /// <param name="account">The account whose run is carried, by its generated identifier.</param>
     /// <param name="cancellationToken">Cancels the pass between messages and between batches; committed batches stay durable.</param>
     /// <returns>What the pass did, and how the run ended where this pass ended it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">
@@ -116,7 +116,7 @@ public sealed class SpamClassificationPass
     /// nothing, and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var run = await this.runStore.FindOutstandingAsync(account, cancellationToken);
@@ -126,7 +126,7 @@ public sealed class SpamClassificationPass
             return SpamClassificationRunReport.NoRun;
         }
 
-        var settings = this.settingsReader.SettingsFor(account.Id);
+        var settings = this.settingsReader.SettingsFor(account);
 
         if (!settings.IsEnabled)
         {
@@ -256,7 +256,7 @@ public sealed class SpamClassificationPass
         else
         {
             var result = await this.classifier.ClassifyAsync(
-                run.Account.User,
+                run.Account,
                 candidate.Id,
                 SpamClassificationMode.Reclassify,
                 cancellationToken);

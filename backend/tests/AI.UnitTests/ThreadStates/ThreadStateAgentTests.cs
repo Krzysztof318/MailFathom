@@ -15,7 +15,7 @@ using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -59,7 +59,7 @@ public sealed class ThreadStateAgentTests
         var thread = Derivable();
 
         // Act
-        var derivation = await agent.DeriveAsync(thread, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(thread, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -85,7 +85,7 @@ public sealed class ThreadStateAgentTests
         var thread = Derivable() with { ExceedsBound = true };
 
         // Act
-        var derivation = await agent.DeriveAsync(thread, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(thread, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -107,7 +107,7 @@ public sealed class ThreadStateAgentTests
         var agent = provider.DeriverOver();
 
         // Act
-        var derivation = await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -123,7 +123,7 @@ public sealed class ThreadStateAgentTests
         var agent = provider.DeriverOver();
 
         // Act
-        var derivation = await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ThreadStateWithholding.ProviderUnavailable, derivation.Withheld);
@@ -138,7 +138,7 @@ public sealed class ThreadStateAgentTests
             "The provider key of AI endpoint 'a-chat-endpoint' could not be resolved."));
 
         // Act
-        var derivation = await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ThreadStateWithholding.ProviderUnavailable, derivation.Withheld);
@@ -159,7 +159,7 @@ public sealed class ThreadStateAgentTests
         var agent = provider.DeriverOver(spendLedger: spendLedger);
 
         // Act
-        var derivation = await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ThreadStateWithholding.AllowanceExhausted, derivation.Withheld);
@@ -176,7 +176,7 @@ public sealed class ThreadStateAgentTests
         var agent = provider.DeriverOver(spendLedger: spendLedger);
 
         // Act
-        await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(11, 7), Arg.Any<CancellationToken>());
@@ -192,7 +192,7 @@ public sealed class ThreadStateAgentTests
         var withoutMessages = Derivable() with { Messages = [] };
 
         // Act
-        var derivation = await agent.DeriveAsync(withoutMessages, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(withoutMessages, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -224,7 +224,7 @@ public sealed class ThreadStateAgentTests
         };
 
         // Act
-        await agent.DeriveAsync(carryingASecret, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(carryingASecret, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
@@ -239,7 +239,7 @@ public sealed class ThreadStateAgentTests
         var agent = provider.DeriverOver();
 
         // Act
-        await agent.DeriveAsync(Derivable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(Derivable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, provider.RequestCount);

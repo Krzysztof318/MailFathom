@@ -163,7 +163,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     /// hand it somebody else's.
     /// </remarks>
     [Fact]
-    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsUserDoesNotOwn_Refuses()
+    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsUserIsNotAssigned_Refuses()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
@@ -171,7 +171,7 @@ public sealed class EmailAttachmentDownloadReaderTests
             AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, AuthorizedObject));
         var reader = ReaderOver(
             summary,
-            accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
+            accountCatalog: AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.Account)),
             authorization: authorization);
 
         // Act
@@ -195,8 +195,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(
             summary,
             folderParticipation: StubMailFolderParticipation
-                .Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias))
-                .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+                .Mapping(new MailFolderIdentity(summary.Account, summary.FolderAlias))
+                .Hiding(new MailFolderIdentity(summary.Account, summary.FolderAlias)));
 
         // Act
         await using var attachment = (await reader.OpenAsync(
@@ -745,7 +745,7 @@ public sealed class EmailAttachmentDownloadReaderTests
         attachmentText ?? ExtractorReporting(AttachmentTextExtractionResult.FormatNotRecognized()),
         screen ?? InactiveScreen(),
         new MailboxScopeResolver(
-            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
+            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.Account.Value ?? ServedAccountId)),
             folderParticipation ?? MappingFolderOf(summary),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
@@ -801,7 +801,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     /// </remarks>
     private static StubMailFolderParticipation MappingFolderOf(EmailSummary? summary) => summary is null
         ? StubMailFolderParticipation.Nothing
-        : StubMailFolderParticipation.Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias));
+        : StubMailFolderParticipation.Mapping(new MailFolderIdentity(summary.Account, summary.FolderAlias));
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {
@@ -840,7 +840,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
 
         return catalog;
     }

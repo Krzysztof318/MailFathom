@@ -82,7 +82,11 @@ public sealed class AuthoredResponseDrafting(
 
         // Appended to what the authoring produced rather than replacing it: a forward already carries the answered
         // message's own files, and what an author uploaded against the draft comes after them.
-        var staged = await drafts.ReadStagedAttachmentsAsync(response.AccountId, request.Revises, cancellationToken);
+        var staged = await drafts.ReadStagedAttachmentsAsync(
+            response.Account,
+            authorization.RequireUser(),
+            request.Revises,
+            cancellationToken);
 
         var authored = staged.Count == 0
             ? response.Email!
@@ -100,6 +104,7 @@ public sealed class AuthoredResponseDrafting(
 
         return await drafts.SaveAsync(
             response.Account,
+            authorization.RequireUser(),
             request.Author,
             composed,
             request.Revises,

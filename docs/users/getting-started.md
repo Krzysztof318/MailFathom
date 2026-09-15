@@ -72,6 +72,7 @@ administer the deployment from:
 {
   "EmailAddress": "you@example.test",
   "DisplayName": "Personal mail",
+  "Language": "English",
   "Host": "imap.example.test",
   "Port": 993,
   "UserName": "you@example.test",
@@ -277,9 +278,9 @@ assigns it to them, and prints the identifier it was generated under. It names n
 several says which of them — `mfctl user add` records each further person — and an invocation that omits it where there
 are several is refused rather than guessed at.
 
-The record `user add` writes names English as the language MailFathom writes for that person in — the reading on a
-message row, the statement about a conversation. `mfctl user edit` is where that becomes `Polish`, and
-[the language a user reads](../operations/configuration-sources.md#the-language-a-user-reads) is the whole of it.
+The mailbox file written in [step 2](#2-write-down-the-mailbox) names the language MailFathom writes about that
+mailbox's mail in — the reading on a message row, the statement about a conversation. `mfctl account edit` is where it
+becomes something else, and [the language this mailbox is read in](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language) is the whole of it.
 
 **The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
 running roster, so the next synchronization run is this account's first one — and the same holds for every user

@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Scheduling;
 
@@ -25,10 +24,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record RecurringSendJobPayload : IJobPayload
 {
-    /// <summary>Gets the user whose account every occurrence is sent as.</summary>
-    public required Guid UserId { get; init; }
-
-    /// <summary>Gets the account every occurrence is submitted through and sent as, within that user.</summary>
+    /// <summary>Gets the account every occurrence is submitted through and sent as.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the declaration whose occasion has come round.</summary>
@@ -40,28 +36,25 @@ public sealed record RecurringSendJobPayload : IJobPayload
     public JobType JobType => JobType.SendRecurringOccurrence;
 
     /// <summary>Describes one recurring send as the document a job carries.</summary>
-    /// <param name="account">The account every occurrence is sent as, named by its user and its identifier together.</param>
+    /// <param name="account">The account every occurrence is sent as, named by its generated identifier.</param>
     /// <param name="recurringSendId">The declaration the occasion belongs to.</param>
     /// <returns>The payload naming that declaration.</returns>
-    public static RecurringSendJobPayload For(MailAccountIdentity account, RecurringSendId recurringSendId) => new()
+    public static RecurringSendJobPayload For(MailAccountId account, RecurringSendId recurringSendId) => new()
     {
-        UserId = account.User.Value,
-        AccountId = account.Id.Value,
+        AccountId = account.Value,
         DeclarationId = recurringSendId.Value,
     };
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
     /// <remarks>
-    /// The user is a required property, so a document that carries none is refused by the deserializer before
-    /// this is reached rather than resolving to a user nobody named. A document the previous release wrote is
-    /// not that case: the migration that put the user on the queue row writes it into the document beside it, so
-    /// what remains here is a value that is present and does not name an account — which this refuses for the
-    /// reason every payload record refuses a component that no longer validates.
+    /// The identifier is a required property, so a document that carries none is refused by the deserializer before
+    /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
+    /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountIdentity ToAccountIdentity() =>
-        MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
+    public MailAccountId ToAccountId() =>
+        MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the declaration identity this payload names.</summary>
     /// <returns>The declaration identity.</returns>

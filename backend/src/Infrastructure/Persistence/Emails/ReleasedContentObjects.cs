@@ -87,17 +87,18 @@ internal static class ReleasedContentObjects
             cancellationToken);
     }
 
-    /// <summary>States every object one user's erasure removes, across the four mail payload kinds and the user's stored files.</summary>
+    /// <summary>States every object one user's own erasure removes: what they were writing, and the files they added.</summary>
     /// <param name="session">The session the erasure runs in.</param>
     /// <param name="userId">The user being erased.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>A task that completes once the session holds every key the erasure frees.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The four kinds are read as four queries because they hang off four different things, and all four are read whole
-    /// rather than in pages: a user's erasure removes a user's whole mailbox, so what is held here is one string per
-    /// stored payload for the length of one transaction. That is the price of answering a data subject truthfully about
-    /// both stores, and it is paid once per erasure rather than per message.
+    /// Only what the user authored and what they uploaded. Stored mail and submitted messages are the mailbox's rather
+    /// than theirs, so those payloads are released when an account is erased and not before — an account somebody else
+    /// is still assigned keeps every one of them. The three kinds are read as three queries because they hang off
+    /// three different things, and each whole rather than in pages: what is held is one string per stored payload for
+    /// the length of one transaction, which is the price of answering a data subject truthfully about both stores.
     /// </remarks>
     public static async Task ReleaseForUserAsync(
         IPersistenceSession session,
@@ -105,25 +106,6 @@ internal static class ReleasedContentObjects
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-
-        // Narrowed on the user each payload's own row carries rather than on the identifiers of the accounts that
-        // user holds. An identifier names one mailbox within its user and another within the next, so a membership
-        // test on it would release a second user's objects whenever the two had named an account alike.
-        await ReleaseAsync(
-            session,
-            sessionContext.EmailMessageContents
-                .Where(content => content.StoredEmail.UserId == userId
-                    && content.Backend == ContentStorageBackend.ObjectStorage)
-                .Select(content => content.ObjectLocator!),
-            cancellationToken);
-
-        await ReleaseAsync(
-            session,
-            sessionContext.OutgoingEmailContents
-                .Where(content => content.OutgoingEmail.UserId == userId
-                    && content.Backend == ContentStorageBackend.ObjectStorage)
-                .Select(content => content.ObjectLocator!),
-            cancellationToken);
 
         await ReleaseAsync(
             session,
@@ -149,16 +131,14 @@ internal static class ReleasedContentObjects
             cancellationToken);
     }
 
-    /// <summary>Releases the object-stored payloads of one mail account, for every user or for one of them.</summary>
+    /// <summary>Releases the object-stored payloads of one mail account, which is one copy however many read it.</summary>
     /// <param name="session">The transaction the erasure runs in.</param>
     /// <param name="accountId">The account whose payloads are released.</param>
-    /// <param name="userId">The one user whose copy is released, or <see langword="null" /> for everybody's.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>A task that completes once every locator is registered for release on commit.</returns>
     public static async Task ReleaseForMailAccountAsync(
         IPersistenceSession session,
         string accountId,
-        Guid? userId,
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -167,7 +147,6 @@ internal static class ReleasedContentObjects
             session,
             sessionContext.EmailMessageContents
                 .Where(content => content.StoredEmail.MailboxAccountId == accountId
-                    && (userId == null || content.StoredEmail.UserId == userId)
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -176,7 +155,6 @@ internal static class ReleasedContentObjects
             session,
             sessionContext.OutgoingEmailContents
                 .Where(content => content.OutgoingEmail.MailboxAccountId == accountId
-                    && (userId == null || content.OutgoingEmail.UserId == userId)
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -185,7 +163,6 @@ internal static class ReleasedContentObjects
             session,
             sessionContext.MailDraftContents
                 .Where(content => content.MailDraft.MailboxAccountId == accountId
-                    && (userId == null || content.MailDraft.UserId == userId)
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -194,7 +171,6 @@ internal static class ReleasedContentObjects
             session,
             sessionContext.RecurringSendDrafts
                 .Where(draft => draft.RecurringSend.MailboxAccountId == accountId
-                    && (userId == null || draft.RecurringSend.UserId == userId)
                     && draft.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(draft => draft.ObjectLocator!),
             cancellationToken);

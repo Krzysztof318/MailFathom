@@ -9,7 +9,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Common.Observability;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
@@ -409,7 +408,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
     private static StoredEmailAwaitingExtraction AwaitingExtraction(StoredEmailId storedEmailId) =>
         new(
             storedEmailId,
-            MailAccountIdentity.Create(MailUserId.Create(Guid.CreateVersion7()), MailAccountId.Create("primary")));
+            MailAccountId.Create("primary"));
 
     private static async Task<IReadOnlyList<StoredEmailAwaitingExtraction>> NeverAnswerUntilStoppedAsync(
         TaskCompletionSource asked,

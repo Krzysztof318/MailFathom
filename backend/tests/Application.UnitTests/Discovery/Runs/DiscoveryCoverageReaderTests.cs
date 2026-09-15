@@ -11,7 +11,6 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -207,7 +206,6 @@ public sealed class DiscoveryCoverageReaderTests
 
     private static MailboxScope Scope(params MailAccountId[] accountIds) =>
         MailboxScope.Create(
-            SyntheticMailUser.Deployment,
             accountIds.Length is 0 ? [Work, Archive] : accountIds,
             []);
 }

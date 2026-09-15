@@ -608,7 +608,7 @@ scanner switched on nothing here runs, and an enqueue costs exactly what it did 
 
 `AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
 the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts the
-caller's user owns, the people named become addresses, the addresses and the text become MIME, and the MIME and the
+caller is assigned, the people named become addresses, the addresses and the text become MIME, and the MIME and the
 request become the durable record. Composing them in one place is what keeps a second entrypoint from doing two of the
 three and inventing the middle one, and it is what `send_email` calls and the whole of what that tool does.
 
@@ -1218,7 +1218,12 @@ belongs between an agent and a recipient.
 **[The client endpoint](../operations/client-endpoint.md#the-drafts-routes) reaches the same drafts as a person rather
 than as an agent**, under the same two grants and with the same meaning: composing, listing, opening, revising, giving
 up, and attaching are `mailfathom.mail.drafts.write`, and promoting one is `mailfathom.mail.send`. Every route there is
-scoped to the caller's own user, so a draft another user holds answers exactly as one nobody holds — and because a
+scoped to the caller's own user, as every draft tool on the MCP surface is, so a draft another user holds answers
+exactly as one nobody holds. **That bounds the draft and the acts on it rather than the copy in the mailbox.** The
+drafts folder belongs to the account, so on a mailbox assigned to more than one person the others meet the unsent
+revision there through ordinary folder and message reads exactly as they meet every other message the mailbox holds,
+while the draft itself stays unreachable to them by identifier. Withholding the copy would take the draft out of the
+mail client the person writes in, which is the whole reason it is filed. And because a
 draft is a row, a stored message, and a copy in the user's folder rather than anything a client keeps, the one
 somebody started in the browser is the one the desktop shell opens and the one their phone's mail client shows.
 [The outbox routes](../operations/client-endpoint.md#the-outbox-routes) beside them are where that client watches what

@@ -36,7 +36,7 @@ public sealed class OrchestratedRederivationHoldTests(MailFathomOrchestrationFix
         await using var firstReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await using var secondReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var scope = StoredMailRederivationHandler.LeaseScopeOf(new StoredMailScope(
-            MailAccountIdentity.Create(firstReplica.ServedUser, MailAccountId.Create("rederivation-handover")),
+            MailAccountId.Create("rederivation-handover"),
             Folder: null));
         var secondWalkedAlongside = true;
 

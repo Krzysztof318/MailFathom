@@ -209,7 +209,7 @@ public sealed class SendEmailToolTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailFieldRefused, refusal.ErrorCode);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, default, default!, default!, default!);
     }
 
     /// <summary>A key longer than the record's column is refused here, so the caller reads a bound rather than an argument failure.</summary>
@@ -255,7 +255,7 @@ public sealed class SendEmailToolTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailFieldRefused, refusal.ErrorCode);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, default, default!, default!, default!);
     }
 
     /// <summary>An account this deployment does not serve is the same answer whichever spelling named it.</summary>
@@ -300,7 +300,7 @@ public sealed class SendEmailToolTests
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailFieldRefused, refusal.ErrorCode);
         Assert.Contains("cc recipients", refusal.Message, StringComparison.Ordinal);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, default, default!, default!, default!);
     }
 
     /// <summary>A list longer than a record holds is refused on its length, before anything of it is read.</summary>
@@ -334,7 +334,7 @@ public sealed class SendEmailToolTests
             OutgoingEmailRequest.MaximumRecipientCount.ToString(CultureInfo.InvariantCulture),
             refusal.Message,
             StringComparison.Ordinal);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, default, default!, default!, default!);
     }
 
     /// <summary>The grant is the use case's to require, and a tool test proves the tool does not reach past it.</summary>
@@ -422,7 +422,7 @@ public sealed class SendEmailToolTests
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-        .GetArguments()[2]!;
+        .GetArguments()[3]!;
 
     private static SendEmailTool ToolOver(
         out IAuthoredEmailComposer composer,

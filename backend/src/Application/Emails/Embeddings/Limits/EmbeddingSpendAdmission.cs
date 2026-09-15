@@ -4,9 +4,9 @@
 
 namespace MailFathom.Application.Emails.Embeddings.Limits;
 
-/// <summary>Where one user stands inside the current budget period, against both ceilings that bound them.</summary>
-/// <param name="User">What the named user has spent in this period and what their own ceiling admits.</param>
-/// <param name="Deployment">What every user together has spent in this period and what the deployment's ceiling admits.</param>
+/// <summary>Where one mailbox stands inside the current budget period, against both ceilings that bound it.</summary>
+/// <param name="User">The mailbox's per-user standing: the strictest of what the users assigned it have spent and what each of their own ceilings admits, and an exhausted period naming nobody where it is assigned to none.</param>
+/// <param name="Deployment">What this deployment actually sent in this period and what its ceiling admits, counted once per call rather than summed out of the per-user figures.</param>
 /// <remarks>
 /// <para>
 /// The two halves are the same shape because they are the same question asked of two populations, and both are needed
@@ -14,8 +14,9 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// refused. Both share the period's instants, so a paused worker wakes at one roll-over whichever bound stopped it.
 /// </para>
 /// <para>
-/// Counts and instants only — no message, passage, or vector is describable from it, and the user appears as the
-/// generated identity the accounts already carry.
+/// Counts and instants only — no message, passage, or vector is describable from it, and no user is named at all:
+/// the per-user half carries one assigned user's figures without saying which, and carries nobody's where the mailbox
+/// is assigned to nobody.
 /// </para>
 /// </remarks>
 public sealed record EmbeddingSpendAdmission(EmbeddingSpendPeriod User, EmbeddingSpendPeriod Deployment)

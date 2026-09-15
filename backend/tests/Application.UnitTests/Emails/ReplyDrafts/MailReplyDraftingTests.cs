@@ -296,9 +296,9 @@ public sealed class MailReplyDraftingTests
 
     /// <summary>The language is the acting user's own, which is the one thing a drafting answering nothing has to go on.</summary>
     [Theory]
-    [InlineData(MailUserLanguage.English)]
-    [InlineData(MailUserLanguage.Polish)]
-    public async Task DraftAsync_AnyDrafting_CarriesTheLanguageTheUserRecordNames(MailUserLanguage language)
+    [InlineData(MailAccountLanguage.English)]
+    [InlineData(MailAccountLanguage.Polish)]
+    public async Task DraftAsync_AnyDrafting_CarriesTheLanguageTheUserRecordNames(MailAccountLanguage language)
     {
         // Arrange
         var writer = WriterReturning(Written("We accept."));
@@ -326,6 +326,7 @@ public sealed class MailReplyDraftingTests
 
     private static ReplyDraftSources Sources(IReadOnlyList<ReplyDraftMessage>? messages = null) =>
         new(
+            Account,
             "The racking quotation",
             messages ??
             [
@@ -367,12 +368,12 @@ public sealed class MailReplyDraftingTests
         IReadOnlyList<MailAccountId>? servedAccounts = null,
         AccessAuthorization? authorization = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        MailUserLanguage language = MailUserLanguage.English,
+        MailAccountLanguage language = MailAccountLanguage.English,
         bool derivesStyleFromSentMail = true)
     {
         var accounts = servedAccounts ?? [Account];
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
         catalog.User.Returns(SyntheticMailUser.Deployment);
 
         var scopeResolver = new MailboxScopeResolver(
@@ -392,11 +393,11 @@ public sealed class MailReplyDraftingTests
             derivesStyleFromSentMail);
     }
 
-    /// <summary>Answers one language for whoever is asked about, which is what a drafting for one user needs.</summary>
-    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    /// <summary>Answers one language for whichever mailbox is asked about, which is what a drafting over one account needs.</summary>
+    private static IMailAccountLanguages LanguagesAnswering(MailAccountLanguage language)
     {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
+        var languages = Substitute.For<IMailAccountLanguages>();
+        languages.LanguageOf(Arg.Any<MailAccountId>()).Returns(language);
 
         return languages;
     }

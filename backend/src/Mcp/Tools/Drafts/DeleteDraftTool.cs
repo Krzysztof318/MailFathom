@@ -13,8 +13,8 @@ using ModelContextProtocol.Server;
 
 namespace MailFathom.Mcp.Tools.Drafts;
 
-/// <summary>Publishes the <c>delete_draft</c> tool over <see cref="MailDraftBook" />.</summary>
-/// <param name="drafts">Gives the draft up and takes the copies of it back out of the mailbox.</param>
+/// <summary>Publishes the <c>delete_draft</c> tool over <see cref="UserMailDrafts" />.</summary>
+/// <param name="drafts">Gives up a draft of the caller's own user and takes the copies of it back out of the mailbox.</param>
 /// <remarks>
 /// <para>
 /// It is the destructive one of the three drafting tools, and it is destructive in the plain sense rather than the
@@ -36,7 +36,7 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// </remarks>
 [McpServerToolType]
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
-internal sealed class DeleteDraftTool(MailDraftBook drafts)
+internal sealed class DeleteDraftTool(UserMailDrafts drafts)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>

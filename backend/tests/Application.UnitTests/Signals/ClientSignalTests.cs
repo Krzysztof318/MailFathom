@@ -15,8 +15,8 @@ namespace MailFathom.Application.UnitTests.Signals;
 /// <summary>Covers what each kind of statement carries, and the bounds that keep one from growing into a payload.</summary>
 public sealed class ClientSignalTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -58,7 +58,7 @@ public sealed class ClientSignalTests
 
         // Assert
         Assert.Equal(ClientSignal.MostNamedEmails, signal.Emails.Count);
-        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(Account, signal.Account);
         Assert.Equal(Inbox, signal.Folder);
     }
 
@@ -102,7 +102,7 @@ public sealed class ClientSignalTests
 
         // Assert
         Assert.Equal(ClientSignalKind.AccountState, signal.Kind);
-        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(Account, signal.Account);
         Assert.Null(signal.Folder);
         Assert.Equal(0, signal.Count);
         Assert.Empty(signal.Emails);
@@ -125,7 +125,7 @@ public sealed class ClientSignalTests
 
         // Assert
         Assert.Equal(ClientSignalKind.MailFlagsChanged, signal.Kind);
-        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(Account, signal.Account);
         Assert.Equal(Inbox, signal.Folder);
         Assert.Equal([new SignalledEmailFlags(email, IsSeen: true, IsFlagged: false)], signal.Flags);
         Assert.Empty(signal.Emails);

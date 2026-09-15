@@ -160,7 +160,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
-        services.AddSingleton<IUserStoredContentLedger>(new InMemoryUserStoredContentLedger());
+        services.AddSingleton<IAccountStoredContentLedger>(new InMemoryAccountStoredContentLedger());
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());
         // Registered with no channel behind it, so every service a run resolves composes while what it says about the
         // run reaches nobody. A test that has a claim about what a client was told supplies its own publisher to the
@@ -292,6 +292,10 @@ internal static class SynchronizationTestHost
         services.AddScoped(_ => new SpamClassificationRunOptions());
         services.AddScoped(_ => CreateClassificationSettingsReader());
         services.AddScoped(_ => CreateSpamActionSettingsReader());
+        // The language a derivation writes in is still stated per user while the mail it is derived from is the
+        // mailbox's, so a pass reads it through the resolution the production graph registers rather than from a user
+        // it has not got.
+        services.AddScoped<IMailAccountLanguages>(_ => new EnglishForEveryAccount());
         services.AddScoped<DeterministicSpamClassifier>();
         services.AddScoped<EmailSpamClassifier>();
         services.AddScoped<SpamActionRecorder>();
@@ -383,9 +387,13 @@ internal static class SynchronizationTestHost
         // is the one those options were published over, because a mailbox belongs to the user whose record holds it.
         services.AddSingleton(ResolvedServedMailUsers.Serving([.. options.ServedUsers ?? []]));
         services.AddSingleton<IDeploymentMailUserSource>(provider => provider.GetRequiredService<ServedMailUsers>());
-        services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
+        services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
             provider.GetRequiredService<ServedMailUsers>()));
+        services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
+            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
+        services.AddScoped<IMailAccountAssignments>(provider =>
+            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
 
         // The coordinator supervises an account only once it holds the account's lease, so the table stands here as one
         // that grants every account to this replica unless a test plays the other one.
@@ -400,13 +408,13 @@ internal static class SynchronizationTestHost
         var store = Substitute.For<IMailRuleEvaluationStore>();
 
         store.GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
         store.GetStoredEmailsAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -421,7 +429,7 @@ internal static class SynchronizationTestHost
         var store = Substitute.For<IStoredEmailAttachmentTextStore>();
 
         store.GetEmailsAwaitingAttachmentTextAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -436,7 +444,7 @@ internal static class SynchronizationTestHost
         var store = Substitute.For<IStoredEmailChunkingStore>();
 
         store.GetEmailsAwaitingChunkingAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]));
@@ -460,10 +468,16 @@ internal static class SynchronizationTestHost
     {
         var runStore = Substitute.For<ISpamClassificationRunStore>();
 
-        runStore.FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<SpamClassificationRun?>(null));
 
         return runStore;
+    }
+
+    /// <summary>The language of a deployment that has not been told a mailbox is read in anything else.</summary>
+    private sealed class EnglishForEveryAccount : IMailAccountLanguages
+    {
+        public MailAccountLanguage LanguageOf(MailAccountId account) => MailAccountLanguage.English;
     }
 
     /// <summary>Answers with classification switched off, which is what a deployment configuring none of it runs with.</summary>
@@ -489,7 +503,7 @@ internal static class SynchronizationTestHost
     {
         var runStore = Substitute.For<IMailRuleEvaluationRunStore>();
 
-        runStore.FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<MailRuleEvaluationRun?>(null));
 
         return runStore;
@@ -553,7 +567,7 @@ internal static class SynchronizationTestHost
 
         var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
         resolutionStore
-            .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+            .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var alias = call.Arg<MailFolderAlias>();
@@ -589,7 +603,7 @@ internal static class SynchronizationTestHost
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         reconciliationStore
             .GetReconciliationWindowAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<int>(),
@@ -610,7 +624,7 @@ internal static class SynchronizationTestHost
         var filingStore = Substitute.For<IOutgoingMailFilingStore>();
         filingStore
             .ReadFilingsAtAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -631,10 +645,10 @@ internal static class SynchronizationTestHost
     {
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]));
         recordStore
-            .ReadLifecycleCountsAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+            .ReadLifecycleCountsAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationLifecycleCount>>([]));
 
         return recordStore;
@@ -660,7 +674,7 @@ internal static class SynchronizationTestHost
         var auditStore = Substitute.For<IMailboxMutationAuditEntryStore>();
         auditStore
             .EraseCompletedBeforeAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -674,7 +688,7 @@ internal static class SynchronizationTestHost
         var mutationStore = Substitute.For<IMailboxMutationReconciliationStore>();
         mutationStore
             .ReadPlacementsAtAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -682,7 +696,7 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
             .ReadMutationsRemovingAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -690,7 +704,7 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
             .ReadFlagChangesOnAsync(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -706,9 +720,9 @@ internal static class SynchronizationTestHost
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<MailAccountIdentity>().Id,
+                call.Arg<MailAccountId>(),
                 Subject: null,
                 SentAt: null,
                 ReceivedAt: null,

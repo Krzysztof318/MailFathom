@@ -25,6 +25,7 @@ public sealed class MailAccountEndpointsTests
                                        {
                                          "EmailAddress": "archive@example.test",
                                          "DisplayName": "archive",
+                                         "Language": "English",
                                          "Host": "imap.example.test",
                                          "UserName": "archive@example.test",
                                          "Secrets": { "Password": { "Name": "archive-password", "SecretReference": "file:/run/secrets/archive-password" } }
@@ -87,7 +88,7 @@ public sealed class MailAccountEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
 
         // Act
         var result = await MailAccountEndpoints.CreateAsync(
@@ -124,7 +125,7 @@ public sealed class MailAccountEndpointsTests
         // Arrange
         var unreadable = UnreadableAccount();
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, unreadable);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1, unreadable);
 
         // Act
         var result = await MailAccountEndpoints.ReadAsync(
@@ -143,7 +144,7 @@ public sealed class MailAccountEndpointsTests
         // Arrange
         var unreadable = UnreadableAccount();
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, unreadable);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1, unreadable);
 
         // Act
         var result = await MailAccountEndpoints.ReadAllAsync(deployment.MailAccounts, TestContext.Current.CancellationToken);
@@ -228,7 +229,7 @@ public sealed class MailAccountEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1);
+        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
 
         // Act
         var result = await MailAccountEndpoints.AssignAsync(

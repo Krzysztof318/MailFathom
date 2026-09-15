@@ -4,6 +4,7 @@
 
 using MailFathom.AI;
 using MailFathom.AI.Chat;
+using MailFathom.AppHost;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
@@ -33,7 +34,9 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -49,6 +52,7 @@ using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -307,6 +311,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // announced anything at all.
         builder.Services.AddSingleton(new MailOutboxSignal(capacity: 16));
         builder.Services.AddSingleton<IDeploymentMailAccountCatalog>(account);
+        // The other half of the same reading, and registered from the same instance for the reason the composition
+        // root registers both from one: which users an account serves decides what a caller reads, which users a
+        // ceiling counts against, and which groups a signal reaches, so a harness answering the two from different
+        // places would narrow differently in each.
+        builder.Services.AddSingleton<IMailAccountAssignments>(account);
         // Whose accounts those are, and whose contact book. A composed host settles this from its user records while
         // it starts and so does this harness, below, once the composed services can reach the database: the
         // caller-scoped catalog the infrastructure registers compares it against the user a caller is admitted for,
@@ -513,6 +522,17 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                 spamClassification ?? SpamClassificationSettings.Disabled,
                 SyntheticMailAccount.AccountId));
 
+        // The three remaining readers an account is worked on under, and the one resolution still composed from a
+        // user's own setting. A composition root registers all four; a harness without them fails to resolve the
+        // classifier, the redacting reader, and the attachment deriver rather than behaving like the deployment that
+        // scans nothing, takes no action on a verdict, and writes English — which is the deployment every test here
+        // composes.
+        var deploymentPostures = new OrchestratedDeploymentPostures();
+
+        builder.Services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
+        builder.Services.AddSingleton<ISpamActionSettingsReader>(deploymentPostures);
+        builder.Services.AddSingleton<IMailAccountLanguages>(deploymentPostures);
+
         // The same arrangement for the other decision a composition root reads out of the account's own section: the
         // synchronizer resolves the collector for every folder run, the collector asks this what the user switched on,
         // and a composition without it would fail to resolve rather than behave like the deployment that collects
@@ -542,6 +562,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         {
             await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
             deploymentUser.Resolved(await ReadSoleUserAsync(host, cancellationToken));
+            await AssignTheSuiteAccountUnlessItIsHeldAsync(host, deploymentUser.User, cancellationToken);
         }
         catch
         {
@@ -580,6 +601,62 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         await scope.ServiceProvider
             .GetRequiredService<IMailUserProvisioning>()
             .ProvisionAsync(MailUserId.Create(Guid.NewGuid()), SuiteUserDisplayName, cancellationToken);
+    }
+
+    /// <summary>Records the account this suite's mail belongs to and assigns it to the suite's user, unless an earlier start did.</summary>
+    /// <remarks>
+    /// <para>
+    /// The suite supplies the account ports itself, so nothing here mints an identifier and nothing composes an
+    /// administrative write. What the rows are for is the relation neither port carries: the per-user ceiling is
+    /// answered in SQL from the accounts assigned to the users the claiming account is assigned to, so an account no
+    /// assignment names counts against nobody and the user bound is unreachable. Writing them through the context is
+    /// the same kind of arrangement as seeding mail directly — a row shape a deployment produces, written without the
+    /// run that would ordinarily produce it.
+    /// </para>
+    /// <para>
+    /// Only while the rows are absent, for the reason the user is recorded only while the table is empty: the suite
+    /// starts several hosts over one database, and the assignment's own key keeps one row where two starts race.
+    /// </para>
+    /// </remarks>
+    private static async Task AssignTheSuiteAccountUnlessItIsHeldAsync(
+        IHost host,
+        MailUserId user,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<MailFathomDbContext>();
+        var accountId = Guid.Parse(OrchestrationContract.ServedMailAccountId);
+
+        if (await context.MailAccountAssignments.AnyAsync(
+            assignment => assignment.MailAccountId == accountId,
+            cancellationToken))
+        {
+            return;
+        }
+
+        var recordedAt = TimeProvider.System.GetUtcNow();
+
+        if (!await context.MailAccountRecords.AnyAsync(record => record.Id == accountId, cancellationToken))
+        {
+            context.MailAccountRecords.Add(new MailAccountRecordEntity
+            {
+                Id = accountId,
+                DisplayName = OrchestrationContract.ServedMailAccountDisplayName,
+                Document = "{}",
+                Version = 1,
+                CreatedAt = recordedAt,
+                UpdatedAt = recordedAt,
+            });
+        }
+
+        context.MailAccountAssignments.Add(new MailAccountAssignmentEntity
+        {
+            UserId = user.Value,
+            MailAccountId = accountId,
+            AssignedAt = recordedAt,
+        });
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Reads the one user the orchestrated database holds, which the harness recorded before the first start.</summary>

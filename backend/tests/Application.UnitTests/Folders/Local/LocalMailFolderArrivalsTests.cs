@@ -18,8 +18,8 @@ namespace MailFathom.Application.UnitTests.Folders.Local;
 /// <summary>Covers where synchronization's arrivals land on a held account, and that a mirrored account's synchronization writes nothing new.</summary>
 public sealed class LocalMailFolderArrivalsTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("primary");
 
     private static readonly LocalMailFolderArrivalSource SourceInbox =
         new(MailFolderAlias.Create("INBOX"), MailFolderSpecialUse.Inbox, "INBOX");

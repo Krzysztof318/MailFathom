@@ -11,7 +11,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <summary>The one whole-mailbox classification run an account may have, keyed by the account exactly as the table is.</summary>
 internal sealed class InMemorySpamClassificationRunStore : ISpamClassificationRunStore
 {
-    private readonly Dictionary<MailAccountIdentity, SpamClassificationRun> runs = [];
+    private readonly Dictionary<MailAccountId, SpamClassificationRun> runs = [];
     private readonly List<SpamClassificationRun> saves = [];
 
     /// <summary>Gets every state a run was saved in, which is what proves a batch committed the position it reached.</summary>
@@ -20,7 +20,7 @@ internal sealed class InMemorySpamClassificationRunStore : ISpamClassificationRu
     /// <summary>Gets the run recorded for an account, whether or not it is still outstanding.</summary>
     /// <param name="account">The account to read, named as the user and the identifier together.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never had one.</returns>
-    internal SpamClassificationRun? Find(MailAccountIdentity account) => this.runs.GetValueOrDefault(account);
+    internal SpamClassificationRun? Find(MailAccountId account) => this.runs.GetValueOrDefault(account);
 
     /// <summary>Puts a run in front of an account without going through the request path.</summary>
     /// <param name="run">The run to record.</param>
@@ -28,7 +28,7 @@ internal sealed class InMemorySpamClassificationRunStore : ISpamClassificationRu
 
     /// <inheritdoc />
     public Task<SpamClassificationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.runs.GetValueOrDefault(account) is { IsOutstanding: true } outstanding
             ? outstanding
@@ -36,7 +36,7 @@ internal sealed class InMemorySpamClassificationRunStore : ISpamClassificationRu
 
     /// <inheritdoc />
     public Task<SpamClassificationRun?> FindLatestAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.runs.GetValueOrDefault(account));
 

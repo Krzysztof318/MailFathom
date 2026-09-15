@@ -924,7 +924,7 @@ public sealed class MailboxTimelineReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns(
+        catalog.AssignedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

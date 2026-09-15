@@ -22,7 +22,7 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// which reclamation removes.
 /// </remarks>
 public sealed record LocalMailCopy(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     OutgoingMailFiling Filing,
     MailFolderResolutionId Binding,
     ExtractedEmailMetadata? Metadata,

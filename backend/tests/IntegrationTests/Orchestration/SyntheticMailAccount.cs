@@ -61,6 +61,7 @@ internal sealed class SyntheticMailAccount(
     IMailboxMutationAuditSettingsReader,
     IMailAnsweringAuditSettingsReader,
     IDeploymentMailAccountCatalog,
+    IMailAccountAssignments,
     IMailFolderParticipationReader,
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,
@@ -90,6 +91,7 @@ internal sealed class SyntheticMailAccount(
         "inbox",
         "a-folder-nobody-bound",
         "account-ownership-inbox",
+        "account-stored-content",
         "answering-audit-inbox",
         "ask-mail",
         "ask-mail-elsewhere",
@@ -125,7 +127,6 @@ internal sealed class SyntheticMailAccount(
         "mutation-record-inbox",
         "mutation-withdrawal",
         "occurrence-identity",
-        "user-stored-content",
         DraftCopyFolderAlias,
         OutgoingCopyFolderAlias,
         "persistence-session",
@@ -142,7 +143,6 @@ internal sealed class SyntheticMailAccount(
         "rule-evaluation",
         "rule-evaluation-parked",
         "seen-state-provenance",
-        "shared-account-name",
         "spam-scan",
         "stale-derived-data",
         "stored-content-move-hold",
@@ -176,8 +176,8 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     public static MailUserId User => OrchestratedDeploymentUser.Shared.User;
 
-    /// <summary>Gets the account every test writes under, named by its user and its identifier together.</summary>
-    public static MailAccountIdentity Account => MailAccountIdentity.Create(User, AccountId);
+    /// <summary>Gets the account every test writes under, named by the identifier the deployment gave it.</summary>
+    public static MailAccountId Account => AccountId;
 
     /// <summary>The alias the one class that files a copy of its own outgoing mail maps the sent role onto.</summary>
     internal const string OutgoingCopyFolderAlias = "outgoing-copy";
@@ -236,7 +236,6 @@ internal sealed class SyntheticMailAccount(
     public IReadOnlyList<ServedMailAccount> ServedAccounts =>
     [
         new(
-            User,
             AccountId,
             MailAccountDisplayName.Create(OrchestrationContract.ServedMailAccountDisplayName),
             MailSynchronizationMode.Polling),
@@ -248,6 +247,19 @@ internal sealed class SyntheticMailAccount(
     /// switch and nothing in the suite exercises a deployment that turned it off.
     /// </remarks>
     public bool SynchronizationEnabled => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One user is assigned the one account, which is the relation the rows the harness writes into the assignment
+    /// table state as well. Anybody else is assigned nothing, so a test acting for a user this deployment never
+    /// established reads nothing rather than reading the suite's mail.
+    /// </remarks>
+    public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) =>
+        user == User ? [AccountId] : [];
+
+    /// <inheritdoc />
+    public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) =>
+        account == AccountId ? [User] : [];
 
     /// <inheritdoc />
     /// <remarks>

@@ -38,12 +38,12 @@ internal sealed class EmailThreadConfiguration : IEntityTypeConfiguration<EmailT
         entity.Property(thread => thread.MailboxAccountId).HasMaxLength(128).IsRequired();
         entity.Property(thread => thread.ConcurrencyVersion).IsRowVersion();
 
-        // The pair rather than the identifier, because an account is identified by both: the same word names one
-        // mailbox within one user and another within the next, so a conversation keyed onto the identifier alone
-        // would hang on whichever of them the database happened to hold.
+        // The generated identifier alone, which is the whole of what identifies an account: it names one mailbox
+        // across the deployment, so a conversation keyed onto it hangs on exactly the account it was assembled
+        // from whoever is assigned that mailbox.
         entity.HasOne<MailboxAccountEntity>()
             .WithMany()
-            .HasForeignKey(thread => new { thread.UserId, thread.MailboxAccountId })
+            .HasForeignKey(thread => thread.MailboxAccountId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // The survivor a merge points at is a row of this same table, and it is constrained rather than trusted: a

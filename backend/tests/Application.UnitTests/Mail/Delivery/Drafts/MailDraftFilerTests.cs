@@ -25,8 +25,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 /// <summary>Covers what one draft owes the mailbox, including everything a process that stopped mid-way left behind.</summary>
 public sealed class MailDraftFilerTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -36,7 +36,7 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await OpenAsync(harness, "first version");
 
         // Act
@@ -58,7 +58,7 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await OpenAsync(harness, "first version");
         await harness.Filer.SettleAsync(draft, CancellationToken.None);
 
@@ -77,7 +77,7 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await OpenAsync(harness, "first version");
         await harness.Filer.SettleAsync(draft, CancellationToken.None);
         var revised = await ReviseAsync(harness, draft.Id, "second version");
@@ -108,13 +108,13 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await OpenAsync(harness, "first version");
         await harness.Filer.SettleAsync(draft, CancellationToken.None);
         var revised = await ReviseAsync(harness, draft.Id, "second version");
 
         harness.Withdraw = (_, _) => Task.FromException(
-            new MailboxUnavailableException(Account.Id, new InvalidOperationException("unreachable")));
+            new MailboxUnavailableException(Account, new InvalidOperationException("unreachable")));
 
         var crashed = await harness.Filer.SettleAsync(revised, CancellationToken.None);
 
@@ -143,11 +143,11 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id, "drafts", "INBOX.Drafts");
+        harness.MapDraftsFolder(Account, "drafts", "INBOX.Drafts");
         var draft = await OpenAsync(harness, "first version");
         await harness.Filer.SettleAsync(draft, CancellationToken.None);
         var revised = await ReviseAsync(harness, draft.Id, "second version");
-        harness.MapDraftsFolder(Account.Id, "drafts", "INBOX.OldDrafts");
+        harness.MapDraftsFolder(Account, "drafts", "INBOX.OldDrafts");
 
         // Act
         var result = await harness.Filer.SettleAsync(revised, CancellationToken.None);
@@ -167,7 +167,7 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         harness.Append = _ => Task.FromResult(
             new AppendedMailCopy(RemoteEmailPlacement.NotReported(), InternetMessageId: null));
         var draft = await OpenAsync(harness, "first version");
@@ -188,9 +188,9 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         harness.Append = _ => Task.FromException<AppendedMailCopy>(
-            new MailboxUnavailableException(Account.Id, new InvalidOperationException("unreachable")));
+            new MailboxUnavailableException(Account, new InvalidOperationException("unreachable")));
         var draft = await OpenAsync(harness, "first version");
 
         var unknown = await harness.Filer.SettleAsync(draft, CancellationToken.None);
@@ -212,7 +212,7 @@ public sealed class MailDraftFilerTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await OpenAsync(harness, "first version");
         await harness.Filer.SettleAsync(draft, CancellationToken.None);
         await harness.Drafts.RecordDiscardedAsync(
@@ -269,6 +269,7 @@ public sealed class MailDraftFilerTests
         var draft = await harness.Drafts.OpenAsync(
             session,
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [Recipient()],
             "a draft",

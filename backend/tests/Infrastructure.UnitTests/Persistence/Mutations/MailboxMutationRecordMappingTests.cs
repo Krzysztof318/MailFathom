@@ -6,7 +6,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Mutations;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Mutations;
@@ -197,12 +196,11 @@ public sealed class MailboxMutationRecordMappingTests
     {
         var folder = new MailFolderEntity
         {
-            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             Alias = "INBOX",
             ResolutionGeneration = 1,
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { Id = "primary" },
         };
 
         return new MailboxMutationEntity
@@ -211,11 +209,9 @@ public sealed class MailboxMutationRecordMappingTests
             StoredEmailId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             StoredEmail = new StoredEmailEntity
             {
-                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = "primary",
                 MailFolder = folder,
             },
-            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             MailFolder = folder,
             UidValidity = 1,

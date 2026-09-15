@@ -33,9 +33,6 @@ internal sealed class EmailThreadEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account holds this conversation.</summary>
-    public required Guid UserId { get; set; }
-
     /// <summary>Gets or sets when this deployment first assembled the thread.</summary>
     /// <remarks>
     /// What decides a merge. When a message proves two threads were always one, the earlier one survives, and the

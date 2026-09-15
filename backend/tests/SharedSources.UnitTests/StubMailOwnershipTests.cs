@@ -2,25 +2,24 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.SharedSources.UnitTests;
 
-/// <summary>Covers the ownership answer every suite bounding two users against each other arranges through.</summary>
+/// <summary>Covers the ownership answer every suite bounding two mailboxes against each other arranges through.</summary>
 /// <remarks>
-/// A fault here reports somebody else's arrangement. A stub that answered with one user whatever it was asked would
-/// make a per-user ceiling test pass while the ceiling bounded nothing, which is exactly the claim those tests exist
-/// to make; and one that ignored its default would leave every suite that arranges no user at all refused.
+/// A fault here reports somebody else's arrangement. A stub that answered with one mailbox whatever it was asked
+/// would make a ceiling test pass while the ceiling bounded nothing, which is exactly the claim those tests exist to
+/// make; and one that ignored its default would leave every suite that arranges no mailbox at all refused.
 /// </remarks>
 public sealed class StubMailOwnershipTests
 {
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.NewGuid());
 
     [Fact]
-    public async Task ReadStoredEmailAccountAsync_NothingArranged_AnswersWithTheDefaultUser()
+    public async Task ReadStoredEmailAccountAsync_NothingArranged_AnswersWithTheDefaultMailbox()
     {
         // Arrange
         var ownership = new StubMailOwnership();
@@ -29,14 +28,14 @@ public sealed class StubMailOwnershipTests
         var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, account.User);
+        Assert.Equal(SyntheticMailAccount.Deployment, account);
     }
 
     [Fact]
-    public async Task ReadStoredEmailAccountAsync_AMessageArrangedToSomebodyElse_AnswersWithThatUser()
+    public async Task ReadStoredEmailAccountAsync_AMessageArrangedToAnotherMailbox_AnswersWithThatMailbox()
     {
         // Arrange
-        var ownership = new StubMailOwnership().Owns(Message, SyntheticMailUser.Another);
+        var ownership = new StubMailOwnership().Owns(Message, SyntheticMailAccount.Another);
         var unarranged = StoredEmailId.Create(Guid.NewGuid());
 
         // Act
@@ -44,59 +43,22 @@ public sealed class StubMailOwnershipTests
         var fallback = await ownership.ReadStoredEmailAccountAsync(unarranged, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, account.User);
-        Assert.Equal(SyntheticMailUser.Deployment, fallback.User);
+        Assert.Equal(SyntheticMailAccount.Another, account);
+        Assert.Equal(SyntheticMailAccount.Deployment, fallback);
     }
 
-    /// <summary>
-    /// The default mailbox is the user's own. A stub naming one mailbox for everybody would put two users' mail in a
-    /// single account, so a suite asserting that one account is scanned and another is not would be arranging the same
-    /// account twice and passing on an answer no deployment gives.
-    /// </summary>
-    [Fact]
-    public async Task ReadStoredEmailAccountAsync_TwoUsersWithNoMailboxStated_AnswersEachWithTheirOwn()
-    {
-        // Arrange
-        var ownership = new StubMailOwnership().Owns(Message, SyntheticMailUser.Another);
-        var unarranged = StoredEmailId.Create(Guid.NewGuid());
-
-        // Act
-        var another = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
-        var deployment = await ownership.ReadStoredEmailAccountAsync(
-            unarranged,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.NotEqual(deployment.Id, another.Id);
-    }
-
-    /// <summary>The mailbox is what a posture is read against, so a test that is about one states it.</summary>
-    [Fact]
-    public async Task ReadStoredEmailAccountAsync_AMessageArrangedToOneMailbox_AnswersWithThatMailbox()
-    {
-        // Arrange
-        var scanned = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("scanned"));
-        var ownership = new StubMailOwnership().Owns(Message, scanned);
-
-        // Act
-        var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(scanned, account);
-    }
-
-    /// <summary>The default is the stub's own, so a suite serving somebody other than the deployment states it once.</summary>
+    /// <summary>The default is the stub's own, so a suite serving a mailbox other than the deployment's states it once.</summary>
     [Fact]
     public async Task ReadStoredEmailAccountAsync_AStatedDefault_IsWhatAnUnarrangedMessageAnswersWith()
     {
         // Arrange
-        var ownership = new StubMailOwnership(SyntheticMailUser.Another);
+        var ownership = new StubMailOwnership(SyntheticMailAccount.Another);
 
         // Act
         var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, account.User);
+        Assert.Equal(SyntheticMailAccount.Another, account);
     }
 
     [Fact]

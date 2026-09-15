@@ -41,7 +41,7 @@ public sealed record SpamClassificationHistoryQuery
     public const int MaximumPageSize = 200;
 
     private SpamClassificationHistoryQuery(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? storedEmailId,
         SpamVerdict? verdict,
         DateTimeOffset? evaluatedFrom,
@@ -59,9 +59,7 @@ public sealed record SpamClassificationHistoryQuery
     }
 
     /// <summary>Gets the account whose classifications are read.</summary>
-    public MailAccountIdentity Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account.Id;
+    public MailAccountId Account { get; }
 
     /// <summary>Gets the occurrence the page is narrowed to, or <see langword="null" /> for every occurrence of the account.</summary>
     public StoredEmailId? StoredEmailId { get; }
@@ -103,7 +101,7 @@ public sealed record SpamClassificationHistoryQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static SpamClassificationHistoryQueryResult Create(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? storedEmailId,
         SpamVerdict? verdict,
         DateTimeOffset? evaluatedFrom,
@@ -152,14 +150,13 @@ public sealed record SpamClassificationHistoryQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? storedEmailId,
         SpamVerdict? verdict,
         DateTimeOffset? evaluatedFrom,
         DateTimeOffset? evaluatedBefore) =>
         PageFilterFingerprint.Of(
-            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account.Id.Value,
+            account.Value,
             storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture),
             verdict?.ToString(),
             evaluatedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),

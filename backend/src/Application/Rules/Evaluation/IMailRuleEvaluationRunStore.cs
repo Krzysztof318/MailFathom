@@ -11,15 +11,15 @@ namespace MailFathom.Application.Rules.Evaluation;
 public interface IMailRuleEvaluationRunStore
 {
     /// <summary>Reads the run this account is still waiting to have carried further.</summary>
-    /// <param name="account">The account to read, named by its user and its identifier together.</param>
+    /// <param name="account">The account to read, by its generated identifier together.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The outstanding run, or <see langword="null" /> when the account has none — including when the last one ended.</returns>
     Task<MailRuleEvaluationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the run this account last had, whether it is still outstanding or has ended.</summary>
-    /// <param name="account">The account to read, named by its user and its identifier together.</param>
+    /// <param name="account">The account to read, by its generated identifier together.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never been asked for one.</returns>
     /// <remarks>
@@ -27,7 +27,7 @@ public interface IMailRuleEvaluationRunStore
     /// as one still going, so reporting only the outstanding one would leave "it completed an hour ago" and "you never
     /// asked" looking identical from the outside.
     /// </remarks>
-    Task<MailRuleEvaluationRun?> FindLatestAsync(MailAccountIdentity account, CancellationToken cancellationToken);
+    Task<MailRuleEvaluationRun?> FindLatestAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Stages a run — a request, a batch's progress, or an ending — in the session it commits through.</summary>
     /// <param name="session">The session the batch's evaluations are staged in, so progress and evaluations commit together.</param>

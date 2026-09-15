@@ -6,7 +6,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
@@ -111,12 +110,8 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             "local-email-state-foreign",
             cancellationToken);
 
-        var anotherAccount = MailAccountIdentity.Create(
-            SyntheticMailAccount.User,
-            MailAccountId.Create("local-email-state-elsewhere"));
-        var anotherUser = MailAccountIdentity.Create(
-            MailUserId.Create(Guid.CreateVersion7()),
-            SyntheticMailAccount.AccountId);
+        var anotherAccount = MailAccountId.Create("local-email-state-elsewhere");
+        var anotherUser = SyntheticMailAccount.AccountId;
         var refusedState = new LocalEmailState(
             binding,
             Folder: null,
@@ -196,7 +191,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
     /// <summary>Reads through the store inside a session of its own, which is the only way the port reads.</summary>
     private static Task<LocalEmailState?> ReadAsync(
         OrchestratedMailFathomServices services,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
             (scope, session, token) => scope.GetRequiredService<ILocalEmailStateStore>().ReadAsync(
@@ -225,7 +220,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             async (scope, session, token) =>
             {
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
@@ -246,8 +241,8 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
     private static Task<long> ReadStoredContentBytesAsync(
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IUserStoredContentLedger>()
-                .ReadStoredContentBytesAsync(SyntheticMailAccount.User, token),
+            (scope, token) => scope.GetRequiredService<IAccountStoredContentLedger>()
+                .ReadStoredContentBytesAsync(SyntheticMailAccount.Account, token),
             cancellationToken);
 
     private static Task<string> ReadObjectLocatorAsync(

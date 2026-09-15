@@ -200,7 +200,7 @@ public sealed class AuthoredResponseDraftingTests
             MailFathomPermission.MailRead);
 
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var authoring = new StoredEmailResponseAuthoring(
             summaries,
@@ -288,7 +288,7 @@ public sealed class AuthoredResponseDraftingTests
             .Returns(_ => Task.FromResult(OpenedEmailAttachmentResult.Opened(new StubOpenedEmailAttachment())));
 
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var authoring = new StoredEmailResponseAuthoring(
             summaries,
@@ -298,7 +298,7 @@ public sealed class AuthoredResponseDraftingTests
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 catalog,
-                StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
+                StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.Account, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities,

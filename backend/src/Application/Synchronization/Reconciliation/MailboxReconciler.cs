@@ -121,7 +121,7 @@ public sealed class MailboxReconciler
     /// </remarks>
     public async Task<MailboxReconciliationResult> ReconcileAsync(
         IMailboxSession mailboxSession,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
         ulong? reconciledThroughModSeq,
@@ -226,7 +226,7 @@ public sealed class MailboxReconciler
     /// </para>
     /// </remarks>
     private void AnnounceWhatMoved(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folder,
         ReconciledWindowClassification classification,
         ReconciledFolderOutcome outcome)
@@ -279,12 +279,12 @@ public sealed class MailboxReconciler
     /// </remarks>
     private async Task<ReconciledFolderOutcome> AttributeDisappearancesAsync(
         ReconciledWindowClassification classification,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         CancellationToken cancellationToken)
     {
-        var disposition = this.dispositionReader.GetDisposition(account.Id);
+        var disposition = this.dispositionReader.GetDisposition(account);
         var observedAt = this.timeProvider.GetUtcNow();
 
         if (classification.Disappeared.Count == 0)
@@ -361,7 +361,7 @@ public sealed class MailboxReconciler
     /// </remarks>
     private async Task<ReconciledFlagChanges> AttributeFlagChangesAsync(
         ReconciledWindowClassification classification,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         CancellationToken cancellationToken)
@@ -425,7 +425,7 @@ public sealed class MailboxReconciler
     private static IEnumerable<AttributedFlagChange> AttributedValuesOf(
         IReadOnlyList<MailboxMutationRecord> records,
         ObservedWindowCandidate observed,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity)
     {
@@ -437,7 +437,7 @@ public sealed class MailboxReconciler
         }
 
         var occurrence = EmailOccurrenceId.Create(
-            account.Id,
+            account,
             folderResolutionId,
             uidValidity,
             observed.Candidate.Uid);
@@ -496,12 +496,12 @@ public sealed class MailboxReconciler
 
     private static MailboxMutationRecord? FindRecordRemoving(
         IReadOnlyList<MailboxMutationRecord> records,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         ImapUid uid)
     {
-        var occurrence = EmailOccurrenceId.Create(account.Id, folderResolutionId, uidValidity, uid);
+        var occurrence = EmailOccurrenceId.Create(account, folderResolutionId, uidValidity, uid);
 
         return records.FirstOrDefault(record => record.AccountsForRemovalOf(occurrence));
     }

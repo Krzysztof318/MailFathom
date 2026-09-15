@@ -71,7 +71,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
             (scope, session, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
                 .WithdrawAsync(
                     session,
-                    SyntheticMailAccount.User,
+                    [SyntheticMailAccount.AccountId],
                     [pending, alsoPending, issued, unknown],
                     token),
             cancellationToken);
@@ -86,7 +86,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
         // answers with are two different claims, and it is the second one a client acts on.
         var readBack = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .ReadAsync(SyntheticMailAccount.User, [pending, alsoPending, issued, unknown], token),
+                .ReadAsync([SyntheticMailAccount.AccountId], [pending, alsoPending, issued, unknown], token),
             cancellationToken);
 
         Assert.Equal(3, readBack.Count);
@@ -134,7 +134,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
         CancellationToken cancellationToken) =>
         services.CommitProducingAsync(
             (scope, session, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .ReleaseAsync(session, SyntheticMailAccount.User, [recordId], token),
+                .ReleaseAsync(session, [SyntheticMailAccount.AccountId], [recordId], token),
             cancellationToken);
 
     private static async Task<MailboxMutationRecordId[]> ReadOutstandingIdsAsync(
@@ -169,7 +169,6 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
         // one before it — which the database would answer by handing back the first record instead of opening a second.
         var request = MailboxMutationRequest.SetSeen(
             storedEmailId,
-            SyntheticMailAccount.User,
             occurrence,
             MailboxMutationRequester.Command($"{Requester.Identity}-{uid}"),
             isSeen);

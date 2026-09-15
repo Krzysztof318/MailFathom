@@ -72,7 +72,7 @@ public sealed class EmailContentReaderTests
         Assert.Equal(
             ["report.pdf"],
             content.Attachments?.Select(attachment => attachment.Description.FileName?.Value));
-        Assert.Equal(summary.AccountId, content.AccountId);
+        Assert.Equal(summary.Account, content.AccountId);
         Assert.Equal(summary.FolderAlias, content.FolderAlias);
         Assert.Equal(summary.RemoteFlags, content.RemoteFlags);
     }
@@ -766,11 +766,11 @@ public sealed class EmailContentReaderTests
     }
 
     /// <summary>
-    /// Mail in an account another user owns is refused by the same answer, so holding an identifier is not a way to
-    /// read somebody else's correspondence.
+    /// Mail of a mailbox this caller is not assigned is refused by the same answer, so holding an identifier is not a
+    /// way to read somebody else's correspondence.
     /// </summary>
     [Fact]
-    public async Task ReadContentAsync_EmailOfAnAccountTheCallersUserDoesNotOwn_IsReportedAsNotFound()
+    public async Task ReadContentAsync_EmailOfAMailboxTheCallersUserIsNotAssigned_IsReportedAsNotFound()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
@@ -780,7 +780,10 @@ public sealed class EmailContentReaderTests
         var reader = ReaderOver(
             summary,
             RendererReturning(RenderingOf()),
-            accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
+            accountCatalog: AssignedMailAccountCatalogs.For(
+                authorization,
+                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, summary.Account),
+                SyntheticServedAccount.Of(summary.Account)),
             authorization: authorization);
 
         // Act
@@ -795,6 +798,73 @@ public sealed class EmailContentReaderTests
         Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
     }
 
+    /// <summary>
+    /// One mailbox assigned to two people holds one copy of one message, and each of them reads it under the
+    /// identifier the deployment generated. A third user, assigned nothing, reads nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the reading half of what keying the mail graph by the account alone is for. The message is stored once
+    /// and no row names a user, so what decides who reaches it is the assignment relation and nothing else — which is
+    /// why the catalog composed here is the real one over stated assignments rather than a substituted answer.
+    /// </para>
+    /// <para>
+    /// The third user is what a pair cannot establish. With two assigned users every caller in the arrangement reads
+    /// the message, so a narrowing that had been dropped altogether would look exactly like one that works; the caller
+    /// assigned nothing is the one that tells them apart, and the answer they get is the code an identifier naming
+    /// nothing meets.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_AMessageOfAMailboxAssignedToTwoUsers_IsReadByBothAndByNobodyElse()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, summary.Account)
+            .Assigning(SyntheticMailUser.Another, summary.Account);
+
+        // Act
+        var readByOne = await ReadAsAsync(summary, assignments, SyntheticMailUser.Deployment);
+        var readByTheOther = await ReadAsAsync(summary, assignments, SyntheticMailUser.Another);
+        var readByNobody = await ReadAsAsync(summary, assignments, SyntheticMailUser.Third);
+
+        // Assert
+        // One message, one account identifier, read twice: the two callers are served the same mailbox rather than a
+        // copy each, which is what the shared assignment means.
+        var forOne = ContentOf(Assert.Single(readByOne.Emails));
+        var forTheOther = ContentOf(Assert.Single(readByTheOther.Emails));
+
+        Assert.Equal(summary.StoredEmailId, forOne.StoredEmailId);
+        Assert.Equal(summary.StoredEmailId, forTheOther.StoredEmailId);
+        Assert.Equal(summary.Account, forOne.AccountId);
+        Assert.Equal(forOne.AccountId, forTheOther.AccountId);
+        Assert.Equal(forOne.Body.PlainText.Text, forTheOther.Body.PlainText.Text);
+
+        Assert.Equal(
+            MailFathomErrorCode.StoredEmailNotFound,
+            FailureOf(Assert.Single(readByNobody.Emails)).ErrorCode);
+    }
+
+    /// <summary>Reads one stored message as a caller acting for one user, over one stated set of assignments.</summary>
+    private static Task<GetEmailContentResult> ReadAsAsync(
+        EmailSummary summary,
+        IMailAccountAssignments assignments,
+        MailUserId user)
+    {
+        var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailRead);
+
+        return ReaderOver(
+            summary,
+            RendererReturning(RenderingOf()),
+            accountCatalog: AssignedMailAccountCatalogs.For(
+                authorization,
+                assignments,
+                SyntheticServedAccount.Of(summary.Account)),
+            authorization: authorization)
+            .ReadContentAsync(RequestFor([summary.StoredEmailId]), TestContext.Current.CancellationToken);
+    }
+
     /// <summary>A folder an operator withheld from tools is unreadable by identifier too, and refused the same way as mail that is not there.</summary>
     [Fact]
     public async Task ReadContentAsync_EmailOfAFolderWithheldFromTools_IsReportedAsNotFound()
@@ -805,8 +875,8 @@ public sealed class EmailContentReaderTests
             summary,
             RendererReturning(RenderingOf()),
             folderParticipation: StubMailFolderParticipation
-                .Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias))
-                .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+                .Mapping(new MailFolderIdentity(summary.Account, summary.FolderAlias))
+                .Hiding(new MailFolderIdentity(summary.Account, summary.FolderAlias)));
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -876,7 +946,7 @@ public sealed class EmailContentReaderTests
         var reader = ReaderOver(
             [served, unserved],
             RendererReturning(RenderingOf()),
-            accountCatalog: CatalogServing(served.AccountId));
+            accountCatalog: CatalogServing(served.Account));
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -1610,7 +1680,7 @@ public sealed class EmailContentReaderTests
             RequestFor([summary.StoredEmailId]),
             TestContext.Current.CancellationToken);
         var derived = await derivedReader.ReadMetadataAsync(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
+            MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
             StoredRawMime,
             TestContext.Current.CancellationToken);
 
@@ -1830,7 +1900,7 @@ public sealed class EmailContentReaderTests
             .. conversation.Select((summary, ordinal) => (threadId, new ThreadedEmailSummary
             {
                 StoredEmailId = summary.StoredEmailId,
-                AccountId = summary.AccountId,
+                AccountId = summary.Account,
                 FolderAlias = summary.FolderAlias,
                 ParentStoredEmailId = asAChain && ordinal > 0 ? conversation[ordinal - 1].StoredEmailId : null,
                 Subject = summary.Subject,
@@ -1897,7 +1967,7 @@ public sealed class EmailContentReaderTests
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
-            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
+            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.Account.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
             folderParticipation ?? MappingFoldersOf(summary is null ? [] : [summary]),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
@@ -1943,7 +2013,7 @@ public sealed class EmailContentReaderTests
     /// </remarks>
     private static StubMailFolderParticipation MappingFoldersOf(IReadOnlyList<EmailSummary> summaries) =>
         StubMailFolderParticipation.Mapping(
-            [.. summaries.Select(summary => new MailFolderIdentity(summary.AccountId, summary.FolderAlias))]);
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]);
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {
@@ -2003,7 +2073,7 @@ public sealed class EmailContentReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
 
         return catalog;
     }
@@ -2090,9 +2160,9 @@ public sealed class EmailContentReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<MailAccountIdentity>().Id,
+                call.Arg<MailAccountId>(),
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,

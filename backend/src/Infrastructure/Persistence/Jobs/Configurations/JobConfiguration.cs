@@ -30,8 +30,11 @@ namespace MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 /// </para>
 /// <para>
 /// The turn rather than the available instant, because the order a claim drains the queue in is what decides whether
-/// one user's backlog postpones another user's due work. The available instant stays a predicate — it is what makes
-/// a job due — and the turn is what orders the jobs that are.
+/// one mailbox's backlog postpones another mailbox's due work. The available instant stays a predicate — it is what
+/// makes a job due — and the turn is what orders the jobs that are. The axis is the account rather than a user,
+/// since a mailbox assigned to several users carries one backlog and no user of it is more its owner than another;
+/// what ADR 0014 fixes is that no backlog postpones another's due work indefinitely, which a turn per account gives
+/// whichever user the work was queued for.
 /// </para>
 /// <para>
 /// The account is a column with an index of its own rather than a value inside the payload, because erasure,
@@ -50,14 +53,7 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<JobEntity> entity)
     {
-        // A queue row names an account and its user or neither, which the check states because the foreign key
-        // cannot: both columns are optional, so PostgreSQL leaves a row supplying only one of them unchecked, and a
-        // row carrying an identifier without a user would then reference a mailbox nothing resolved.
-        entity.ToTable(
-            "jobs",
-            table => table.HasCheckConstraint(
-                PersistenceConstraintNames.JobAccountUserCheckConstraintName,
-                $"(\"{nameof(JobEntity.UserId)}\" IS NULL) = (\"{nameof(JobEntity.MailboxAccountId)}\" IS NULL)"));
+        entity.ToTable("jobs");
         entity.HasKey(job => job.Id);
         entity.Property(job => job.Id).ValueGeneratedNever();
         entity.Property(job => job.JobType).HasMaxLength(64).IsRequired();
@@ -90,16 +86,16 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
             .HasDatabaseName(PersistenceConstraintNames.JobClaimIndexName)
             .HasFilter(
                 $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
-        entity.HasIndex(job => new { job.UserId, job.MailboxAccountId, job.EnqueuedAt })
+        entity.HasIndex(job => new { job.MailboxAccountId, job.EnqueuedAt })
             .HasDatabaseName(PersistenceConstraintNames.JobAccountIndexName);
 
         // Filtered to the same states the claim index is, and for the same reason: what an enqueue asks is where the
-        // user's *waiting* work has reached, so a queue that has been running for a year reads a structure the size of
-        // its backlog. The user leads and no account column follows it, because the user is a column on this row now:
-        // the latest turn is one descending step into this index rather than a maximum over each of the user's
-        // accounts, which is what the enqueue had to compose while the user could only be reached through a join.
-        entity.HasIndex(job => new { job.UserId, job.TurnAt })
-            .HasDatabaseName(PersistenceConstraintNames.JobUserTurnIndexName)
+        // account's *waiting* work has reached, so a queue that has been running for a year reads a structure the
+        // size of its backlog. The account leads it and no user stands ahead of it — a mailbox assigned to several
+        // users is one queue, so the latest turn is one descending step into this index rather than a maximum over
+        // the accounts of whichever of them happened to ask.
+        entity.HasIndex(job => new { job.MailboxAccountId, job.TurnAt })
+            .HasDatabaseName(PersistenceConstraintNames.JobAccountTurnIndexName)
             .HasFilter(
                 $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
 
@@ -111,12 +107,12 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
             .HasDatabaseName(PersistenceConstraintNames.JobDeadLetterIndexName)
             .HasFilter($"\"{nameof(JobEntity.State)}\" = '{nameof(JobState.DeadLettered)}'");
 
-        // The reference is the pair, an account being identified by its user and its identifier together. Both
-        // columns are optional, so PostgreSQL enforces the constraint only on a row supplying both — which is why the
-        // table above carries the check that states the invariant the enforcement rests on.
+        // The generated identifier alone is the reference, so a queue row names one mailbox across the deployment
+        // rather than one user's view of one. The column is optional, so PostgreSQL enforces the constraint only on
+        // a row that names an account at all, which is what leaves work belonging to no mailbox queueable.
         entity.HasOne(job => job.MailboxAccount)
             .WithMany()
-            .HasForeignKey(job => new { job.UserId, job.MailboxAccountId })
+            .HasForeignKey(job => job.MailboxAccountId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

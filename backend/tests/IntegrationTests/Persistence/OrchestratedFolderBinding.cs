@@ -63,7 +63,7 @@ internal static class OrchestratedFolderBinding
 
     /// <summary>Binds one alias on an account other than the one this deployment serves, and commits it.</summary>
     /// <param name="services">The composed services the write runs through.</param>
-    /// <param name="account">The account the binding belongs to, named by its user and its identifier together.</param>
+    /// <param name="account">The account the binding belongs to, by its generated identifier together.</param>
     /// <param name="alias">The alias this test class owns, so its rows are not disturbed by another's.</param>
     /// <param name="remotePath">The remote folder the alias names.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -75,7 +75,7 @@ internal static class OrchestratedFolderBinding
     /// </remarks>
     internal static async Task<MailFolderResolution> CommitAsync(
         OrchestratedMailFathomServices services,
-        MailAccountIdentity account,
+        MailAccountId account,
         string alias,
         string remotePath,
         CancellationToken cancellationToken)

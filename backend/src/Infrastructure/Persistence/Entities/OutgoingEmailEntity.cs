@@ -22,8 +22,14 @@ internal sealed class OutgoingEmailEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account the message is sent from.</summary>
-    public required Guid UserId { get; set; }
+    /// <summary>Gets or sets the user who asked for the send, and <see langword="null" /> where the deployment's own configuration did.</summary>
+    /// <remarks>
+    /// A reference rather than a narrowing term: every user assigned the account reads the message, and erasing the
+    /// author leaves it in the mailbox. What it is for is the identity beside it — two assigned users retrying one
+    /// requester's submission are two submissions — which is why the unique index over that identity counts two nulls
+    /// as one value rather than as two: a rule evaluating twice is one send, and there is no person to tell apart.
+    /// </remarks>
+    public Guid? UserId { get; set; }
 
     public OutgoingEmailOrigin RequesterOrigin { get; set; }
 

@@ -40,7 +40,7 @@ public interface IStoredEmailAttachmentTextStore
     /// stepped over, which is what keeps the walk proportional to the mail this feature is about.
     /// </remarks>
     Task<IReadOnlyList<EmailAwaitingAttachmentText>> GetEmailsAwaitingAttachmentTextAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);

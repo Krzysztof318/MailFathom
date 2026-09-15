@@ -213,7 +213,7 @@ public sealed class MailDraftAttachmentsTests
 
         return new MailDraftAttachments(
             new MailDraftDirectory(
-                OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
+                AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
                 drafts,
                 new InMemoryMailDraftContentStore(),
                 Substitute.For<IOutgoingMailTextReader>(),
@@ -262,7 +262,8 @@ public sealed class MailDraftAttachmentsTests
     private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(user, Work),
+            Work,
+            user,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [],
             "a draft",

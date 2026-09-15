@@ -144,7 +144,6 @@ public sealed class MailDeletionRecorder
 
         var request = MailboxMutationRequest.Delete(
             storedEmailId,
-            target.User,
             target.Occurrence,
             requester,
             localDisposition);

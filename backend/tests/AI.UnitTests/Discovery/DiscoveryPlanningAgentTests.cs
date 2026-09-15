@@ -37,7 +37,6 @@ public sealed class DiscoveryPlanningAgentTests
     private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly MailboxScope WholeMailbox = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 

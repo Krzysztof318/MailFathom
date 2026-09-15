@@ -183,7 +183,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
         foreach (var account in this.ReadServedAccounts(settingsSnapshot))
         {
-            if (this.supervisedAccounts.ContainsKey(account.Id.Value))
+            if (this.supervisedAccounts.ContainsKey(account.Value))
             {
                 continue;
             }
@@ -199,7 +199,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
             if (hold is null)
             {
-                this.LogAccountHeldElsewhere(account.Id.Value);
+                this.LogAccountHeldElsewhere(account.Value);
 
                 continue;
             }
@@ -212,12 +212,12 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
                 accountScheduling.Token,
                 workUnitToken);
 
-            this.supervisedAccounts[account.Id.Value] = new SupervisedAccount(
+            this.supervisedAccounts[account.Value] = new SupervisedAccount(
                 settingsSnapshot,
                 accountScheduling,
                 task);
 
-            this.LogAccountSupervisionStarted(account.Id.Value);
+            this.LogAccountSupervisionStarted(account.Value);
         }
     }
 
@@ -227,7 +227,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// served set is configuration plus the user a startup gate established and only the composed port holds both. The
     /// scope lives for the read: a supervisor gets a scope of its own per work unit.
     /// </remarks>
-    private MailAccountIdentity[] ReadServedAccounts(MailSynchronizationOptions settingsSnapshot)
+    private MailAccountId[] ReadServedAccounts(MailSynchronizationOptions settingsSnapshot)
     {
         using var accountScope = this.scopeFactory.CreateScope();
         accountScope.ServiceProvider
@@ -237,7 +237,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         return [.. accountScope.ServiceProvider
             .GetRequiredService<IDeploymentMailAccountCatalog>()
             .ServedAccounts
-            .Select(static account => account.Identity)];
+            .Select(static account => account.Id)];
     }
 
     /// <summary>Supervises one account for as long as this replica holds it, and gives the account back once supervision ends.</summary>
@@ -249,7 +249,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// lease's margin before another replica may open its own sessions.
     /// </remarks>
     private async Task SuperviseWhileHeldAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         WorkLeaseHold hold,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
@@ -274,7 +274,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     }
 
     private Task StartSupervisor(
-        MailAccountIdentity account,
+        MailAccountId account,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
@@ -282,7 +282,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         // The watch is built here and owned by the supervisor, so a supervisor that ends releases the connections it was
         // holding and the replacement starts with none.
         var pushNotifications = new AccountPushNotificationWatch(
-            account.Id,
+            account,
             this.scopeFactory,
             this.loggerFactory.CreateLogger<AccountPushNotificationWatch>(),
             this.timeProvider);

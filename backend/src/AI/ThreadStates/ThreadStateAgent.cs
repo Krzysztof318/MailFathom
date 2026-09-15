@@ -12,7 +12,7 @@ using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -125,7 +125,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     /// <inheritdoc />
     public async Task<ThreadStateDerivation> DeriveAsync(
         DerivableThread thread,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(thread);
@@ -243,7 +243,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     /// </remarks>
     private async Task<ChatModelAnswer?> AskAsync(
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         // One ledger for the whole chain, so a derivation that falls through to the fallback spends the run's
@@ -278,7 +278,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {

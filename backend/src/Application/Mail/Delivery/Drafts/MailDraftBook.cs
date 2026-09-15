@@ -25,8 +25,8 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// crash between them leaves neither rather than half of a draft.
 /// </para>
 /// <para>
-/// Being the one way in is also what makes it the place the grant is asked for. A draft is written into the user's own
-/// mailbox and reaches nobody else, so it is admitted under the grant that says exactly that: a caller holding
+/// Being the one way in is also what makes it the place the grant is asked for. A draft is what one person is writing
+/// and has not sent, so it is admitted under the grant that says exactly that: a caller holding
 /// <see cref="MailFathomPermission.MailDraftsWrite" /> for a command, and MailFathom's own identity for a rule. That is
 /// asked with no transport in the picture, so a second entrypoint added later meets it whatever it did first. What it
 /// deliberately is not is <see cref="MailFathomPermission.MailSend" />: a caller that may draft and may not send is the
@@ -37,6 +37,17 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// The mailbox is brought into step once the write has committed, and never before it. A crash in between leaves a
 /// draft the pass will settle; a crash the other way round would leave a message in somebody's drafts folder that
 /// nothing here can name.
+/// </para>
+/// <para>
+/// <b>The author term bounds the draft record and the three acts on it, not the message the mailbox holds.</b>
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// keeps the author beside the account so a draft is read, revised, discarded, and promoted by its author alone among
+/// the account's assigned users, and that is what is enforced here. What the filer then puts into the account's drafts
+/// folder is the mailbox's own mail: a folder read and a message read narrow by assigned accounts and carry no author
+/// term, so on a mailbox assigned to more than one user the others meet the unsent revision there exactly as they meet
+/// every other message the mailbox holds. Withholding the copy instead would take the draft out of the mail client the
+/// person is writing in, which is the whole reason it is filed, and would buy a confidentiality a shared mailbox
+/// offers nowhere else.
 /// </para>
 /// </remarks>
 public sealed class MailDraftBook
@@ -85,7 +96,8 @@ public sealed class MailDraftBook
     }
 
     /// <summary>Writes a composed draft down, as a new one or as the next revision of one that already exists.</summary>
-    /// <param name="account">The account the draft belongs to, named by its user and its identifier.</param>
+    /// <param name="account">The account the draft belongs to, by its generated identifier.</param>
+    /// <param name="writtenBy">The user writing it, who is the one person among the account's assigned users who reads it.</param>
     /// <param name="author">The authored act writing it down.</param>
     /// <param name="composed">The composed message, its recipients, and the identity this revision carries.</param>
     /// <param name="revises">The draft this replaces, or <see langword="null" /> to write a new one.</param>
@@ -93,7 +105,7 @@ public sealed class MailDraftBook
     /// <returns>The draft as it stands once the mailbox has been brought into step with it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="author" /> or <paramref name="composed" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the author names is not what reached this.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that is still being written, or when the message carries material this deployment screens outgoing mail for.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that <paramref name="writtenBy" /> wrote and is still being written, or when the message carries material this deployment screens outgoing mail for.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the message carries, which refuses the draft rather than filing it unscreened.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write did not commit on any allowed attempt.</exception>
     /// <remarks>
@@ -102,7 +114,8 @@ public sealed class MailDraftBook
     /// the removal leaves one draft in the folder rather than two or none.
     /// </remarks>
     public async Task<MailDraftRecord> SaveAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId writtenBy,
         OutgoingEmailRequester author,
         ComposedMailDraft composed,
         MailDraftId? revises,
@@ -115,7 +128,7 @@ public sealed class MailDraftBook
 
         if (revises is { } revisedDraftId)
         {
-            await this.RequireRevisableAsync(account.Id, revisedDraftId, cancellationToken);
+            await this.RequireRevisableAsync(account, writtenBy, revisedDraftId, cancellationToken);
         }
 
         // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
@@ -155,6 +168,7 @@ public sealed class MailDraftBook
                     : await this.drafts.OpenAsync(
                         session,
                         account,
+                        writtenBy,
                         author,
                         composed.Recipients,
                         composed.Subject,
@@ -192,10 +206,11 @@ public sealed class MailDraftBook
 
     /// <summary>Reads the files staged against the draft a revision replaces, so the new revision carries them too.</summary>
     /// <param name="account">The account the caller's own resolution named, which the draft has to belong to.</param>
+    /// <param name="writtenBy">The user asking, who has to be the one the draft was written by.</param>
     /// <param name="revises">The draft being revised, or <see langword="null" /> where a new one is being written.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The staged files with their octets, empty for a new draft and for one nothing is attached to.</returns>
-    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft this account still holds as a revisable one.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft this account holds as a revisable one of <paramref name="writtenBy" />'s.</exception>
     /// <remarks>
     /// <para>
     /// A file is uploaded once and belongs to the draft rather than to one revision of it, so every composition after
@@ -203,16 +218,17 @@ public sealed class MailDraftBook
     /// boundary that composes a draft.
     /// </para>
     /// <para>
-    /// <b>The draft is established as this account's before a single octet is read.</b> The identifier arrived from
-    /// whoever asked, and the write beneath this establishes ownership too — but it does so after a composition that
-    /// these files are part of, so a read placed before it would carry another user's attachments into this request
+    /// <b>The draft is established as this user's own before a single octet is read.</b> The identifier arrived from
+    /// whoever asked, and the write beneath this establishes authorship too — but it does so after a composition that
+    /// these files are part of, so a read placed before it would carry another person's attachments into this request
     /// and answer a bound-exceeded refusal where a foreign identifier has to answer exactly as an unknown one. Reading
     /// nothing until the check has passed is what leaves the two indistinguishable, in the size of the answer as well
-    /// as in its code.
+    /// as in its code. The account alone would not settle it, two people being assignable to one mailbox.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<AuthoredEmailAttachment>> ReadStagedAttachmentsAsync(
         MailAccountId account,
+        MailUserId writtenBy,
         MailDraftId? revises,
         CancellationToken cancellationToken)
     {
@@ -221,17 +237,18 @@ public sealed class MailDraftBook
             return [];
         }
 
-        await this.RequireRevisableAsync(account, draftId, cancellationToken);
+        await this.RequireRevisableAsync(account, writtenBy, draftId, cancellationToken);
 
         return await this.drafts.ReadAttachmentContentAsync(draftId, cancellationToken);
     }
 
     /// <summary>Gives up one draft and takes the copies of it back out of the mailbox.</summary>
     /// <param name="draftId">The draft to give up.</param>
+    /// <param name="writtenBy">The user giving it up, who has to be the one the draft was written by.</param>
     /// <param name="cancellationToken">Cancels the write and the commands that follow it.</param>
     /// <returns>What settling the mailbox did, which is already durable by the time it is returned.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one to give up under that identifier.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one for <paramref name="writtenBy" /> to give up under that identifier.</exception>
     /// <remarks>
     /// <para>
     /// <b>Only a draft this system created can be given up here.</b> The identifier names a record MailFathom wrote, and
@@ -249,14 +266,23 @@ public sealed class MailDraftBook
     /// and keeping no record of where it came from. What stops such a send is cancelling the send, and until it is
     /// delivered or cancelled the draft stands — which is the same answer revising a promoted draft already gives.
     /// </para>
+    /// <para>
+    /// <b>A draft somebody else wrote is refused as one nobody holds</b>, the same answer and for the same reason
+    /// revising one gives: ADR 0014 keeps a draft on its author rather than on the mailbox, so once two people are
+    /// assigned one account the account no longer says whose draft it is, and telling a foreign draft apart from an
+    /// absent one would let a caller learn which drafts exist by asking to give them up. The author is asked here
+    /// rather than left to whichever collaborator a caller was wired to.
+    /// </para>
     /// </remarks>
     public async Task<MailDraftFilingResult> DiscardAsync(
         MailDraftId draftId,
+        MailUserId writtenBy,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
-        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft)
+        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft
+            || draft.User != writtenBy)
         {
             throw MailDraftRefusedException.NotFound();
         }
@@ -277,20 +303,24 @@ public sealed class MailDraftBook
         return await this.filer.SettleAsync(discarded, cancellationToken);
     }
 
-    /// <summary>Requires that the draft a revision names is one of this account's that is still being written.</summary>
+    /// <summary>Requires that the draft a revision names is one this user wrote in this account and is still writing.</summary>
     /// <remarks>
-    /// The three refusals are one answer on purpose. A draft of another account, a draft already given up, and a draft
-    /// nobody holds are all a caller naming something it may not revise, and telling them apart would let it learn
-    /// which drafts exist by asking to revise them.
+    /// The four refusals are one answer on purpose. A draft of another account, a draft another of the account's
+    /// assigned users wrote, a draft already given up, and a draft nobody holds are all a caller naming something it
+    /// may not revise, and telling them apart would let it learn which drafts exist by asking to revise them.
+    /// The author is asked as well as the account because ADR 0014 keeps a draft on the person rather than on the
+    /// mailbox: once two people are assigned one account, the account alone stops saying whose draft it is.
     /// </remarks>
     private async Task RequireRevisableAsync(
         MailAccountId accountId,
+        MailUserId writtenBy,
         MailDraftId draftId,
         CancellationToken cancellationToken)
     {
         if (await this.drafts.FindAsync(draftId, cancellationToken)
             is not { IsDiscarded: false, PromotedTo: null } draft
-            || draft.AccountId != accountId)
+            || draft.AccountId != accountId
+            || draft.User != writtenBy)
         {
             throw MailDraftRefusedException.NotFound();
         }

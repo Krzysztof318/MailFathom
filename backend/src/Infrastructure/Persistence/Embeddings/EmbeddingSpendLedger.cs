@@ -16,7 +16,10 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 [RequiresIntegrationCoverage]
 internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmbeddingSpendLedger
 {
-    /// <summary>Adds a period's spend, inserting the user's row the first time anything is charged to it.</summary>
+    /// <summary>The user column's value on the row carrying the deployment's own total, which names nobody.</summary>
+    private static readonly Guid DeploymentRow = Guid.Empty;
+
+    /// <summary>Adds a period's spend, inserting the row the first time anything is charged to it.</summary>
     /// <remarks>
     /// One statement rather than a read and a write, because the two workers that spend do so in separate transactions
     /// and a read-modify-write would let each of them overwrite the other's increment with a total that was already
@@ -46,6 +49,7 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
         CancellationToken cancellationToken)
     {
         var userId = user.Value;
+        var deploymentRow = DeploymentRow;
 
         var totals = await dbContext.EmbeddingSpendPeriods
             .AsNoTracking()
@@ -53,7 +57,7 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
             .GroupBy(_ => 1)
             .Select(rows => new EmbeddingSpendTotals(
                 rows.Sum(period => period.UserId == userId ? period.ConsumedInputCharacterCount : 0L),
-                rows.Sum(period => period.ConsumedInputCharacterCount)))
+                rows.Sum(period => period.UserId == deploymentRow ? period.ConsumedInputCharacterCount : 0L)))
             .SingleOrDefaultAsync(cancellationToken);
 
         return totals ?? EmbeddingSpendTotals.Unspent;
@@ -62,21 +66,26 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
     /// <inheritdoc />
     public async Task<long> ReadDeploymentConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
-        CancellationToken cancellationToken) =>
-        await dbContext.EmbeddingSpendPeriods
+        CancellationToken cancellationToken)
+    {
+        var deploymentRow = DeploymentRow;
+
+        return await dbContext.EmbeddingSpendPeriods
             .AsNoTracking()
-            .Where(period => period.PeriodStartsAt == periodStart)
+            .Where(period => period.PeriodStartsAt == periodStart && period.UserId == deploymentRow)
             .SumAsync(period => period.ConsumedInputCharacterCount, cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
-        MailUserId user,
+        IReadOnlyCollection<MailUserId> users,
         long inputCharacterCount,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(users);
         ArgumentOutOfRangeException.ThrowIfNegative(inputCharacterCount);
 
         if (inputCharacterCount == 0)
@@ -86,11 +95,29 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
 
         var sessionDbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
+        // The deployment's own row first, so what was sent is counted once whether the mailbox has one assigned user,
+        // several, or none. A loop over the users is what charges each of them in full, which is the per-user ceiling
+        // ADR 0014 asks for and is deliberately more than was sent.
+        await IncrementAsync(sessionDbContext, periodStart, DeploymentRow, inputCharacterCount, cancellationToken);
+
+        foreach (var user in users)
+        {
+            await IncrementAsync(sessionDbContext, periodStart, user.Value, inputCharacterCount, cancellationToken);
+        }
+    }
+
+    /// <summary>Issues one upsert, which is the whole of what a charge is.</summary>
+    private static Task<int> IncrementAsync(
+        MailFathomDbContext sessionDbContext,
+        DateTimeOffset periodStart,
+        Guid userId,
+        long inputCharacterCount,
+        CancellationToken cancellationToken) =>
+
         // All three values are parameters rather than composed text; only the identifiers, which come from the entity's
         // own constants, are part of the statement.
-        await sessionDbContext.Database.ExecuteSqlRawAsync(
+        sessionDbContext.Database.ExecuteSqlRawAsync(
             RecordSpendStatement,
-            [periodStart, user.Value, inputCharacterCount],
+            [periodStart, userId, inputCharacterCount],
             cancellationToken);
-    }
 }

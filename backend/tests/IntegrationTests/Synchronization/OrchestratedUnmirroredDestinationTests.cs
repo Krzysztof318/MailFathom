@@ -60,8 +60,7 @@ public sealed class OrchestratedUnmirroredDestinationTests(MailFathomOrchestrati
         var binding = await services.InScopeAsync(
             async (scope, token) =>
             {
-                var account = SyntheticMailAccount.Account;
-                var accountId = account.Id;
+                var accountId = SyntheticMailAccount.Account;
                 var policy = scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(accountId);
                 var configuredPath = RemoteFolderPath.Create(folderName);
 
@@ -73,7 +72,7 @@ public sealed class OrchestratedUnmirroredDestinationTests(MailFathomOrchestrati
                     configuredPath,
                     MailFolderParticipation.MappedOnly);
                 var resolution = await scope.GetRequiredService<MailFolderResolver>()
-                    .ResolveAsync(account, mapping, policy, token);
+                    .ResolveAsync(accountId, mapping, policy, token);
 
                 var destinationPath = resolution.Resolution!.RemotePath;
 
@@ -83,7 +82,7 @@ public sealed class OrchestratedUnmirroredDestinationTests(MailFathomOrchestrati
                 await session.CopyAsync(copied, destinationPath, new InMemoryMailboxMutationJournal(), token);
 
                 return await scope.GetRequiredService<IMailFolderResolutionStore>()
-                    .GetCurrentResolutionAsync(account, alias, token);
+                    .GetCurrentResolutionAsync(accountId, alias, token);
             },
             cancellationToken);
 

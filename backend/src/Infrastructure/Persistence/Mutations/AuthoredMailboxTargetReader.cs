@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -50,7 +49,6 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             .Where(email => email.RemoteExpungeObservedAt == null)
             .Select(email => new
             {
-                email.UserId,
                 email.MailboxAccountId,
                 email.UidValidity,
                 email.Uid,
@@ -73,7 +71,6 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             RemoteFolderPath.Create(located.RemotePath));
 
         return new AuthoredMailboxTarget(
-            MailUserId.Create(located.UserId),
             EmailOccurrenceId.Create(
                 MailAccountId.Create(located.MailboxAccountId),
                 folder.Id,

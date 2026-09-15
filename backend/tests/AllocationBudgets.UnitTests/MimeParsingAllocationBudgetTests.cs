@@ -40,7 +40,7 @@ public sealed class MimeParsingAllocationBudgetTests
             new NoTrustedAuthentication(),
             localSenderVerifier: null);
 
-        var account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+        var account = MailAccountId.Create("primary");
         var content = LargeSyntheticMessage.AsFetched();
         var cancellationToken = TestContext.Current.CancellationToken;
         var budgetBytes = (long)(content.RawMime.Length * MaximumAllocatedShareOfMessage);

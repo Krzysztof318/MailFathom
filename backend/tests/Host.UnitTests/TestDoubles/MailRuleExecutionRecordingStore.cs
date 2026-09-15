@@ -40,7 +40,7 @@ internal sealed class MailRuleExecutionRecordingStore : IMailRuleExecutionStore
 
     /// <inheritdoc />
     public Task<int> EraseEvaluatedBeforeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset evaluatedBefore,
         int limit,
         CancellationToken cancellationToken) =>

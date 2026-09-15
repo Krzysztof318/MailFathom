@@ -65,6 +65,13 @@ internal sealed class SpamClassificationHarness
     /// <summary>Gets the clock every stamp is read from, which stands still unless a test advances it.</summary>
     internal FakeTimeProvider Clock { get; }
 
+    /// <summary>Gets who reaches which mailbox, which is how a mailbox's classification settings are resolved.</summary>
+    /// <remarks>
+    /// Empty until a test states an assignment, and a mailbox assigned to nobody classifies nothing — so a suite
+    /// arranging a verdict assigns the mailbox it writes into rather than inheriting a roster it never stated.
+    /// </remarks>
+    internal StubMailAccountAssignments Assignments { get; } = new();
+
     /// <summary>Builds content the classification only hands to its collaborators, so the bytes themselves say nothing.</summary>
     /// <returns>The stored content.</returns>
     internal static StoredEmailContent SomeContent()
@@ -85,7 +92,6 @@ internal sealed class SpamClassificationHarness
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(call => new SpamActionOccurrence(
                 call.Arg<StoredEmailId>(),
-                SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(
                     accountId,
                     new MailFolderResolutionId(folderAlias, MailFolderResolutionGeneration.First),

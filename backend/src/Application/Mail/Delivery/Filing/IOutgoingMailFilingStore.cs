@@ -130,7 +130,7 @@ public interface IOutgoingMailFilingStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -159,7 +159,7 @@ public interface IOutgoingMailFilingStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutgoingEmailId>> ReadDuplicatedSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset appendedSince,
         int limit,
         CancellationToken cancellationToken);

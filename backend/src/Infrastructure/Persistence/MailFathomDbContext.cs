@@ -92,7 +92,7 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<StoredSecretEntity> StoredSecrets => this.Set<StoredSecretEntity>();
 
-    internal DbSet<UserStoredContentEntity> UserStoredContent => this.Set<UserStoredContentEntity>();
+    internal DbSet<AccountStoredContentEntity> AccountStoredContent => this.Set<AccountStoredContentEntity>();
 
     internal DbSet<StoredContentClaimEntity> StoredContentClaims => this.Set<StoredContentClaimEntity>();
 
@@ -241,7 +241,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());
         modelBuilder.ApplyConfiguration(new ClientSignalTicketConfiguration());
         modelBuilder.ApplyConfiguration(new ClientSessionConfiguration());
-        modelBuilder.ApplyConfiguration(new UserStoredContentConfiguration());
+        modelBuilder.ApplyConfiguration(new AccountStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredContentClaimConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());

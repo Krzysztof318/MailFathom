@@ -66,7 +66,6 @@ internal sealed class MailboxMutationAuditEntryConfiguration : IEntityTypeConfig
         // an index of its own, which keeps the write cost of an append to one index beyond the key.
         entity.HasIndex(entry => new
         {
-            entry.UserId,
             entry.MailboxAccountId,
             entry.CompletedAt,
             entry.Id,

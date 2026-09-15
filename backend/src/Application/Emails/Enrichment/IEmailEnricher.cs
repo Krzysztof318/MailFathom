@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Enrichment;
 
@@ -32,7 +32,7 @@ public interface IEmailEnricher
     /// </remarks>
     bool IsActive { get; }
 
-    /// <summary>Derives one message's marks, written in the language the person they are for reads.</summary>
+    /// <summary>Derives one message's marks, written in the language the mailbox they were found in is read in.</summary>
     /// <param name="email">The message and the passages the derivation reads.</param>
     /// <param name="language">The language every sentence the derivation produces is written in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -40,12 +40,13 @@ public interface IEmailEnricher
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// The language is the caller's rather than the message's, and it is an argument rather than a property of
-    /// <see cref="EnrichableEmail" /> because it is a fact about whom the derivation is for. What that record carries
-    /// stays what a derivation reads, which is what keeps the person out of the text sent to a provider.
+    /// The language is the mailbox's rather than the message's, and it is an argument rather than a property of
+    /// <see cref="EnrichableEmail" /> because it is a fact about which mailbox the derivation is of. One derivation is what
+    /// every user assigned that mailbox reads, and what the record carries stays what a derivation reads, which is
+    /// what keeps both the person and the mailbox out of the text sent to a provider.
     /// </remarks>
     Task<EmailEnrichmentDerivation> DeriveAsync(
         EnrichableEmail email,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken);
 }

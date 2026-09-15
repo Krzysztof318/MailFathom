@@ -8,7 +8,7 @@ using MailFathom.Domain.Folders;
 namespace MailFathom.Application.Contacts.Collection;
 
 /// <summary>What one synchronization run of one folder collects under.</summary>
-/// <param name="Account">The account being synchronized, named by its user and its identifier, which is what a read of its mail narrows on.</param>
+/// <param name="Account">The account being synchronized, by its generated identifier, which is what a read of its mail narrows on.</param>
 /// <param name="FolderRole">The role the folder plays, or <see langword="null" /> when configuration gave it none.</param>
 /// <param name="Budget">How many contacts this run may still record.</param>
 /// <remarks>
@@ -20,6 +20,6 @@ namespace MailFathom.Application.Contacts.Collection;
 /// also what makes the bound the run's — a value built per message would bound nothing.
 /// </remarks>
 public sealed record ContactCollectionRun(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     MailFolderSpecialUse? FolderRole,
     ContactCollectionBudget Budget);

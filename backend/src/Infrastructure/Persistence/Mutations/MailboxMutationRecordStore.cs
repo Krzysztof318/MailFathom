@@ -7,7 +7,6 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -76,7 +75,6 @@ internal sealed class MailboxMutationRecordStore(
 
             // Copied off the folder row this occurrence was resolved through, which is the account's own binding. A
             // change belongs to the user whose mailbox it was performed in.
-            UserId = folder.UserId,
             MailFolderId = folder.Id,
             MailFolder = folder,
             UidValidity = request.Occurrence.UidValidity.Value,
@@ -150,29 +148,32 @@ internal sealed class MailboxMutationRecordStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// The user is part of the predicate rather than a check over what came back, so the database never returns a row
-    /// belonging to somebody else and there is nothing in this process for a later mistake to leak. The folder binding
-    /// is included because rebuilding a record needs the alias and generation its occurrence identity is made of.
+    /// The caller's accounts are part of the predicate rather than a check over what came back, so the database never
+    /// returns a row from a mailbox the caller is not assigned and there is nothing in this process for a later
+    /// mistake to leak. The folder binding is included because rebuilding a record needs the alias and generation its
+    /// occurrence identity is made of.
     /// </remarks>
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(recordIds);
 
-        if (recordIds.Count == 0)
+        if (accounts.Count == 0 || recordIds.Count == 0)
         {
             return [];
         }
 
-        var userValue = user.Value;
+        var accountValues = AccountValuesOf(accounts);
         var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
 
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
+            .Where(mutation => accountValues.Contains(mutation.MailboxAccountId)
+                && identifiers.Contains(mutation.Id))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -188,14 +189,15 @@ internal sealed class MailboxMutationRecordStore(
     /// </remarks>
     public async Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(recordIds);
 
-        if (recordIds.Count == 0)
+        if (accounts.Count == 0 || recordIds.Count == 0)
         {
             return [];
         }
@@ -203,16 +205,17 @@ internal sealed class MailboxMutationRecordStore(
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
-        var userValue = user.Value;
+        var accountValues = AccountValuesOf(accounts);
 
         // One query for the whole call rather than one per record: a caller withdrawing a full batch is the ordinary
         // case here, and the commit this joins retries as a whole, so a round trip per record would be paid again on
         // every attempt. Tracked, because the stage this may write has to be part of the caller's commit, and joined to
-        // the folder because rebuilding the record needs the binding its occurrence identity is made of. The user is
-        // part of the predicate so a row belonging to somebody else is absent rather than read and then rejected.
+        // the folder because rebuilding the record needs the binding its occurrence identity is made of. The caller's
+        // accounts are part of the predicate so a row outside them is absent rather than read and then rejected.
         var entities = await writeContext.MailboxMutations
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
+            .Where(mutation => accountValues.Contains(mutation.MailboxAccountId)
+                && identifiers.Contains(mutation.Id))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -234,14 +237,15 @@ internal sealed class MailboxMutationRecordStore(
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(recordIds);
 
-        if (recordIds.Count == 0)
+        if (accounts.Count == 0 || recordIds.Count == 0)
         {
             return [];
         }
@@ -249,14 +253,15 @@ internal sealed class MailboxMutationRecordStore(
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
-        var userValue = user.Value;
+        var accountValues = AccountValuesOf(accounts);
 
         // Read exactly as a withdrawal reads, and for the same reasons: one query for the whole call, tracked so the
         // write is part of the caller's commit, joined to the folder because rebuilding the record needs the binding,
-        // and narrowed by the user so somebody else's row is absent rather than read and then rejected.
+        // and narrowed by the caller's accounts so a row outside them is absent rather than read and then rejected.
         var entities = await writeContext.MailboxMutations
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
+            .Where(mutation => accountValues.Contains(mutation.MailboxAccountId)
+                && identifiers.Contains(mutation.Id))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -337,29 +342,28 @@ internal sealed class MailboxMutationRecordStore(
 
     /// <inheritdoc />
     public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int limit,
         CancellationToken cancellationToken) =>
         this.ReadOutstandingOfAsync(account, mutationName: null, limit, cancellationToken);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken) =>
         this.ReadOutstandingOfAsync(account, mutation.Name, limit, cancellationToken);
 
     private async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingOfAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         string? mutationName,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         // Read once and compared in the query, so every row in one page is judged against one instant rather than
         // against whatever the clock said when the provider reached it.
@@ -370,8 +374,7 @@ internal sealed class MailboxMutationRecordStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue &&
-                mutation.MailboxAccountId == accountValue &&
+            .Where(mutation => mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled &&
                 (mutationName == null || mutation.Mutation == mutationName) &&
@@ -395,19 +398,17 @@ internal sealed class MailboxMutationRecordStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         // Grouped by the stored stage rather than by the lifecycle, because the lifecycle is derived by a domain method
         // the provider cannot translate. Collapsing the three converging stages happens once the rows are here, over an
         // answer that is at most one row per mutation per stage.
         var groupedStages = await readContext.MailboxMutations
             .AsNoTracking()
-            .Where(mutation => mutation.UserId == userValue &&
-                mutation.MailboxAccountId == accountValue &&
+            .Where(mutation => mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled)
             .GroupBy(mutation => new { mutation.Mutation, mutation.Stage })
@@ -495,6 +496,9 @@ internal sealed class MailboxMutationRecordStore(
                 mutation.Mutation == mutationName,
             cancellationToken);
     }
+
+    private static string[] AccountValuesOf(IReadOnlyList<MailAccountId> accounts) =>
+        [.. accounts.Select(account => account.Value).Distinct(StringComparer.Ordinal)];
 
     private static async Task<MailboxMutationEntity> RequireEntityAsync(
         IPersistenceSession session,

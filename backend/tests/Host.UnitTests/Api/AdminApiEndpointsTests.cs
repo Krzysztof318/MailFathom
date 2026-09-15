@@ -554,6 +554,7 @@ public sealed class AdminApiEndpointsTests
         var timeProvider = new FakeTimeProvider();
         var spendGate = new EmbeddingSpendGate(
             Substitute.For<IEmbeddingSpendLedger>(),
+            new StubMailAccountAssignments(),
             EmbeddingSpendBudget.Unbounded,
             timeProvider);
         var retryPolicy = new OptimisticConcurrencyRetryPolicy(

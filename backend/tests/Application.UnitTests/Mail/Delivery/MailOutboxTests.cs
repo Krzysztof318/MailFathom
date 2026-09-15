@@ -35,8 +35,8 @@ public sealed class MailOutboxTests
     /// <summary>The literal the screened deployment's detector reports, which stands in for a credential in a message.</summary>
     private const string ScreenedMarker = "AKIAEXAMPLEKEY";
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Authored = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -240,6 +240,7 @@ public sealed class MailOutboxTests
 
         var request = OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Rule("archive", "r1", StoredEmailId.Create(Guid.CreateVersion7())),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
 
@@ -791,6 +792,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Schedule(RecurringSendId.Create(Guid.CreateVersion7()), DueAt),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
@@ -801,6 +803,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Rule("auto-reply", "revision-1", StoredEmailId.Create(Guid.CreateVersion7())),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
@@ -820,6 +823,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command(invocationIdentity),
             recipients);
     }

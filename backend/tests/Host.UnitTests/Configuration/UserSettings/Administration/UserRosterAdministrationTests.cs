@@ -100,12 +100,12 @@ public sealed class UserRosterAdministrationTests
 
     /// <summary>
     /// The record rather than only the envelope, because a user nothing declares is served from their own record or
-    /// from nothing at all — and the marker beside the document is what the next start reads to decide that. What it
-    /// carries is the one property a record must state, so a deployment that has just recorded its first user holds a
-    /// record its own gate accepts rather than one it refuses at the next start.
+    /// from nothing at all — and the marker beside the document is what the next start reads to decide that. It
+    /// declares nothing, because everything a record can state is the user's own to state later and a mailbox is a
+    /// record of its own; what matters is that the document exists and that the next start's gate accepts it.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_CommitsARecordOfTheirLanguageBesideTheEnvelope()
+    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_CommitsAnEmptyRecordBesideTheEnvelope()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -116,7 +116,7 @@ public sealed class UserRosterAdministrationTests
         // Assert
         await harness.Documents.Received(1).CommitAsync(
             outcome.User,
-            """{"Language":"English"}""",
+            "{}",
             MailUserEndpointAccess.Everywhere,
             1,
             Arg.Any<CancellationToken>());

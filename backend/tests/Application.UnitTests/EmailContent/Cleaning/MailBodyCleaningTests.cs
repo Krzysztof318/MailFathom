@@ -327,14 +327,14 @@ public sealed class MailBodyCleaningTests
     private static MailboxScopeResolver ScopeResolverOver(EmailSummary? summary)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns(
+        accountCatalog.AssignedAccounts.Returns(
             [SyntheticServedAccount.Of(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId))]);
 
         return new MailboxScopeResolver(
             accountCatalog,
             StubMailFolderParticipation.Mapping(summary is null
                 ? []
-                : [new MailFolderIdentity(summary.AccountId, summary.FolderAlias)]),
+                : [new MailFolderIdentity(summary.Account, summary.FolderAlias)]),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing);
     }

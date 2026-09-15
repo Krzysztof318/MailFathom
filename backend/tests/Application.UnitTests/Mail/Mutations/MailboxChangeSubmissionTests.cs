@@ -14,7 +14,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -24,8 +23,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// <summary>Covers the one place a change's executor is chosen, and what a held account's local commit does for each kind of change.</summary>
 public sealed class MailboxChangeSubmissionTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderResolution Inbox =
         MailFolderResolution.FirstBindingOf(MailFolderAlias.Create("INBOX"), RemoteFolderPath.Create("INBOX"));
@@ -35,7 +34,7 @@ public sealed class MailboxChangeSubmissionTests
     private static readonly StoredEmailId Email = StoredEmailId.Create(Guid.CreateVersion7());
 
     private static readonly EmailOccurrenceId Occurrence =
-        EmailOccurrenceId.Create(Account.Id, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(41));
+        EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(41));
 
     private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Command("call-1");
 
@@ -122,7 +121,7 @@ public sealed class MailboxChangeSubmissionTests
     {
         // Arrange
         this.Store();
-        var request = MailboxMutationRequest.SetFlagged(Email, Account.User, Occurrence, Requester, isFlagged: true);
+        var request = MailboxMutationRequest.SetFlagged(Email, Occurrence, Requester, isFlagged: true);
 
         // Act
         var submitted = await this.Held().SubmitAsync(this.session, request, null, null, Token);
@@ -147,9 +146,9 @@ public sealed class MailboxChangeSubmissionTests
         var named = AuthoredMailKeywords.Create([keyword]);
         var request = direction switch
         {
-            "add" => MailboxMutationRequest.AddKeywords(Email, Account.User, Occurrence, Requester, named),
-            "remove" => MailboxMutationRequest.RemoveKeywords(Email, Account.User, Occurrence, Requester, named),
-            _ => MailboxMutationRequest.SetKeywords(Email, Account.User, Occurrence, Requester, named),
+            "add" => MailboxMutationRequest.AddKeywords(Email, Occurrence, Requester, named),
+            "remove" => MailboxMutationRequest.RemoveKeywords(Email, Occurrence, Requester, named),
+            _ => MailboxMutationRequest.SetKeywords(Email, Occurrence, Requester, named),
         };
 
         // Act
@@ -279,7 +278,6 @@ public sealed class MailboxChangeSubmissionTests
         var submission = this.Held();
         var ruleDelete = MailboxMutationRequest.Delete(
             Email,
-            Account.User,
             Occurrence,
             MailboxMutationRequester.Rule("tidy-newsletters", "revision-1"),
             AuthoredDeleteEmailDisposition.RetainLocalCopy);
@@ -301,7 +299,7 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.Store();
         var junk = JunkDestination();
-        var request = MailboxMutationRequest.Copy(Email, Account.User, Occurrence, Requester, junk.Path);
+        var request = MailboxMutationRequest.Copy(Email, Occurrence, Requester, junk.Path);
 
         // Act
         var submitted = await this.Held().SubmitAsync(this.session, request, junk, null, Token);
@@ -330,7 +328,7 @@ public sealed class MailboxChangeSubmissionTests
         this.Store();
         var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
         auditSettings
-            .GetAuditSettings(Account.Id)
+            .GetAuditSettings(Account)
             .Returns(new MailboxMutationAuditSettings(IsEnabled: true, TimeSpan.FromDays(30)));
 
         // Act
@@ -394,7 +392,7 @@ public sealed class MailboxChangeSubmissionTests
         await submission.SubmitAsync(this.session, DeleteRequest(), null, null, Token);
         var submitted = await submission.SubmitAsync(this.session, DeleteRequest(), null, Now.AddSeconds(30), Token);
         var readByThePass = submitted.Record!;
-        await this.records.WithdrawAsync(this.session, Account.User, [readByThePass.Id], Token);
+        await this.records.WithdrawAsync(this.session, [Account], [readByThePass.Id], Token);
 
         // Act
         var erasure = submission.EraseAsync(this.session, readByThePass, Token);
@@ -455,14 +453,13 @@ public sealed class MailboxChangeSubmissionTests
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static MailboxMutationRequest SeenRequest(bool isSeen) =>
-        MailboxMutationRequest.SetSeen(Email, Account.User, Occurrence, Requester, isSeen);
+        MailboxMutationRequest.SetSeen(Email, Occurrence, Requester, isSeen);
 
     private static MailboxMutationRequest MoveRequest(RemoteFolderPath destination) =>
-        MailboxMutationRequest.Relocate(Email, Account.User, Occurrence, Requester, destination);
+        MailboxMutationRequest.Relocate(Email, Occurrence, Requester, destination);
 
     private static MailboxMutationRequest DeleteRequest() => MailboxMutationRequest.Delete(
         Email,
-        Account.User,
         Occurrence,
         Requester,
         AuthoredDeleteEmailDisposition.RetainLocalCopy);

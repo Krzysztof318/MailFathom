@@ -115,9 +115,9 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Keyed exactly as the walk's position is, by the user, the account, and the folder, with <c>*</c> standing for the
-    /// whole account. A walk of one folder and a walk of the whole account are two runs with two positions, so they are
-    /// two leases as well.
+    /// Keyed exactly as the walk's position is, by the account and the folder, with <c>*</c> standing for the whole
+    /// account. A walk of one folder and a walk of the whole account are two runs with two positions, so they are two
+    /// leases as well. No user stands in it: a mailbox two people are assigned is one walk rather than two.
     /// </para>
     /// <para>
     /// A scope the lease cannot carry — longer than it leaves room for, or an account identifier holding a control
@@ -130,10 +130,9 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var user = scope.Account.User.Value;
-        var accountId = scope.Account.Id.Value;
+        var accountId = scope.Account.Value;
         var folder = scope.Folder?.Value ?? "*";
-        var readableScope = string.Create(CultureInfo.InvariantCulture, $"mail-rederivation/{user}/{accountId}/{folder}");
+        var readableScope = string.Create(CultureInfo.InvariantCulture, $"mail-rederivation/{accountId}/{folder}");
 
         if (readableScope.Length <= WorkScope.MaximumLength && !accountId.Any(char.IsControl))
         {
@@ -142,7 +141,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
 
         var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{accountId}/{folder}")));
 
-        return WorkScope.Create(string.Create(CultureInfo.InvariantCulture, $"mail-rederivation/{user}/sha256-{digest}"));
+        return WorkScope.Create(string.Create(CultureInfo.InvariantCulture, $"mail-rederivation/sha256-{digest}"));
     }
 
     /// <inheritdoc />
@@ -162,14 +161,14 @@ public sealed class StoredMailRederivationHandler : IJobHandler
                 nameof(payload));
         }
 
-        StoredMailScope scope = new(named.ToAccountIdentity(), named.ToFolderAlias());
+        StoredMailScope scope = new(named.ToAccountId(), named.ToFolderAlias());
 
         if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true } run)
         {
             return;
         }
 
-        using var runScope = this.telemetry.BeginRun(scope.Account.Id, scope.Folder);
+        using var runScope = this.telemetry.BeginRun(scope.Account, scope.Folder);
 
         var walk = await this.WalkUnderLeaseAsync(run, runScope, cancellationToken);
 

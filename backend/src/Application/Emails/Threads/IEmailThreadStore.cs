@@ -32,7 +32,7 @@ public interface IEmailThreadStore
     /// <returns>One entry per identifier that is bound, and nothing for the ones that are not.</returns>
     Task<IReadOnlyList<EmailThreadBinding>> FindBindingsAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> identifiers,
         CancellationToken cancellationToken);
 
@@ -43,7 +43,7 @@ public interface IEmailThreadStore
     /// <returns>The new conversation's identity.</returns>
     Task<EmailThreadId> StartThreadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 
     /// <summary>Binds identifiers this account does not bind yet to one conversation.</summary>
@@ -54,7 +54,7 @@ public interface IEmailThreadStore
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     Task BindIdentifiersAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> identifiers,
         EmailThreadId threadId,
         CancellationToken cancellationToken);

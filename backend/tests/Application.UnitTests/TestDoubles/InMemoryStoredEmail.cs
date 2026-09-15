@@ -32,10 +32,10 @@ internal sealed record InMemoryStoredEmail(EmailSummary Summary, IReadOnlyList<s
 
     /// <summary>Narrows by the account and the alias together, the way the PostgreSQL predicate this stands in for does.</summary>
     private bool MatchesScope(MailboxEmailSelection selection) =>
-        (selection.Scope.AccountIds.Count is 0 || selection.Scope.AccountIds.Contains(this.Summary.AccountId))
+        (selection.Scope.AccountIds.Count is 0 || selection.Scope.AccountIds.Contains(this.Summary.Account))
         && (selection.Scope.SelectedFolders.Count is 0
             || selection.Scope.SelectedFolders.Contains(
-                new MailFolderIdentity(this.Summary.AccountId, this.Summary.FolderAlias)));
+                new MailFolderIdentity(this.Summary.Account, this.Summary.FolderAlias)));
 
     private bool MatchesParticipants(MailboxEmailSelection selection) =>
         (selection.SenderNormalizedAddress is not { } sender || this.SenderMatches(sender))

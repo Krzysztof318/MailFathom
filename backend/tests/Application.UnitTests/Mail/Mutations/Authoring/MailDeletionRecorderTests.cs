@@ -30,8 +30,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 /// </remarks>
 public sealed class MailDeletionRecorderTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderAlias Trash = MailFolderAlias.Create("Trash");
 
@@ -87,7 +87,7 @@ public sealed class MailDeletionRecorderTests
         AuthoredDeleteEmailDisposition configured)
     {
         // Arrange
-        this.dispositions.GetAuthoredDeleteDisposition(Account.Id).Returns(configured);
+        this.dispositions.GetAuthoredDeleteDisposition(Account).Returns(configured);
         var recorder = this.Recorder(TargetIn(Trash));
 
         // Act
@@ -158,7 +158,7 @@ public sealed class MailDeletionRecorderTests
     {
         // Arrange
         this.dispositions
-            .GetAuthoredDeleteDisposition(Account.Id)
+            .GetAuthoredDeleteDisposition(Account)
             .Throws(new InvalidOperationException("No account carries the identifier personal."));
         var recorder = this.Recorder(TargetIn(Trash));
 
@@ -213,7 +213,7 @@ public sealed class MailDeletionRecorderTests
         await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
-        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
 
         Assert.True(waiting.Token.IsCancellationRequested);
     }
@@ -237,7 +237,7 @@ public sealed class MailDeletionRecorderTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
 
         Assert.False(waiting.Token.IsCancellationRequested);
         Assert.Equal(
@@ -274,7 +274,7 @@ public sealed class MailDeletionRecorderTests
         await recorder.RecordAsync(LocalEmail, Requester, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
-        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
 
         Assert.True(waiting.Token.IsCancellationRequested);
         Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
@@ -311,7 +311,7 @@ public sealed class MailDeletionRecorderTests
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDelete);
-        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id));
+        var accountCatalog = AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -325,9 +325,9 @@ public sealed class MailDeletionRecorderTests
                 accountCatalog,
                 StubMailFolderParticipation
                     .Mapping(
-                        new MailFolderIdentity(Account.Id, Trash),
-                        new MailFolderIdentity(Account.Id, MailFolderAlias.Create("INBOX")))
-                    .Hiding(new MailFolderIdentity(Account.Id, Withheld)),
+                        new MailFolderIdentity(Account, Trash),
+                        new MailFolderIdentity(Account, MailFolderAlias.Create("INBOX")))
+                    .Hiding(new MailFolderIdentity(Account, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
@@ -346,8 +346,7 @@ public sealed class MailDeletionRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            Account.User,
-            EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
+            EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }
 

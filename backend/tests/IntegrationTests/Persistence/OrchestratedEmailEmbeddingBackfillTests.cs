@@ -238,7 +238,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
                 .OpenAsync(
                     session,
                     MailboxMutationRequest.Relocate(
-                        storedEmailId, SyntheticMailAccount.User,
+                        storedEmailId,
                         occurrenceId,
                         MailboxMutationRequester.Rule("file-the-newsletters", "1"),
                         RemoteFolderPath.Create("Archive")),
@@ -340,8 +340,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
-                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    session, SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,
                         subject,

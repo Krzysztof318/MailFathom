@@ -31,8 +31,8 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// </remarks>
 public sealed class MailOutboxSignal
 {
-    private readonly Channel<MailAccountIdentity> accounts;
-    private readonly HashSet<MailAccountIdentity> pending = [];
+    private readonly Channel<MailAccountId> accounts;
+    private readonly HashSet<MailAccountId> pending = [];
     private readonly Lock gate = new();
 
     /// <summary>Creates the queue at the depth this deployment allows it.</summary>
@@ -46,7 +46,7 @@ public sealed class MailOutboxSignal
         // dropping mode answers true and loses the signal without telling anybody. Nothing here ever waits, because
         // nothing calls WriteAsync. One reader, because one loop takes the passes and the ceiling on work in flight is
         // the pass's own.
-        this.accounts = Channel.CreateBounded<MailAccountIdentity>(
+        this.accounts = Channel.CreateBounded<MailAccountId>(
             new BoundedChannelOptions(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -58,13 +58,13 @@ public sealed class MailOutboxSignal
     public int Depth => this.accounts.Reader.Count;
 
     /// <summary>Says that an account has something outstanding to deliver.</summary>
-    /// <param name="account">The account whose outbox is worth a pass, named by its user and its identifier.</param>
+    /// <param name="account">The account whose outbox is worth a pass, by its generated identifier.</param>
     /// <returns><see langword="true" /> when the account is queued for a pass or was already queued for one; <see langword="false" /> when the queue was full and the signal was refused.</returns>
     /// <remarks>
     /// An account already waiting is reported as signalled, because it is: the pass it is waiting for reads the outbox
     /// rather than the signal, so it will find whatever was written between the two calls.
     /// </remarks>
-    public bool Signal(MailAccountIdentity account)
+    public bool Signal(MailAccountId account)
     {
         lock (this.gate)
         {
@@ -103,7 +103,7 @@ public sealed class MailOutboxSignal
     /// shutdown, and the loop reading it would never end.
     /// </para>
     /// </remarks>
-    public async IAsyncEnumerable<MailAccountIdentity> ReadAllAsync(
+    public async IAsyncEnumerable<MailAccountId> ReadAllAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await foreach (var account in this.accounts.Reader.ReadAllAsync(cancellationToken))

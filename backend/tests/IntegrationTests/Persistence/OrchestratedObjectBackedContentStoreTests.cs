@@ -494,7 +494,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
@@ -603,7 +603,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, placement.ByteLength),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

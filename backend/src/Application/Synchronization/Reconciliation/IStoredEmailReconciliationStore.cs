@@ -51,7 +51,7 @@ public interface IStoredEmailReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,

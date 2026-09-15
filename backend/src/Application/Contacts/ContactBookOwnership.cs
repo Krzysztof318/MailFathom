@@ -19,21 +19,23 @@ namespace MailFathom.Application.Contacts;
 /// A caller admitted on a surface that serves one person their own mail is acting for that user, and their book is
 /// that user's. Two principals carry no user and reach the book all the same: the deployment administrator, whose
 /// acts are the deployment's, and this process's own identity, under which collection records the people an account
-/// corresponds with. Both resolve to the user this deployment serves, because while mail accounts, users, and
-/// credentials are declared in configuration a deployment holds exactly one user record and every account it
-/// synchronizes is that user's — so the book an operator manages and the book collection writes into are that one
-/// person's book rather than an unscoped one. The invariant is established before the host serves anything, which is
-/// what makes this a resolution rather than an assumption.
+/// corresponds with. Both resolve to the sole user this deployment serves where it serves exactly one, so the book an
+/// operator manages and the book collection writes into are that person's book rather than an unscoped one. Where the
+/// roster holds several, there is no sole user for an act carrying none to be attributed to and
+/// <see cref="IDeploymentMailUserSource" /> refuses rather than choosing one — which is what keeps this a
+/// resolution rather than an assumption now that a deployment holds as many user records as it was given and a
+/// mailbox is assigned to however many of them an administrator assigned it to.
 /// </para>
 /// <para>
-/// It is deliberately not the empty answer <see cref="Accounts.OwnedMailAccountCatalog" /> gives a caller acting for another
+/// It is deliberately not the empty answer <see cref="Accounts.AssignedMailAccountCatalog" /> gives a caller acting for another
 /// user. There the question is which of the accounts this deployment serves belong to the caller, and nobody's is a
 /// meaningful answer; here the question is which book to read, and a book belonging to nobody is not one. What a caller
 /// acting for another user gets is that user's own book — empty until they write in it — rather than this one's.
 /// </para>
 /// <para>
-/// When accounts, users, and credentials move into the database together, the administrative surface names the user
-/// it is acting for and collection reads the account's own. This is the one place that changes.
+/// What is left for a deployment serving several is a contact book of its own for work that acts for nobody, or an
+/// administrative surface that names the user it is acting for. Neither is decided here, and until one of them is
+/// this is the place that states the limit rather than the place that hides it.
 /// </para>
 /// </remarks>
 public sealed class ContactBookOwnership

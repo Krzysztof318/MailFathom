@@ -44,16 +44,16 @@ internal static class JobEnqueueStatement
     /// <summary>How far past its user's latest waiting turn a newly enqueued job is placed.</summary>
     /// <remarks>
     /// <para>
-    /// The rate at which one user may claim ground ahead of the clock: a second of turn per job. A user enqueuing
-    /// nothing sits on the instant its work becomes available, so a deployment serving one user claims in the order it
-    /// always did, and a user enqueuing a thousand jobs at once holds turns spread over the next thousand seconds
-    /// rather than a thousand turns at the same instant. That is what lets another user's due job, whose turn is the
-    /// instant it arrived, overtake the part of the backlog whose turn has not come.
+    /// The rate at which one mailbox may claim ground ahead of the clock: a second of turn per job. An account
+    /// enqueuing nothing sits on the instant its work becomes available, so a deployment serving one mailbox claims
+    /// in the order it always did, and an account enqueuing a thousand jobs at once holds turns spread over the next
+    /// thousand seconds rather than a thousand turns at the same instant. That is what lets another mailbox's due
+    /// job, whose turn is the instant it arrived, overtake the part of the backlog whose turn has not come.
     /// </para>
     /// <para>
     /// A second rather than a tuned figure, because what the spacing has to be smaller than is how fast the deployment
-    /// drains one user's work, and every deployment that keeps up at all drains more than one job per second per
-    /// active user. Larger would interleave more coarsely without bounding anything further; smaller would let a
+    /// drains one mailbox's work, and every deployment that keeps up at all drains more than one job per second per
+    /// active mailbox. Larger would interleave more coarsely without bounding anything further; smaller would let a
     /// backlog claim more of the clock than the workers can serve, which is the FIFO behaviour this replaces.
     /// </para>
     /// </remarks>
@@ -90,8 +90,7 @@ internal static class JobEnqueueStatement
 
         var jobTypeName = request.JobType.Name;
         var idempotencyKey = request.Key.Value;
-        var userId = request.Account?.User.Value;
-        var accountId = request.Account?.Id.Value;
+        var accountId = request.Account?.Value;
         var requestedAvailableAt = request.AvailableAt;
         var pending = nameof(JobState.Pending);
         var claimableStates = new[] { pending, nameof(JobState.Claimed) };
@@ -99,30 +98,27 @@ internal static class JobEnqueueStatement
         var traceParent = enqueuedTrace?.TraceParent;
         var traceState = enqueuedTrace?.TraceState;
 
-        // The user is a column of the row rather than something this statement looks up: whoever asked for the work
-        // resolved the account through a catalog, so writing it here is a read of mailbox_accounts that does not happen
-        // and a row that can never say an account without saying whose it is.
-        //
-        // The turn is taken from the queue's own user column, walking the claim index backwards and stopping at the
-        // first row. That is one index read where the previous form needed a lateral join over every mailbox the user
-        // holds, and it is why the index leads with the user: an aggregate over a join is computed from the whole join,
-        // and against a backlog of two hundred thousand rows PostgreSQL scanned the queue for it — measured at 6742
-        // buffers against 10 for a bounded backwards walk. A userless job compares against no rows, so the subquery
-        // answers null, GREATEST ignores it, and the job stays claimable at the instant it was available at.
+        // The turn is taken from the queue's own account column, walking the claim index backwards and stopping at
+        // the first row. That is one index read where a per-user form would need a lateral join over every mailbox
+        // assigned to the user, and it is why the index leads with the account: an aggregate over a join is computed
+        // from the whole join, and against a backlog of two hundred thousand rows PostgreSQL scanned the queue for
+        // it — measured at 6742 buffers against 10 for a bounded backwards walk. An accountless job compares against
+        // no rows, so the subquery answers null, GREATEST ignores it, and the job stays claimable at the instant it
+        // was available at.
         return $"""
                 INSERT INTO jobs (
-                    "Id", "JobType", "IdempotencyKey", "Payload", "UserId", "MailboxAccountId",
+                    "Id", "JobType", "IdempotencyKey", "Payload", "MailboxAccountId",
                     "State", "AvailableAt", "TurnAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
                     "EnqueuedTraceParent", "EnqueuedTraceState")
                 VALUES (
-                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {userId}, {accountId},
+                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {accountId},
                     {pending}, COALESCE({requestedAvailableAt}, now()),
                     GREATEST(
                         COALESCE({requestedAvailableAt}, now()),
                         (SELECT waiting."TurnAt"
                          FROM jobs AS waiting
                          WHERE waiting."State" = ANY({claimableStates})
-                           AND waiting."UserId" = {userId}
+                           AND waiting."MailboxAccountId" = {accountId}
                          ORDER BY waiting."TurnAt" DESC
                          LIMIT 1) + {turnSpacing}),
                     {enqueuedAt}, {enqueuedAt}, 0,

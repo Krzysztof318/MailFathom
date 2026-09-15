@@ -119,7 +119,7 @@ internal static class AuthoredSendGovernors
     /// <summary>A user owning no account, which vouches for no address of their own.</summary>
     private sealed class OwningNobody : ICallerMailAccountCatalog
     {
-        public IReadOnlyList<ServedMailAccount> OwnedAccounts { get; } = [];
+        public IReadOnlyList<ServedMailAccount> AssignedAccounts { get; } = [];
 
         public bool SynchronizationEnabled => false;
 

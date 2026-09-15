@@ -7,7 +7,6 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
@@ -67,8 +66,8 @@ public sealed class StoredEmailEmbeddingGenerator
     /// <param name="concurrencyRetryPolicy">Commits one call's vectors, retrying a conflict with a competing writer.</param>
     /// <param name="spendGate">Says whether the period still admits a request, and is charged for the ones it does.</param>
     /// <param name="requestPacer">Holds a call back until this deployment is allowed to send its next one.</param>
-    /// <param name="ownership">Names the account this message is in and the user it is assigned to, which bound the spend and the posture.</param>
-    /// <param name="egressGuard">States which mailbox the passages are from, so the adapter that sends them scans under that account's posture.</param>
+    /// <param name="ownership">Names the mailbox this message belongs to, so the spend is bounded and charged across the users it serves.</param>
+    /// <param name="egressGuard">States whose posture the passages leave under, so the adapter that sends them scans against it.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingGenerator(
         IEmailEmbeddingStore embeddingStore,
@@ -108,11 +107,11 @@ public sealed class StoredEmailEmbeddingGenerator
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels or the host is shutting down. Committed vectors stay durable.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the user whose spend this turn
+    /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the mailbox whose spend this turn
     /// would be charged against cannot be established. The caller holds an identifier it read from this deployment, so
     /// what this reports is a message erased underneath the turn rather than an argument a caller can correct. The
     /// ordinary form of that race does not reach it: a message already gone has nothing outstanding, which ends the
-    /// turn as whole before a user is ever asked for, and only one erased between that answer and the ownership
+    /// turn as whole before a mailbox is ever asked for, and only one erased between that answer and the account
     /// lookup behind it arrives here.
     /// </exception>
     /// <remarks>
@@ -138,11 +137,12 @@ public sealed class StoredEmailEmbeddingGenerator
         var embeddedChunkCount = 0;
         var sentCharacterCount = 0;
 
-        // Resolved once for the whole turn, because which mailbox a stored message is in cannot change while it is being
-        // embedded, and resolved lazily rather than up front, because a message with nothing outstanding must not need
-        // an account at all: one erased underneath this turn is an ordinary race that the empty answer below settles,
-        // and asking whose it was first would turn that into a refusal a caller would read as a defect.
-        MailAccountIdentity? account = null;
+        // Resolved once for the whole turn, because which mailbox a stored message is in cannot change while it is
+        // being embedded, and resolved lazily rather than up front, because a message with nothing outstanding must
+        // not need an account at all: one erased underneath this turn is an ordinary race that the empty answer below
+        // settles, and asking which mailbox held it first would turn that into a refusal a caller would read as a
+        // defect.
+        MailAccountId? account = null;
 
         for (var call = 0; call < MaximumProviderCallsPerEmail; call++)
         {
@@ -162,9 +162,10 @@ public sealed class StoredEmailEmbeddingGenerator
             account ??= await this.ownership.ReadStoredEmailAccountAsync(storedEmailId, cancellationToken);
 
             // Asked before every call rather than once per message, because a long message spends across many calls and
-            // a ceiling consulted only at the start would be one a single message could walk straight through. The
-            // ceiling is the user's while the posture below is the account's, which is why the read answers with both.
-            var period = await this.spendGate.ReadCurrentPeriodForAsync(account.Value.User, cancellationToken);
+            // a ceiling consulted only at the start would be one a single message could walk straight through. It is
+            // asked of the mailbox rather than of a person: the message is one copy however many users are assigned
+            // it, and every one of them has to be under their ceiling for the copy to be worked on at all.
+            var period = await this.spendGate.ReadCurrentPeriodForAccountAsync(account.Value, cancellationToken);
             if (!period.AdmitsRequest)
             {
                 return StoredEmailEmbeddingRun.SpendCeilingReached(
@@ -198,7 +199,13 @@ public sealed class StoredEmailEmbeddingGenerator
                     sentCharacterCount);
             }
 
-            await this.CommitVectorsAsync(profile, account.Value.User, passages, vectors, billedCharacterCount, cancellationToken);
+            await this.CommitVectorsAsync(
+                profile,
+                account.Value,
+                passages,
+                vectors,
+                billedCharacterCount,
+                cancellationToken);
 
             embeddedChunkCount += passages.Count;
             sentCharacterCount += billedCharacterCount;
@@ -241,7 +248,7 @@ public sealed class StoredEmailEmbeddingGenerator
     /// </remarks>
     private Task CommitVectorsAsync(
         RegisteredEmbeddingProfile profile,
-        MailUserId user,
+        MailAccountId account,
         IReadOnlyList<EmailChunkAwaitingEmbedding> passages,
         IReadOnlyList<EmbeddingVector> vectors,
         int billedCharacterCount,
@@ -259,9 +266,9 @@ public sealed class StoredEmailEmbeddingGenerator
                     embeddings,
                     attemptCancellationToken);
 
-                await this.spendGate.RecordSpendAsync(
+                await this.spendGate.RecordAccountSpendAsync(
                     persistenceSession,
-                    user,
+                    account,
                     billedCharacterCount,
                     attemptCancellationToken);
             },

@@ -4,7 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -59,7 +59,7 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var onOneHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await using var onAnotherHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var user = OrchestratedDeploymentUser.Shared.User;
+        var account = SyntheticMailAccount.Account;
         var ceilings = await CeilingsWithRoomForAsync(onOneHost, payloadCount: 1, cancellationToken);
 
         var claimed = new List<(OrchestratedMailFathomServices Host, StoredContentClaimRecord Record)>();
@@ -67,9 +67,9 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         try
         {
             // Act
-            var taken = await ClaimAsync(onOneHost, user, ceilings, cancellationToken);
+            var taken = await ClaimAsync(onOneHost, account, ceilings, cancellationToken);
             claimed.Add((onOneHost, taken));
-            var refusedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            var refusedElsewhere = await ClaimAsync(onAnotherHost, account, ceilings, cancellationToken);
             claimed.Add((onAnotherHost, refusedElsewhere));
 
             // Assert
@@ -78,7 +78,7 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
 
             // Act
             await ReleaseAsync(onOneHost, taken.ClaimId!.Value, cancellationToken);
-            var admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            var admittedElsewhere = await ClaimAsync(onAnotherHost, account, ceilings, cancellationToken);
             claimed.Add((onAnotherHost, admittedElsewhere));
 
             // Assert
@@ -112,12 +112,12 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var user = OrchestratedDeploymentUser.Shared.User;
+        var account = SyntheticMailAccount.Account;
         var withRoom = await CeilingsWithRoomForAsync(services, payloadCount: 4, cancellationToken);
         var userIsFull = withRoom with { UserBytes = PayloadByteCount - 1 };
 
         // Act
-        var record = await ClaimAsync(services, user, userIsFull, cancellationToken);
+        var record = await ClaimAsync(services, account, userIsFull, cancellationToken);
 
         // Assert
         Assert.False(record.IsGranted);
@@ -148,11 +148,11 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
 
     private static Task<StoredContentClaimRecord> ClaimAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        MailAccountId account,
         StoredContentCeilings ceilings,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredContentClaimStore>()
-                .ClaimAsync(user, PayloadByteCount, ceilings, ClaimLifetime, token),
+                .ClaimAsync(account, PayloadByteCount, ceilings, ClaimLifetime, token),
             cancellationToken);
 
     /// <summary>Gives one claim's room back, through a scope of its own the way the ceiling's own disposal does.</summary>

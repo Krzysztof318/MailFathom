@@ -40,7 +40,7 @@ public sealed class MailboxDestinationResolver
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicies;
     private readonly ILocalMailFolderStore localFolders;
 
-    private readonly Dictionary<(MailAccountIdentity Account, MailFolderReference Destination), MailboxDestinationResolution> answers = [];
+    private readonly Dictionary<(MailAccountId Account, MailFolderReference Destination), MailboxDestinationResolution> answers = [];
 
     /// <summary>Initializes the resolver from the two ways a destination is turned into a folder.</summary>
     /// <param name="folderReferences">Turns the alias or the role an author named into the mapping of the account it means.</param>
@@ -81,7 +81,7 @@ public sealed class MailboxDestinationResolver
     /// account only maps reaches the mail server and records a binding in a session of its own.
     /// </remarks>
     public async Task<MailboxDestinations> ResolveAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IEnumerable<MailFolderReference> destinations,
         CancellationToken cancellationToken)
     {
@@ -104,7 +104,7 @@ public sealed class MailboxDestinationResolver
     /// nothing in this type's contract says a scope holds one account's work.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ResolveOneAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderReference destination,
         CancellationToken cancellationToken)
     {
@@ -127,7 +127,7 @@ public sealed class MailboxDestinationResolver
     /// the batch keeps moving.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ReadCurrentAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderReference destination,
         CancellationToken cancellationToken)
     {
@@ -135,7 +135,7 @@ public sealed class MailboxDestinationResolver
 
         try
         {
-            mapping = this.folderReferences.Resolve(account.Id, destination);
+            mapping = this.folderReferences.Resolve(account, destination);
         }
         catch (MailFolderRoleUnmappedException)
         {
@@ -162,7 +162,7 @@ public sealed class MailboxDestinationResolver
 
     /// <summary>Reads the binding the folder's own synchronization run recorded.</summary>
     private async Task<MailboxDestinationResolution> ReadMirroredBindingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping mapping,
         CancellationToken cancellationToken)
     {
@@ -183,11 +183,11 @@ public sealed class MailboxDestinationResolver
     /// destination and end the next pass the same way, forever.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ResolveOnDemandAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderMapping mapping,
         CancellationToken cancellationToken)
     {
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account.Id);
+        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account);
 
         MailFolderResolutionResult result;
 

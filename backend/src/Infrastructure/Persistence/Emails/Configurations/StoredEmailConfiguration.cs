@@ -185,11 +185,13 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailOccurrenceUniqueIndexName);
 
-        entity.HasIndex(email => new { email.UserId, email.MailboxAccountId, email.ReceivedAt, email.Id })
+        // The account leads it and no user stands ahead of it. A mail row carries no user, so the accounts a caller
+        // is assigned are the whole of what narrows this read, and a multi-account timeline is the merged per-account
+        // walk ADR 0014 describes rather than one ordered walk over a column that no longer exists.
+        entity.HasIndex(email => new { email.MailboxAccountId, email.ReceivedAt, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountTimelineIndexName)
-            .IsDescending(false, false, true, true)
+            .IsDescending(false, true, true)
             .HasNullSortOrder(
-                NullSortOrder.Unspecified,
                 NullSortOrder.Unspecified,
                 NullSortOrder.NullsLast,
                 NullSortOrder.Unspecified);
@@ -236,7 +238,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // The order a requested whole-mailbox rule run walks in. It is the identity rather than the timeline because a
         // walk that has to resume needs a total order no later write disturbs, and because the position it commits is
         // one column rather than a nullable timestamp paired with a tie-breaker.
-        entity.HasIndex(email => new { email.UserId, email.MailboxAccountId, email.Id })
+        entity.HasIndex(email => new { email.MailboxAccountId, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountIdentityIndexName);
 
         // No action for the reason the hierarchy's own parent reference takes none: an account's erasure removes its
@@ -253,7 +255,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // has been evaluated, so without the filter this read would walk the account's entire index once per run to
         // find the handful of rows that qualify — and it runs for every account on every synchronization run.
         entity.HasIndex(
-                email => new { email.UserId, email.MailboxAccountId, email.Id },
+                email => new { email.MailboxAccountId, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasFilter(
@@ -264,7 +266,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // of a send already filed locally. Filtered to the filed copies no server has returned yet, which is a handful
         // at most, so the question costs an empty probe on every other message rather than a walk of the account.
         entity.HasIndex(
-                email => new { email.UserId, email.MailboxAccountId, email.InternetMessageId },
+                email => new { email.MailboxAccountId, email.InternetMessageId },
                 PersistenceConstraintNames.StoredEmailFiledSentCopyIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailFiledSentCopyIndexName)
             .HasFilter(
@@ -276,7 +278,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // in full, once per account run, for ever, to return nothing. The messages carrying no attachment at all are
         // the larger part of a mailbox and are outside the filter too, since the walk requires a positive count.
         entity.HasIndex(
-                email => new { email.UserId, email.MailboxAccountId, email.Id },
+                email => new { email.MailboxAccountId, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
             .HasFilter(

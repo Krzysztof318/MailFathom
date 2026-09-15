@@ -42,7 +42,7 @@ public sealed class StoredMailRederivationHandlerTests
 
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
 
     private static readonly JobExecutionSettings JobSettings = JobExecutionSettings.Create(
         batchSize: 10,
@@ -240,7 +240,7 @@ public sealed class StoredMailRederivationHandlerTests
         // Assert
         var published = this.telemetry.Runs.Single();
 
-        Assert.Equal(WholeAccount.Account.Id, published.AccountId);
+        Assert.Equal(WholeAccount.Account, published.AccountId);
         Assert.Null(published.FolderAlias);
         Assert.Equal([EmailsPerPass, 3], [.. published.Passes.Select(pass => pass.RederivedEmailCount)]);
     }
@@ -260,7 +260,11 @@ public sealed class StoredMailRederivationHandlerTests
         Assert.Equal(EmailsPerPass + 2, this.runs.Find(WholeAccount)!.RederivedEmailCount);
     }
 
-    /// <summary>A segment walks under the lease its scope is named by, which is the same name on every replica.</summary>
+    /// <summary>A segment walks under the lease its scope is named by, which names the mailbox and no reader of it.</summary>
+    /// <remarks>
+    /// The same name on every replica, and the same name whoever is assigned the mailbox: a mailbox two people are
+    /// served is one walk over one copy of the mail, so a user in the scope would let two segments walk it at once.
+    /// </remarks>
     [Fact]
     public async Task RunAsync_ASegmentOfAWholeAccountRun_WalksUnderTheLeaseOfThatScope()
     {
@@ -273,7 +277,7 @@ public sealed class StoredMailRederivationHandlerTests
 
         // Assert
         Assert.Equal(
-            [$"mail-rederivation/{SyntheticMailUser.Deployment.Value}/work/*"],
+            ["mail-rederivation/work/*"],
             [.. this.leases.AskedScopes.Select(scope => scope.Value)]);
     }
 
@@ -365,14 +369,14 @@ public sealed class StoredMailRederivationHandlerTests
     {
         // Arrange
         StoredMailScope longAccount = new(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(new string('a', WorkScope.MaximumLength))),
+            MailAccountId.Create(new string('a', WorkScope.MaximumLength)),
             MailFolderAlias.Create("inbox"));
 
         // Act
         var scope = StoredMailRederivationHandler.LeaseScopeOf(longAccount);
 
         // Assert
-        Assert.StartsWith($"mail-rederivation/{SyntheticMailUser.Deployment.Value}/sha256-", scope.Value, StringComparison.Ordinal);
+        Assert.StartsWith("mail-rederivation/sha256-", scope.Value, StringComparison.Ordinal);
         Assert.InRange(scope.Value.Length, 1, WorkScope.MaximumLength);
     }
 
@@ -461,9 +465,9 @@ public sealed class StoredMailRederivationHandlerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
-                MetadataOf(call.Arg<MailAccountIdentity>().Id))));
+                MetadataOf(call.Arg<MailAccountId>()))));
 
         return new StoredMailRederivationHandler(
             new StoredMailRederivation(

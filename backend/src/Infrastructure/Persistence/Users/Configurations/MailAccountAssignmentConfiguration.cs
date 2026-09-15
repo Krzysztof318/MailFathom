@@ -31,9 +31,10 @@ internal sealed class MailAccountAssignmentConfiguration : IEntityTypeConfigurat
             .HasConstraintName(PersistenceConstraintNames.MailAccountAssignmentAccountForeignKeyName)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // ponytail: one user per account until issue 1325 keys the mail graph by the account alone; drop the uniqueness there.
+        // Not unique: an account is assigned to as many users as an administrator assigns it to, and the mail graph
+        // is keyed by the account alone, so one mailbox is one copy of the mail however many people read it. What the
+        // index is for is the reverse read — which users an account serves — which a fan-out and an erasure both ask.
         entity.HasIndex(assignment => assignment.MailAccountId)
-            .IsUnique()
-            .HasDatabaseName(PersistenceConstraintNames.MailAccountAssignmentAccountUniqueIndexName);
+            .HasDatabaseName(PersistenceConstraintNames.MailAccountAssignmentAccountIndexName);
     }
 }

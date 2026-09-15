@@ -96,7 +96,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, ArchivePath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
@@ -152,7 +152,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, RemovedPath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, RemovedPath);
         await RecordIntentAsync(services, request, cancellationToken);
 
         // Act
@@ -207,7 +207,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, CopyPath);
+        var request = MailboxMutationRequest.Copy(storedEmailId, occurrence, Requester, CopyPath);
 
         await StopAfterTheCopyCommandAsync(services, request, occurrence, cancellationToken);
 

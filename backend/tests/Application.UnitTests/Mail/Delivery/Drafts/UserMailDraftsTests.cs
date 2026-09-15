@@ -37,11 +37,9 @@ public sealed class UserMailDraftsTests
 
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work);
+    private static readonly MailAccountId Account =
+        Work;
 
-    private static readonly MailAccountIdentity TheirAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Another, Work);
 
     private static readonly ReadOnlyMemory<byte> ComposedMime =
         Encoding.ASCII.GetBytes("Subject: a draft\r\n\r\nHello.").AsMemory();
@@ -63,13 +61,18 @@ public sealed class UserMailDraftsTests
         Assert.Empty(harness.Drafts.Drafts);
     }
 
-    /// <summary>A draft another user holds is refused as one nobody holds, and is left exactly as it was.</summary>
+    /// <summary>A draft another user wrote in the mailbox both are assigned is refused as one nobody holds.</summary>
+    /// <remarks>
+    /// The mailbox is the same one, which is the whole point: a shared mailbox is read by everybody assigned to it,
+    /// and a draft in it is read by the person who wrote it alone — so what refuses this is the author on the row
+    /// rather than the account, which both callers reach.
+    /// </remarks>
     [Fact]
-    public async Task DiscardAsync_ADraftAnotherUserHolds_IsRefusedAndLeavesItStanding()
+    public async Task DiscardAsync_ADraftAnotherUserWroteInTheSharedMailbox_IsRefusedAndLeavesItStanding()
     {
         // Arrange
         var harness = Harness();
-        var theirs = await SaveAsync(harness, TheirAccount);
+        var theirs = await SaveAsync(harness, Account, SyntheticMailUser.Another);
         var drafts = UserDraftsOver(harness);
 
         // Act
@@ -98,14 +101,14 @@ public sealed class UserMailDraftsTests
         Assert.Equal(queued.Id, harness.Drafts.Peek(draft.Id)!.PromotedTo);
     }
 
-    /// <summary>A draft another user holds is refused as one nobody holds, and nothing is queued.</summary>
+    /// <summary>A draft another user wrote in the mailbox both are assigned is refused, and nothing is queued.</summary>
     [Fact]
-    public async Task SendAsync_ADraftAnotherUserHolds_IsRefusedAndQueuesNothing()
+    public async Task SendAsync_ADraftAnotherUserWroteInTheSharedMailbox_IsRefusedAndQueuesNothing()
     {
         // Arrange
         var harness = Harness();
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var theirs = await SaveAsync(harness, TheirAccount);
+        var theirs = await SaveAsync(harness, Account, SyntheticMailUser.Another);
         var drafts = UserDraftsOver(harness, outgoingEmails: outgoingEmails);
 
         // Act
@@ -128,8 +131,7 @@ public sealed class UserMailDraftsTests
             MailFathomPermission.MailSend);
 
         return new UserMailDrafts(
-            OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
-            harness.Drafts,
+            AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
             harness.Book,
             PromotionOver(harness, outgoingEmails ?? new InMemoryOutgoingEmailStore()),
             callerAuthorization);
@@ -215,10 +217,12 @@ public sealed class UserMailDraftsTests
     /// <summary>Writes one draft down for one account, which is the arrangement every test here starts from.</summary>
     private static Task<MailDraftRecord> SaveAsync(
         MailDraftHarness harness,
-        MailAccountIdentity account) =>
+        MailAccountId account,
+        MailUserId? author = null) =>
         harness.Book.SaveAsync(
             account,
-            OutgoingEmailRequester.Command($"mfctl-{account.User.Value:N}"),
+            author ?? SyntheticMailUser.Deployment,
+            OutgoingEmailRequester.Command($"mfctl-{account.Value:N}-{(author ?? SyntheticMailUser.Deployment).Value:N}"),
             new ComposedMailDraft(
                 [Recipient()],
                 "a draft",

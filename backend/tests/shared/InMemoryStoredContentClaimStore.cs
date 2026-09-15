@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -17,15 +18,22 @@ namespace MailFathom.TestSupport;
 /// in a deployment is refused here.
 /// </para>
 /// <para>
-/// The claims are one dictionary rather than one per user, which is what lets a test hold two users' claims against
-/// each other exactly as one deployment's replicas hold theirs. Nothing here expires on a clock: a test that needs an
-/// abandoned claim states it with <see cref="ExpireEveryClaim" />, so the suite stays free of a wall clock.
+/// A claim names the account, and the per-user figure is the largest sum over the users assigned that account, each
+/// user's sum being over every account they are assigned. That is what ADR 0014 asks of a shared mailbox: it counts in
+/// full against everybody assigned it, so the user closest to their ceiling decides, and a mailbox assigned to nobody
+/// is bounded by the deployment alone.
+/// </para>
+/// <para>
+/// The claims are one dictionary rather than one per account, which is what lets a test hold two mailboxes' claims
+/// against each other exactly as one deployment's replicas hold theirs. Nothing here expires on a clock: a test that
+/// needs an abandoned claim states it with <see cref="ExpireEveryClaim" />, so the suite stays free of a wall clock.
 /// </para>
 /// </remarks>
 internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
 {
     private readonly Dictionary<Guid, ReservedRoom> claims = [];
-    private readonly Dictionary<MailUserId, long> occupiedBytesByUser = [];
+    private readonly Dictionary<MailAccountId, long> occupiedBytesByAccount = [];
+    private readonly StubMailAccountAssignments assignments = new();
 
     /// <summary>Gets or sets what local content storage is reported to occupy across the deployment.</summary>
     public long OccupiedBytes { get; set; }
@@ -48,13 +56,28 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     /// </remarks>
     public int ReleaseCount { get; private set; }
 
-    /// <summary>States what one user's stored content occupies before the test begins.</summary>
-    /// <param name="user">The user.</param>
-    /// <param name="occupiedBytes">What their payloads hold.</param>
+    /// <summary>States what one mailbox's stored content occupies before the test begins.</summary>
+    /// <param name="account">The mailbox.</param>
+    /// <param name="occupiedBytes">What its payloads hold.</param>
     /// <returns>This store, so arrangements read as one expression.</returns>
-    public InMemoryStoredContentClaimStore Holding(MailUserId user, long occupiedBytes)
+    public InMemoryStoredContentClaimStore Holding(MailAccountId account, long occupiedBytes)
     {
-        this.occupiedBytesByUser[user] = occupiedBytes;
+        this.occupiedBytesByAccount[account] = occupiedBytes;
+
+        return this;
+    }
+
+    /// <summary>States which mailboxes one user is assigned, which is what their own ceiling is summed over.</summary>
+    /// <param name="user">The user.</param>
+    /// <param name="accounts">The mailboxes assigned to them.</param>
+    /// <returns>This store, so arrangements read as one expression.</returns>
+    /// <remarks>
+    /// A test that says nothing about assignments is bounded by the deployment's ceiling alone, which is the same
+    /// answer a deployment gives for a mailbox nobody has been assigned.
+    /// </remarks>
+    public InMemoryStoredContentClaimStore Assigning(MailUserId user, params MailAccountId[] accounts)
+    {
+        this.assignments.Assigning(user, accounts);
 
         return this;
     }
@@ -80,7 +103,7 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
 
     /// <inheritdoc />
     public Task<StoredContentClaimRecord> ClaimAsync(
-        MailUserId user,
+        MailAccountId account,
         long bytes,
         StoredContentCeilings ceilings,
         TimeSpan claimLifetime,
@@ -88,7 +111,7 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(claimLifetime, TimeSpan.Zero);
-        RequireNamedUser(user);
+        RequireNamedAccount(account);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!ceilings.BoundsAnything)
@@ -98,8 +121,12 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
 
         var binding = this.claims.Values.Where(room => !room.HasExpired).ToArray();
         var deploymentHeld = this.OccupiedBytes + binding.Sum(room => room.Bytes);
-        var userHeld = this.occupiedBytesByUser.GetValueOrDefault(user)
-            + binding.Where(room => room.User == user).Sum(room => room.Bytes);
+        var userHeld = this.assignments.UsersAssignedTo(account)
+            .Select(reader => this.assignments.AccountsAssignedTo(reader).Sum(assigned =>
+                this.occupiedBytesByAccount.GetValueOrDefault(assigned)
+                + binding.Where(room => room.Account == assigned).Sum(room => room.Bytes)))
+            .DefaultIfEmpty(0L)
+            .Max();
 
         if (deploymentHeld > (ceilings.DeploymentBytes ?? long.MaxValue) - bytes)
         {
@@ -112,7 +139,7 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
         }
 
         var claimId = Guid.CreateVersion7();
-        this.claims[claimId] = new ReservedRoom(user, bytes, HasExpired: false);
+        this.claims[claimId] = new ReservedRoom(account, bytes, HasExpired: false);
 
         return Task.FromResult(new StoredContentClaimRecord(claimId, StoredContentBound.None));
     }
@@ -126,15 +153,15 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
         return Task.CompletedTask;
     }
 
-    private static void RequireNamedUser(MailUserId user)
+    private static void RequireNamedAccount(MailAccountId account)
     {
-        if (!user.IsSpecified)
+        if (string.IsNullOrWhiteSpace(account.Value))
         {
             throw new ArgumentException(
-                "A stored-content claim is reserved against a named user's ceiling, so a user naming nobody cannot claim.",
-                nameof(user));
+                "A stored-content claim is reserved against a named account, so an account naming nothing cannot claim.",
+                nameof(account));
         }
     }
 
-    private sealed record ReservedRoom(MailUserId User, long Bytes, bool HasExpired);
+    private sealed record ReservedRoom(MailAccountId Account, long Bytes, bool HasExpired);
 }

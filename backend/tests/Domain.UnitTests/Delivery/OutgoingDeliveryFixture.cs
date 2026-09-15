@@ -6,7 +6,6 @@ using System.Globalization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
-using MailFathom.TestSupport;
 
 namespace MailFathom.Domain.UnitTests.Delivery;
 
@@ -31,7 +30,7 @@ internal static class OutgoingDeliveryFixture
         params OutgoingRecipientOutcome[] recipients) => new()
         {
             Id = OutgoingEmailId.Create(Guid.Parse("0198f0a0-1111-7000-8000-000000000001")),
-            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+            AccountId = MailAccountId.Create("work"),
             Requester = OutgoingEmailRequester.Command("mfctl-4f2a"),
             Principal = OutgoingEmailPrincipal.Of("operator"),
             Recipients = recipients,

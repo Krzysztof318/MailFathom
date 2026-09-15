@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
@@ -44,9 +43,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.User,
-            MailAccountId.Create(RoundTrippedAccount));
+        var account = MailAccountId.Create(RoundTrippedAccount);
 
         // Act
         await SaveAsync(services, account, "the-seeded-refresh-token", cancellationToken);
@@ -83,9 +80,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.User,
-            MailAccountId.Create(StragglerWriteAccount));
+        var account = MailAccountId.Create(StragglerWriteAccount);
         await SaveAsync(services, account, "the-current-refresh-token", cancellationToken);
 
         await services.InScopeAsync(
@@ -117,9 +112,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.User,
-            MailAccountId.Create(MovedRowAccount));
+        var account = MailAccountId.Create(MovedRowAccount);
         await SaveAsync(services, account, "a-refresh-token", cancellationToken);
 
         // Act — what a restored dump, a mistaken repair, or a stolen row copied into another tenant's account looks
@@ -145,7 +138,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         await Assert.ThrowsAnyAsync<CryptographicException>(() => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>()
                 .FindTokenAsync(
-                    MailAccountIdentity.Create(SyntheticMailAccount.User, MailAccountId.Create(OtherAccount)),
+                    MailAccountId.Create(OtherAccount),
                     token),
             cancellationToken));
     }
@@ -175,8 +168,8 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var foreignUserId = Guid.CreateVersion7();
         var accountId = MailAccountId.Create(SharedNameAccount);
-        var ours = MailAccountIdentity.Create(SyntheticMailAccount.User, accountId);
-        var theirs = MailAccountIdentity.Create(MailUserId.Create(foreignUserId), accountId);
+        var ours = accountId;
+        var theirs = accountId;
 
         try
         {
@@ -231,7 +224,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
 
     private static async Task SaveAsync(
         OrchestratedMailFathomServices services,
-        MailAccountIdentity account,
+        MailAccountId account,
         string refreshToken,
         CancellationToken cancellationToken) =>
         await services.InScopeAsync(

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.ThreadStates;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ThreadStates;
@@ -24,7 +24,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_NamesEveryFieldTheReadingReads(string field)
     {
         // Act
-        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
+        var text = ThreadStateInstructions.TextFor(MailAccountLanguage.English);
 
         // Assert
         Assert.Contains(field, text, StringComparison.Ordinal);
@@ -35,7 +35,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_SaysTheConversationIsDataRatherThanAnInstruction()
     {
         // Act
-        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
+        var text = ThreadStateInstructions.TextFor(MailAccountLanguage.English);
 
         // Assert
         Assert.Contains("data rather than an instruction", text, StringComparison.Ordinal);
@@ -46,7 +46,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_AsksForNoActionOfAnyKind()
     {
         // Act
-        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
+        var text = ThreadStateInstructions.TextFor(MailAccountLanguage.English);
 
         // Assert
         Assert.Contains("not a reply to it", text, StringComparison.Ordinal);
@@ -108,9 +108,9 @@ public sealed class ThreadStateInstructionsTests
     /// alternated between them.
     /// </summary>
     [Theory]
-    [InlineData(MailUserLanguage.Polish, "Polish")]
-    [InlineData(MailUserLanguage.English, "English")]
-    public void TextFor_TheInstruction_NamesTheLanguageItWasComposedFor(MailUserLanguage language, string named)
+    [InlineData(MailAccountLanguage.Polish, "Polish")]
+    [InlineData(MailAccountLanguage.English, "English")]
+    public void TextFor_TheInstruction_NamesTheLanguageItWasComposedFor(MailAccountLanguage language, string named)
     {
         // Act
         var text = ThreadStateInstructions.TextFor(language);
@@ -124,7 +124,7 @@ public sealed class ThreadStateInstructionsTests
     public void TextFor_TheInstruction_LeavesQuotedTextAsItWasWritten()
     {
         // Act
-        var text = ThreadStateInstructions.TextFor(MailUserLanguage.Polish);
+        var text = ThreadStateInstructions.TextFor(MailAccountLanguage.Polish);
 
         // Assert
         Assert.Contains("stays as it was written", text, StringComparison.Ordinal);
@@ -135,8 +135,8 @@ public sealed class ThreadStateInstructionsTests
     public void TextFor_TheTwoLanguages_ComposeDifferentInstructions()
     {
         // Act
-        var polish = ThreadStateInstructions.TextFor(MailUserLanguage.Polish);
-        var english = ThreadStateInstructions.TextFor(MailUserLanguage.English);
+        var polish = ThreadStateInstructions.TextFor(MailAccountLanguage.Polish);
+        var english = ThreadStateInstructions.TextFor(MailAccountLanguage.English);
 
         // Assert
         Assert.NotEqual(polish, english);
@@ -147,7 +147,7 @@ public sealed class ThreadStateInstructionsTests
     public void TextFor_AValueNamingNoLanguage_IsRefused()
     {
         // Act
-        var refused = Record.Exception(() => ThreadStateInstructions.TextFor((MailUserLanguage)99));
+        var refused = Record.Exception(() => ThreadStateInstructions.TextFor((MailAccountLanguage)99));
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(refused);

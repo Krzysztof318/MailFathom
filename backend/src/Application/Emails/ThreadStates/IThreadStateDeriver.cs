@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.ThreadStates;
 
@@ -30,7 +30,7 @@ public interface IThreadStateDeriver
     /// </remarks>
     bool IsActive { get; }
 
-    /// <summary>Derives one conversation's state, written in the language the person it is for reads.</summary>
+    /// <summary>Derives one conversation's state, written in the language the mailbox it was derived from is read in.</summary>
     /// <param name="thread">The conversation and the messages the derivation reads.</param>
     /// <param name="language">The language every statement the derivation produces is written in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -38,12 +38,13 @@ public interface IThreadStateDeriver
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="thread" /> is <see langword="null" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// The language is the caller's rather than the conversation's, and it is an argument rather than a property of
-    /// <see cref="DerivableThread" /> because it is a fact about whom the derivation is for. What that record carries
-    /// stays what a derivation reads, which is what keeps the person out of the text sent to a provider.
+    /// The language is the mailbox's rather than the conversation's, and it is an argument rather than a property of
+    /// <see cref="DerivableThread" /> because it is a fact about which mailbox the derivation is of. One derivation is what
+    /// every user assigned that mailbox reads, and what the record carries stays what a derivation reads, which is
+    /// what keeps both the person and the mailbox out of the text sent to a provider.
     /// </remarks>
     Task<ThreadStateDerivation> DeriveAsync(
         DerivableThread thread,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken);
 }

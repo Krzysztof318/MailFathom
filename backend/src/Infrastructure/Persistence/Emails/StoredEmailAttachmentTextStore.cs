@@ -8,7 +8,6 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -42,15 +41,14 @@ internal sealed class StoredEmailAttachmentTextStore(
     /// column and no tie-breaker is needed.
     /// </remarks>
     public async Task<IReadOnlyList<EmailAwaitingAttachmentText>> GetEmailsAwaitingAttachmentTextAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var after = resumeAfter?.Value;
 
         // One snapshot for both halves, exactly as the cut reads it: the predicate narrows the batch and the answer
@@ -60,7 +58,6 @@ internal sealed class StoredEmailAttachmentTextStore(
 
         var candidates = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
-                userId,
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 terms)
@@ -69,7 +66,6 @@ internal sealed class StoredEmailAttachmentTextStore(
             .Take(batchSize)
             .Select(email => new OutstandingAttachmentRow(
                 email.Id,
-                email.UserId,
                 new StoredDerivedWorkCandidateRow(
                     email.MailFolder.MailboxAccountId,
                     email.MailFolder.Alias,
@@ -82,8 +78,7 @@ internal sealed class StoredEmailAttachmentTextStore(
         [
             .. candidates.Select(row => new EmailAwaitingAttachmentText(
                 StoredEmailId.Create(row.Id),
-                MailUserId.Create(row.UserId),
-                account.Id,
+                account,
                 row.Candidate.AdmittedUnder(terms))),
         ];
     }
@@ -147,7 +142,6 @@ internal sealed class StoredEmailAttachmentTextStore(
 
     /// <summary>Narrows stored mail to the messages whose attachments nothing has read yet.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to embedding, which is what decides the reading.</param>
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
@@ -160,11 +154,10 @@ internal sealed class StoredEmailAttachmentTextStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => SelectingEverywhere(
-        emails.Where(email => email.UserId == userId && email.MailboxAccountId == mailboxAccountId),
+        emails.Where(email => email.MailboxAccountId == mailboxAccountId),
         embeddedFolders,
         terms);
 
@@ -251,6 +244,5 @@ internal sealed class StoredEmailAttachmentTextStore(
     /// <summary>One message awaiting a reading of its attachments, as the walk's projection returns it.</summary>
     private sealed record OutstandingAttachmentRow(
         Guid Id,
-        Guid UserId,
         StoredDerivedWorkCandidateRow Candidate);
 }

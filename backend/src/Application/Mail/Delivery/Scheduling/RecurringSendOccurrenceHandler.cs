@@ -159,7 +159,13 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
         }
 
         var composition = this.composer.RecomposeAsOccurrence(
-            declaration.Account,
+            declaration.AccountId,
+
+            // The occasion is the declaration's author's send, not the pass's: nothing is acting for a user here, and
+            // ADR 0014 keeps a recurring send's author beside the account, so an occasion of it is that person's send
+            // exactly as the declaration was. The idempotency identity is settled elsewhere — the requester composes
+            // the declaration's own identifier with the occasion — so this carries provenance rather than uniqueness.
+            declaration.User,
             OutgoingEmailRequester.Schedule(declaration.Id, occurrence),
             declaration.Recipients,
             draft.RawMime,

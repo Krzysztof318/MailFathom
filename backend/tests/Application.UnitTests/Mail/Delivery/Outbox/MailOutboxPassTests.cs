@@ -28,8 +28,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 
 public sealed class MailOutboxPassTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
     private static readonly DateTimeOffset RanAt = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ReadOnlyMemory<byte> RawMime =
@@ -334,7 +334,7 @@ public sealed class MailOutboxPassTests
         var context = new PassContext();
         var draft = await context.SaveDraftAsync();
         Assert.Equal(0, context.DraftSide.AppendCount);
-        context.DraftSide.MapDraftsFolder(Account.Id);
+        context.DraftSide.MapDraftsFolder(Account);
         context.Enqueue();
 
         // Act
@@ -357,7 +357,7 @@ public sealed class MailOutboxPassTests
         var context = new PassContext(submits: false);
         var draft = await context.SaveDraftAsync();
         Assert.Equal(0, context.DraftSide.AppendCount);
-        context.DraftSide.MapDraftsFolder(Account.Id);
+        context.DraftSide.MapDraftsFolder(Account);
 
         // Act
         var report = await context.RunAsync();
@@ -378,7 +378,7 @@ public sealed class MailOutboxPassTests
     {
         // Arrange
         var context = new PassContext();
-        context.DraftSide.MapDraftsFolder(Account.Id);
+        context.DraftSide.MapDraftsFolder(Account);
         var draft = await context.SaveDraftAsync();
         var appended = Assert.Single(context.DraftSide.Drafts.Peek(draft.Id)!.Copies);
         await context.PromoteDraftAsync(draft.Id, context.Enqueue());
@@ -415,7 +415,7 @@ public sealed class MailOutboxPassTests
 
             var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
             Assert.True(EmailAddress.TryCreate(displayName: null, "me@example.test", out var sender));
-            senderIdentities.FindSenderIdentity(Account.Id).Returns(OutgoingSenderIdentity.Create(Account.Id, sender));
+            senderIdentities.FindSenderIdentity(Account).Returns(OutgoingSenderIdentity.Create(Account, sender));
 
             var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
             sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -437,7 +437,7 @@ public sealed class MailOutboxPassTests
                 TimeSpan.FromHours(8));
 
             this.policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
-            this.policyReader.GetDeliveryPolicy(Account.Id).Returns(submits ? TransportSecurityPolicy() : null);
+            this.policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
 
             this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, this.settings, this.clock);
             this.DraftSide = new MailDraftHarness(this.clock, this.Store, this.settings);
@@ -487,6 +487,7 @@ public sealed class MailOutboxPassTests
 
             var request = OutgoingEmailRequest.Create(
                 Account,
+                SyntheticMailUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
 
@@ -556,6 +557,7 @@ public sealed class MailOutboxPassTests
 
             return this.DraftSide.Book.SaveAsync(
                 Account,
+                SyntheticMailUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 new ComposedMailDraft(
                     [

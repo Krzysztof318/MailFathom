@@ -15,7 +15,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Observability;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -179,7 +178,7 @@ public sealed class MailAnsweringRunTelemetryTests : IDisposable
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-            MailboxScope.Create(SyntheticMailUser.Deployment, [Account], []),
+            MailboxScope.Create([Account], []),
             StartedAt);
 
         observation.RecordComposition("answering", "0a1b2c3d4e5f");

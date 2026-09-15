@@ -36,7 +36,7 @@ public sealed class OrchestratedAccountSupervisionHoldTests(MailFathomOrchestrat
         await using var firstReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await using var secondReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var scope = MailAccountSupervisionScope.For(
-            MailAccountIdentity.Create(firstReplica.ServedUser, MailAccountId.Create("replica-handover")));
+            MailAccountId.Create("replica-handover"));
 
         // Act
         using var firstHold = await TakeAsync(firstReplica, scope, cancellationToken);

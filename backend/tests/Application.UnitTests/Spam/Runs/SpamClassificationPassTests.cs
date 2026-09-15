@@ -19,11 +19,11 @@ namespace MailFathom.Application.UnitTests.Spam.Runs;
 /// <summary>Covers what a pass carries, what it skips, what it leaves for the next one, and how a run stops early.</summary>
 public sealed class SpamClassificationPassTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("acct-1");
 
-    private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-2"));
+    private static readonly MailAccountId OtherAccount =
+        MailAccountId.Create("acct-2");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -40,11 +40,15 @@ public sealed class SpamClassificationPassTests
     private int storedEmailCount;
 
     /// <summary>Stores content for every occurrence but the ones a test says nothing is stored for.</summary>
-    public SpamClassificationPassTests() => this.harness.ContentStore
-        .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-        .Returns(call => this.emailsWithoutContent.Contains(call.Arg<StoredEmailId>())
-            ? null
-            : SpamClassificationHarness.SomeContent());
+    public SpamClassificationPassTests()
+    {
+        this.harness.Assignments.Assigning(SyntheticMailUser.Deployment, Account, OtherAccount);
+        this.harness.ContentStore
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(call => this.emailsWithoutContent.Contains(call.Arg<StoredEmailId>())
+                ? null
+                : SpamClassificationHarness.SomeContent());
+    }
 
     [Fact]
     public async Task RunAsync_NoRunOutstanding_ReportsNoneAndReadsNoMail()
@@ -299,7 +303,7 @@ public sealed class SpamClassificationPassTests
         // Arrange
         var inScope = this.StoreEmail();
         this.StoreEmail(Archive);
-        this.StoreEmail(accountId: OtherAccount.Id);
+        this.StoreEmail(accountId: OtherAccount);
         this.runs.Arrange(this.RequestedRun());
 
         // Act
@@ -328,7 +332,7 @@ public sealed class SpamClassificationPassTests
     private StoredEmailId StoreEmail(MailFolderAlias? folderAlias = null, MailAccountId? accountId = null) =>
         this.harness.Emails.Add(new ClassifiableEmail(
             StoredEmailId.Create(Guid.Parse($"0199a0c0-0000-7000-8000-{++this.storedEmailCount:D12}")),
-            accountId ?? Account.Id,
+            accountId ?? Account,
             folderAlias ?? Inbox));
 
     private SpamClassificationRun RequestedRun(
@@ -364,7 +368,7 @@ public sealed class SpamClassificationPassTests
             this.harness.CreateClassifier(settingsReader, commitPolicy),
             this.harness.CreateActionRecorder(
                 actions ?? SpamActionSettings.None,
-                SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
+                SpamClassificationHarness.OccurrenceReader(Account, Inbox),
                 sessionFactory,
                 commitPolicy),
             settingsReader,

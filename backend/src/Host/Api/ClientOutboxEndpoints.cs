@@ -25,7 +25,7 @@ namespace MailFathom.Host.Api;
 /// <b>A listing names an account and never the deployment.</b> The narrowing is required rather than optional, so
 /// there is no unnarrowed reading here at all: one that fell back to every account would page through every user's
 /// outgoing mail, which is the deployment-wide catalog a user-facing surface must never compose. An account another
-/// user owns is refused exactly as one nobody configured, and a send another user made answers exactly as one
+/// user is assigned is refused exactly as one nobody configured, and a send another user made answers exactly as one
 /// nobody made.
 /// </para>
 /// <para>
@@ -93,7 +93,7 @@ internal static class ClientOutboxEndpoints
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
-    /// An account this user does not own is <c>400</c> rather than <c>404</c>, which is how every other narrowing on
+    /// An account this user is not assigned is <c>400</c> rather than <c>404</c>, which is how every other narrowing on
     /// this surface answers one: it is a mistake in the request the client wrote rather than a missing resource, and it
     /// answers identically for an account nobody configured so that nothing here reports whose accounts exist.
     /// </remarks>
@@ -139,7 +139,7 @@ internal static class ClientOutboxEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this user owns.");
+            return Refuse("The account is not one this user is assigned.");
         }
     }
 

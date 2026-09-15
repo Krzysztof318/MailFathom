@@ -17,7 +17,7 @@ namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class FakeMailboxRefreshTokenStore : IMailboxRefreshTokenStore
 {
-    private readonly Dictionary<MailAccountIdentity, string> tokensByAccount = [];
+    private readonly Dictionary<MailAccountId, string> tokensByAccount = [];
 
     /// <summary>Creates a store holding nothing.</summary>
     public FakeMailboxRefreshTokenStore()
@@ -27,7 +27,7 @@ internal sealed class FakeMailboxRefreshTokenStore : IMailboxRefreshTokenStore
     /// <summary>Creates a store already holding one account's refresh token.</summary>
     /// <param name="account">The account the token belongs to, which is the key a lookup has to arrive under.</param>
     /// <param name="storedToken">The token text, or <see langword="null" /> for an account holding none.</param>
-    public FakeMailboxRefreshTokenStore(MailAccountIdentity account, string? storedToken)
+    public FakeMailboxRefreshTokenStore(MailAccountId account, string? storedToken)
     {
         if (storedToken is not null)
         {
@@ -44,14 +44,14 @@ internal sealed class FakeMailboxRefreshTokenStore : IMailboxRefreshTokenStore
     /// credential lands on: a store that recorded the identifier would let one user's refresh token be written onto
     /// another user's account with nothing to assert against.
     /// </remarks>
-    public List<MailAccountIdentity> StoredAccounts { get; } = [];
+    public List<MailAccountId> StoredAccounts { get; } = [];
 
     /// <summary>Gets the token last stored, read as text so it survives the caller erasing its own copy.</summary>
     public string? LastStoredToken { get; private set; }
 
     /// <inheritdoc />
     public Task<MailboxRefreshToken?> FindTokenAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.tokensByAccount.TryGetValue(account, out var storedToken)
             ? MailboxRefreshToken.FromText(storedToken)
@@ -59,7 +59,7 @@ internal sealed class FakeMailboxRefreshTokenStore : IMailboxRefreshTokenStore
 
     /// <inheritdoc />
     public Task SaveTokenAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxRefreshToken refreshToken,
         CancellationToken cancellationToken)
     {

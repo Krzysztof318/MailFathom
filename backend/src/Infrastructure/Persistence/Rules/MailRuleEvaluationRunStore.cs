@@ -20,15 +20,14 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 {
     /// <inheritdoc />
     public async Task<MailRuleEvaluationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var outstanding = await dbContext.MailRuleEvaluationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.UserId == userId && run.MailboxAccountId == mailboxAccountId && run.EndedAt == null,
+                run => run.MailboxAccountId == mailboxAccountId && run.EndedAt == null,
                 cancellationToken);
 
         return outstanding is null ? null : Read(outstanding, account);
@@ -37,15 +36,14 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     /// <inheritdoc />
     /// <remarks>One row per account, so the account's key is the whole of the lookup and no ordering is needed.</remarks>
     public async Task<MailRuleEvaluationRun?> FindLatestAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var latest = await dbContext.MailRuleEvaluationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.UserId == userId && run.MailboxAccountId == mailboxAccountId,
+                run => run.MailboxAccountId == mailboxAccountId,
                 cancellationToken);
 
         return latest is null ? null : Read(latest, account);
@@ -66,7 +64,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
-            [run.Account.User.Value, run.Account.Id.Value],
+            [run.Account.Value],
             cancellationToken);
 
         if (stored is null)
@@ -95,7 +93,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
-            [run.Account.User.Value, run.Account.Id.Value],
+            [run.Account.Value],
             cancellationToken);
 
         if (stored is null)
@@ -123,13 +121,12 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     /// The user comes off the identity the pass was started for rather than from a read of the account, which is what
     /// makes the pair on the row the same pair the caller resolved.
     /// </remarks>
-    private static MailRuleEvaluationRunEntity NewRunFor(MailAccountIdentity account) => new()
+    private static MailRuleEvaluationRunEntity NewRunFor(MailAccountId account) => new()
     {
-        MailboxAccountId = account.Id.Value,
-        UserId = account.User.Value,
+        MailboxAccountId = account.Value,
     };
 
-    private static MailRuleEvaluationRun Read(MailRuleEvaluationRunEntity entity, MailAccountIdentity account) => new()
+    private static MailRuleEvaluationRun Read(MailRuleEvaluationRunEntity entity, MailAccountId account) => new()
     {
         Account = account,
         RequestedAt = entity.RequestedAt,

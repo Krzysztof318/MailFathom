@@ -173,9 +173,10 @@ public readonly record struct MailFathomPermission
     /// <para>
     /// The one grant on this surface that decides which mailboxes the deployment serves a person at all: declaring one
     /// points this deployment at a mail server and gives it a credential reference to authenticate with, and withdrawing
-    /// one erases the account and every message, folder, and attachment this deployment stored for it, because an account
-    /// is served to one user at a time and nobody is left to serve it. That erasure is the person disposing of their own
-    /// mailbox, which is why it is not the administrative <see cref="AdminErase" />. It follows from nothing —
+    /// one ends that person's assignment to the mailbox — erasing the account and every message, folder, and attachment
+    /// this deployment stored for it when nobody else is left assigned, and erasing only what they authored there when
+    /// somebody is. That is the person disposing of their own hold on a mailbox, which is why it is not the
+    /// administrative <see cref="AdminErase" />. It follows from nothing —
     /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding which
     /// mailboxes are read at all.
     /// </para>

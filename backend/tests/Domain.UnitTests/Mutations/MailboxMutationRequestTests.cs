@@ -6,7 +6,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Mutations;
@@ -29,14 +28,14 @@ public sealed class MailboxMutationRequestTests
     public void Factories_ForEachMutation_CarryOnlyTheParametersThatMutationTakes()
     {
         // Act
-        var relocate = MailboxMutationRequest.Relocate(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, Archive);
+        var relocate = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive);
         var delete = MailboxMutationRequest.Delete(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             AuthoredDeleteEmailDisposition.EraseLocalCopy);
-        var setSeen = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, isSeen: true);
-        var copy = MailboxMutationRequest.Copy(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, Archive);
+        var setSeen = MailboxMutationRequest.SetSeen(LocalEmail, Occurrence(), Requester, isSeen: true);
+        var copy = MailboxMutationRequest.Copy(LocalEmail, Occurrence(), Requester, Archive);
 
         // Assert
         Assert.Equal(Archive, relocate.DestinationPath);
@@ -62,7 +61,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.Relocate,
             Requester,
@@ -83,7 +81,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.Delete,
             Requester,
@@ -104,7 +101,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.Delete,
             Requester,
@@ -125,7 +121,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.Copy,
             Requester,
@@ -147,7 +142,7 @@ public sealed class MailboxMutationRequestTests
         AuthoredDeleteEmailDisposition disposition)
     {
         // Act
-        var request = MailboxMutationRequest.Relocate(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, Archive, disposition);
+        var request = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive, disposition);
 
         // Assert
         Assert.Equal(disposition, request.LocalDisposition);
@@ -159,7 +154,7 @@ public sealed class MailboxMutationRequestTests
     public void Relocate_AMirroredDestination_CarriesNoLocalDisposition()
     {
         // Act
-        var request = MailboxMutationRequest.Relocate(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, Archive);
+        var request = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive);
 
         // Assert
         Assert.Null(request.LocalDisposition);
@@ -171,7 +166,7 @@ public sealed class MailboxMutationRequestTests
     {
         // Act
         var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequest.Relocate(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             Archive,
@@ -188,7 +183,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.Delete,
             Requester,
@@ -209,7 +203,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             default,
             Requester,
@@ -230,7 +223,7 @@ public sealed class MailboxMutationRequestTests
     public void SetFlagged_EitherDirection_CarriesTheFlaggedStateAndNoSeenState(bool isFlagged)
     {
         // Act
-        var request = MailboxMutationRequest.SetFlagged(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, isFlagged);
+        var request = MailboxMutationRequest.SetFlagged(LocalEmail, Occurrence(), Requester, isFlagged);
 
         // Assert
         Assert.Equal(MailboxMutation.SetFlagged, request.Mutation);
@@ -248,9 +241,9 @@ public sealed class MailboxMutationRequestTests
         var keywords = AuthoredMailKeywords.Create(["$Todo"]);
 
         // Act
-        var added = MailboxMutationRequest.AddKeywords(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, keywords);
-        var removed = MailboxMutationRequest.RemoveKeywords(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, keywords);
-        var replaced = MailboxMutationRequest.SetKeywords(LocalEmail, SyntheticMailUser.Deployment, Occurrence(), Requester, keywords);
+        var added = MailboxMutationRequest.AddKeywords(LocalEmail, Occurrence(), Requester, keywords);
+        var removed = MailboxMutationRequest.RemoveKeywords(LocalEmail, Occurrence(), Requester, keywords);
+        var replaced = MailboxMutationRequest.SetKeywords(LocalEmail, Occurrence(), Requester, keywords);
 
         // Assert
         Assert.Equal(
@@ -270,7 +263,7 @@ public sealed class MailboxMutationRequestTests
     {
         // Act
         var request = MailboxMutationRequest.SetKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             AuthoredMailKeywords.None);
@@ -291,7 +284,7 @@ public sealed class MailboxMutationRequestTests
     {
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.AddKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             AuthoredMailKeywords.None));
@@ -306,7 +299,7 @@ public sealed class MailboxMutationRequestTests
     {
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.RemoveKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             AuthoredMailKeywords.None));
@@ -325,17 +318,17 @@ public sealed class MailboxMutationRequestTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.AddKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             keywords: null!));
         Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.RemoveKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             keywords: null!));
         Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.SetKeywords(
-            LocalEmail, SyntheticMailUser.Deployment,
+            LocalEmail,
             Occurrence(),
             Requester,
             keywords: null!));
@@ -348,7 +341,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.AddKeywords,
             Requester,
@@ -369,7 +361,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.SetFlagged,
             Requester,
@@ -390,7 +381,6 @@ public sealed class MailboxMutationRequestTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
-            SyntheticMailUser.Deployment,
             Occurrence(),
             MailboxMutation.SetKeywords,
             Requester,

@@ -27,8 +27,7 @@ namespace MailFathom.Application.UnitTests.Folders;
 /// </summary>
 public sealed class MirroredMailFolderEditorTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly MailFolderAlias Projects = MailFolderAlias.Create("projects");
 
@@ -345,7 +344,7 @@ public sealed class MirroredMailFolderEditorTests
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<MailTransportSecurityPolicy>(),
                 Arg.Any<CancellationToken>())
-            .Returns(_ => throw new RemoteFolderEditRefusedException(Account.Id, Projects, MailFolderAct.Delete));
+            .Returns(_ => throw new RemoteFolderEditRefusedException(Account, Projects, MailFolderAct.Delete));
 
         // Act
         var outcome = await deployment.Editor.DeleteAsync(Account, Projects, TestContext.Current.CancellationToken);
@@ -372,7 +371,7 @@ public sealed class MirroredMailFolderEditorTests
                 Arg.Any<string>(),
                 Arg.Any<MailTransportSecurityPolicy>(),
                 Arg.Any<CancellationToken>())
-            .Returns<RemoteFolderPath>(_ => throw new MailboxUnavailableException(Account.Id, new TimeoutException()));
+            .Returns<RemoteFolderPath>(_ => throw new MailboxUnavailableException(Account, new TimeoutException()));
 
         // Act
         var outcome = await deployment.Editor.RenameAsync(Account, Projects, "Plans", TestContext.Current.CancellationToken);

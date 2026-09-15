@@ -37,7 +37,7 @@ internal static class OutgoingMailUsageQuery
     internal static IQueryable<OutgoingEmailEntity> ComposeMessages(
         IQueryable<OutgoingEmailEntity> messages,
         DateTimeOffset periodStart,
-        MailAccountIdentity? account)
+        MailAccountId? account)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
@@ -48,11 +48,9 @@ internal static class OutgoingMailUsageQuery
             return withinPeriod;
         }
 
-        var userValue = narrowed.User.Value;
-        var accountValue = narrowed.Id.Value;
+        var accountValue = narrowed.Value;
 
-        return withinPeriod.Where(message => message.UserId == userValue
-            && message.MailboxAccountId == accountValue);
+        return withinPeriod.Where(message => message.MailboxAccountId == accountValue);
     }
 
     /// <summary>Composes the query over the people those messages are addressed to.</summary>

@@ -5,11 +5,9 @@
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -36,23 +34,16 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
     /// <param name="awaitsExtraction">Whether text is still expected to be derived from the email's content.</param>
     /// <param name="bodyText">The extracted text a condition naming the body text resolves.</param>
     /// <param name="evaluatedAt">When a pass last evaluated it, which takes it out of the arrival queue.</param>
-    /// <param name="user">
-    /// The user whose account the email belongs to, defaulting to the one a deployment serves. Stated separately from
-    /// the facts because the facts name the account as the identifier an operator wrote, and an identifier names one
-    /// account within its user — so a test that wants mail this deployment must not read names another user here.
-    /// </param>
     /// <returns>The identity of the added email.</returns>
     internal StoredEmailId Add(
         MailRuleEmailFacts facts,
         bool awaitsExtraction = false,
         string? bodyText = null,
-        DateTimeOffset? evaluatedAt = null,
-        MailUserId? user = null)
+        DateTimeOffset? evaluatedAt = null)
     {
         var row = new StoredRow
         {
             Id = StoredEmailId.Create(Guid.CreateVersion7()),
-            User = user ?? SyntheticMailUser.Deployment,
             Occurrence = EmailOccurrenceId.Create(
                 MailAccountId.Create(facts.Account),
                 new MailFolderResolutionId(
@@ -91,7 +82,7 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetEmailsAwaitingFirstEvaluationAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
@@ -99,7 +90,7 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetStoredEmailsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
@@ -130,7 +121,7 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
     }
 
     private IReadOnlyList<StoredEmailAwaitingRuleEvaluation> Read(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         Func<StoredRow, bool> admits)
@@ -143,8 +134,8 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
         [
             .. this.rows
                 .Skip(startIndex)
-                .Where(row => row.User == account.User
-                    && row.Facts.Account == account.Id.Value
+                .Where(row => row.Occurrence.AccountId == account
+                    && row.Facts.Account == account.Value
                     && admits(row))
                 .Take(batchSize)
                 .Select(row => new StoredEmailAwaitingRuleEvaluation(
@@ -158,8 +149,6 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
     private sealed class StoredRow
     {
         internal required StoredEmailId Id { get; init; }
-
-        internal required MailUserId User { get; init; }
 
         internal required EmailOccurrenceId Occurrence { get; init; }
 

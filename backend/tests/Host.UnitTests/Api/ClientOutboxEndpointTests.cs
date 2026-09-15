@@ -36,6 +36,9 @@ public sealed class ClientOutboxEndpointTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
+    /// <summary>A second mailbox this deployment serves and the caller is not assigned.</summary>
+    private static readonly MailAccountId Unassigned = MailAccountId.Create("someone-elses");
+
     /// <summary>The paths a client appends to the address it was configured with, pinned because it composes them from constants of its own.</summary>
     [Fact]
     public void OutboxRoutes_ArePathsAClientComposes()
@@ -160,7 +163,7 @@ public sealed class ClientOutboxEndpointTests
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var mine = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work));
+        var mine = await QueueAsync(outgoingEmails, Work);
 
         // Act
         var result = await ClientOutboxEndpoints.ReadSendAsync(
@@ -173,13 +176,13 @@ public sealed class ClientOutboxEndpointTests
         Assert.Equal(mine.Value, read.Value!.OutgoingEmail);
     }
 
-    /// <summary>A send another user made answers as one nobody made, so nothing here reports that it exists.</summary>
+    /// <summary>A send from a mailbox this caller is not assigned answers as one nobody made.</summary>
     [Fact]
-    public async Task ReadSendAsync_ASendAnotherUserMade_AnswersAsOneNobodyMade()
+    public async Task ReadSendAsync_ASendFromAMailboxTheCallerIsNotAssigned_AnswersAsOneNobodyMade()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Another, Work));
+        var theirs = await QueueAsync(outgoingEmails, Unassigned);
 
         // Act
         var result = await ClientOutboxEndpoints.ReadSendAsync(
@@ -210,14 +213,14 @@ public sealed class ClientOutboxEndpointTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>A send another user made is an outcome rather than a refusal, and the decision is never reached.</summary>
+    /// <summary>A send from a mailbox this caller is not assigned is an outcome rather than a refusal, and the decision is never reached.</summary>
     [Fact]
-    public async Task CancelAsync_ASendAnotherUserMade_ReportsItUnknownWithoutDeciding()
+    public async Task CancelAsync_ASendFromAMailboxTheCallerIsNotAssigned_ReportsItUnknownWithoutDeciding()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var operations = Substitute.For<IOutboxOperationStore>();
-        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Another, Work));
+        var theirs = await QueueAsync(outgoingEmails, Unassigned);
 
         // Act
         var result = await ClientOutboxEndpoints.CancelAsync(
@@ -251,14 +254,26 @@ public sealed class ClientOutboxEndpointTests
     }
 
     /// <summary>Builds the user-facing outbox the routes reach, for a caller acting for the deployment's user.</summary>
+    /// <remarks>
+    /// Two mailboxes are served and the caller is assigned one of them, which is what lets a test state a send
+    /// somebody else made: the record is in this deployment either way, and what keeps it out of the answer is the
+    /// assignment rather than the deployment not holding it.
+    /// </remarks>
     private static UserOutbox OutboxOver(
         InMemoryOutgoingEmailStore outgoingEmails,
         IOutboxOperationStore operations)
     {
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, Work)
+            .Assigning(SyntheticMailUser.Another, Unassigned);
 
         return new UserOutbox(
-            OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(Work)),
+            AssignedMailAccountCatalogs.For(
+                authorization,
+                assignments,
+                SyntheticServedAccount.Of(Work),
+                SyntheticServedAccount.Of(Unassigned)),
             outgoingEmails,
             operations,
             authorization);
@@ -267,7 +282,7 @@ public sealed class ClientOutboxEndpointTests
     /// <summary>Writes one queued send down for one account, which is the arrangement the reading tests start from.</summary>
     private static async Task<OutgoingEmailId> QueueAsync(
         InMemoryOutgoingEmailStore outgoingEmails,
-        MailAccountIdentity account)
+        MailAccountId account)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
@@ -275,7 +290,8 @@ public sealed class ClientOutboxEndpointTests
             Substitute.For<IPersistenceSession>(),
             OutgoingEmailRequest.Create(
                 account,
-                OutgoingEmailRequester.Command($"mfctl-{account.User.Value:N}"),
+                SyntheticMailUser.Deployment,
+                OutgoingEmailRequester.Command($"mfctl-{account.Value}"),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]),
             OutgoingEmailPrincipal.Of("test-caller"),
             Encoding.ASCII.GetBytes("Subject: a send\r\n\r\nHello.").Length,

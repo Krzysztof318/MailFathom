@@ -49,7 +49,7 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// later meets it whatever it did first.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a caller may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user is assigned, and therefore which one a caller may name.</param>
 /// <param name="recipientResolver">Turns the people the author named into the addresses a message is offered to.</param>
 /// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
 /// <param name="outbox">Writes the record and the message down together, and says the account has something to send.</param>
@@ -71,7 +71,7 @@ public sealed class AuthoredMailSubmission(
     /// <returns>The durable record the message was written down as, whether this call created it or an identical earlier one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no user.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user is not assigned, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailSubmissionRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, the account configures no address to send from, or the message is asked to leave at a time that has passed.</exception>
     /// <exception cref="OutgoingMailRefusedException">Thrown when a recipient is one this deployment may not write to, when this caller has reached a ceiling of its own, or when a recipient it named is one nothing here vouches for.</exception>
     public async Task<OutgoingEmailRecord> SubmitAsync(
@@ -82,11 +82,11 @@ public sealed class AuthoredMailSubmission(
 
         authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        // Resolved against the accounts the caller's user owns rather than against the deployment's, because a send
+        // Resolved against the accounts the caller's user is assigned rather than against the deployment's, because a send
         // names the mailbox mail leaves as: an account belonging to somebody else would put this caller's message into
         // the world under that person's address. It is refused with the failure an unserved account gets, so a refusal
         // cannot tell a caller that the account exists.
-        var account = accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
+        var account = accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // Before the contact book is read and before anything is composed, because a time that has gone is the
@@ -122,7 +122,8 @@ public sealed class AuthoredMailSubmission(
         };
 
         var composition = composer.Compose(
-            account.Identity,
+            account.Id,
+            accountCatalog.User,
             request.Requester,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);

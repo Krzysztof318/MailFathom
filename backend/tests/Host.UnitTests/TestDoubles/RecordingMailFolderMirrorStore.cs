@@ -35,14 +35,14 @@ internal sealed class RecordingMailFolderMirrorStore(MailFolderMirrorErasure? er
     /// <inheritdoc />
     public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         int maxEmails,
         CancellationToken cancellationToken)
     {
         lock (this.erasedFolders)
         {
-            this.erasedFolders.Add(new MailFolderIdentity(account.Id, folderAlias));
+            this.erasedFolders.Add(new MailFolderIdentity(account, folderAlias));
         }
 
         return Task.FromResult(erasure ?? MailFolderMirrorErasure.Nothing);

@@ -28,22 +28,14 @@ public sealed record EmailSummary
     /// <summary>Gets the stable local identity of the email, which every later request names it by.</summary>
     public required StoredEmailId StoredEmailId { get; init; }
 
-    /// <summary>Gets the account whose mailbox the email was read from, named by its user and its identifier.</summary>
+    /// <summary>Gets the account whose mailbox the email was read from, by its generated identifier.</summary>
     /// <remarks>
-    /// The pair, read back from the email's own row: an identifier names one account within its user, and a summary
-    /// that feeds a write — an authored answer, a draft — supplies the user that write records without asking the
-    /// account table again.
+    /// Read back from the email's own row rather than resolved again, and the generated identifier alone: it names one
+    /// mailbox across the deployment, so a summary that feeds a write — an authored answer, a draft — carries
+    /// everything that write needs about which mailbox it is for. Who may read it is the assignment relation's answer
+    /// rather than this value's.
     /// </remarks>
-    public required MailAccountIdentity Account { get; init; }
-
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
-    /// <remarks>
-    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
-    /// alone there says what the code means.
-    /// </remarks>
-    public MailAccountId AccountId => this.Account.Id;
-
+    public required MailAccountId Account { get; init; }
 
     /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>
     public required MailFolderAlias FolderAlias { get; init; }

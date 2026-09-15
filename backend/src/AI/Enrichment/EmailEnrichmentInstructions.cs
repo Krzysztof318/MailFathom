@@ -6,7 +6,7 @@ using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using MailFathom.Application.Emails.Enrichment;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.AI.Enrichment;
 
@@ -28,33 +28,35 @@ namespace MailFathom.AI.Enrichment;
 /// on.
 /// </para>
 /// <para>
-/// What the readings are written in is the reader's language rather than the message's. A derivation is produced for
-/// one person and nobody asked it a question, so there is no language in the request to answer in — before their record
-/// stated one, a mailbox carrying two languages produced a list that alternated between them. Quoted text is the one
-/// exception the instruction states, because a subject rendered into another language is no longer the subject
-/// somebody would find in their mail.
+/// What the readings are written in is the mailbox's language rather than the message's. A derivation is produced
+/// for a mailbox and nobody asked it a question, so there is no language in the request to answer in — before the
+/// account's record stated one, a mailbox carrying two languages produced a list that alternated between them. The
+/// mailbox's rather than a reader's because the reading is one row: a mailbox two people are assigned is enriched
+/// once, and both of them read the sentence that one derivation wrote. Quoted text is the one exception the
+/// instruction states, because a subject rendered into another language is no longer the subject somebody would find
+/// in their mail.
 /// </para>
 /// </remarks>
 internal static class EmailEnrichmentInstructions
 {
     /// <summary>The instruction for each language this deployment writes in, composed once per language.</summary>
     /// <remarks>Composed from the members rather than written out twice, so the set is the enumeration's and a language added to it arrives here without this file being edited.</remarks>
-    private static readonly FrozenDictionary<MailUserLanguage, string> TextByLanguage = Enum
-        .GetValues<MailUserLanguage>()
+    private static readonly FrozenDictionary<MailAccountLanguage, string> TextByLanguage = Enum
+        .GetValues<MailAccountLanguage>()
         .ToFrozenDictionary(static language => language, Compose);
 
-    /// <summary>Gets the instruction the agent is composed with for one user's language.</summary>
+    /// <summary>Gets the instruction the agent is composed with for one mailbox's language.</summary>
     /// <param name="language">The language this derivation's readings are written in.</param>
     /// <returns>The instruction text.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
-    internal static string TextFor(MailUserLanguage language) => TextByLanguage.TryGetValue(language, out var text)
+    internal static string TextFor(MailAccountLanguage language) => TextByLanguage.TryGetValue(language, out var text)
         ? text
         : throw new ArgumentOutOfRangeException(
             nameof(language),
             language,
             "The enrichment agent is composed for a language MailFathom writes in.");
 
-    private static string Compose(MailUserLanguage language) => string.Create(
+    private static string Compose(MailAccountLanguage language) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         You read one message from somebody's own mailbox and write down what it is about, why it may matter to them, and

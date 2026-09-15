@@ -97,7 +97,7 @@ internal static class MailFolderErasureEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        if (mappings.FindFolderNamed(servedAccount.Id, folderAlias) is { Participation.IsSynchronized: true })
+        if (mappings.FindFolderNamed(servedAccount, folderAlias) is { Participation.IsSynchronized: true })
         {
             return TypedResults.Problem(
                 $"The folder '{folderAlias.Value}' is still mirrored, so erasing it would only cost a remirror. Switch its Synchronize off, or remove its mapping, and ask again.",
@@ -107,7 +107,7 @@ internal static class MailFolderErasureEndpoint
         var erasure = await eraser.EraseAsync(servedAccount, folderAlias, cancellationToken);
 
         return TypedResults.Ok(new MailFolderErasureResponse(
-            servedAccount.Id.Value,
+            servedAccount.Value,
             folderAlias.Value,
             erasure.ErasedEmailCount,
             erasure.EmailsRemain));
