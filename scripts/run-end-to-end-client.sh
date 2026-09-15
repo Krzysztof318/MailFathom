@@ -349,7 +349,9 @@ served_user="$(
 
 # The mailbox is a mail account record of its own, assigned to that user as it is created. The three transport opt-ins
 # are here rather than in the environment for one reason: the mail server beside this run speaks no TLS, and a
-# deployment reaching a clear-text server has to say so wherever the mailbox is declared.
+# deployment reaching a clear-text server has to say so wherever the mailbox is declared. The language is stated for a
+# different reason: every account names the one MailFathom writes about its mail in, and this run replays an English
+# corpus.
 
 # A refusal answers 200 with the reasons rather than a failing status, because every one of them is something the caller
 # composes the next attempt from. So the outcome is read rather than the status code.
@@ -370,6 +372,7 @@ mailbox_declaration="$(
            account: ({
              EmailAddress: $emailAddress,
              DisplayName: "End-to-end mailbox",
+             Language: "English",
              Host: $host,
              Port: $port,
              UserName: $userName,
