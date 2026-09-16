@@ -478,6 +478,7 @@ public sealed class MailboxSynchronizer
                 synchronizationWindow,
                 flaggedDeletes.AwaitingRestore,
                 account,
+                folder.Alias,
                 budget,
                 collection,
                 arrivalSource,
@@ -752,12 +753,15 @@ public sealed class MailboxSynchronizer
     /// produces is the one a first discovery would have. The record is retired once that store is durable, and equally
     /// when the occurrence is no longer served or falls outside the account's window, because nothing would ever store
     /// it then. A run whose byte budget cannot cover the next one leaves it, and everything behind it, for the next run.
+    /// It is announced to open clients as a changed message rather than as arrived mail, because it is a message the
+    /// person already had and deleted, not one that has just reached them.
     /// </remarks>
     private async Task RestoreUndeletedEmailsAsync(
         IMailboxSession mailboxSession,
         MailSynchronizationWindow synchronizationWindow,
         IReadOnlyList<DeleteLeftFlagged> awaitingRestore,
         MailAccountId account,
+        MailFolderAlias folder,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         LocalMailFolderArrivalSource arrivalSource,
@@ -771,6 +775,7 @@ public sealed class MailboxSynchronizer
                 synchronizationWindow,
                 cancellationToken);
             var metadata = batch.Emails.FirstOrDefault(email => email.OccurrenceId.Uid == undeleted.Uid);
+            StoredEmailId? restoredAs = null;
 
             if (metadata is not null)
             {
@@ -779,7 +784,7 @@ public sealed class MailboxSynchronizer
                     return;
                 }
 
-                await this.StoreOccurrenceAsync(
+                var restored = await this.StoreOccurrenceAsync(
                     mailboxSession,
                     metadata,
                     placement: null,
@@ -791,9 +796,10 @@ public sealed class MailboxSynchronizer
                     storageAlreadyRefused: null,
                     arrivalSource,
                     cancellationToken);
+                restoredAs = restored.StoredEmailId;
             }
 
-            await this.flaggedDeleteFollower.RetireAsync(undeleted, cancellationToken);
+            await this.flaggedDeleteFollower.RetireAsync(account, folder, undeleted, restoredAs, cancellationToken);
         }
     }
 

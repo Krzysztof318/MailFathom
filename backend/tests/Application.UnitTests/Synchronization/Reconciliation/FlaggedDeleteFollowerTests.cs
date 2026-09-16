@@ -220,19 +220,54 @@ public sealed class FlaggedDeleteFollowerTests
         Assert.Empty(settlement.Restored);
     }
 
-    /// <summary>Retiring an occurrence the run has stored again is one commit of its own.</summary>
+    /// <summary>A message stored again is one an open client was told had gone, so it is announced as changed.</summary>
     [Fact]
-    public async Task RetireAsync_AnOccurrenceAwaitingRestore_StopsFollowingIt()
+    public async Task RetireAsync_AnOccurrenceStoredAgain_StopsFollowingItAndSignalsTheMessage()
     {
         // Arrange
         var followed = Followed(42, keptEmail: null);
-        var context = new FollowerContext().Following(followed);
+        var channel = new RecordingClientSignalChannel();
+        var context = new FollowerContext(channel).Following(followed);
 
         // Act
-        await context.Follower.RetireAsync(followed, TestContext.Current.CancellationToken);
+        await context.Follower.RetireAsync(
+            Account,
+            InboxFolder.Alias,
+            followed,
+            DeletedEmail,
+            TestContext.Current.CancellationToken);
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
 
         // Assert
         Assert.Equal([followed.Id], context.Store.Retired);
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal([DeletedEmail], signal.Emails);
+    }
+
+    /// <summary>An occurrence the run could not store again is only let go, since nothing came back to announce.</summary>
+    [Fact]
+    public async Task RetireAsync_AnOccurrenceNotStoredAgain_StopsFollowingItWithoutASignal()
+    {
+        // Arrange
+        var followed = Followed(42, keptEmail: null);
+        var channel = new RecordingClientSignalChannel();
+        var context = new FollowerContext(channel).Following(followed);
+
+        // Act
+        await context.Follower.RetireAsync(
+            Account,
+            InboxFolder.Alias,
+            followed,
+            restoredAs: null,
+            TestContext.Current.CancellationToken);
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
+
+        // Assert
+        Assert.Equal([followed.Id], context.Store.Retired);
+        Assert.Empty(channel.Published);
     }
 
     private static DeleteLeftFlagged Followed(uint uid, StoredEmailId? keptEmail) =>

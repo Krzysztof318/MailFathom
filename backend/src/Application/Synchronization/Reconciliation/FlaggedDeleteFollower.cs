@@ -169,20 +169,37 @@ public sealed class FlaggedDeleteFollower
     }
 
     /// <summary>Stops following an occurrence whose erased message the run has stored again, or found it could not.</summary>
+    /// <remarks>
+    /// A message stored again is announced as changed in its folder, as a kept row brought back is, because an open
+    /// client has to learn that a message it was told had gone is back.
+    /// </remarks>
+    /// <param name="account">The account the occurrence belongs to.</param>
+    /// <param name="folder">The folder the occurrence is in.</param>
     /// <param name="undeleted">One of the occurrences a follow-up returned as awaiting restore.</param>
+    /// <param name="restoredAs">The local email the message was stored again as, or <see langword="null" /> when it was not.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the record is gone.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="undeleted" /> is <see langword="null" />.</exception>
-    public Task RetireAsync(DeleteLeftFlagged undeleted, CancellationToken cancellationToken)
+    public async Task RetireAsync(
+        MailAccountId account,
+        MailFolderAlias folder,
+        DeleteLeftFlagged undeleted,
+        StoredEmailId? restoredAs,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(undeleted);
 
-        return this.concurrencyRetryPolicy.CommitAsync(
+        await this.concurrencyRetryPolicy.CommitAsync(
             (persistenceSession, attemptCancellationToken) => this.reconciliationStore.RetireDeletesLeftFlaggedAsync(
                 persistenceSession,
                 [undeleted.Id],
                 attemptCancellationToken),
             cancellationToken);
+
+        if (restoredAs is { } restored && this.signals.Reaches)
+        {
+            this.signals.Publish(ClientSignal.MailChanged(account, folder, [restored]));
+        }
     }
 
     /// <summary>Tells an open client which stored mail left its folder or came back, once the follow-up is committed.</summary>

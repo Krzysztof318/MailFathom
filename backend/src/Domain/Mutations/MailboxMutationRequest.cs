@@ -419,11 +419,11 @@ public sealed record MailboxMutationRequest
             || mutation == MailboxMutation.RemoveKeywords
             || mutation == MailboxMutation.SetKeywords;
 
-        // A delete has to name one and a relocation may, which is why this is two checks rather than one equality: the
-        // relocation's disposition says its destination is unmirrored, and its absence says the destination is mirrored.
-        // Both are meaningful, so neither can be refused.
-        var requiresLocalDisposition = mutation == MailboxMutation.Delete;
-        var permitsLocalDisposition = requiresLocalDisposition || mutation == MailboxMutation.Relocate;
+        // A delete has to name a local disposition and a relocation may, which is why that is two checks rather than one
+        // equality: the relocation's disposition says its destination is unmirrored, and its absence says the destination
+        // is mirrored. Both are meaningful, so neither can be refused. A server disposition is a delete's alone.
+        var isDelete = mutation == MailboxMutation.Delete;
+        var permitsLocalDisposition = isDelete || mutation == MailboxMutation.Relocate;
 
         if (takesDestination != destinationPath.HasValue)
         {
@@ -471,7 +471,7 @@ public sealed record MailboxMutationRequest
                 nameof(keywords));
         }
 
-        if (requiresLocalDisposition && !localDisposition.HasValue)
+        if (isDelete && !localDisposition.HasValue)
         {
             throw new ArgumentException(
                 $"The {mutation.Name} mutation names a local disposition and none was supplied.",
@@ -496,10 +496,10 @@ public sealed record MailboxMutationRequest
                 "The local disposition of a delete must be one of the declared dispositions.");
         }
 
-        if (requiresLocalDisposition != serverDisposition.HasValue)
+        if (isDelete != serverDisposition.HasValue)
         {
             throw new ArgumentException(
-                requiresLocalDisposition
+                isDelete
                     ? $"The {mutation.Name} mutation names a server disposition and none was supplied."
                     : $"The {mutation.Name} mutation names no server disposition.",
                 nameof(serverDisposition));
