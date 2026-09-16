@@ -353,7 +353,10 @@ second one being stored; `ix_stored_emails_filed_sent_copy` is how the question 
 Erasing a message on a held account removes the `stored_emails` row, which is the only record of where that message was
 on the source — so the erasing transaction writes one row here instead, and the drain expunges from it afterwards. That
 is what keeps a person's delete, a rule's delete, and a retention pass from waiting on a mail server, or failing because
-one is unreachable.
+one is unreachable. It is written only while the account holds its own mailbox, and only for a folder the source keeps
+messages in: a mirrored account's source holds the mail rather than a copy of it, and a folder playing a virtual role
+presents occurrences of messages that live in other folders, so a record written for either would name a UID the drain
+should never have expunged.
 
 | Column of `mailbox_source_removals` | What it records |
 |---|---|

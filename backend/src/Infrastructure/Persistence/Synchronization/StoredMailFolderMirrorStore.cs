@@ -28,6 +28,7 @@ internal sealed class StoredMailFolderMirrorStore(TimeProvider timeProvider) : I
         IPersistenceSession session,
         MailAccountId account,
         MailFolderAlias folderAlias,
+        bool folderHoldsItsOwnMessages,
         int maxEmails,
         CancellationToken cancellationToken)
     {
@@ -66,12 +67,14 @@ internal sealed class StoredMailFolderMirrorStore(TimeProvider timeProvider) : I
             [.. removed.Select(static email => email.Id)],
             cancellationToken);
 
-        // Owed only by an account whose own mailbox is the truth, and read before the removal is staged like the two
-        // reads above, because the occurrence each record names lives on the row itself. A mirrored account's source
-        // holds the mail rather than a copy of it, so erasing what MailFathom mirrors of a folder says nothing about
-        // what that server should keep — and a record written there would be expunged from later, by a drain that has
-        // no gate over this half of its work.
-        if (await HoldsItsOwnMailboxAsync(sessionContext, accountIdValue, cancellationToken))
+        // Owed only by an account whose own mailbox is the truth, for a folder that server keeps messages in, and read
+        // before the removal is staged like the two reads above, because the occurrence each record names lives on the
+        // row itself. A mirrored account's source holds the mail rather than a copy of it, so erasing what MailFathom
+        // mirrors of a folder says nothing about what that server should keep; and the UIDs a virtual folder presents
+        // are occurrences of messages living in other folders, so a record naming one would expunge mail nobody asked
+        // about. Either record would be acted on later by a drain that has no gate over this half of its work.
+        if (folderHoldsItsOwnMessages
+            && await HoldsItsOwnMailboxAsync(sessionContext, accountIdValue, cancellationToken))
         {
             MailboxSourceRemovalRecords.Stage(sessionContext, removed, timeProvider.GetUtcNow());
         }

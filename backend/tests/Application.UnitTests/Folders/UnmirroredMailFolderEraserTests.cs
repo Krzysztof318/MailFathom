@@ -22,6 +22,7 @@ public sealed class UnmirroredMailFolderEraserTests
     private static readonly MailAccountId Account =
         MailAccountId.Create("primary");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("JUNK");
+    private static readonly MailFolderAlias Everything = MailFolderAlias.Create("EVERYTHING");
 
     /// <summary>The pass runs inside one transaction, so what it removed is either all committed or not removed at all.</summary>
     [Fact]
@@ -106,10 +107,75 @@ public sealed class UnmirroredMailFolderEraserTests
         Assert.Empty(store.Passes);
     }
 
+    /// <summary>A folder the source keeps messages in is what a held account's source removal record may name.</summary>
+    [Fact]
+    public async Task EraseAsync_AFolderTheAccountMapsToAPath_ErasesItAsAFolderTheSourceKeepsMessagesIn()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 4, EmailsRemain: false));
+        var eraser = EraserOver(store, maxEmailsPerPass: 500);
+
+        // Act
+        await eraser.EraseAsync(Account, Junk, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(store.FolderHeldItsOwnMessages);
+    }
+
+    /// <summary>
+    /// A virtual folder presents occurrences of messages the source keeps elsewhere, so its erasure asks that server
+    /// for nothing: a record naming one would expunge mail out of the folders it is presented from.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AFolderPlayingAVirtualRole_ErasesItWithoutClaimingTheSourceKeepsMessagesThere()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 4, EmailsRemain: false));
+        var eraser = EraserOver(
+            store,
+            maxEmailsPerPass: 500,
+            mappings: MappingsNaming(MailFolderMapping.ToSpecialUse(Everything, MailFolderSpecialUse.All)));
+
+        // Act
+        await eraser.EraseAsync(Account, Everything, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(store.FolderHeldItsOwnMessages);
+    }
+
+    /// <summary>
+    /// The alias need not be one a mapping still names, and an alias configuration no longer describes cannot be told
+    /// apart from a virtual one — so the erasure runs and the source is told nothing.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AnAliasNoMappingNamesAnyMore_ErasesItWithoutClaimingTheSourceKeepsMessagesThere()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 4, EmailsRemain: false));
+        var eraser = EraserOver(store, maxEmailsPerPass: 500, mappings: MappingsNaming(null));
+
+        // Act
+        var erasure = await eraser.EraseAsync(Account, Junk, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(4, erasure.ErasedEmailCount);
+        Assert.False(store.FolderHeldItsOwnMessages);
+    }
+
+    /// <summary>Answers every lookup with one mapping, or with none at all for an alias configuration no longer names.</summary>
+    private static IMailFolderMappingReader MappingsNaming(MailFolderMapping? mapping)
+    {
+        var mappings = Substitute.For<IMailFolderMappingReader>();
+        mappings.FindFolderNamed(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>()).Returns(mapping);
+
+        return mappings;
+    }
+
     private static UnmirroredMailFolderEraser EraserOver(
         IStoredMailFolderMirrorStore store,
         int maxEmailsPerPass,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        IMailFolderMappingReader? mappings = null)
     {
         var clock = new FakeTimeProvider();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -117,6 +183,7 @@ public sealed class UnmirroredMailFolderEraserTests
 
         return new UnmirroredMailFolderEraser(
             store,
+            mappings ?? MappingsNaming(MailFolderMapping.ToRemotePath(Junk, RemoteFolderPath.Create("INBOX.Junk"))),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
             new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxEmailsPerPass },
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
@@ -131,14 +198,18 @@ public sealed class UnmirroredMailFolderEraserTests
         public IReadOnlyList<(MailAccountId Account, MailFolderAlias FolderAlias, int MaxEmails)> Passes =>
             this.passes;
 
+        public bool? FolderHeldItsOwnMessages { get; private set; }
+
         public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
             IPersistenceSession session,
             MailAccountId account,
             MailFolderAlias folderAlias,
+            bool folderHoldsItsOwnMessages,
             int maxEmails,
             CancellationToken cancellationToken)
         {
             this.passes.Add((account, folderAlias, maxEmails));
+            this.FolderHeldItsOwnMessages = folderHoldsItsOwnMessages;
 
             return Task.FromResult(erasure);
         }

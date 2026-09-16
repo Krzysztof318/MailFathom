@@ -67,6 +67,11 @@ public sealed class WithdrawnMailFolderMailErasureHandler : IJobHandler
                 session,
                 named.Account,
                 named.Folder,
+                // A folder reaching this job is one a person deleted through the client, and that surface refuses every
+                // folder carrying a role at all — MailFolderActRefusal.ProtectedRole — so none of them plays a virtual
+                // one. The mapping is gone by the time a pass runs, which is why the answer is this invariant rather
+                // than a reading: a payload field would carry the same constant through the job store instead.
+                folderHoldsItsOwnMessages: true,
                 this.options.MaxReconciledEmailsPerRun,
                 attemptCancellationToken),
             cancellationToken);
