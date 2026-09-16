@@ -192,6 +192,20 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             .Where(row => !HasNewerObservationThan(row, outcome.ObservedAt))
             .ToArray();
 
+        if (!outcome.AppliesRemoteDeletions)
+        {
+            // The account's mailbox is MailFathom's to keep, so a message gone from the source is the drain's own work
+            // completing rather than somebody deleting mail. The row keeps its whole life and loses only the pointer at
+            // a position no server holds any more, which is the same clearing the drain would have written itself.
+            foreach (var row in disappeared)
+            {
+                row.UidValidity = null;
+                row.Uid = null;
+            }
+
+            return;
+        }
+
         if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
         {
             // The cascade takes the raw MIME with the row, and nothing below the content store observes that cascade,

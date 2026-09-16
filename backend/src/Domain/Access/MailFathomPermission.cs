@@ -271,6 +271,27 @@ public readonly record struct MailFathomPermission
     public static MailFathomPermission AdminConfigurationWrite { get; } =
         new("mailfathom.admin.configuration.write", ProtectedSurface.Administration);
 
+    /// <summary>Gets the permission covering switching one mail account between mirroring its source server and holding its own mailbox.</summary>
+    /// <remarks>
+    /// <para>
+    /// A name of its own that no other administrative grant confers, because it is the one act here that destroys a
+    /// copy of somebody's mail: an account switched into holding its mailbox has its source emptied of everything
+    /// MailFathom durably holds, message by message, for as long as it stays switched. Nothing in the configuration
+    /// file, a reload, or a template reaches it, so this name is the whole of who may ask.
+    /// </para>
+    /// <para>
+    /// It is on the administrative surface because the route is served there, and
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
+    /// refuses a <c>mailfathom.mail.*</c> name written there. Its default posture holds like every other name's: an
+    /// administrative entry stating no <c>Permissions</c> key, and one writing a pattern that covers this name, both
+    /// gain it on the release that publishes it, which the changelog entry says. An operator who wants it held apart
+    /// writes a list naming only what that entry needs. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission AdminCustodyWrite { get; } =
+        new("mailfathom.admin.custody.write", ProtectedSurface.Administration);
+
     #endregion
 
     /// <summary>Gets every published permission.</summary>
@@ -296,6 +317,7 @@ public readonly record struct MailFathomPermission
         AdminErase,
         AdminExport,
         AdminConfigurationWrite,
+        AdminCustodyWrite,
     ];
 
     /// <summary>Gets whether this value names a published permission rather than the unusable struct default.</summary>

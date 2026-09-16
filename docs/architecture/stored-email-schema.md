@@ -55,6 +55,15 @@ These columns are an observation and never an instruction. Reading mail cannot r
 
 **When this deployment first held the message.** `StoredAt` is written once, when the row is inserted, and is never revised. It is deliberately neither `sent_at` nor `received_at`: both of those are facts about the message that a sender or a mail server decided, and can be years old on a mailbox being synchronized for the first time. This is a fact about this deployment, and it is what spam classification's ordering is measured against — how long a message has waited for a verdict before everything derived from it is released anyway, which [junk is kept out of what a deployment derives from mail](../features/spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail) states as behaviour. The migration that adds the column backfills every existing row with `-infinity` rather than with the instant of the upgrade: a message stored before the column existed has by definition waited longer than any wait a deployment can configure, so it is eligible immediately, while stamping it with the upgrade would hold a whole mailbox out of the index for one more wait apiece.
 
+**When the stored bytes were last read back and matched.** `ContentVerifiedAt` is null until the drain of a
+[held account](../features/held-mailboxes.md) has read this message's payload out of the content store and matched it
+against the length and SHA-256 digest recorded for it, and carries the instant of that reading afterwards. It exists so
+that emptying a mailbox of years does not read every payload again on every pass: a row that carries it has already
+been proved, and the gate then turns on the row and the folder alone. It is written by nothing else and read by nothing
+else, and `ix_stored_emails_awaiting_drain` — `(MailboxAccountId, ReceivedAt, Id)` over the rows that still carry a
+`UidValidity` — is what makes selecting the next batch proportionate to the batch rather than to the mailbox. A
+mirrored account never has one, because nothing drains it.
+
 **Concurrency.** `ConcurrencyVersion` maps onto the PostgreSQL `xmin` system column rather than a column of its own, so PostgreSQL maintains the token and no writer has to.
 
 ### Sender and recipients
@@ -294,7 +303,7 @@ among the account's assigned users, a recurring send keeps the author it was dec
 belongs to the account once submitted while keeping its author in the identity an idempotent enqueue is judged on.
 That is authorship rather than ownership, which is why the column survives where every other one went.
 
-`mailbox_accounts` is keyed by `Id` alone. Beside it the table carries the two columns [the folders MailFathom keeps for a held account](#the-folders-mailfathom-keeps-for-a-held-account) need: `CustodyPhase`, and the `LocalMailFoldersRevision` those folders are written against. The mailbox identifier is the account's generated identifier as text. It is a relational column rather than a value in a document, which is the point: lookup, uniqueness, and cascade erasure are then guarantees PostgreSQL gives rather than predicates somebody remembered to write. The table holds one row per account however many users are assigned it, and it needs no index of its own: every read of it is by the key, and the read that asks which mailboxes one user reaches is `mail_account_assignments`.
+`mailbox_accounts` is keyed by `Id` alone. Beside it the table carries the three columns [the folders MailFathom keeps for a held account](#the-folders-mailfathom-keeps-for-a-held-account) need: `RequestedCustody`, `CustodyPhase`, and the `LocalMailFoldersRevision` those folders are written against. The mailbox identifier is the account's generated identifier as text. It is a relational column rather than a value in a document, which is the point: lookup, uniqueness, and cascade erasure are then guarantees PostgreSQL gives rather than predicates somebody remembered to write. The table holds one row per account however many users are assigned it, and it needs no index of its own: every read of it is by the key, and the read that asks which mailboxes one user reaches is `mail_account_assignments`.
 
 **A mailbox is bound before anybody is assigned it, and that is an ordinary state.** The account row is created by whichever synchronization run first binds one of the account's folders, and that run names no user at all: whose mail it is is the assignment relation, written by an administrator, and a mailbox configured and not yet assigned is one the deployment holds for nobody rather than an orphan. Nothing records a user but `mfctl user add` and, on a database upgraded from a release before users were recorded, the migration that provisions the user its stored mail belongs to.
 
@@ -309,7 +318,8 @@ gives an account whose mailbox MailFathom holds a folder hierarchy of its own, a
 
 | Column of `mailbox_accounts` | What it records |
 |---|---|
-| `CustodyPhase` | `Mirrored`, `Held`, or `Restoring`, as text, `Mirrored` by default and on every account a migration found. Only `Held` has local folders; nothing in this release moves an account out of `Mirrored` |
+| `RequestedCustody` | `MirrorSource` or `HoldMailbox`, as text, `MirrorSource` by default and on every account a migration found. What an administrator last asked for, written only by the custody switch and never by a configuration file |
+| `CustodyPhase` | `Mirrored`, `Held`, or `Restoring`, as text, `Mirrored` by default and on every account a migration found. How far the work of granting the requested custody has got. Only `Held` has local folders, and only `Mirrored` applies the account's `RemotelyDeletedEmailDisposition` to a message the source stopped reporting |
 | `LocalMailFoldersRevision` | An optimistic concurrency token every write to the account's local folders increments, whether it is an edit, an arrival being placed, or an erasure pass. Two writes decided against the same hierarchy therefore cannot both commit, so a cycle, a duplicate sibling name, or a message placed in a folder erased meanwhile is refused at commit and decided again from what the winner wrote |
 
 | Column of `local_mail_folders` | What it records |
@@ -337,6 +347,29 @@ it. The draft names the message it filed in `mail_drafts.FiledStoredEmailId` and
 `mail_drafts.FiledRevision`. When
 synchronization meets the provider's own copy of a filed send, the occurrence is carried onto that row rather than a
 second one being stored; `ix_stored_emails_filed_sent_copy` is how the question is answered.
+
+## What a held account's source still has to be emptied of
+
+Erasing a message on a held account removes the `stored_emails` row, which is the only record of where that message was
+on the source — so the erasing transaction writes one row here instead, and the drain expunges from it afterwards. That
+is what keeps a person's delete, a rule's delete, and a retention pass from waiting on a mail server, or failing because
+one is unreachable. It is written only while the account holds its own mailbox, and only for a folder the source keeps
+messages in: a mirrored account's source holds the mail rather than a copy of it, and a folder playing a virtual role
+presents occurrences of messages that live in other folders, so a record written for either would name a UID the drain
+should never have expunged.
+
+| Column of `mailbox_source_removals` | What it records |
+|---|---|
+| `Id` | The record's identity, a version 7 UUID MailFathom mints, and the primary key |
+| `MailboxAccountId` | The account the removal belongs to, as text, so the queue is read per account exactly as every other pass is |
+| `MailFolderId` | The folder binding the occurrence was in, a foreign key onto `mail_folders` that cascades: a folder this deployment stops mirroring takes its outstanding removals with it, because the alias they were expressed against is gone |
+| `UidValidity`, `Uid` | The occurrence to expunge. `ix_mailbox_source_removals_occurrence` is unique over the folder and the two, so two erasures of one occurrence leave one record however many writers reach it at once |
+| `RecordedAt` | When the erasure wrote it. `ix_mailbox_source_removals_queue` is `(MailboxAccountId, RecordedAt)`, which is the queue the drain reads oldest first |
+
+The row carries nothing from the message: no subject, no address, no folder path, and no identifier of the message that
+was erased. What it is for is a UID to name in a `UID EXPUNGE`, and the record is deleted in the same transaction that
+records the expunge as done. A record whose folder reports another `UIDVALIDITY` is abandoned without a command
+reaching the source, on the same reasoning the drain's own batches are.
 
 ## What a person set about their own client
 

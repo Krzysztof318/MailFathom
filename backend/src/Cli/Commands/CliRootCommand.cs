@@ -190,6 +190,15 @@ internal static class CliRootCommand
             AdoptSettingsCommand.Create(context),
         };
 
+        // Which copy of one account's mailbox is the truth. A group of its own under "account" rather than two verbs
+        // beside "edit", because "switch" is the only thing here that empties a mail server of somebody's mail and
+        // "show" is the only view of that happening — a pair worth finding together and worth not reading as a setting.
+        Command custodyCommand = new("custody", "Read and change which copy of an account's mailbox is the truth.")
+        {
+            ShowMailAccountCustodyCommand.Create(context),
+            SwitchMailAccountCustodyCommand.Create(context),
+        };
+
         // The mailboxes this deployment reads. A group beside "user" rather than beneath it, because an account is a
         // record of its own that one user or several are assigned. "delete" and "unassign" are apart from the rest:
         // erasing an account, or ending its last assignment, disposes of every message this deployment holds for it.
@@ -201,6 +210,7 @@ internal static class CliRootCommand
             EditMailAccountCommand.Create(context),
             AssignMailAccountCommand.Create(context),
             UnassignMailAccountCommand.Create(context),
+            custodyCommand,
             DeleteMailAccountCommand.Create(context),
         };
 

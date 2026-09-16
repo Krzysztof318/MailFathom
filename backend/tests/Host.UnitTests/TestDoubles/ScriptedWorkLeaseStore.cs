@@ -84,4 +84,16 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
 
         return Task.FromResult(held);
     }
+
+    public Task<IReadOnlyList<WorkLease>> ReadEveryHeldAsync(int maximumLeases, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<WorkLease> held =
+        [
+            .. this.holders
+                .Take(maximumLeases)
+                .Select(entry => new WorkLease(entry.Key, entry.Value, Replica, DateTimeOffset.MaxValue)),
+        ];
+
+        return Task.FromResult(held);
+    }
 }

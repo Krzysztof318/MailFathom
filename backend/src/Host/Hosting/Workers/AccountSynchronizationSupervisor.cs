@@ -14,6 +14,7 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Notifications;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
@@ -22,6 +23,7 @@ using MailFathom.Application.Signals;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -327,6 +329,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             {
                 Func<CancellationToken, Task>[] stagesAfterTheFolders =
                 [
+                    token => this.DrainHeldSourceAsync(runSettings, token),
                     this.DeliverOutstandingMailAsync,
                     token => this.EraseExpiredDerivedRecordsAsync(runSettings, token),
                     token => this.ClassifyRequestedMailAsync(runSettings, token),
@@ -443,6 +446,45 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.LogMutationConvergenceFailed(exception, this.account.Value);
 
             return true;
+        }
+    }
+
+    /// <summary>Takes one bounded pass at emptying a held account's source of what MailFathom verifiably holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It sits among the stages after the folders rather than beside them, because it removes mail the folders have
+    /// just finished storing and because it takes the account's one write connection, which the folder connections
+    /// must have given back. A mirrored account's pass is one read that returns nothing.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run and never puts the account into backoff. The drain is work with no deadline: what
+    /// it could not take off the source this time it takes next time, and answering an unreachable source by reading
+    /// the account's mail less often would be the wrong trade for everybody using it.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A drain pass that ended unexpectedly leaves the source holding what it held; every message keeps its occurrence, the next run asks again, and the account is not backed off for a pass with no deadline.")]
+    private async Task DrainHeldSourceAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var pass = scope.ServiceProvider.GetRequiredService<MailboxDrainPass>();
+            var report = await pass.DrainAsync(this.account, cancellationToken);
+
+            scope.ServiceProvider.GetRequiredService<IMailboxDrainTelemetry>().Report(this.account, report);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogSourceDrainFailed(exception, this.account.Value);
         }
     }
 
@@ -1405,6 +1447,18 @@ internal sealed partial class AccountSynchronizationSupervisor
                 remotelyDeletedEmailDisposition);
         }
 
+        // Its own line rather than the one above, because no disposition was applied to these: on an account whose
+        // mailbox MailFathom keeps, an occurrence gone from the source is the drain's own work and the local row is
+        // the only copy there is. Naming the configured disposition here would tell an operator their mail had been
+        // erased when nothing touched it.
+        if (reconciliation.DrainCompletedEmailCount > 0)
+        {
+            this.LogDrainedOccurrencesObserved(
+                this.account.Value,
+                folderAlias,
+                reconciliation.DrainCompletedEmailCount);
+        }
+
         if (reconciliation.SeenStateChangedEmailCount > 0)
         {
             this.LogSeenStateChangesObserved(
@@ -1580,6 +1634,19 @@ internal sealed partial class AccountSynchronizationSupervisor
         int remotelyDeletedEmailCount,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition);
 
+    /// <summary>Records occurrences the source no longer holds on an account whose mailbox MailFathom keeps.</summary>
+    /// <remarks>
+    /// It names no disposition because none was applied: the row's occurrence is cleared and the mail stands, so this
+    /// is the drain's work arriving back through synchronization rather than mail leaving the local copy.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mail server no longer holds {DrainCompletedEmailCount} messages stored for {AccountId}/{FolderAlias}; MailFathom keeps this mailbox, so their local copies stand and only the source occurrence was cleared.")]
+    private partial void LogDrainedOccurrencesObserved(
+        string accountId,
+        string folderAlias,
+        int drainCompletedEmailCount);
+
     /// <summary>Separates a folder the server does not advertise from a folder that failed, because only one of them is the operator's to fix in configuration.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -1639,6 +1706,12 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Converging the outstanding mailbox mutations of account {AccountId} ended unexpectedly; its folders still synchronized and its next run is backed off, and every change keeps the record of how far it got.")]
     private partial void LogMutationConvergenceFailed(Exception exception, string accountId);
+
+    /// <summary>Reports a drain pass that ended unexpectedly, which leaves the source holding what it held and nothing else.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Draining the source of account {AccountId} ended unexpectedly; every message it did not take off the source keeps its occurrence and the next run asks again, and the account is not backed off for it.")]
+    private partial void LogSourceDrainFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Information,

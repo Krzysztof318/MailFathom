@@ -122,4 +122,27 @@ public interface IWorkLeaseStore
     Task<IReadOnlyList<WorkLease>> ReadHeldAsync(
         IReadOnlyCollection<WorkScope> scopes,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads every scope the deployment is holding right now, whatever it names.</summary>
+    /// <param name="maximumLeases">The most rows to read, which bounds an answer nothing else bounds.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Every unexpired lease, ordered by scope and cut off at the bound.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumLeases" /> is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// The read above answers about scopes the caller can name; this answers about the deployment, which is the
+    /// question an act refused while any replica is running an older build has to ask. There is nothing to name there:
+    /// what the refusal turns on is whether some process the asking replica has never heard of is holding work, and a
+    /// set of scopes composed from what this build knows would miss exactly the holder it is looking for.
+    /// </para>
+    /// <para>
+    /// Like the read above it is a snapshot and reserves nothing, and a caller may do nothing with it but report it or
+    /// refuse on it. The table holds one row per held scope, so the bound is what keeps one answer bounded against a
+    /// deployment that has grown past what it should carry — and the ordering is what makes a filled answer a prefix
+    /// of the held scopes rather than an arbitrary sample of them. A caller refusing on what it did not see needs that
+    /// property: an answer that filled says the deployment holds at least this many leases and nothing about the rest,
+    /// which is a statement an implementation answering in an arbitrary order could not support.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<WorkLease>> ReadEveryHeldAsync(int maximumLeases, CancellationToken cancellationToken);
 }

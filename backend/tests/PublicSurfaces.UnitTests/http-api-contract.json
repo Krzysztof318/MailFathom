@@ -4955,6 +4955,127 @@
         ],
         "type": "object"
       },
+      "MailAccountCustodyResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "drain": {
+            "$ref": "#/components/schemas/MailAccountDrainStandingResponse"
+          },
+          "isSwitchPending": {
+            "type": "boolean"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "requested": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "requested",
+          "phase",
+          "isSwitchPending",
+          "drain"
+        ],
+        "type": "object"
+      },
+      "MailAccountCustodySwitchRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "custody": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "custody"
+        ],
+        "type": "object"
+      },
+      "MailAccountCustodySwitchResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "refusals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requested": {
+            "type": "string"
+          },
+          "wasAccepted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account",
+          "wasAccepted",
+          "requested",
+          "phase",
+          "refusals"
+        ],
+        "type": "object"
+      },
+      "MailAccountDrainStandingResponse": {
+        "properties": {
+          "awaitingDrain": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "awaitingSourceRemoval": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "heldBackAboveSizeLimit": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "heldBackAwaitingHeadroom": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "awaitingDrain",
+          "heldBackAboveSizeLimit",
+          "heldBackAwaitingHeadroom",
+          "awaitingSourceRemoval"
+        ],
+        "type": "object"
+      },
       "MailAccountErasureResponse": {
         "properties": {
           "erased": {
@@ -9365,6 +9486,79 @@
   },
   "openapi": "3.1.1",
   "paths": {
+    "/api/admin/accounts/custody": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountCustodyResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/accounts/custody/switch": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailAccountCustodySwitchRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountCustodySwitchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
     "/api/admin/answering/audit": {
       "get": {
         "parameters": [

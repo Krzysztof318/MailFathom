@@ -37,6 +37,7 @@ internal sealed class RecordingMailFolderMirrorStore(MailFolderMirrorErasure? er
         IPersistenceSession session,
         MailAccountId account,
         MailFolderAlias folderAlias,
+        bool folderHoldsItsOwnMessages,
         int maxEmails,
         CancellationToken cancellationToken)
     {

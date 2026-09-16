@@ -214,16 +214,19 @@ public sealed class MailFolderErasureEndpointTests
             request,
             CatalogServing(Account),
             this.mappings,
-            EraserOver(store),
+            EraserOver(store, this.mappings),
             TestContext.Current.CancellationToken);
 
-    private static UnmirroredMailFolderEraser EraserOver(IStoredMailFolderMirrorStore store)
+    private static UnmirroredMailFolderEraser EraserOver(
+        IStoredMailFolderMirrorStore store,
+        IMailFolderMappingReader mappings)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
         return new UnmirroredMailFolderEraser(
             store,
+            mappings,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -257,6 +260,7 @@ public sealed class MailFolderErasureEndpointTests
             IPersistenceSession session,
             MailAccountId account,
             MailFolderAlias folderAlias,
+            bool folderHoldsItsOwnMessages,
             int maxEmails,
             CancellationToken cancellationToken)
         {

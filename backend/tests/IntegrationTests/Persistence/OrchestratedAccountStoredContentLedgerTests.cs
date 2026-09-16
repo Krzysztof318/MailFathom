@@ -242,6 +242,7 @@ public sealed class OrchestratedAccountStoredContentLedgerTests(MailFathomOrches
                         Disappeared: [storedEmailId],
                         RemovedByOwnMutation: [],
                         RemotelyDeletedEmailDisposition.EraseLocalCopy,
+                        AppliesRemoteDeletions: true,
                         Observation),
                     token),
             cancellationToken);

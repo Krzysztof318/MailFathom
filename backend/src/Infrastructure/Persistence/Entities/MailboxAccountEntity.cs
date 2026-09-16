@@ -23,6 +23,14 @@ internal sealed class MailboxAccountEntity
     /// <summary>Gets or sets which copy of the mailbox is the truth, which is <see cref="MailAccountCustodyPhase.Mirrored" /> for every account nothing has switched.</summary>
     public MailAccountCustodyPhase CustodyPhase { get; set; }
 
+    /// <summary>Gets or sets the custody an administrator last asked for, which is <see cref="MailAccountCustody.MirrorSource" /> for every account nothing has switched.</summary>
+    /// <remarks>
+    /// Separate from <see cref="CustodyPhase" /> because a switch in either direction is a period of background work:
+    /// this column is what somebody asked for and that one is how far the work of granting it has got. Only the
+    /// administrative command writes this one, and only the account's own supervision writes that one.
+    /// </remarks>
+    public MailAccountCustody RequestedCustody { get; set; }
+
     /// <summary>Gets or sets the revision of the account's local folder hierarchy, which every write to that hierarchy advances.</summary>
     /// <remarks>
     /// A concurrency token on the account rather than on each folder, because the rules a folder edit is decided by —

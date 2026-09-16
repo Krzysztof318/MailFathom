@@ -41,6 +41,7 @@ public sealed class WithdrawnMailFolderMailErasureHandlerTests
             Arg.Any<IPersistenceSession>(),
             Account,
             MailFolderAlias.Create("projects"),
+            true,
             MaxEmailsPerPass,
             Arg.Any<CancellationToken>());
         await jobs.DidNotReceive().EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>());
@@ -103,6 +104,7 @@ public sealed class WithdrawnMailFolderMailErasureHandlerTests
                 Arg.Any<IPersistenceSession>(),
                 Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderAlias>(),
+                Arg.Any<bool>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(erasure);

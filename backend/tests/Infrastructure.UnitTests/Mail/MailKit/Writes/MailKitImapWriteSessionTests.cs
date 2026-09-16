@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -773,5 +774,154 @@ public sealed class MailKitImapWriteSessionTests
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IMailFolder>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The drain's whole command, and the one place a bare <c>EXPUNGE</c> would be catastrophic rather than merely
+    /// wrong: the batch is what MailFathom verifiably holds, and every other message anybody flagged deleted is mail
+    /// this deployment has no copy of.
+    /// </summary>
+    [Fact]
+    public async Task ExpungeDrainedAsync_AServerAdvertisingUidPlus_FlagsAndExpungesExactlyTheBatchAndNothingElse()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.ExpungeDrainedAsync(
+            ImapUidValidity.Create(7U),
+            [ImapUid.Create(11U), ImapUid.Create(12U)],
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 2 && uids[0].Id == 11U && uids[1].Id == 12U),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Add && request.Flags == MessageFlags.Deleted),
+            Arg.Any<CancellationToken>());
+        await openFolder.Received(1).ExpungeAsync(
+            Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 2 && uids[0].Id == 11U && uids[1].Id == 12U),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The reading the whole hold gate rests on: an account may leave mirroring for holding only where its source
+    /// advertises a message-scoped expunge, so this answering wrongly would move an account onto a source that can
+    /// never be emptied.
+    /// </summary>
+    [Fact]
+    public async Task SupportsDrainAsync_AServerAdvertisingUidPlus_ReportsTheSourceCanBeDrained()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var supportsDrain = await session.SupportsDrainAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(supportsDrain);
+    }
+
+    /// <summary>A server without <c>UIDPLUS</c> can never serve a drain batch, and the switch is what has to hear it.</summary>
+    [Fact]
+    public async Task SupportsDrainAsync_AServerWithoutUidPlus_ReportsTheSourceCannotBeDrained()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var supportsDrain = await session.SupportsDrainAsync(CancellationToken.None);
+
+        // Assert
+        Assert.False(supportsDrain);
+    }
+
+    /// <summary>Without <c>UID EXPUNGE</c> there is no message-scoped removal, so the drain has nothing safe to issue.</summary>
+    [Fact]
+    public async Task ExpungeDrainedAsync_AServerWithoutUidPlus_RefusesBeforeFlaggingAnythingDeleted()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(() => session.ExpungeDrainedAsync(
+            ImapUidValidity.Create(7U),
+            [ImapUid.Create(11U)],
+            CancellationToken.None));
+
+        // Assert
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A folder recreated between selecting the batch and issuing it renumbered every message in it, so these UIDs now
+    /// name mail MailFathom never stored. Nothing reaches the source.
+    /// </summary>
+    [Fact]
+    public async Task ExpungeDrainedAsync_TheFolderNowReportsAnotherUidValidity_IsAbandonedBeforeAnyCommand()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(uidValidity: 9U);
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var abandonment = await Assert.ThrowsAsync<MailboxFolderRecreatedException>(() => session.ExpungeDrainedAsync(
+            ImapUidValidity.Create(7U),
+            [ImapUid.Create(11U)],
+            CancellationToken.None));
+
+        // Assert
+        Assert.Equal(7U, abandonment.SessionUidValidity.Value);
+        Assert.Equal(9U, abandonment.ReselectedUidValidity.Value);
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A batch naming nothing is what a bare <c>EXPUNGE</c> would be reached through, so it is refused outright.</summary>
+    [Fact]
+    public async Task ExpungeDrainedAsync_ABatchNamingNoUid_IsRefusedRatherThanIssuedAsAnUnboundedRemoval()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(() => session.ExpungeDrainedAsync(
+            ImapUidValidity.Create(7U),
+            [],
+            CancellationToken.None));
+
+        // Assert
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
     }
 }

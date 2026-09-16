@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Signals;
@@ -49,6 +50,7 @@ public sealed class MailboxReconciler
     private readonly IStoredEmailReconciliationStore reconciliationStore;
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly IRemotelyDeletedEmailDispositionReader dispositionReader;
+    private readonly IMailAccountCustodyStore custodyStore;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
@@ -58,6 +60,7 @@ public sealed class MailboxReconciler
     /// <param name="reconciliationStore">Chooses the window and records what the server answered.</param>
     /// <param name="mutationStore">Says which of the disappearances are changes MailFathom itself made.</param>
     /// <param name="dispositionReader">Answers what the account being reconciled does with an email its server no longer holds.</param>
+    /// <param name="custodyStore">Says whether the account's source is still the truth about what exists, which outranks that answer.</param>
     /// <param name="concurrencyRetryPolicy">Commits one window's outcome, retrying a conflict with a competing writer.</param>
     /// <param name="signals">Tells an open client which stored mail this window moved, so what is on the screen catches up.</param>
     /// <param name="timeProvider">Stamps the observation, which is what advances the window across runs.</param>
@@ -67,6 +70,7 @@ public sealed class MailboxReconciler
         IStoredEmailReconciliationStore reconciliationStore,
         IMailboxMutationReconciliationStore mutationStore,
         IRemotelyDeletedEmailDispositionReader dispositionReader,
+        IMailAccountCustodyStore custodyStore,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         ClientSignals signals,
         TimeProvider timeProvider,
@@ -75,6 +79,7 @@ public sealed class MailboxReconciler
         ArgumentNullException.ThrowIfNull(reconciliationStore);
         ArgumentNullException.ThrowIfNull(mutationStore);
         ArgumentNullException.ThrowIfNull(dispositionReader);
+        ArgumentNullException.ThrowIfNull(custodyStore);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -83,6 +88,7 @@ public sealed class MailboxReconciler
         this.reconciliationStore = reconciliationStore;
         this.mutationStore = mutationStore;
         this.dispositionReader = dispositionReader;
+        this.custodyStore = custodyStore;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.signals = signals;
         this.timeProvider = timeProvider;
@@ -189,7 +195,8 @@ public sealed class MailboxReconciler
 
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
-            outcome.Disappeared.Count,
+            outcome.AppliesRemoteDeletions ? outcome.Disappeared.Count : 0,
+            outcome.AppliesRemoteDeletions ? 0 : outcome.Disappeared.Count,
             outcome.RemovedByOwnMutation.Count,
             flagChanges.ExternalSeenStateCount,
             flagChanges.ExternalFlaggedStateCount,
@@ -285,6 +292,12 @@ public sealed class MailboxReconciler
         CancellationToken cancellationToken)
     {
         var disposition = this.dispositionReader.GetDisposition(account);
+
+        // Asked before the disposition is used rather than beside it, because on an account whose mailbox MailFathom
+        // holds the answer is that the source has no say at all: an occurrence gone from it is the drain's own work
+        // completing, and the local row is the only copy there is.
+        var custody = await this.custodyStore.ReadAsync(account, cancellationToken);
+        var appliesRemoteDeletions = custody?.AppliesRemoteDeletions ?? true;
         var observedAt = this.timeProvider.GetUtcNow();
 
         if (classification.Disappeared.Count == 0)
@@ -295,6 +308,7 @@ public sealed class MailboxReconciler
                 [],
                 [],
                 disposition,
+                appliesRemoteDeletions,
                 observedAt);
         }
 
@@ -327,6 +341,7 @@ public sealed class MailboxReconciler
                         attribution.Record.Request.LocalDisposition)),
             ],
             disposition,
+            appliesRemoteDeletions,
             observedAt);
     }
 
@@ -649,7 +664,12 @@ public sealed class MailboxReconciler
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>
 /// <param name="ObservedEmailCount">How many stored occurrences the server still holds, whether it described them or only confirmed them.</param>
-/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds and nothing MailFathom did accounts for.</param>
+/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds, nothing MailFathom did accounts for, and the account's disposition was applied to.</param>
+/// <param name="DrainCompletedEmailCount">
+/// How many stored occurrences the folder no longer holds on an account whose mailbox MailFathom keeps. They are
+/// counted apart from the remotely deleted ones because no disposition is applied to them: on such an account the
+/// source has no say, so an occurrence gone from it is the drain's own work completing and the local row stands.
+/// </param>
 /// <param name="OwnMutationCompletedEmailCount">
 /// How many stored occurrences left the folder because MailFathom relocated or deleted them. They are counted apart from
 /// the remotely deleted ones because they are the opposite finding: a change of the user's own that has come back
@@ -686,6 +706,7 @@ public sealed class MailboxReconciler
 public sealed record MailboxReconciliationResult(
     int ObservedEmailCount,
     int RemotelyDeletedEmailCount,
+    int DrainCompletedEmailCount,
     int OwnMutationCompletedEmailCount,
     int SeenStateChangedEmailCount,
     int FlaggedStateChangedEmailCount,
@@ -703,6 +724,7 @@ public sealed record MailboxReconciliationResult(
     public static MailboxReconciliationResult NothingToReconcile { get; } = new(
         ObservedEmailCount: 0,
         RemotelyDeletedEmailCount: 0,
+        DrainCompletedEmailCount: 0,
         OwnMutationCompletedEmailCount: 0,
         SeenStateChangedEmailCount: 0,
         FlaggedStateChangedEmailCount: 0,
