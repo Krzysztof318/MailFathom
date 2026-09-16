@@ -6,6 +6,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -47,12 +48,19 @@ internal sealed class InMemoryMailboxDrainStore : IMailboxDrainStore
 
     public Task<IReadOnlyList<MailboxDrainCandidate>> ReadCandidatesAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumCandidates,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(drainableFolders);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumCandidates, 1);
 
-        return Task.FromResult<IReadOnlyList<MailboxDrainCandidate>>([.. this.candidates.Take(maximumCandidates)]);
+        return Task.FromResult<IReadOnlyList<MailboxDrainCandidate>>(
+        [
+            .. this.candidates
+                .Where(candidate => drainableFolders.Contains(candidate.Folder.Alias))
+                .Take(maximumCandidates),
+        ]);
     }
 
     public Task<IReadOnlyList<MailboxDrainCandidate>> ReadCandidatesAgainAsync(
@@ -99,12 +107,19 @@ internal sealed class InMemoryMailboxDrainStore : IMailboxDrainStore
 
     public Task<IReadOnlyList<MailboxSourceRemoval>> ReadSourceRemovalsAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumRemovals,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(drainableFolders);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumRemovals, 1);
 
-        return Task.FromResult<IReadOnlyList<MailboxSourceRemoval>>([.. this.removals.Take(maximumRemovals)]);
+        return Task.FromResult<IReadOnlyList<MailboxSourceRemoval>>(
+        [
+            .. this.removals
+                .Where(removal => drainableFolders.Contains(removal.Folder.Alias))
+                .Take(maximumRemovals),
+        ]);
     }
 
     public Task DeleteSourceRemovalsAsync(

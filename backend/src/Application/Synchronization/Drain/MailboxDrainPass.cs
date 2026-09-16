@@ -124,7 +124,9 @@ public sealed class MailboxDrainPass
     /// An account whose configuration has come to synchronize a folder playing a virtual role has its drain paused
     /// rather than run: such a folder presents messages that are occurrences of other folders, so draining it would
     /// remove mail from folders nobody asked about. The pause is silent in the counts and visible in the standing
-    /// figures, which go on saying what the source still holds.
+    /// figures, which go on saying what the source still holds. Withdrawing that mapping lifts the pause and leaves
+    /// the rows it stored standing, so both halves of the pass name the folders they may reach as well, rather than
+    /// resting on the pause alone.
     /// </para>
     /// <para>
     /// The two halves share one budget, so <c>MaxDrainedEmailsPerRun</c> bounds what a run takes off the source rather
@@ -168,16 +170,18 @@ public sealed class MailboxDrainPass
 
         var tally = new DrainTally();
         var budget = this.options.MaxDrainedEmailsPerRun;
+        var drainableFolders = this.FoldersHoldingTheirOwnMessages(account);
 
         if (custodyState.Phase is MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring)
         {
             budget -= await this.RemoveErasedMailAsync(
-                account, transportSecurityPolicy, tally, budget, cancellationToken);
+                account, drainableFolders, transportSecurityPolicy, tally, budget, cancellationToken);
         }
 
         if (budget > 0 && custodyState.Phase is MailAccountCustodyPhase.Held)
         {
-            await this.DrainStoredMailAsync(account, transportSecurityPolicy, tally, budget, cancellationToken);
+            await this.DrainStoredMailAsync(
+                account, drainableFolders, transportSecurityPolicy, tally, budget, cancellationToken);
         }
 
         return tally.ToReport();
@@ -245,12 +249,14 @@ public sealed class MailboxDrainPass
     /// </remarks>
     private async Task DrainStoredMailAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         MailTransportSecurityPolicy transportSecurityPolicy,
         DrainTally tally,
         int budget,
         CancellationToken cancellationToken)
     {
-        var candidates = await this.store.ReadCandidatesAsync(account, budget, cancellationToken);
+        var candidates = await this.store.ReadCandidatesAsync(
+            account, drainableFolders, budget, cancellationToken);
 
         foreach (var generation in candidates.GroupBy(static candidate =>
             (candidate.Folder, candidate.Occurrence.UidValidity)))
@@ -288,13 +294,15 @@ public sealed class MailboxDrainPass
     /// </remarks>
     private async Task<int> RemoveErasedMailAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         MailTransportSecurityPolicy transportSecurityPolicy,
         DrainTally tally,
         int budget,
         CancellationToken cancellationToken)
     {
         var removedBefore = tally.RemovedCount;
-        var removals = await this.store.ReadSourceRemovalsAsync(account, budget, cancellationToken);
+        var removals = await this.store.ReadSourceRemovalsAsync(
+            account, drainableFolders, budget, cancellationToken);
 
         foreach (var generation in removals.GroupBy(static removal =>
             (removal.Folder, removal.Occurrence.UidValidity)))
@@ -560,6 +568,22 @@ public sealed class MailboxDrainPass
     private bool SynchronizesAVirtualFolder(MailAccountId account) => this.mappings.FoldersOf(account)
         .Any(static mapping => mapping.Participation.IsSynchronized
             && VirtualMailFolderRoles.Includes(mapping.SpecialUse));
+
+    /// <summary>Reads the aliases a command may name, which are the account's folders the source keeps messages of its own in.</summary>
+    /// <remarks>
+    /// Asked per folder as well as per account, because the pause above lifts the moment the virtual mapping is
+    /// withdrawn while the rows it stored keep their occurrence and their remote path, and nothing on a row says the
+    /// folder was a view. A folder playing such a role presents UIDs of messages the source keeps elsewhere, so a
+    /// command naming one takes mail out of folders nobody asked about. An alias no mapping names any more answers the
+    /// same way, nothing being left to say which of the two it was: those rows stay on the source and go on being
+    /// counted as awaiting the drain, which is what an operator sees until the local copy of that folder is erased.
+    /// </remarks>
+    private IReadOnlyCollection<MailFolderAlias> FoldersHoldingTheirOwnMessages(MailAccountId account) =>
+    [
+        .. this.mappings.FoldersOf(account)
+            .Where(static mapping => !VirtualMailFolderRoles.Includes(mapping.SpecialUse))
+            .Select(static mapping => mapping.Alias),
+    ];
 
     /// <summary>Establishes whether the account's source can be emptied of one named message at a time.</summary>
     /// <returns>

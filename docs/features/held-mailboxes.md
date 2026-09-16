@@ -84,6 +84,12 @@ The drain runs at the end of each synchronization run of a held account, under t
 the account's one write connection. It never runs on a client, MCP, or rule request, so how fast the source server is
 decides how soon it is emptied and never how long anybody waits.
 
+**Only the account's own folders are ever named.** A command goes out against a folder the account's configuration
+currently maps and that plays none of the three virtual roles, and against no other. A folder no mapping names any more
+is answered the same way a virtual one is, because nothing on a stored row says which of the two it was, and the rows of
+either stay on the source and go on being counted under *Awaiting drain* — erasing the local copy of that folder is what
+ends that, and such an erasure asks the source for nothing.
+
 **A message leaves its source only once all of this is true:**
 
 1. its row is committed, carrying the occurrence about to be expunged;

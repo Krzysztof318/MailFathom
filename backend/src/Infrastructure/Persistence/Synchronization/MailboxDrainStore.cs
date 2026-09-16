@@ -25,18 +25,29 @@ internal sealed class MailboxDrainStore(MailFathomDbContext readContext) : IMail
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxDrainCandidate>> ReadCandidatesAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumCandidates,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(drainableFolders);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumCandidates, 1);
 
+        if (drainableFolders.Count == 0)
+        {
+            return [];
+        }
+
         var accountValue = account.Value;
+        var aliasValues = drainableFolders.Select(static alias => alias.Value).ToArray();
 
         // Oldest first, over the filtered index the drain has of its own, so the read costs what the source still
-        // holds rather than what the mailbox does.
+        // holds rather than what the mailbox does. The folders are named inside the query rather than filtered out of
+        // its answer, so the bound is spent on rows a command may actually name.
         var rows = await readContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.MailboxAccountId == accountValue && email.UidValidity != null)
+            .Where(email => email.MailboxAccountId == accountValue
+                && email.UidValidity != null
+                && aliasValues.Contains(email.MailFolder.Alias))
             .OrderBy(email => email.ReceivedAt)
             .ThenBy(email => email.Id)
             .Take(maximumCandidates)
@@ -140,16 +151,25 @@ internal sealed class MailboxDrainStore(MailFathomDbContext readContext) : IMail
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxSourceRemoval>> ReadSourceRemovalsAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumRemovals,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(drainableFolders);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumRemovals, 1);
 
+        if (drainableFolders.Count == 0)
+        {
+            return [];
+        }
+
         var accountValue = account.Value;
+        var aliasValues = drainableFolders.Select(static alias => alias.Value).ToArray();
 
         var rows = await readContext.MailboxSourceRemovals
             .AsNoTracking()
-            .Where(removal => removal.MailboxAccountId == accountValue)
+            .Where(removal => removal.MailboxAccountId == accountValue
+                && aliasValues.Contains(removal.MailFolder!.Alias))
             .OrderBy(removal => removal.RecordedAt)
             .Take(maximumRemovals)
             .Select(removal => new RemovalRow(

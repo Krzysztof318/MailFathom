@@ -38,6 +38,10 @@ public sealed class MailboxDrainPassTests
         MailFolderAlias.Create("archive"),
         RemoteFolderPath.Create("Archive"));
 
+    private static readonly MailFolderResolution Everything = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("everything"),
+        RemoteFolderPath.Create("[Gmail]/All Mail"));
+
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 15, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly MailTransportSecurityPolicy TransportPolicy = MailTransportSecurityPolicy.Create(
@@ -474,6 +478,50 @@ public sealed class MailboxDrainPassTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Withdrawing the mapping of a folder playing a virtual role lifts the account-wide pause, and the rows it stored
+    /// keep an occurrence naming UIDs of messages the source keeps in other folders. Nothing on such a row says so, so
+    /// the pass asks the mapping per folder and takes them for no command at all.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_StoredMailOfAFolderNoMappingNamesAnyMore_LeavesItOnTheSource()
+    {
+        // Arrange
+        var context = new DrainContext(Held)
+            .Storing(Stored(Inbox, uid: 11))
+            .Storing(Stored(Everything, uid: 12));
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.DrainedCount);
+        Assert.Equal([ImapUid.Create(11)], context.ExpungedUids);
+    }
+
+    /// <summary>The same answer governs the erased half, which has no gate of its own once a record has been written.</summary>
+    [Fact]
+    public async Task DrainAsync_SourceRemovalOfAFolderPlayingAVirtualRole_IssuesNoCommandForIt()
+    {
+        // Arrange
+        var removal = new MailboxSourceRemoval(
+            MailboxSourceRemovalId.New(),
+            EmailOccurrenceId.Create(Account, Everything.Id, ImapUidValidity.Create(1), ImapUid.Create(31)),
+            Everything);
+
+        var context = new DrainContext(Held)
+            .MappingEverythingAsAVirtualFolder()
+            .AwaitingRemovalOf(removal);
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.RemovedErasedCount);
+        Assert.Empty(context.ExpungedUids);
+        Assert.Empty(context.Store.DeletedRemovals);
+    }
+
     private static MailAccountCustodyState Held { get; } =
         new(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Held);
 
@@ -503,6 +551,7 @@ public sealed class MailboxDrainPassTests
 
             this.mappings.FoldersOf(Account).Returns([
                 MailFolderMapping.ToRemotePath(Inbox.Alias, Inbox.RemotePath),
+                MailFolderMapping.ToRemotePath(Archive.Alias, Archive.RemotePath),
             ]);
             this.mutations.ReadOutstandingAsync(Account, Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns([]);
@@ -632,6 +681,24 @@ public sealed class MailboxDrainPassTests
                     Arg.Any<MailFolderAlias>(),
                     Arg.Any<CancellationToken>())
                 .Returns((MailFolderResolution?)null);
+
+            return this;
+        }
+
+        /// <summary>Maps one alias to the <c>All</c> role, which is a view the account may not be drained of.</summary>
+        /// <remarks>
+        /// Not synchronized, because that is the case the account-wide pause does not cover: a mapping the operator has
+        /// switched off, or withdrawn altogether, leaves the rows it stored behind it.
+        /// </remarks>
+        internal DrainContext MappingEverythingAsAVirtualFolder()
+        {
+            this.mappings.FoldersOf(Account).Returns([
+                MailFolderMapping.ToRemotePath(Inbox.Alias, Inbox.RemotePath),
+                MailFolderMapping.ToSpecialUse(
+                    Everything.Alias,
+                    MailFolderSpecialUse.All,
+                    MailFolderParticipation.MappedOnly),
+            ]);
 
             return this;
         }

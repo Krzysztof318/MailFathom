@@ -5,6 +5,7 @@
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Synchronization.Drain;
 
@@ -20,17 +21,26 @@ public interface IMailboxDrainStore
 {
     /// <summary>Reads the oldest messages of a held account that its source still holds.</summary>
     /// <param name="account">The account.</param>
+    /// <param name="drainableFolders">The aliases whose folder the source keeps messages of its own in.</param>
     /// <param name="maximumCandidates">The most messages one pass takes in hand.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The candidates, oldest first, bounded by what was asked for.</returns>
+    /// <returns>The candidates, oldest first, bounded by what was asked for, and none from any other folder.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="drainableFolders" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumCandidates" /> is not positive.</exception>
     /// <remarks>
     /// Oldest first so a mailbox of years empties from the end nobody is reading, and bounded so one pass costs a
     /// bounded number of reads whatever the mailbox holds. Every candidate carries an occurrence: a row whose occurrence
     /// was cleared has already been drained and is not asked about again.
     /// </remarks>
+    /// <remarks>
+    /// The folders are named rather than excluded, and the bound is applied after they are, so a folder nothing may
+    /// expunge from takes none of the pass: a row it stored would otherwise be read on every run for ever and starve
+    /// the mailbox behind it. An empty collection answers with nothing, which is the honest answer for an account that
+    /// maps no folder at all.
+    /// </remarks>
     Task<IReadOnlyList<MailboxDrainCandidate>> ReadCandidatesAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumCandidates,
         CancellationToken cancellationToken);
 
@@ -80,12 +90,16 @@ public interface IMailboxDrainStore
 
     /// <summary>Reads the messages erased before the drain reached them, whose source copy still has to go.</summary>
     /// <param name="account">The account.</param>
+    /// <param name="drainableFolders">The aliases whose folder the source keeps messages of its own in.</param>
     /// <param name="maximumRemovals">The most records one pass takes in hand.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The records, oldest first, bounded by what was asked for.</returns>
+    /// <returns>The records, oldest first, bounded by what was asked for, and none from any other folder.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="drainableFolders" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumRemovals" /> is not positive.</exception>
+    /// <remarks>Named folders, and the bound after them, for the reason the candidate read states.</remarks>
     Task<IReadOnlyList<MailboxSourceRemoval>> ReadSourceRemovalsAsync(
         MailAccountId account,
+        IReadOnlyCollection<MailFolderAlias> drainableFolders,
         int maximumRemovals,
         CancellationToken cancellationToken);
 
