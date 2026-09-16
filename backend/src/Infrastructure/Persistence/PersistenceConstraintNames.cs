@@ -284,6 +284,14 @@ internal static class PersistenceConstraintNames
 
     internal const string MailboxMutationPlacementIndexName = "ix_mailbox_mutations_placement";
 
+    internal const string MailboxMutationFlaggedDeleteIndexName = "ix_mailbox_mutations_flagged_delete";
+
+    /// <summary>The occurrence a delete left flagged on its server, which is followed once however often its settlement is replayed.</summary>
+    internal const string MailboxFlaggedDeleteOccurrenceUniqueIndexName = "ix_mailbox_flagged_deletes_occurrence";
+
+    /// <summary>The order a folder's run asks about the occurrences its deletes left flagged.</summary>
+    internal const string MailboxFlaggedDeleteQueueIndexName = "ix_mailbox_flagged_deletes_queue";
+
     /// <summary>The occurrence one erased message still occupies on its source, which is recorded once however often the erasure is attempted.</summary>
     internal const string MailboxSourceRemovalOccurrenceUniqueIndexName = "ix_mailbox_source_removals_occurrence";
 

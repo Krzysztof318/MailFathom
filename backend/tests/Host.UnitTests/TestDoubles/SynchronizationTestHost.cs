@@ -211,6 +211,7 @@ internal static class SynchronizationTestHost
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();
+        services.AddScoped<FlaggedDeleteFollower>();
         services.AddScoped<MailboxReconciler>();
 
         // Every account run begins by converging what the account has asked a mail server for and not seen finished,

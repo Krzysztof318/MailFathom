@@ -74,6 +74,9 @@ A refusal changes nothing and names every reason at once, so one round of fixing
   presents messages that are occurrences of other folders, so holding it would store each of them twice and draining it
   would remove mail from folders nobody asked about. Providers whose folders are labels over one store are not what
   this mode is for.
+- **The account's deletes only flag a message deleted** — its `AuthoredDeleteServerDisposition` is `FlagDeleted`. That
+  setting asks for deleted mail to stay on the source server, which a held account empties. Set it to `Expunge` and ask
+  again. An account the configuration does not declare is not refused for this.
 - **Switching off, a folder mapping names nothing the source could hold.** Before the mailbox is appended back, every
   mapping's remote path has to be valid and either name a folder the source advertises or be one the mapping's
   `CreateIfMissing` permits. While any fails, nothing starts.
@@ -169,6 +172,8 @@ wrong trade for everybody using it.
   the source is the drain's own work completing rather than somebody deleting mail, so the phase answers what a
   disappearance means. The configured value goes on saying what it says, and applies again once the account is mirrored.
   This is why the switch does not refuse an account configured to erase the local copy.
+- **A delete is local, so `AuthoredDeleteServerDisposition` decides nothing while the mailbox is held.** The drain
+  empties the source whatever a delete would have left there.
 - **Every synchronized folder is drained, including sent, drafts, junk, and trash.** A folder whose mapping does not
   synchronize is never held and never drained.
 - **A `UIDVALIDITY` change on a held account's source duplicates rather than loses.** Rows still carrying an occurrence

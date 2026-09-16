@@ -7,7 +7,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Mutations;
 
-/// <summary>Answers what one account keeps locally of an email MailFathom is about to delete on its mail server.</summary>
+/// <summary>Answers what a delete MailFathom is about to author on one account does, locally and on its mail server.</summary>
 /// <remarks>
 /// <para>
 /// It is read where the delete is authored rather than where it completes, because those are different runs: the
@@ -29,4 +29,13 @@ public interface IAuthoredDeleteEmailDispositionReader
     /// <param name="accountId">The account whose mail is being deleted.</param>
     /// <returns>What becomes of the local copy once the server no longer holds the message.</returns>
     AuthoredDeleteEmailDisposition GetAuthoredDeleteDisposition(MailAccountId accountId);
+
+    /// <summary>Gets what one account's own deletions do to the message on its mail server.</summary>
+    /// <param name="accountId">The account whose mail is being deleted.</param>
+    /// <returns>Whether the delete expunges the message or only flags it <c>\Deleted</c>.</returns>
+    /// <remarks>
+    /// Beside the local answer rather than on a port of its own, because both are read by the same callers at the same
+    /// moment about the same act and are written down on the same record.
+    /// </remarks>
+    AuthoredDeleteServerDisposition GetAuthoredDeleteServerDisposition(MailAccountId accountId);
 }

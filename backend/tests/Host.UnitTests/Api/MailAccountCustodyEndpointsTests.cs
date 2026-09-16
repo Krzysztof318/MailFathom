@@ -268,6 +268,7 @@ public sealed class MailAccountCustodyEndpointsTests
             Substitute.For<IMailTransportSecurityPolicyReader>(),
             heldLeases,
             Substitute.For<IMailAccountCustodyAuditor>(),
+            Substitute.For<IAuthoredDeleteEmailDispositionReader>(),
             CommitPolicy(),
             AccessAuthorizations.ForAdministratorGranted(
                 MailFathomPermission.AdminRead,

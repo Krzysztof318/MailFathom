@@ -41,6 +41,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName,
         PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
         PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName,
+        PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName,
     ];
 
     [Theory]

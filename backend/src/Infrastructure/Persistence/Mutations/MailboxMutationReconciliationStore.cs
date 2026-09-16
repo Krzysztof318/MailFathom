@@ -241,6 +241,55 @@ internal sealed partial class MailboxMutationReconciliationStore(
         entity.SourceRemovalObservedAt ??= observedAt;
     }
 
+    /// <inheritdoc />
+    /// <remarks>Read through the index filtered to exactly these rows, so a folder whose deletes expunge costs nothing here.</remarks>
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadUnsettledFlaggedDeletesAsync(
+        MailAccountId account,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        int maxRecordCount,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRecordCount);
+
+        var accountValue = account.Value;
+        var alias = folderResolutionId.Alias.Value;
+        var generation = folderResolutionId.Generation.Value;
+        var uidValidityValue = uidValidity.Value;
+        var deleteName = MailboxMutation.Delete.Name;
+
+        var entities = await readContext.MailboxMutations
+            .AsNoTracking()
+            .Include(mutation => mutation.MailFolder)
+            .Where(mutation => mutation.MailboxAccountId == accountValue
+                && mutation.MailFolder.Alias == alias
+                && mutation.MailFolder.ResolutionGeneration == generation
+                && mutation.UidValidity == uidValidityValue
+                && mutation.Mutation == deleteName
+                && mutation.ServerDisposition == AuthoredDeleteServerDisposition.FlagDeleted
+                && mutation.Stage == MailboxMutationStage.Completed
+                && mutation.DeleteFlagSettledAt == null
+                && mutation.SourceRemovalObservedAt == null)
+            .OrderBy(mutation => mutation.RecordedAt)
+            .ThenBy(mutation => mutation.Id)
+            .Take(maxRecordCount)
+            .ToArrayAsync(cancellationToken);
+
+        return [.. entities.Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+    }
+
+    /// <inheritdoc />
+    public async Task RecordDeleteFlagSettledAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        DateTimeOffset settledAt,
+        CancellationToken cancellationToken)
+    {
+        var entity = await RequireEntityAsync(session, recordId, cancellationToken);
+
+        entity.DeleteFlagSettledAt ??= settledAt;
+    }
+
     private static async Task<MailboxMutationEntity> RequireEntityAsync(
         IPersistenceSession session,
         MailboxMutationRecordId recordId,

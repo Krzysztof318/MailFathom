@@ -383,6 +383,10 @@ itself deleted the message on your instruction and the account keeps the local c
 although the server no longer holds it — [the authored-delete disposition](imap-synchronization.md#what-becomes-of-a-message-mailfathom-deleted-itself)
 is what chooses that, and nothing else produces it.
 
+A message a delete of MailFathom's [only flagged](imap-synchronization.md#a-delete-that-only-flags-the-message) is
+excluded the same way while the server still holds it marked `\Deleted`, unless that same disposition kept it readable.
+It comes back when the flag is removed on the server, which undoes the delete.
+
 `IsRemotelyDeleted` is a different question and is not that exclusion. It is reported on every result and filtered on by
 nothing, because it is the server's `\Deleted` flag on a message the folder still holds and still serves — a message a
 reader can legitimately ask for, and one whose flag they can then read.

@@ -300,7 +300,8 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
             stored.StoredEmailId,
             occurrence,
             Requester,
-            localDisposition);
+            localDisposition,
+            AuthoredDeleteServerDisposition.Expunge);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

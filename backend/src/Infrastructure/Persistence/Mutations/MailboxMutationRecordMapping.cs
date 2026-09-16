@@ -52,7 +52,8 @@ internal static class MailboxMutationRecordMapping
                 entity.DesiredSeenState,
                 entity.DesiredFlaggedState,
                 ToKeywords(entity),
-                ToLocalDisposition(entity, mutation)),
+                ToLocalDisposition(entity, mutation),
+                ToServerDisposition(entity, mutation)),
             Stage = entity.Stage,
             IsAudited = entity.AuditTrailEnabled,
             RequiresSourceRemoval = entity.RequiresSourceRemoval,
@@ -63,6 +64,7 @@ internal static class MailboxMutationRecordMapping
             LastFailure = StoredFailureCode.ToErrorCode(entity.LastFailureCode),
             PlacementObservedAt = entity.PlacementObservedAt,
             SourceRemovalObservedAt = entity.SourceRemovalObservedAt,
+            DeleteFlagSettledAt = entity.DeleteFlagSettledAt,
         };
     }
 
@@ -94,6 +96,18 @@ internal static class MailboxMutationRecordMapping
 
         return mutation == MailboxMutation.Relocate ? entity.LocalDisposition : null;
     }
+
+    /// <summary>Restores what a delete decided about the message on the server.</summary>
+    /// <remarks>
+    /// Unlike a missing local disposition, a missing value here is not a guess: only a build that knows no other value
+    /// writes a delete row without one — a replica still running it during a rolling upgrade — and that build expunges.
+    /// </remarks>
+    private static AuthoredDeleteServerDisposition? ToServerDisposition(
+        MailboxMutationEntity entity,
+        MailboxMutation mutation) =>
+        mutation == MailboxMutation.Delete
+            ? entity.ServerDisposition ?? AuthoredDeleteServerDisposition.Expunge
+            : null;
 
     /// <summary>Restores the keywords a keyword mutation named, exactly as they were stored.</summary>
     /// <remarks>

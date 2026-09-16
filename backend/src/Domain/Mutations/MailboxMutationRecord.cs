@@ -112,6 +112,25 @@ public sealed record MailboxMutationRecord
     /// <summary>Gets when synchronization saw the source occurrence leave its folder, or <see langword="null" /> while it has not.</summary>
     public required DateTimeOffset? SourceRemovalObservedAt { get; init; }
 
+    /// <summary>Gets when synchronization first answered for the <c>\Deleted</c> flag a delete that issued no expunge left, or <see langword="null" /> while it has not.</summary>
+    /// <remarks>
+    /// <para>
+    /// Such a delete never makes its occurrence disappear, so the reading that settles it is a different one from the
+    /// disappearance an expunging delete waits for: the occurrence seen still flagged, which is what applies
+    /// <see cref="MailboxMutationRequest.LocalDisposition" />, or seen already unflagged, which means the delete was
+    /// undone on the server before anything local happened and leaves the local copy as it was.
+    /// </para>
+    /// <para>
+    /// What happens to the occurrence after that is followed apart from this record, because an erased local copy takes
+    /// the record with it and the occurrence still has to be watched for the flag being removed.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? DeleteFlagSettledAt { get; init; }
+
+    /// <summary>Gets whether this is a delete that flagged its message <c>\Deleted</c> and left expunging to somebody else.</summary>
+    public bool LeavesMessageOnServer =>
+        this.Request.ServerDisposition is AuthoredDeleteServerDisposition.FlagDeleted;
+
     /// <summary>Gets whether the record has reached a stage nothing moves it out of.</summary>
     public bool IsTerminal => this.Stage
         is MailboxMutationStage.Completed
@@ -193,11 +212,14 @@ public sealed record MailboxMutationRecord
     /// This is the terminal state of the join rather than of the protocol sequence, and the two are reached at
     /// different moments. <see cref="MailboxMutationStage.Completed" /> says the server did what was asked; this says
     /// the local mailbox has stopped owing anything about it, which is what takes the record out of the candidates a
-    /// later discovery is matched against.
+    /// later discovery is matched against. A delete that left its message on the server is reconciled once its flag
+    /// has been settled, since nothing about that occurrence is followed through this record afterwards.
     /// </remarks>
     public bool IsReconciled =>
         (!this.ExpectsPlacementObservation || this.PlacementObservedAt is not null)
-        && (!this.ExpectsSourceRemovalObservation || this.SourceRemovalObservedAt is not null);
+        && (!this.ExpectsSourceRemovalObservation
+            || this.SourceRemovalObservedAt is not null
+            || (this.LeavesMessageOnServer && this.DeleteFlagSettledAt is not null));
 
     /// <summary>Reports whether a newly discovered occurrence is one this mutation put there.</summary>
     /// <param name="discoveredFolderPath">The remote path of the folder the occurrence was discovered in.</param>

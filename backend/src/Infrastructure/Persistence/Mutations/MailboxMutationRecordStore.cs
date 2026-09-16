@@ -91,6 +91,7 @@ internal sealed class MailboxMutationRecordStore(
             // would otherwise hold a second reference to.
             Keywords = request.Keywords is { } keywords ? [.. keywords.Values] : null,
             LocalDisposition = request.LocalDisposition,
+            ServerDisposition = request.ServerDisposition,
 
             // Resolved here, with the row, so a trail switched on or off while this mutation is in flight decides
             // nothing about a change already begun.

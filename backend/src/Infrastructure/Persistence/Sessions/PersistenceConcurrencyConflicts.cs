@@ -189,12 +189,17 @@ internal static class PersistenceConcurrencyConflicts
     /// ending on a violation of a key that did not exist when it looked.
     /// </para>
     /// <para>
-    /// The last is where the source still holds a message an erasure took locally, recorded once however many erasure
+    /// The next is where the source still holds a message an erasure took locally, recorded once however many erasure
     /// paths reach the same stored row. Two of them — a folder's mirror erased while a message in it is erased by
     /// identity, or either beside the delete a person authored — read the row in separate transactions and both stage
     /// the record, and the loser violates the occurrence index. The retry re-reads, finds the row already gone and the
     /// winner's record standing, and stages nothing, which is what keeps one occurrence one thing for the drain to
     /// expunge instead of ending the erasing run on a violation it could not have avoided.
+    /// </para>
+    /// <para>
+    /// The last is where a delete that only flagged a message left it on the server. Two runs of one folder both read
+    /// the flag on a delete neither has settled, and both record the occurrence the settlement follows, so the loser
+    /// violates the occurrence index. The retry re-reads, finds the delete settled by the winner, and records nothing.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -231,6 +236,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.LocalMailFolderSiblingNameUniqueIndexName
                 or PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName
-                or PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName,
+                or PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName
+                or PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName,
         };
 }

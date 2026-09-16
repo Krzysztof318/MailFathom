@@ -379,10 +379,12 @@ in its new folder, match again, and file it again for as long as the folder is w
 [a change MailFathom made is not a change to react to](imap-synchronization.md#a-change-mailfathom-made-is-not-a-change-to-react-to)
 states how the record answers that exactly, without a cycle counter or a rate limit.
 
-**What a deletion does to the local copy is the account's decision**, taken from `AuthoredDeleteEmailDisposition` at the
-moment the request is written, exactly as a deletion somebody authored through a tool is.
+**What a deletion does is the account's decision**, taken from `AuthoredDeleteEmailDisposition` for the local copy and
+`AuthoredDeleteServerDisposition` for the server at the moment the request is written, exactly as a deletion somebody
+authored through a tool is.
 [What becomes of a message MailFathom deleted itself](imap-synchronization.md#what-becomes-of-a-message-mailfathom-deleted-itself)
-states the three answers.
+states the three local answers, and [a delete that only flags the message](imap-synchronization.md#a-delete-that-only-flags-the-message)
+the server's other one. A rule that moves mail always expunges its source.
 
 ### What an account permits a rule to do
 

@@ -7,10 +7,12 @@ using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
@@ -130,6 +132,61 @@ public sealed class MailAccountCustodySwitchTests
         var refusal = Assert.Single(outcome!.Refusals);
         Assert.Equal(MailAccountCustodySwitchRefusal.SynchronizedVirtualFolder, refusal.Reason);
         Assert.Equal("EVERYTHING", refusal.Subject);
+    }
+
+    /// <summary>A held account empties its source, so an account whose deletes mean to leave mail there cannot be one.</summary>
+    [Fact]
+    public async Task SwitchAsync_TheAccountOnlyFlagsItsDeletes_RefusesHoldingTheMailbox()
+    {
+        // Arrange
+        var context = new SwitchContext().DeletingOnTheServerBy(AuthoredDeleteServerDisposition.FlagDeleted);
+
+        // Act
+        var outcome = await context.Switch.SwitchAsync(
+            Account,
+            MailAccountCustody.HoldMailbox,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.Single(outcome!.Refusals);
+        Assert.Equal(MailAccountCustodySwitchRefusal.FlagOnlyAuthoredDelete, refusal.Reason);
+        Assert.Null(refusal.Subject);
+        Assert.Equal(MailAccountCustody.MirrorSource, context.Custody.StateOf(Account)!.Requested);
+    }
+
+    /// <summary>Mirroring again leaves the source alone, so the setting refuses nothing on the way back.</summary>
+    [Fact]
+    public async Task SwitchAsync_BackToMirroringAnAccountThatOnlyFlagsItsDeletes_IsAccepted()
+    {
+        // Arrange
+        var context = new SwitchContext(MailAccountCustody.HoldMailbox)
+            .DeletingOnTheServerBy(AuthoredDeleteServerDisposition.FlagDeleted);
+
+        // Act
+        var outcome = await context.Switch.SwitchAsync(
+            Account,
+            MailAccountCustody.MirrorSource,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.WasAccepted);
+    }
+
+    /// <summary>An account the configuration no longer declares has no answer, and none is invented to refuse it over.</summary>
+    [Fact]
+    public async Task SwitchAsync_TheConfigurationDeclaresNoDeletionSettingForTheAccount_RefusesNothingOverIt()
+    {
+        // Arrange
+        var context = new SwitchContext().DeclaringNoSuchAccount();
+
+        // Act
+        var outcome = await context.Switch.SwitchAsync(
+            Account,
+            MailAccountCustody.HoldMailbox,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.WasAccepted);
     }
 
     [Fact]
@@ -309,6 +366,7 @@ public sealed class MailAccountCustodySwitchTests
         private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
         private readonly IRemoteFolderCatalog remoteFolders = Substitute.For<IRemoteFolderCatalog>();
         private readonly IWorkLeaseStore leases = Substitute.For<IWorkLeaseStore>();
+        private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions = Substitute.For<IAuthoredDeleteEmailDispositionReader>();
 
         internal SwitchContext(
             MailAccountCustody current = MailAccountCustody.MirrorSource,
@@ -340,6 +398,7 @@ public sealed class MailAccountCustodySwitchTests
                 transportSecurity,
                 this.leases,
                 this.Auditor,
+                this.deleteDispositions,
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
                 AccessAuthorizations.ForAdministratorGranted(granted ?? MailFathomPermission.AdminCustodyWrite),
                 clock);
@@ -350,6 +409,21 @@ public sealed class MailAccountCustodySwitchTests
         internal RecordingMailAccountCustodyAuditor Auditor { get; } = new();
 
         internal MailAccountCustodySwitch Switch { get; }
+
+        internal SwitchContext DeletingOnTheServerBy(AuthoredDeleteServerDisposition disposition)
+        {
+            this.deleteDispositions.GetAuthoredDeleteServerDisposition(Arg.Any<MailAccountId>()).Returns(disposition);
+
+            return this;
+        }
+
+        internal SwitchContext DeclaringNoSuchAccount()
+        {
+            this.deleteDispositions.GetAuthoredDeleteServerDisposition(Arg.Any<MailAccountId>())
+                .Returns(_ => throw new InvalidOperationException("The account is not configured."));
+
+            return this;
+        }
 
         internal SwitchContext Mapping(params MailFolderMapping[] folders)
         {

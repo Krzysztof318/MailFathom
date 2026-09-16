@@ -194,7 +194,8 @@ public sealed class MailboxChangeReleaserTests
             StoredEmailId.Create(Guid.CreateVersion7()),
             OccurrenceIn(folderAlias, uid),
             Requester,
-            AuthoredDeleteEmailDisposition.RetainTombstone);
+            AuthoredDeleteEmailDisposition.RetainTombstone,
+            AuthoredDeleteServerDisposition.Expunge);
 
     private static MailboxMutationRequest RelocateRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.Relocate(

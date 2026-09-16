@@ -200,7 +200,8 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
                 storedEmailId,
                 occurrence,
                 Requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy);
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge);
         }
 
         if (mutation == MailboxMutation.SetSeen)

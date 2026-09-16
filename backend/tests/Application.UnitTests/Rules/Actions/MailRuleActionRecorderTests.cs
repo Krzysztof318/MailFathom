@@ -237,6 +237,24 @@ public sealed class MailRuleActionRecorderTests
         Assert.Equal(AuthoredDeleteEmailDisposition.RetainTombstone, request.LocalDisposition);
     }
 
+    /// <summary>A rule's delete leaves its message on the server exactly when the account says so, as an authored delete's does.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleDeletingMailOnAnAccountThatOnlyFlags_CarriesTheFlagOnlyDisposition()
+    {
+        // Arrange
+        this.dispositions
+            .GetAuthoredDeleteServerDisposition(Arg.Any<MailAccountId>())
+            .Returns(AuthoredDeleteServerDisposition.FlagDeleted);
+
+        // Act
+        await this.RecordAsync(Planned("drop-notifications", MailRuleAction.Delete()));
+
+        // Assert
+        Assert.Equal(
+            AuthoredDeleteServerDisposition.FlagDeleted,
+            Assert.Single(this.records.OpenedRequests).ServerDisposition);
+    }
+
     /// <summary>The identity is the occurrence, the rule with its revision, and the mutation, so asking again asks once.</summary>
     [Fact]
     public async Task RecordAsync_TheSameRuleAndRevisionTwice_OpensOneRecord()

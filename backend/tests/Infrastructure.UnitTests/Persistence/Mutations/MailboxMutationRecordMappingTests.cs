@@ -61,10 +61,63 @@ public sealed class MailboxMutationRecordMappingTests
         entity.Mutation = MailboxMutation.Delete.Name;
         entity.DestinationFolderPath = null;
         entity.DestinationHierarchyDelimiter = null;
+        entity.ServerDisposition = AuthoredDeleteServerDisposition.Expunge;
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(
             () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
+    }
+
+    /// <summary>A delete is performed later under the server disposition it was recorded with, whatever the setting says by then.</summary>
+    [Theory]
+    [InlineData(AuthoredDeleteServerDisposition.Expunge)]
+    [InlineData(AuthoredDeleteServerDisposition.FlagDeleted)]
+    public void ToRecord_ADeleteCarryingAServerDisposition_RestoresItWithItsFlagSettlement(
+        AuthoredDeleteServerDisposition disposition)
+    {
+        // Arrange
+        var settledAt = RecordedAt.AddMinutes(5);
+        var entity = StoredDelete();
+        entity.ServerDisposition = disposition;
+        entity.DeleteFlagSettledAt = settledAt;
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(disposition, record.Request.ServerDisposition);
+        Assert.Equal(settledAt, record.DeleteFlagSettledAt);
+    }
+
+    /// <summary>
+    /// A delete row naming no server disposition was written by a build that knows only expunging, a replica still
+    /// running it during a rolling upgrade, so it is performed the way that build would have performed it.
+    /// </summary>
+    [Fact]
+    public void ToRecord_ADeleteNamingNoServerDisposition_ExpungesAsTheBuildThatWroteItWould()
+    {
+        // Arrange
+        var entity = StoredDelete();
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(AuthoredDeleteServerDisposition.Expunge, record.Request.ServerDisposition);
+    }
+
+    /// <summary>Only a delete decides anything on the server, so a relocation restores no server disposition.</summary>
+    [Fact]
+    public void ToRecord_ARelocation_RestoresNoServerDisposition()
+    {
+        // Arrange
+        var entity = StoredRelocation();
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Null(record.Request.ServerDisposition);
     }
 
     /// <summary>
@@ -177,6 +230,18 @@ public sealed class MailboxMutationRecordMappingTests
             $"more than the {RemoteEmailKeywords.MaximumKeywords}",
             refusal.Message,
             StringComparison.Ordinal);
+    }
+
+    private static MailboxMutationEntity StoredDelete()
+    {
+        var entity = StoredRelocation();
+
+        entity.Mutation = MailboxMutation.Delete.Name;
+        entity.DestinationFolderPath = null;
+        entity.DestinationHierarchyDelimiter = null;
+        entity.LocalDisposition = AuthoredDeleteEmailDisposition.EraseLocalCopy;
+
+        return entity;
     }
 
     private static MailboxMutationEntity StoredKeywordChange(MailboxMutation mutation, string[] keywords)

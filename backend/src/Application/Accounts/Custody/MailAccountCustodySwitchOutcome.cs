@@ -46,6 +46,8 @@ public sealed record MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRef
             "Too many replicas are holding work at once for their builds to be read, so whether one of them does not know this mode could not be established. Ask again once fewer scopes are held.",
         MailAccountCustodySwitchRefusal.ReplicaOnBuildWithoutTheMode =>
             $"Replica '{this.Subject}' is holding work under a build that does not know this mode, and would read a held account as mirrored. The refusal clears once that replica's lease expires.",
+        MailAccountCustodySwitchRefusal.FlagOnlyAuthoredDelete =>
+            "The account's deletions only flag a message deleted and leave it on the source server, which an account holding its own mailbox empties. Set its authored delete server disposition to Expunge and ask again.",
         _ =>
             $"The folder mapping '{this.Subject}' names no folder the source server holds, and does not permit creating one there, so the mailbox could not be appended back. Correct its remote path and ask again.",
     };

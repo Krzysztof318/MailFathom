@@ -963,8 +963,9 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <para>
     /// It binds as one of the two names <see cref="RemotelyDeletedEmailDisposition" /> declares, and a value that is
     /// neither fails startup rather than silently selecting a default: this setting decides whether stored mail is
-    /// destroyed, and a typo in it must never be the reason mail survives or does not. The default keeps the local row
-    /// as a tombstone that mailbox queries exclude.
+    /// destroyed, and a typo in it must never be the reason mail survives or does not. The default erases the local
+    /// copy, so what the server no longer holds is not kept either; an account that has to outlive the server's own
+    /// retention names <see cref="RemotelyDeletedEmailDisposition.RetainTombstone" /> instead.
     /// </para>
     /// <para>
     /// The setting is per account because the accounts of one deployment answer to different providers and serve
@@ -974,7 +975,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </para>
     /// </remarks>
     public RemotelyDeletedEmailDisposition RemotelyDeletedEmailDisposition { get; set; } =
-        RemotelyDeletedEmailDisposition.RetainTombstone;
+        RemotelyDeletedEmailDisposition.EraseLocalCopy;
 
     /// <summary>Gets or sets what happens to the local copy of an email MailFathom itself deletes on this account's server.</summary>
     /// <remarks>
@@ -987,12 +988,30 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </para>
     /// <para>
     /// It binds as one of the names <see cref="AuthoredDeleteEmailDisposition" /> declares, and a value that is none of
-    /// them fails startup for the same reason the setting above does. The default keeps the local copy readable, which
-    /// is the value that destroys nothing.
+    /// them fails startup for the same reason the setting above does. The default erases the local copy, which is what
+    /// the gesture means; keeping it is a choice an account states by name.
     /// </para>
     /// </remarks>
     public AuthoredDeleteEmailDisposition AuthoredDeleteEmailDisposition { get; set; } =
-        AuthoredDeleteEmailDisposition.RetainLocalCopy;
+        AuthoredDeleteEmailDisposition.EraseLocalCopy;
+
+    /// <summary>Gets or sets what a delete MailFathom authors on this account does to the message on its mail server.</summary>
+    /// <remarks>
+    /// <para>
+    /// The default expunges the message. <see cref="AuthoredDeleteServerDisposition.FlagDeleted" /> only flags it
+    /// <c>\Deleted</c> and leaves the expunge to the server or to another client, which is what a mailbox shared with a
+    /// client that still offers an undelete asks for. Either way the local copy follows
+    /// <see cref="AuthoredDeleteEmailDisposition" />, and <see cref="RemotelyDeletedEmailDisposition" /> never applies to
+    /// the later expunge of a message MailFathom flagged.
+    /// </para>
+    /// <para>
+    /// It binds as one of the names <see cref="AuthoredDeleteServerDisposition" /> declares, and a value that is none of
+    /// them fails startup. The value is read when a delete is recorded and travels on its record, so changing it
+    /// governs the deletes authored from then on.
+    /// </para>
+    /// </remarks>
+    public AuthoredDeleteServerDisposition AuthoredDeleteServerDisposition { get; set; } =
+        AuthoredDeleteServerDisposition.Expunge;
 
     /// <summary>Gets or sets what deleting one of this account's folders through the client does on its mail server.</summary>
     /// <remarks>
@@ -1121,6 +1140,13 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the authored delete email disposition must be one of {string.Join(", ", Enum.GetNames<AuthoredDeleteEmailDisposition>())}.",
                 [nameof(this.AuthoredDeleteEmailDisposition)]);
+        }
+
+        if (!Enum.IsDefined(this.AuthoredDeleteServerDisposition))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the authored delete server disposition must be one of {string.Join(", ", Enum.GetNames<AuthoredDeleteServerDisposition>())}.",
+                [nameof(this.AuthoredDeleteServerDisposition)]);
         }
 
         // Checked for the same reason as the disposition above: a bare number binds onto an enum whether or not a

@@ -164,27 +164,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 authoredDisposition is AuthoredDeleteEmailDisposition.RetainLocalCopy;
         }
 
-        if (erasedByAuthoredDelete.Count > 0)
-        {
-            // What these messages hold leaves storage with them, so their user's figure gives it back inside the same
-            // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
-            // session commits rather than before the line below it: the removal below only stages a delete the change
-            // tracker applies at that commit. A later change making the removal set-based would execute immediately and
-            // turn that ordering into a real one.
-            await AccountStoredContentLedger.RemoveAsync(
-                sessionContext,
-                [.. erasedByAuthoredDelete.Select(email => email.Id)],
-                cancellationToken);
-
-            // An authored delete is a deliberate erasure, so it carries through to the object rather than being left
-            // to the sweep: the keys are read here, before the cascade removes the rows that carry them.
-            await ReleasedContentObjects.ReleaseForStoredEmailsAsync(
-                session,
-                [.. erasedByAuthoredDelete.Select(static row => row.Id)],
-                cancellationToken);
-
-            sessionContext.StoredEmails.RemoveRange(erasedByAuthoredDelete);
-        }
+        await EraseAuthoredDeletesAsync(session, sessionContext, erasedByAuthoredDelete, cancellationToken);
 
         var disappeared = outcome.Disappeared
             .Select(storedEmailId => rowsById.GetValueOrDefault(storedEmailId.Value))
@@ -243,6 +223,203 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         }
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeleteLeftFlagged>> GetDeletesLeftFlaggedAsync(
+        MailAccountId account,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        int maxCount,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
+
+        var accountValue = account.Value;
+        var alias = folderResolutionId.Alias.Value;
+        var generation = folderResolutionId.Generation.Value;
+        var uidValidityValue = uidValidity.Value;
+
+        // ponytail: an occurrence recorded under a UIDVALIDITY the folder no longer reports is never asked about again and
+        // is left in place; it names a position and nothing of the message. Remove such rows once they are ever counted.
+        var followed = await readContext.MailboxFlaggedDeletes
+            .AsNoTracking()
+            .Where(flagged => flagged.MailboxAccountId == accountValue
+                && readContext.MailFolders.Any(folder => folder.Id == flagged.MailFolderId
+                    && folder.Alias == alias
+                    && folder.ResolutionGeneration == generation)
+                && flagged.UidValidity == uidValidityValue)
+            .OrderBy(flagged => flagged.LastObservedAt)
+            .ThenBy(flagged => flagged.Id)
+            .Take(maxCount)
+            .Select(flagged => new { flagged.Id, flagged.Uid, flagged.StoredEmailId })
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. followed.Select(static flagged => new DeleteLeftFlagged(
+                new DeleteLeftFlaggedId(flagged.Id),
+                ImapUid.Create(flagged.Uid),
+                flagged.StoredEmailId is { } kept ? StoredEmailId.Create(kept) : null)),
+        ];
+    }
+
+    /// <inheritdoc />
+    public async Task ApplyFlaggedDeleteSettlementAsync(
+        IPersistenceSession session,
+        FlaggedDeleteSettlement settlement,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settlement);
+
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var observedAt = settlement.ObservedAt;
+        Guid[] rowIds =
+        [
+            .. settlement.Settled.Select(static settled => settled.StoredEmailId.Value),
+            .. settlement.Expunged.Concat(settlement.Restored)
+                .Select(static entry => entry.KeptEmail?.Value)
+                .OfType<Guid>(),
+        ];
+        var rowsById = await sessionContext.StoredEmails
+            .Where(email => rowIds.Contains(email.Id))
+            .ToDictionaryAsync(static email => email.Id, cancellationToken);
+
+        var settledRows = settlement.Settled
+            .Where(settled => rowsById.ContainsKey(settled.StoredEmailId.Value))
+            .Select(settled => (Row: rowsById[settled.StoredEmailId.Value], settled.LocalDisposition))
+            .Where(static settled => settled.Row.UidValidity is not null
+                && settled.Row.Uid is not null
+                && settled.Row.AuthoredDeleteFlaggedAt is null)
+            .DistinctBy(static settled => settled.Row.Id)
+            .ToArray();
+
+        foreach (var (row, disposition) in settledRows)
+        {
+            sessionContext.MailboxFlaggedDeletes.Add(new MailboxFlaggedDeleteEntity
+            {
+                Id = Guid.CreateVersion7(observedAt),
+                MailboxAccountId = row.MailboxAccountId,
+                MailFolderId = row.MailFolderId,
+                UidValidity = row.UidValidity!.Value,
+                Uid = row.Uid!.Value,
+                StoredEmailId = disposition is AuthoredDeleteEmailDisposition.EraseLocalCopy ? null : row.Id,
+                LastObservedAt = observedAt,
+            });
+
+            if (disposition is AuthoredDeleteEmailDisposition.EraseLocalCopy)
+            {
+                continue;
+            }
+
+            row.AuthoredDeleteFlaggedAt ??= observedAt;
+            row.IsRetainedAfterAuthoredDelete = disposition is AuthoredDeleteEmailDisposition.RetainLocalCopy;
+            row.IsRemotelyDeleted = true;
+            row.RemoteFlagsObservedAt = observedAt;
+        }
+
+        await EraseAuthoredDeletesAsync(
+            session,
+            sessionContext,
+            [
+                .. settledRows
+                    .Where(static settled => settled.LocalDisposition is AuthoredDeleteEmailDisposition.EraseLocalCopy)
+                    .Select(static settled => settled.Row),
+            ],
+            cancellationToken);
+
+        // The row stays exactly as the delete left it — readable or a tombstone — and only records what the server did.
+        foreach (var row in KeptRowsOf(settlement.Expunged, rowsById))
+        {
+            row.RemoteExpungeObservedAt ??= observedAt;
+        }
+
+        // A never-observed reading is what puts the row back in the backward pass, whose next window then reads its flags
+        // as a first observation rather than as a change somebody made.
+        foreach (var row in KeptRowsOf(settlement.Restored, rowsById))
+        {
+            row.AuthoredDeleteFlaggedAt = null;
+            row.IsRetainedAfterAuthoredDelete = false;
+            row.IsRemotelyDeleted = false;
+            row.RemoteFlagsObservedAt = null;
+        }
+
+        Guid[] stillFlaggedIds = [.. settlement.StillFlagged.Select(static entry => entry.Id.Value)];
+
+        if (stillFlaggedIds.Length > 0)
+        {
+            await sessionContext.MailboxFlaggedDeletes
+                .Where(flagged => stillFlaggedIds.Contains(flagged.Id) && flagged.LastObservedAt < observedAt)
+                .ExecuteUpdateAsync(
+                    update => update.SetProperty(flagged => flagged.LastObservedAt, observedAt),
+                    cancellationToken);
+        }
+
+        await this.RetireDeletesLeftFlaggedAsync(
+            session,
+            [.. settlement.Expunged.Concat(settlement.Restored).Select(static entry => entry.Id)],
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RetireDeletesLeftFlaggedAsync(
+        IPersistenceSession session,
+        IReadOnlyList<DeleteLeftFlaggedId> ids,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        Guid[] retiredIds = [.. ids.Select(static id => id.Value)];
+
+        await sessionContext.MailboxFlaggedDeletes
+            .Where(flagged => retiredIds.Contains(flagged.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    /// <summary>Removes the rows an authored delete said to erase, with everything that leaves storage with them.</summary>
+    private static async Task EraseAuthoredDeletesAsync(
+        IPersistenceSession session,
+        MailFathomDbContext sessionContext,
+        List<StoredEmailEntity> erased,
+        CancellationToken cancellationToken)
+    {
+        if (erased.Count == 0)
+        {
+            return;
+        }
+
+        // What these messages hold leaves storage with them, so their user's figure gives it back inside the same
+        // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
+        // session commits rather than before the line below it: the removal below only stages a delete the change
+        // tracker applies at that commit. A later change making the removal set-based would execute immediately and
+        // turn that ordering into a real one.
+        await AccountStoredContentLedger.RemoveAsync(
+            sessionContext,
+            [.. erased.Select(email => email.Id)],
+            cancellationToken);
+
+        // An authored delete is a deliberate erasure, so it carries through to the object rather than being left
+        // to the sweep: the keys are read here, before the cascade removes the rows that carry them.
+        await ReleasedContentObjects.ReleaseForStoredEmailsAsync(
+            session,
+            [.. erased.Select(static row => row.Id)],
+            cancellationToken);
+
+        sessionContext.StoredEmails.RemoveRange(erased);
+    }
+
+    /// <summary>Finds the rows a followed occurrence kept, skipping one another writer has already removed.</summary>
+    private static IEnumerable<StoredEmailEntity> KeptRowsOf(
+        IReadOnlyList<DeleteLeftFlagged> entries,
+        Dictionary<Guid, StoredEmailEntity> rowsById) =>
+        entries
+            .Select(entry => entry.KeptEmail is { } kept ? rowsById.GetValueOrDefault(kept.Value) : null)
+            .OfType<StoredEmailEntity>();
+
     /// <summary>Narrows the stored emails to the ones one folder binding's window may select from.</summary>
     private IQueryable<StoredEmailEntity> EligibleEmails(
         MailAccountId account,
@@ -260,7 +437,8 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
                 && email.UidValidity == uidValidityValue
-                && email.RemoteExpungeObservedAt == null);
+                && email.RemoteExpungeObservedAt == null
+                && email.AuthoredDeleteFlaggedAt == null);
     }
 
     /// <summary>Reads every row the outcome names in one query, so applying a window costs one round trip rather than one per email.</summary>

@@ -955,6 +955,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<StoredMailRederivationRequests>();
         services.AddScoped<StoredMailRederivationRunReader>();
         services.AddScoped<MailboxSynchronizer>();
+        services.AddScoped<FlaggedDeleteFollower>();
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         // The caller-scoped half of the account catalog, registered beside the resolution that is its first reader. The

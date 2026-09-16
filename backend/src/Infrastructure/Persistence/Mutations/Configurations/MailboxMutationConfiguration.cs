@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +54,7 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
         // names no declared disposition fails the read rather than being taken as the destructive value by
         // elimination, which is what an integer column would have allowed.
         entity.Property(mutation => mutation.LocalDisposition).HasConversion<string>().HasMaxLength(64);
+        entity.Property(mutation => mutation.ServerDisposition).HasConversion<string>().HasMaxLength(64);
 
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(mutation => mutation.ConcurrencyVersion).IsRowVersion();
@@ -97,6 +99,11 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
     /// disappearance back needs no index of its own: it is asked by folder, UIDVALIDITY, and UID, which is the prefix
     /// the identity index already leads with.
     /// </para>
+    /// <para>
+    /// The fourth answers reconciliation, which asks of every folder which completed deletes left their message flagged
+    /// on the server and have not been settled yet. It is filtered to exactly those, so it holds only the deletes the
+    /// next run of their folder is about to settle, and nothing at all on an account whose deletes expunge.
+    /// </para>
     /// </remarks>
     private static void ConfigureIndexes(EntityTypeBuilder<MailboxMutationEntity> entity)
     {
@@ -129,5 +136,18 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
         })
             .HasDatabaseName(PersistenceConstraintNames.MailboxMutationPlacementIndexName)
             .HasFilter($"\"{nameof(MailboxMutationEntity.PlacementObservedAt)}\" IS NULL");
+
+        entity.HasIndex(mutation => new
+        {
+            mutation.MailFolderId,
+            mutation.UidValidity,
+            mutation.RecordedAt,
+        })
+            .HasDatabaseName(PersistenceConstraintNames.MailboxMutationFlaggedDeleteIndexName)
+            .HasFilter(
+                $"\"{nameof(MailboxMutationEntity.ServerDisposition)}\" = '{nameof(AuthoredDeleteServerDisposition.FlagDeleted)}'"
+                + $" AND \"{nameof(MailboxMutationEntity.Stage)}\" = '{nameof(MailboxMutationStage.Completed)}'"
+                + $" AND \"{nameof(MailboxMutationEntity.DeleteFlagSettledAt)}\" IS NULL"
+                + $" AND \"{nameof(MailboxMutationEntity.SourceRemovalObservedAt)}\" IS NULL");
     }
 }

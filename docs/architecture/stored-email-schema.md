@@ -45,7 +45,7 @@ Two folders holding the same message — because the user copied it, or because 
 
 **The keywords beside them.** `RemoteKeywords` is a `text[]` on the same row, holding the flags the protocol leaves to whoever set them — `$Junk`, `$Forwarded`, a label a mail client wrote — rather than the five it names. The reconciliation pass writes it with the booleans, from the same `FLAGS` answer, so an empty array means either that the server reported no keyword or that nobody has looked, and `remote_flags_observed_at` is what tells those apart here too. Flag names are compared without regard to case, so the values are held upper-cased, deduplicated, and ordered: two observations that found the same keywords write the same array whatever order the server listed them in. What one row keeps is bounded at 64 keywords of at most 64 characters each, and a server reporting more has the excess discarded rather than failing the window. The column sits here rather than in a table of its own so that every tombstone, retention, erasure, and export path already carrying this row carries the keywords with it.
 
-These columns are an observation and never an instruction. Reading mail cannot reach any of them, because no read path holds a session able to issue a `STORE` at all. `\Seen`, `\Flagged`, and the keywords are what MailFathom can ask a server to move, and only as a change the mailbox user authored — that request is written to `mailbox_mutations` and issued against the server, and it writes nothing here. A column changes when the reconciliation pass next reads the folder and finds the flag standing somewhere new, which is the same way it would change had the user moved the flag in their own mail client. So each of them has exactly one writer whoever moved the flag, and a row read between the command and the next window still reports the last value the server was seen to hold. `\Answered` and `\Draft` are never written under any instruction, and `\Deleted` is written only as a step of removing a message rather than as a flag anything asks for. [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) records why the permitted set stops there.
+These columns are an observation and never an instruction. Reading mail cannot reach any of them, because no read path holds a session able to issue a `STORE` at all. `\Seen`, `\Flagged`, and the keywords are what MailFathom can ask a server to move, and only as a change the mailbox user authored — that request is written to `mailbox_mutations` and issued against the server, and it writes nothing here. A column changes when the reconciliation pass next reads the folder and finds the flag standing somewhere new, which is the same way it would change had the user moved the flag in their own mail client. So each of them has exactly one writer whoever moved the flag, and a row read between the command and the next window still reports the last value the server was seen to hold. `\Answered` and `\Draft` are never written under any instruction, and `\Deleted` is written only by a delete — as a step of removing the message, or as all of it where the account's deletes only flag one — rather than as a flag anything else asks for. [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) records why the permitted set stops there.
 
 **The tombstone.** `remote_expunge_observed_at` records when reconciliation found the message gone from its remote folder, and is null while the server still holds it. It is a different statement from `is_remotely_deleted`, which is the server reporting the `\Deleted` flag for a message the folder still holds and still serves; conflating the two would hide mail that is merely marked for deletion. An account configured to erase local copies has no tombstone at all, because its row is removed instead — and the three tables that reference this one all cascade, so the raw MIME, the search document, and any outstanding repair request go with it. [IMAP synchronization](../features/imap-synchronization.md#reconciling-against-the-server) describes when each happens.
 
@@ -370,6 +370,27 @@ The row carries nothing from the message: no subject, no address, no folder path
 was erased. What it is for is a UID to name in a `UID EXPUNGE`, and the record is deleted in the same transaction that
 records the expunge as done. A record whose folder reports another `UIDVALIDITY` is abandoned without a command
 reaching the source, on the same reasoning the drain's own batches are.
+
+## Where a delete left a message flagged
+
+`mailbox_flagged_deletes` holds one row per occurrence a `FlagDeleted` delete left on its server, written in the
+transaction that settles the delete. It exists beside the delete's own record because neither of the other two rows
+survives every outcome: an erased local copy takes its stored row with it, and the mutation record cascades from that row.
+Reconciliation reads it until the server expunges the message or removes the flag, and removes it then.
+
+| Column of `mailbox_flagged_deletes` | What it records |
+|---|---|
+| `Id` | The row's own identity |
+| `MailboxAccountId`, `MailFolderId` | The account and the folder binding. The binding's foreign key cascades, so a folder that is gone takes its rows with it |
+| `UidValidity`, `Uid` | The occurrence still on the server. `ix_mailbox_flagged_deletes_occurrence` is unique over the folder and the two, so a settlement replayed after a commit conflict writes one row |
+| `StoredEmailId` | The local row the disposition kept, and null when it erased the copy. The foreign key cascades |
+| `LastObservedAt` | When a run last asked about the occurrence. `ix_mailbox_flagged_deletes_queue` is `(MailFolderId, UidValidity, LastObservedAt)`, the order a bounded run reads them in, longest unread first |
+
+A row holds no part of the message: a position in a mailbox and MailFathom's own identity for a row.
+
+On `stored_emails`, `authored_delete_flagged_at` marks a kept row whose message still carries the `\Deleted` a
+`FlagDeleted` delete set. Every mailbox query excludes such a row unless `is_retained_after_authored_delete` keeps it
+readable, and the reconciliation window skips it; the marker is cleared when the server removes `\Deleted`.
 
 ## What a person set about their own client
 
@@ -948,14 +969,24 @@ Each row carries the local email, the source occurrence it was aimed at — the 
 occurrence is stored beside the `StoredEmailId` rather than read back through it, because the email moves: the command
 that was issued was aimed at one folder and one UID, and a record that followed the email would stop describing it.
 
-`LocalDisposition` is one of those parameters, and the only one a delete takes: it names what becomes of the local copy
-once the server no longer holds the message, and is null for every other mutation. It is stored rather than read where
+`LocalDisposition` is one of those parameters, and a delete takes it with one other: it names what becomes of the local
+copy once the server no longer holds the message, and is null for every mutation but a delete and a relocation out of the
+mirrored mailbox. It is stored rather than read where
 the delete finishes because those are different runs — the deletion is issued now and the local copy is disposed of by
 the synchronization run that later sees the message gone — so reading the account's configuration there would apply
 whatever an operator had changed it to in the meantime. Writing it with the row is what makes a setting changed
 mid-flight govern the deletes authored after the change and leave one already begun exactly as it was. A row this
 column is missing from is refused on the way back rather than read as some fallback, because every value destroys
 something a different one keeps.
+
+`ServerDisposition` is the other, and only a delete carries it: `Expunge` or `FlagDeleted`, stored by name and written
+with the row for the same reason `LocalDisposition` is. Every delete recorded before the column existed was written as
+`Expunge`, which is what each of them did, and a delete row without it is read as `Expunge`: only a build that knows no
+other value writes one.
+`DeleteFlagSettledAt` is when a run first read `\Deleted` on the occurrence of a `FlagDeleted` delete, which is what
+settles that delete, since the server goes on holding the message. `ix_mailbox_mutations_flagged_delete` is
+`(MailFolderId, UidValidity, RecordedAt)`, filtered to completed `FlagDeleted` deletes that are neither settled nor seen
+removed, so it holds only what the next run of each folder is about to settle.
 
 `DesiredSeenState`, `DesiredFlaggedState`, and `Keywords` are the other parameters, and each belongs to the mutations
 that take it: the two booleans carry the direction a flag change asked for, and `Keywords` is a `text[]` carrying the
@@ -972,7 +1003,7 @@ from:
 | `Recorded` | The intent is durable and nothing has reached the server | every mutation |
 | `PlacementIssued` | The command that would place the email has gone out and its answer was never read | relocate, copy |
 | `PlacementConfirmed` | The server acknowledged the placement, and named it where it supplied `COPYUID` | relocate, copy |
-| `SourceFlaggedDeleted` | The source carries `\Deleted` and only the expunge remains | relocate over the fallback, delete |
+| `SourceFlaggedDeleted` | The source carries `\Deleted`, and only the expunge remains unless the delete only flags | relocate over the fallback, delete |
 | `Completed` | The change is made, and asking again performs nothing | every mutation |
 | `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | every mutation |
 | `Cancelled` | The person who asked for it took it back before anything reached the server | every mutation |
@@ -997,7 +1028,8 @@ taken in hand on the next pass as it always was.
 repeat of the first, so a mutation found there is reported as an unknown outcome, has
 `MailboxMutationOutcomeUnknown` (25002) written to `LastFailureCode` so an operator reading the row sees why it is
 stuck, and is left for a person to resolve. Every other stage resumes: a relocation found at `PlacementConfirmed`
-removes its source without copying again, and a delete found at `SourceFlaggedDeleted` reissues only the expunge. A
+removes its source without copying again, and a delete found at `SourceFlaggedDeleted` reissues only the expunge, or nothing when its server disposition is
+`FlagDeleted`. A
 `\Seen` change never leaves `Recorded` until it completes — the store is idempotent on the wire, and its record exists
 for provenance rather than for retry safety. A `\Flagged` change and every keyword change behave the same way, for the
 same reason: `STORE +FLAGS` and `STORE -FLAGS` say what a message should carry rather than what to do to it, so issuing

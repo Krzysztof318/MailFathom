@@ -155,6 +155,7 @@ internal sealed class StoredEmailMetadataRepository(
         // longer one retained without one either.
         entity.RemoteFlagsObservedAt = null;
         entity.RemoteExpungeObservedAt = null;
+        entity.AuthoredDeleteFlaggedAt = null;
         entity.IsRetainedAfterAuthoredDelete = false;
 
         return true;

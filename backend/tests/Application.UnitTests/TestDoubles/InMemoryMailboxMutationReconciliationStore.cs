@@ -194,6 +194,50 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReadUnsettledFlaggedDeletesAsync(
+        MailAccountId account,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        int maxRecordCount,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MailboxMutationRecord> unsettled =
+        [
+            .. this.recordsById.Values
+                .Where(record => record.Request.Mutation == MailboxMutation.Delete
+                    && record.Request.ServerDisposition == AuthoredDeleteServerDisposition.FlagDeleted
+                    && record.Stage == MailboxMutationStage.Completed
+                    && record.DeleteFlagSettledAt is null
+                    && record.SourceRemovalObservedAt is null
+                    && record.Request.Occurrence.AccountId == account
+                    && record.Request.Occurrence.FolderResolutionId == folderResolutionId
+                    && record.Request.Occurrence.UidValidity == uidValidity)
+                .OrderBy(static record => record.RecordedAt)
+                .ThenBy(static record => record.Id.Value)
+                .Take(maxRecordCount),
+        ];
+
+        return Task.FromResult(unsettled);
+    }
+
+    /// <inheritdoc />
+    public Task RecordDeleteFlagSettledAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        DateTimeOffset settledAt,
+        CancellationToken cancellationToken)
+    {
+        var record = this.Require(recordId);
+
+        this.recordsById[recordId] = record with
+        {
+            DeleteFlagSettledAt = record.DeleteFlagSettledAt ?? settledAt,
+        };
+
+        return Task.CompletedTask;
+    }
+
     private MailboxMutationRecord Require(MailboxMutationRecordId recordId) =>
         this.recordsById.TryGetValue(recordId, out var record)
             ? record

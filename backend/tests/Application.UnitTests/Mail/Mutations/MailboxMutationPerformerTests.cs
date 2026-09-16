@@ -328,6 +328,37 @@ public sealed class MailboxMutationPerformerTests
             context.Store.RecordOf(request).LastFailure);
     }
 
+    /// <summary>A delete is performed the way it was recorded, whatever the account's setting reads by the time it runs.</summary>
+    [Theory]
+    [InlineData(AuthoredDeleteServerDisposition.Expunge)]
+    [InlineData(AuthoredDeleteServerDisposition.FlagDeleted)]
+    public async Task PerformAsync_ADelete_HandsTheSessionTheServerDispositionItWasRecordedUnder(
+        AuthoredDeleteServerDisposition disposition)
+    {
+        // Arrange
+        var context = new PerformerContext();
+        var occurrence = Occurrence(42U);
+
+        // Act
+        await context.Performer.PerformAsync(
+            MailboxMutationRequest.Delete(
+                StoredEmailId.Create(Guid.CreateVersion7()),
+                occurrence,
+                MailboxMutationRequester.Rule("file-newsletters", "3"),
+                AuthoredDeleteEmailDisposition.EraseLocalCopy,
+                disposition),
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        await context.WriteSession.Received(1).DeleteAsync(
+            occurrence,
+            disposition,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Each mutation reaches the operation it names, and nothing else does.</summary>
     [Fact]
     public async Task PerformAsync_ForEachMutation_IssuesOnlyTheOperationItNames()
@@ -343,7 +374,8 @@ public sealed class MailboxMutationPerformerTests
             MailboxMutationRequest.Delete(
                 storedEmailId, occurrence,
                 requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
@@ -361,6 +393,7 @@ public sealed class MailboxMutationPerformerTests
         // Assert
         await context.WriteSession.Received(1).DeleteAsync(
             occurrence,
+            AuthoredDeleteServerDisposition.Expunge,
             Arg.Any<IMailboxMutationJournal>(),
             Arg.Any<CancellationToken>());
         await context.WriteSession.Received(1).SetSeenAsync(
@@ -653,7 +686,8 @@ public sealed class MailboxMutationPerformerTests
             _ => MailboxMutationRequest.Delete(
                 storedEmailId, occurrence,
                 requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
         };
     }
 

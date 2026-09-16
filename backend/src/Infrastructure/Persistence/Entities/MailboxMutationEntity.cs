@@ -89,6 +89,17 @@ internal sealed class MailboxMutationEntity
     /// </remarks>
     public AuthoredDeleteEmailDisposition? LocalDisposition { get; set; }
 
+    /// <summary>Gets or sets what a delete does to the message on the server, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>Written once with the row and never rewritten, for the reason <see cref="LocalDisposition" /> is.</remarks>
+    public AuthoredDeleteServerDisposition? ServerDisposition { get; set; }
+
+    /// <summary>Gets or sets when synchronization first answered for the <c>\Deleted</c> flag a delete that issued no expunge left, and <see langword="null" /> while it has not.</summary>
+    /// <remarks>
+    /// Written in the transaction that disposes of the local copy, so a delete carrying one has already had
+    /// <see cref="LocalDisposition" /> applied — or found its flag removed before that, and applied nothing.
+    /// </remarks>
+    public DateTimeOffset? DeleteFlagSettledAt { get; set; }
+
     /// <summary>Gets or sets whether this mutation leaves an entry in the account's audit trail when it ends.</summary>
     /// <remarks>
     /// Resolved from the account's configuration when the row is written and never rewritten, which is the whole reason

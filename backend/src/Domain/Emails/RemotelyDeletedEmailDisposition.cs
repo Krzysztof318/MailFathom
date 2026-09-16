@@ -21,16 +21,17 @@ public enum RemotelyDeletedEmailDisposition
 {
     /// <summary>Keeps the local row as a tombstone that every mailbox query excludes.</summary>
     /// <remarks>
-    /// The record that the email existed survives, which is what makes a disappearance auditable rather than silent.
-    /// It is the default because it is the reversible one: a server that misreports a folder costs a hidden row rather
-    /// than a destroyed local copy.
+    /// The record that the email existed survives, which is what makes a disappearance auditable rather than silent,
+    /// and a server that misreports a folder costs a hidden row rather than a destroyed local copy. An account asks for
+    /// it by name: it is no longer the default.
     /// </remarks>
     RetainTombstone = 0,
 
     /// <summary>Removes the local row together with its raw MIME and everything derived from it.</summary>
     /// <remarks>
-    /// Nothing of the email survives locally, so a deployment that must not retain mail past the server's own copy can
-    /// say so. The removal happens as the disappearance is observed, which is deliberate and irreversible.
+    /// Nothing of the email survives locally, so the local mailbox follows the server's own. The removal happens as the
+    /// disappearance is observed, which is deliberate and irreversible. It is the default, because every deletion
+    /// setting of an account defaults to deleting completely: mail the server no longer holds is mail its user deleted.
     /// </remarks>
     EraseLocalCopy = 1,
 }

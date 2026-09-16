@@ -340,6 +340,13 @@ issues a deletion from the trash as soon as it finds one, before the hold a clie
 has taken in hand always gets. Nothing is deleted that was not asked for; what the window costs is the moment to change
 one's mind.
 
+**`FlagOnlyAuthoredDeletes` expunges a flag-only delete for as long as an older replica is running.** It adds three
+nullable columns and an empty table, and writes `Expunge` onto the delete rows `mailbox_mutations` already holds, so it
+is quick on a table of any size. A build older than the release carrying it knows only expunging: a delete recorded
+under `FlagDeleted` that such a replica takes in hand is expunged rather than flagged, and a kept row a newer replica
+marked flagged is served by the older one's queries. Nothing is lost that the delete did not ask to remove from the
+server. An account that relies on `FlagDeleted` finishes the rollout before its user deletes anything.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
