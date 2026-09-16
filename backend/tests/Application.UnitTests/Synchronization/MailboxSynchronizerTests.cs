@@ -2581,7 +2581,7 @@ public sealed class MailboxSynchronizerTests
             ImapUid.Create(20));
         var oversized = MetadataOf(occurrence, sizeOctets: new MailboxSynchronizationOptions().MaxRawMimeBytes + 1);
         context.Session
-            .GetEmailBatchAfterAsync(ImapUid.Create(19), 1, MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .GetEmailBatchAfterAsync(ImapUid.Create(19), 100, MailSynchronizationWindow.Unbounded, CancellationToken.None)
             .Returns(new RemoteEmailMetadataBatch([oversized], InspectedThroughUid: ImapUid.Create(20), HasMore: false));
 
         // Act
@@ -2598,6 +2598,47 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<IPersistenceSession>(),
             Arg.Is<IReadOnlyList<DeleteLeftFlaggedId>>(ids => ids!.SequenceEqual(new[] { undeleted.Id })),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Every message to restore is read from one page, and one the page did not reach waits for a later run rather than
+    /// being let go as though the server no longer served it.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_UndeletedMessagesBeyondOnePage_ReadsOnePageAndLeavesTheRestFollowed()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: SynchronizationCheckpoint.None(ImapUidValidity.Create(5)));
+        var undeleted = ArrangeUndeletedErasedOccurrences(context, 20, 30, 500);
+        var reached = MetadataOf(
+            EmailOccurrenceId.Create(MailAccountId.Create("primary"), InboxFolder.Id, ImapUidValidity.Create(5), ImapUid.Create(20)),
+            sizeOctets: new MailboxSynchronizationOptions().MaxRawMimeBytes + 1);
+        context.Session
+            .GetEmailBatchAfterAsync(ImapUid.Create(19), 100, MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([reached], InspectedThroughUid: ImapUid.Create(120), HasMore: true));
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.Session.Received(1).GetEmailBatchAfterAsync(
+            ImapUid.Create(19),
+            Arg.Any<int>(),
+            Arg.Any<MailSynchronizationWindow>(),
+            Arg.Any<CancellationToken>());
+        await context.MetadataRepository.Received(1).UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            reached,
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<StoredEmailContentAvailability>(),
+            Arg.Any<CancellationToken>());
+        DeleteLeftFlaggedId[] retired =
+        [
+            .. context.ReconciliationStore.ReceivedCalls()
+                .Where(static call => call.GetMethodInfo().Name == nameof(IStoredEmailReconciliationStore.RetireDeletesLeftFlaggedAsync))
+                .SelectMany(static call => (IReadOnlyList<DeleteLeftFlaggedId>)call.GetArguments()[1]!),
+        ];
+        Assert.Equal([undeleted[0].Id, undeleted[1].Id], retired);
     }
 
     /// <summary>An occurrence the server no longer serves, or serves outside the account's window, is never stored again, so it is not followed either.</summary>
@@ -2686,9 +2727,17 @@ public sealed class MailboxSynchronizerTests
         IEmailMetadataRepository MetadataRepository);
 
     /// <summary>Arranges one occurrence whose local copy a flag-only delete erased and whose flag the server has since removed.</summary>
-    private static DeleteLeftFlagged ArrangeUndeletedErasedOccurrence(ReconciliationContext context, uint uid)
+    private static DeleteLeftFlagged ArrangeUndeletedErasedOccurrence(ReconciliationContext context, uint uid) =>
+        ArrangeUndeletedErasedOccurrences(context, uid)[0];
+
+    /// <summary>Arranges occurrences whose local copies flag-only deletes erased and whose flags the server has since removed.</summary>
+    private static DeleteLeftFlagged[] ArrangeUndeletedErasedOccurrences(ReconciliationContext context, params uint[] uids)
     {
-        var undeleted = new DeleteLeftFlagged(new DeleteLeftFlaggedId(Guid.CreateVersion7()), ImapUid.Create(uid), KeptEmail: null);
+        DeleteLeftFlagged[] undeleted =
+        [
+            .. uids.Select(static uid =>
+                new DeleteLeftFlagged(new DeleteLeftFlaggedId(Guid.CreateVersion7()), ImapUid.Create(uid), KeptEmail: null)),
+        ];
         context.ReconciliationStore
             .GetDeletesLeftFlaggedAsync(
                 Arg.Any<MailAccountId>(),
@@ -2696,14 +2745,14 @@ public sealed class MailboxSynchronizerTests
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<DeleteLeftFlagged>>([undeleted]));
+            .Returns(Task.FromResult<IReadOnlyList<DeleteLeftFlagged>>(undeleted));
         context.Session
             .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences(
                 [
-                    new RemoteEmailFlagObservation(
+                    .. uids.Select(static uid => new RemoteEmailFlagObservation(
                         ImapUid.Create(uid),
-                        RemoteEmailFlagSnapshot.NeverObserved with { ObservedAt = DateTimeOffset.UnixEpoch }),
+                        RemoteEmailFlagSnapshot.NeverObserved with { ObservedAt = DateTimeOffset.UnixEpoch })),
                 ],
                 folderHighestModSeq: null)));
 

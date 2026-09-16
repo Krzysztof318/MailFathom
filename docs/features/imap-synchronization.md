@@ -1765,7 +1765,8 @@ the occurrence, which settles the delete. From then on the message is followed r
   completing.
 - **When the flag is removed on the server**, the delete is undone and the message is live again. A kept or tombstoned
   row loses its marker and is visible again; an erased copy is fetched from the server and stored again the way a first
-  discovery stores it, within the run's budget, and a run that has no budget left fetches it next time. Either way an
+  discovery stores it, within the run's budget, and a run that has no budget left fetches it next time. A run reads the
+  messages it restores from one metadata page, so one past that page is restored by a later run. Either way an
   open client is told the message changed rather than that new mail arrived, because the person already had it.
 
 The occurrences being followed are recorded in `mailbox_flagged_deletes`, one row per occurrence: the delete's own

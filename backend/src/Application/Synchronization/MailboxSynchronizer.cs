@@ -749,12 +749,18 @@ public sealed class MailboxSynchronizer
 
     /// <summary>Stores again the messages whose local copy a flag-only delete erased and whose flag was then removed on the server.</summary>
     /// <remarks>
-    /// Each is an ordinary discovery of the one occurrence, asked for by the UID the followed record names, so the row it
-    /// produces is the one a first discovery would have. The record is retired once that store is durable, and equally
-    /// when the occurrence is no longer served or falls outside the account's window, because nothing would ever store
-    /// it then. A run whose byte budget cannot cover the next one leaves it, and everything behind it, for the next run.
-    /// It is announced to open clients as a changed message rather than as arrived mail, because it is a message the
-    /// person already had and deleted, not one that has just reached them.
+    /// <para>
+    /// The run reads one ordinary metadata page, starting just below the lowest UID it has to restore, so every message
+    /// costs one round trip together rather than one each. Each message found there is stored the way a first
+    /// discovery stores it, and its record is retired once that store is durable. A record whose UID the page read past
+    /// without describing it is retired as well: the server no longer serves the occurrence, or serves it outside the
+    /// account's window, so nothing would ever store it. A UID beyond the page waits for a later run, and so does
+    /// everything behind a message the run's byte budget cannot cover.
+    /// </para>
+    /// <para>
+    /// A restored message is announced to open clients as changed rather than as arrived, because it is one the person
+    /// already had and deleted, not one that has just reached them.
+    /// </para>
     /// </remarks>
     private async Task RestoreUndeletedEmailsAsync(
         IMailboxSession mailboxSession,
@@ -767,17 +773,31 @@ public sealed class MailboxSynchronizer
         LocalMailFolderArrivalSource arrivalSource,
         CancellationToken cancellationToken)
     {
-        foreach (var undeleted in awaitingRestore)
+        if (awaitingRestore.Count == 0)
         {
-            var batch = await mailboxSession.GetEmailBatchAfterAsync(
-                undeleted.Uid.Value > 1 ? ImapUid.Create(undeleted.Uid.Value - 1) : null,
-                maxEmailCount: 1,
-                synchronizationWindow,
-                cancellationToken);
-            var metadata = batch.Emails.FirstOrDefault(email => email.OccurrenceId.Uid == undeleted.Uid);
+            return;
+        }
+
+        DeleteLeftFlagged[] inUidOrder = [.. awaitingRestore.OrderBy(static undeleted => undeleted.Uid.Value)];
+        var lowestUid = inUidOrder[0].Uid.Value;
+        var page = await mailboxSession.GetEmailBatchAfterAsync(
+            lowestUid > 1 ? ImapUid.Create(lowestUid - 1) : null,
+            this.options.MaxMetadataBatchSize,
+            synchronizationWindow,
+            cancellationToken);
+        var describedByUid = page.Emails.ToDictionary(static email => email.OccurrenceId.Uid);
+
+        foreach (var undeleted in inUidOrder)
+        {
+            if (page.HasMore && (page.InspectedThroughUid is not { } inspectedThrough
+                || undeleted.Uid.Value > inspectedThrough.Value))
+            {
+                return;
+            }
+
             StoredEmailId? restoredAs = null;
 
-            if (metadata is not null)
+            if (describedByUid.TryGetValue(undeleted.Uid, out var metadata))
             {
                 if (this.WouldFetchContentOf(metadata) && !budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
                 {
