@@ -499,6 +499,28 @@ public sealed class MailboxDrainPassTests
         Assert.Equal([ImapUid.Create(11)], context.ExpungedUids);
     }
 
+    /// <summary>
+    /// A folder whose mapping stops synchronizing is neither held nor drained, and what it stored is kept rather than
+    /// erased — so its rows carry an occurrence the source still answers, and emptying it would leave an operator who
+    /// turns mirroring back on a folder MailFathom holds and the source does not.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_StoredMailOfAFolderTheAccountNoLongerSynchronizes_LeavesItOnTheSource()
+    {
+        // Arrange
+        var context = new DrainContext(Held)
+            .MirroringTheArchiveNoLonger()
+            .Storing(Stored(Inbox, uid: 11))
+            .Storing(Stored(Archive, uid: 12));
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.DrainedCount);
+        Assert.Equal([ImapUid.Create(11)], context.ExpungedUids);
+    }
+
     /// <summary>The same answer governs the erased half, which has no gate of its own once a record has been written.</summary>
     [Fact]
     public async Task DrainAsync_SourceRemovalOfAFolderPlayingAVirtualRole_IssuesNoCommandForIt()
@@ -681,6 +703,20 @@ public sealed class MailboxDrainPassTests
                     Arg.Any<MailFolderAlias>(),
                     Arg.Any<CancellationToken>())
                 .Returns((MailFolderResolution?)null);
+
+            return this;
+        }
+
+        /// <summary>Keeps the archive mapped and stops mirroring it, which is the switch an operator may flip back.</summary>
+        internal DrainContext MirroringTheArchiveNoLonger()
+        {
+            this.mappings.FoldersOf(Account).Returns([
+                MailFolderMapping.ToRemotePath(Inbox.Alias, Inbox.RemotePath),
+                MailFolderMapping.ToRemotePath(
+                    Archive.Alias,
+                    Archive.RemotePath,
+                    MailFolderParticipation.MappedOnly),
+            ]);
 
             return this;
         }

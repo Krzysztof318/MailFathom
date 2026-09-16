@@ -569,19 +569,29 @@ public sealed class MailboxDrainPass
         .Any(static mapping => mapping.Participation.IsSynchronized
             && VirtualMailFolderRoles.Includes(mapping.SpecialUse));
 
-    /// <summary>Reads the aliases a command may name, which are the account's folders the source keeps messages of its own in.</summary>
+    /// <summary>Reads the aliases a command may name, which are the folders the account synchronizes and the source keeps messages of its own in.</summary>
     /// <remarks>
+    /// <para>
     /// Asked per folder as well as per account, because the pause above lifts the moment the virtual mapping is
     /// withdrawn while the rows it stored keep their occurrence and their remote path, and nothing on a row says the
     /// folder was a view. A folder playing such a role presents UIDs of messages the source keeps elsewhere, so a
-    /// command naming one takes mail out of folders nobody asked about. An alias no mapping names any more answers the
-    /// same way, nothing being left to say which of the two it was: those rows stay on the source and go on being
-    /// counted as awaiting the drain, which is what an operator sees until the local copy of that folder is erased.
+    /// command naming one takes mail out of folders nobody asked about.
+    /// </para>
+    /// <para>
+    /// The participation is asked beside the role because ADR 0034 holds a folder whose mapping does not synchronize to
+    /// be neither held nor drained, and turning one off keeps what it stored rather than erasing it — so its rows carry
+    /// an occurrence the source still answers, and an operator who turns mirroring back on the same week would
+    /// otherwise find MailFathom holding a folder the source no longer does. An alias no mapping names any more answers
+    /// the same way, nothing being left to say which of the three it was: the rows of any of them stay on the source
+    /// and go on being counted as awaiting the drain, which is what an operator sees until the local copy of that
+    /// folder is erased.
+    /// </para>
     /// </remarks>
     private IReadOnlyCollection<MailFolderAlias> FoldersHoldingTheirOwnMessages(MailAccountId account) =>
     [
         .. this.mappings.FoldersOf(account)
-            .Where(static mapping => !VirtualMailFolderRoles.Includes(mapping.SpecialUse))
+            .Where(static mapping => mapping.Participation.IsSynchronized
+                && !VirtualMailFolderRoles.Includes(mapping.SpecialUse))
             .Select(static mapping => mapping.Alias),
     ];
 
