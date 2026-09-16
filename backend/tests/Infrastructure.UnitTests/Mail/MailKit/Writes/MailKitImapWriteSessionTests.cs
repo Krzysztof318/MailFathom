@@ -601,7 +601,7 @@ public sealed class MailKitImapWriteSessionTests
         await using var session = await harness.OpenSessionAsync();
 
         // Act
-        await session.DeleteAsync(CreateOccurrenceId(42U), new RecordingMailboxMutationJournal(), CancellationToken.None);
+        await session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.Expunge, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert
         await openFolder.Received(1).StoreAsync(
@@ -612,6 +612,54 @@ public sealed class MailKitImapWriteSessionTests
             Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 1 && uids[0].Id == 42U),
             Arg.Any<CancellationToken>());
         await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An account that only flags its deletes leaves the expunge to the server, so the one command issued is the flag.</summary>
+    [Fact]
+    public async Task DeleteAsync_FlagOnly_FlagsDeletedAndIssuesNoExpunge()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+        var journal = new RecordingMailboxMutationJournal();
+
+        // Act
+        await session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.FlagDeleted, journal, CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 1 && uids[0].Id == 42U),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Add && request.Flags == MessageFlags.Deleted),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
+        Assert.Equal([MailboxMutationStage.SourceFlaggedDeleted], journal.AnnouncedStages);
+    }
+
+    /// <summary>What a server can delete does not depend on the account's setting, so a flag-only delete is refused where an expunge would be.</summary>
+    [Fact]
+    public async Task DeleteAsync_FlagOnlyOnAServerWithoutUidPlus_IsRefusedBeforeAnyCommand()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(
+            () => session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.FlagDeleted, new RecordingMailboxMutationJournal(), CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailboxMutation.Delete.Name, refusal.Operation);
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -630,7 +678,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(
-            () => session.DeleteAsync(CreateOccurrenceId(42U), new RecordingMailboxMutationJournal(), CancellationToken.None));
+            () => session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.Expunge, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
         Assert.Equal(MailboxMutation.Delete.Name, refusal.Operation);
@@ -707,7 +755,7 @@ public sealed class MailKitImapWriteSessionTests
 
         // Act
         await session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
-        await session.DeleteAsync(CreateOccurrenceId(43U), new RecordingMailboxMutationJournal(), CancellationToken.None);
+        await session.DeleteAsync(CreateOccurrenceId(43U), AuthoredDeleteServerDisposition.Expunge, new RecordingMailboxMutationJournal(), CancellationToken.None);
         await session.CopyAsync(CreateOccurrenceId(44U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None);
 
         // Assert

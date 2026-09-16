@@ -381,6 +381,21 @@ internal sealed class StoredEmailEntity
     /// </remarks>
     public bool IsRetainedAfterAuthoredDelete { get; set; }
 
+    /// <summary>
+    /// Gets or sets when reconciliation found the occurrence flagged <c>\Deleted</c> by a delete MailFathom authored that
+    /// issued no expunge, or <see langword="null" /> for every other email.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The server still holds such a message, so <see cref="RemoteExpungeObservedAt" /> cannot say it is gone; this is
+    /// what takes the row out of every mailbox query instead, unless <see cref="IsRetainedAfterAuthoredDelete" /> keeps
+    /// it readable, and out of the reconciliation queue, since the occurrence is followed through a record of its own
+    /// from then on. The expunge somebody issues later is recorded in <see cref="RemoteExpungeObservedAt" /> as any
+    /// other, and a flag removed on the server clears this again.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? AuthoredDeleteFlaggedAt { get; set; }
+
     /// <summary>Gets or sets the outgoing record this email is MailFathom's own filed copy of, and <see langword="null" /> for every message it did not send.</summary>
     /// <remarks>
     /// <para>

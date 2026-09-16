@@ -1817,7 +1817,8 @@ public sealed class MailboxReconcilerTests
                 : MailboxMutationRequest.Delete(
                     storedEmailId, occurrence,
                     requester,
-                    localDisposition),
+                    localDisposition,
+                    AuthoredDeleteServerDisposition.Expunge),
             Stage = MailboxMutationStage.Completed,
             IsAudited = false,
             RequiresSourceRemoval = isRelocation,
@@ -1984,6 +1985,26 @@ public sealed class MailboxReconcilerTests
 
         public StoredEmailId StoredEmailIdOf(uint uid) =>
             this.rowsById.Single(entry => entry.Value.Uid == uid).Key;
+
+        public Task<IReadOnlyList<DeleteLeftFlagged>> GetDeletesLeftFlaggedAsync(
+            MailAccountId account,
+            MailFolderResolutionId folderResolutionId,
+            ImapUidValidity uidValidity,
+            int maxCount,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("The backward pass never follows a flag-only delete.");
+
+        public Task ApplyFlaggedDeleteSettlementAsync(
+            IPersistenceSession session,
+            FlaggedDeleteSettlement settlement,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("The backward pass never settles a flag-only delete.");
+
+        public Task RetireDeletesLeftFlaggedAsync(
+            IPersistenceSession session,
+            IReadOnlyList<DeleteLeftFlaggedId> ids,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("The backward pass never follows a flag-only delete.");
 
         public Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
             MailAccountId account,

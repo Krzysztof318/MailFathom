@@ -35,4 +35,11 @@ public enum MailAccountCustodySwitchRefusal
     /// advertises and whose mapping does not permit creating one there, would leave the restore unable to finish.
     /// </remarks>
     UnusableFolderMapping = 2,
+
+    /// <summary>The account's own deletions only flag a message <c>\Deleted</c> and leave it on the source.</summary>
+    /// <remarks>
+    /// A held account empties its source once each message is durably stored, so a delete that means to leave the
+    /// message on the server contradicts the mode itself. The operator states <c>Expunge</c> for the account first.
+    /// </remarks>
+    FlagOnlyAuthoredDelete = 3,
 }

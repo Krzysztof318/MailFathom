@@ -180,7 +180,11 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
                         scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
                         token);
 
-                await session.DeleteAsync(target, new InMemoryMailboxMutationJournal(), token);
+                await session.DeleteAsync(
+                    target,
+                    AuthoredDeleteServerDisposition.Expunge,
+                    new InMemoryMailboxMutationJournal(),
+                    token);
 
                 return true;
             },

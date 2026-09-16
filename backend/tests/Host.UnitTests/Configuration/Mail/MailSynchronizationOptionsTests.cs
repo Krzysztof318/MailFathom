@@ -827,9 +827,9 @@ public sealed class MailSynchronizationOptionsTests
     public void GetDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
     {
         // Arrange
-        var followingServer = CreateAccount("following-server");
-        followingServer.RemotelyDeletedEmailDisposition = RemotelyDeletedEmailDisposition.EraseLocalCopy;
-        var options = new MailSynchronizationOptions().Serving(followingServer, CreateAccount("archive"));
+        var archive = CreateAccount("archive");
+        archive.RemotelyDeletedEmailDisposition = RemotelyDeletedEmailDisposition.RetainTombstone;
+        var options = new MailSynchronizationOptions().Serving(CreateAccount("following-server"), archive);
 
         // Act
         var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
@@ -842,9 +842,9 @@ public sealed class MailSynchronizationOptionsTests
             dispositions);
     }
 
-    /// <summary>Configuring nothing keeps the reversible outcome, so no deployment loses mail by omission.</summary>
+    /// <summary>An account that says nothing follows its server, and keeping what the server lost is asked for by name.</summary>
     [Fact]
-    public void GetDisposition_AccountConfiguringNoDisposition_KeepsTheLocalRowAsATombstone()
+    public void GetDisposition_AccountConfiguringNoDisposition_ErasesTheLocalCopy()
     {
         // Arrange
         var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"));
@@ -853,7 +853,7 @@ public sealed class MailSynchronizationOptionsTests
         var disposition = options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(MailAccountId.Create("primary"));
 
         // Assert
-        Assert.Equal(RemotelyDeletedEmailDisposition.RetainTombstone, disposition);
+        Assert.Equal(RemotelyDeletedEmailDisposition.EraseLocalCopy, disposition);
     }
 
     [Fact]
@@ -945,6 +945,7 @@ public sealed class MailSynchronizationOptionsTests
         // Arrange
         var account = CreateAccount("primary");
         account.RemotelyDeletedEmailDisposition = RemotelyDeletedEmailDisposition.EraseLocalCopy;
+        account.AuthoredDeleteEmailDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy;
         var options = new MailSynchronizationOptions().Serving(account);
         var accountId = MailAccountId.Create("primary");
 
@@ -962,9 +963,9 @@ public sealed class MailSynchronizationOptionsTests
     public void GetAuthoredDeleteDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
     {
         // Arrange
-        var forgetful = CreateAccount("forgetful");
-        forgetful.AuthoredDeleteEmailDisposition = AuthoredDeleteEmailDisposition.EraseLocalCopy;
-        var options = new MailSynchronizationOptions().Serving(forgetful, CreateAccount("archive"));
+        var archive = CreateAccount("archive");
+        archive.AuthoredDeleteEmailDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy;
+        var options = new MailSynchronizationOptions().Serving(CreateAccount("forgetful"), archive);
 
         // Act
         var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
@@ -1028,6 +1029,114 @@ public sealed class MailSynchronizationOptionsTests
         var result = Assert.Single(results);
         Assert.Contains("RetainLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
         Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every deletion setting of an account that says nothing deletes fully, which is what each gesture means.</summary>
+    [Fact]
+    public void Readers_AccountConfiguringNoDeletionSetting_DeleteFullyOnBothSides()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"));
+        var accountId = MailAccountId.Create("primary");
+
+        // Act
+        var remote = options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(accountId);
+        var authoredLocal = options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteDisposition(accountId);
+        var authoredServer = options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteServerDisposition(accountId);
+
+        // Assert
+        Assert.Equal(RemotelyDeletedEmailDisposition.EraseLocalCopy, remote);
+        Assert.Equal(AuthoredDeleteEmailDisposition.EraseLocalCopy, authoredLocal);
+        Assert.Equal(AuthoredDeleteServerDisposition.Expunge, authoredServer);
+    }
+
+    /// <summary>Two accounts of one deployment can leave their deletes on the server differently.</summary>
+    [Fact]
+    public void GetAuthoredDeleteServerDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
+    {
+        // Arrange
+        var shared = CreateAccount("shared");
+        shared.AuthoredDeleteServerDisposition = AuthoredDeleteServerDisposition.FlagDeleted;
+        var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"), shared);
+
+        // Act
+        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
+            .Select(account => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteServerDisposition(account.Id))
+            .ToArray();
+
+        // Assert
+        Assert.Equal(
+            [AuthoredDeleteServerDisposition.Expunge, AuthoredDeleteServerDisposition.FlagDeleted],
+            dispositions);
+    }
+
+    [Theory]
+    [InlineData("Expunge", AuthoredDeleteServerDisposition.Expunge)]
+    [InlineData("FlagDeleted", AuthoredDeleteServerDisposition.FlagDeleted)]
+    public void Bind_AuthoredDeleteServerDisposition_ReadsItByName(string name, AuthoredDeleteServerDisposition expected)
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailAccounts:0:AccountId"] = "primary",
+                ["MailAccounts:0:DisplayName"] = "The primary mailbox",
+                ["MailAccounts:0:AuthoredDeleteServerDisposition"] = name,
+            })
+            .Build();
+
+        // Act
+        var user = configuration.Get<UserAccountOptions>()!;
+
+        // Assert
+        Assert.Equal(expected, Assert.Single(user.MailAccounts).AuthoredDeleteServerDisposition);
+    }
+
+    /// <summary>A name nobody can interpret fails startup rather than silently expunging or leaving mail on the server.</summary>
+    [Fact]
+    public void Bind_AuthoredDeleteServerDispositionThatNamesNothing_Fails()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailAccounts:0:AccountId"] = "primary",
+                ["MailAccounts:0:DisplayName"] = "The primary mailbox",
+                ["MailAccounts:0:AuthoredDeleteServerDisposition"] = "flag",
+            })
+            .Build();
+        var user = new UserAccountOptions();
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(() => configuration
+            .Bind(user, binderOptions => binderOptions.ErrorOnUnknownConfiguration = true));
+    }
+
+    /// <summary>A bare number binds whether or not a member carries it, so an undeclared one is refused by validation, which a record write runs too.</summary>
+    [Fact]
+    public void ValidateForSynchronization_AuthoredDeleteServerDispositionNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailAccounts:0:AccountId"] = "primary",
+                ["MailAccounts:0:DisplayName"] = "The primary mailbox",
+                ["MailAccounts:0:Host"] = "imap.example.test",
+                ["MailAccounts:0:UserName"] = "mailfathom@example.test",
+                ["MailAccounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-primary-password",
+                ["MailAccounts:0:AuthoredDeleteServerDisposition"] = "2",
+            })
+            .Build();
+        var user = configuration.Get<UserAccountOptions>()!;
+
+        // Act
+        var results = user.FindRefusals().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("Expunge", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("FlagDeleted", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     /// <summary>Deleting a folder means deleting it, so an account that says nothing deletes on both sides.</summary>

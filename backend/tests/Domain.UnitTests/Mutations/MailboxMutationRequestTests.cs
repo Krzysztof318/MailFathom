@@ -33,7 +33,8 @@ public sealed class MailboxMutationRequestTests
             LocalEmail,
             Occurrence(),
             Requester,
-            AuthoredDeleteEmailDisposition.EraseLocalCopy);
+            AuthoredDeleteEmailDisposition.EraseLocalCopy,
+            AuthoredDeleteServerDisposition.Expunge);
         var setSeen = MailboxMutationRequest.SetSeen(LocalEmail, Occurrence(), Requester, isSeen: true);
         var copy = MailboxMutationRequest.Copy(LocalEmail, Occurrence(), Requester, Archive);
 
@@ -44,6 +45,10 @@ public sealed class MailboxMutationRequestTests
         Assert.Null(delete.DestinationPath);
         Assert.Null(delete.DesiredSeenState);
         Assert.Equal(AuthoredDeleteEmailDisposition.EraseLocalCopy, delete.LocalDisposition);
+        Assert.Equal(AuthoredDeleteServerDisposition.Expunge, delete.ServerDisposition);
+        Assert.Null(relocate.ServerDisposition);
+        Assert.Null(setSeen.ServerDisposition);
+        Assert.Null(copy.ServerDisposition);
         Assert.Null(setSeen.DestinationPath);
         Assert.True(setSeen.DesiredSeenState);
         Assert.Null(setSeen.LocalDisposition);
@@ -68,7 +73,8 @@ public sealed class MailboxMutationRequestTests
             withSeenState ? true : null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Contains(refusal.ParamName, RejectedParameterNames, StringComparer.Ordinal);
@@ -88,7 +94,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            AuthoredDeleteEmailDisposition.RetainLocalCopy));
+            AuthoredDeleteEmailDisposition.RetainLocalCopy,
+            AuthoredDeleteServerDisposition.Expunge));
 
         // Assert
         Assert.Equal("destinationPath", refusal.ParamName);
@@ -108,7 +115,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("localDisposition", refusal.ParamName);
@@ -128,7 +136,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            AuthoredDeleteEmailDisposition.EraseLocalCopy));
+            AuthoredDeleteEmailDisposition.EraseLocalCopy,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("localDisposition", refusal.ParamName);
@@ -190,10 +199,87 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            (AuthoredDeleteEmailDisposition)97));
+            (AuthoredDeleteEmailDisposition)97,
+            AuthoredDeleteServerDisposition.Expunge));
 
         // Assert
         Assert.Equal("localDisposition", refusal.ParamName);
+    }
+
+    /// <summary>The server disposition is resolved when the delete is recorded and travels on the request.</summary>
+    [Theory]
+    [InlineData(AuthoredDeleteServerDisposition.Expunge)]
+    [InlineData(AuthoredDeleteServerDisposition.FlagDeleted)]
+    public void Delete_EitherServerDisposition_CarriesIt(AuthoredDeleteServerDisposition disposition)
+    {
+        // Act
+        var request = MailboxMutationRequest.Delete(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredDeleteEmailDisposition.RetainTombstone,
+            disposition);
+
+        // Assert
+        Assert.Equal(disposition, request.ServerDisposition);
+    }
+
+    /// <summary>A stored delete row that says nothing about the server is not performed under a guessed answer.</summary>
+    [Fact]
+    public void Create_DeleteNamingNoServerDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.Delete,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
+            AuthoredDeleteEmailDisposition.EraseLocalCopy,
+            serverDisposition: null));
+
+        // Assert
+        Assert.Equal("serverDisposition", refusal.ParamName);
+    }
+
+    /// <summary>A relocation's removal half always expunges, so a server disposition on one names nothing.</summary>
+    [Fact]
+    public void Create_RelocationNamingAServerDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.Relocate,
+            Requester,
+            Archive,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
+            AuthoredDeleteEmailDisposition.EraseLocalCopy,
+            AuthoredDeleteServerDisposition.FlagDeleted));
+
+        // Assert
+        Assert.Equal("serverDisposition", refusal.ParamName);
+    }
+
+    /// <summary>A server disposition outside the declared set names no command, so it never reaches the durable record.</summary>
+    [Fact]
+    public void Delete_AnUndeclaredServerDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequest.Delete(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredDeleteEmailDisposition.EraseLocalCopy,
+            (AuthoredDeleteServerDisposition)7));
+
+        // Assert
+        Assert.Equal("serverDisposition", refusal.ParamName);
     }
 
     /// <summary>The struct default names no mutation, so a row that somehow carried one is not reconstructed.</summary>
@@ -210,7 +296,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("mutation", refusal.ParamName);
@@ -348,7 +435,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: true,
             AuthoredMailKeywords.Create(["$Todo"]),
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("desiredFlaggedState", refusal.ParamName);
@@ -368,7 +456,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: true,
             AuthoredMailKeywords.Create(["$Todo"]),
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("keywords", refusal.ParamName);
@@ -388,7 +477,8 @@ public sealed class MailboxMutationRequestTests
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null));
+            localDisposition: null,
+            serverDisposition: null));
 
         // Assert
         Assert.Equal("keywords", refusal.ParamName);

@@ -454,6 +454,10 @@ internal sealed class SyntheticMailAccount(
         AuthoredDeleteEmailDisposition.RetainLocalCopy;
 
     /// <inheritdoc />
+    public AuthoredDeleteServerDisposition GetAuthoredDeleteServerDisposition(MailAccountId accountId) =>
+        AuthoredDeleteServerDisposition.Expunge;
+
+    /// <inheritdoc />
     public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId) => MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.None,
         MailAuthenticationPolicy.Create(

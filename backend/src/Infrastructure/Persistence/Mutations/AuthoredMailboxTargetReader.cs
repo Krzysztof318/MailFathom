@@ -29,7 +29,9 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// rather than the same one said twice. A local copy retained after an authored delete is not a tombstone — a listing
 /// serves it, so a caller can see it and name it — while the UID it carries names a message the server expunged.
 /// Recording a change against one would open durable records that convergence could only attempt and fail, so this read
-/// refuses it where a read of the mail itself does not.
+/// refuses it where a read of the mail itself does not. A copy retained after a delete that only flagged the message is
+/// refused on the same terms: the server still holds it, but the delete it was retained after has already been
+/// answered for, and a second change against that occurrence would be one the person never saw it standing for.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -46,7 +48,7 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             .AsNoTracking()
             .Where(email => email.Id == emailId)
             .Where(StoredEmailTombstone.IsNotTombstoned)
-            .Where(email => email.RemoteExpungeObservedAt == null)
+            .Where(email => email.RemoteExpungeObservedAt == null && email.AuthoredDeleteFlaggedAt == null)
             .Select(email => new
             {
                 email.MailboxAccountId,

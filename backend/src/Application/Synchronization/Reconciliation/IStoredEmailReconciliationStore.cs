@@ -84,4 +84,49 @@ public interface IStoredEmailReconciliationStore
         IPersistenceSession session,
         ReconciledFolderOutcome outcome,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads the occurrences of one folder binding that deletes left flagged and that are still followed.</summary>
+    /// <param name="account">The account the folder belongs to.</param>
+    /// <param name="folderResolutionId">The binding the occurrences belong to.</param>
+    /// <param name="uidValidity">The UIDVALIDITY the open session reports, which the occurrences must have been recorded under.</param>
+    /// <param name="maxCount">The greatest number of occurrences to return.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The occurrences read longest ago first, never more than <paramref name="maxCount" />.</returns>
+    Task<IReadOnlyList<DeleteLeftFlagged>> GetDeletesLeftFlaggedAsync(
+        MailAccountId account,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        int maxCount,
+        CancellationToken cancellationToken);
+
+    /// <summary>Applies what one follow-up of a folder's flag-only deletes learned.</summary>
+    /// <param name="session">The explicit persistence session the whole settlement participates in.</param>
+    /// <param name="settlement">What the server said, and what becomes of each local copy.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the writes have been staged.</returns>
+    /// <remarks>
+    /// <para>
+    /// A settled delete whose row another writer has already removed settles nothing and is not followed, because
+    /// nothing local is left for the flag to bring back or to keep hidden. Erasing a row removes everything derived from
+    /// the message with it, exactly as an expunged delete does.
+    /// </para>
+    /// <para>
+    /// A row brought back re-enters the backward pass as one never observed, so its first reading afterwards is an
+    /// observation rather than a change somebody made.
+    /// </para>
+    /// </remarks>
+    Task ApplyFlaggedDeleteSettlementAsync(
+        IPersistenceSession session,
+        FlaggedDeleteSettlement settlement,
+        CancellationToken cancellationToken);
+
+    /// <summary>Stops following occurrences whose erased message has been stored again, or could not be.</summary>
+    /// <param name="session">The explicit persistence session the retirement participates in.</param>
+    /// <param name="ids">The records to retire; one already retired is not an error.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the removals have been staged.</returns>
+    Task RetireDeletesLeftFlaggedAsync(
+        IPersistenceSession session,
+        IReadOnlyList<DeleteLeftFlaggedId> ids,
+        CancellationToken cancellationToken);
 }

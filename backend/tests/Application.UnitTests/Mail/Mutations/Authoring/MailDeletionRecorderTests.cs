@@ -98,6 +98,27 @@ public sealed class MailDeletionRecorderTests
     }
 
     /// <summary>
+    /// What the delete does on the server is read once, as it is recorded, and travels on the record, so a delete still
+    /// in flight is performed the way it was asked for even when the setting has changed since.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_TheSettingChangesAfterTheDeleteIsRecorded_KeepsTheServerDispositionItWasRecordedUnder()
+    {
+        // Arrange
+        this.dispositions.GetAuthoredDeleteServerDisposition(Account).Returns(AuthoredDeleteServerDisposition.FlagDeleted);
+        var recorder = this.Recorder(TargetIn(Trash));
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
+        this.dispositions.GetAuthoredDeleteServerDisposition(Account).Returns(AuthoredDeleteServerDisposition.Expunge);
+
+        // Assert
+        Assert.Equal(
+            AuthoredDeleteServerDisposition.FlagDeleted,
+            Assert.Single(this.records.OpenedRequests).ServerDisposition);
+    }
+
+    /// <summary>
     /// Deleting mail is its own grant, so a caller holding the one that files mail elsewhere is refused. Filing a
     /// message in the trash is reversible; this expunges the occurrence and leaves nothing to fetch back.
     /// </summary>

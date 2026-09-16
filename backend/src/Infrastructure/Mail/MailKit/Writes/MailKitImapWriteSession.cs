@@ -105,6 +105,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     /// <inheritdoc />
     public async Task DeleteAsync(
         EmailOccurrenceId occurrenceId,
+        AuthoredDeleteServerDisposition serverDisposition,
         IMailboxMutationJournal journal,
         CancellationToken cancellationToken)
     {
@@ -124,7 +125,14 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                     this.SessionAccountId,
                     this.folder.Alias);
 
-                await RemoveSourceAsync(openFolder, occurrenceId.Uid, journal, scope, attemptToken);
+                if (serverDisposition is AuthoredDeleteServerDisposition.FlagDeleted)
+                {
+                    await FlagSourceDeletedAsync(openFolder, occurrenceId.Uid, journal, scope, attemptToken);
+                }
+                else
+                {
+                    await RemoveSourceAsync(openFolder, occurrenceId.Uid, journal, scope, attemptToken);
+                }
 
                 return true;
             },
@@ -857,21 +865,32 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         MailboxMutationScope scope,
         CancellationToken cancellationToken)
     {
-        UniqueId[] targetUid = [new UniqueId(uid.Value)];
-
-        if (journal.Stage is not MailboxMutationStage.SourceFlaggedDeleted)
-        {
-            scope.CommandIssued("UID STORE +FLAGS (\\Deleted)");
-            await openFolder.StoreAsync(
-                targetUid,
-                new StoreFlagsRequest(StoreAction.Add, MessageFlags.Deleted) { Silent = true },
-                cancellationToken);
-
-            await journal.SourceFlaggedDeletedAsync(cancellationToken);
-        }
+        await FlagSourceDeletedAsync(openFolder, uid, journal, scope, cancellationToken);
 
         scope.CommandIssued("UID EXPUNGE");
-        await openFolder.ExpungeAsync(targetUid, cancellationToken);
+        await openFolder.ExpungeAsync([new UniqueId(uid.Value)], cancellationToken);
+    }
+
+    /// <summary>Flags one occurrence <c>\Deleted</c>, unless the journal says an earlier attempt already did.</summary>
+    private static async Task FlagSourceDeletedAsync(
+        IMailFolder openFolder,
+        ImapUid uid,
+        IMailboxMutationJournal journal,
+        MailboxMutationScope scope,
+        CancellationToken cancellationToken)
+    {
+        if (journal.Stage is MailboxMutationStage.SourceFlaggedDeleted)
+        {
+            return;
+        }
+
+        scope.CommandIssued("UID STORE +FLAGS (\\Deleted)");
+        await openFolder.StoreAsync(
+            [new UniqueId(uid.Value)],
+            new StoreFlagsRequest(StoreAction.Add, MessageFlags.Deleted) { Silent = true },
+            cancellationToken);
+
+        await journal.SourceFlaggedDeletedAsync(cancellationToken);
     }
 
     /// <summary>Runs one mutation under its own telemetry scope, against the occurrence this session is allowed to change.</summary>

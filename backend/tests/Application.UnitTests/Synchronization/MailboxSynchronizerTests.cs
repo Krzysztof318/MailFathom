@@ -2567,6 +2567,63 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>An erased copy whose delete was undone on the server is stored again from the one occurrence, and then no longer followed.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_AnErasedMessageUndeletedOnTheServer_StoresItAgainAndStopsFollowingIt()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: SynchronizationCheckpoint.None(ImapUidValidity.Create(5)));
+        var undeleted = ArrangeUndeletedErasedOccurrence(context, uid: 20);
+        var occurrence = EmailOccurrenceId.Create(
+            MailAccountId.Create("primary"),
+            InboxFolder.Id,
+            ImapUidValidity.Create(5),
+            ImapUid.Create(20));
+        var oversized = MetadataOf(occurrence, sizeOctets: new MailboxSynchronizationOptions().MaxRawMimeBytes + 1);
+        context.Session
+            .GetEmailBatchAfterAsync(ImapUid.Create(19), 1, MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([oversized], InspectedThroughUid: ImapUid.Create(20), HasMore: false));
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.MetadataRepository.Received(1).UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            oversized,
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<StoredEmailContentAvailability>(),
+            Arg.Any<CancellationToken>());
+        await context.ReconciliationStore.Received(1).RetireDeletesLeftFlaggedAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Is<IReadOnlyList<DeleteLeftFlaggedId>>(ids => ids!.SequenceEqual(new[] { undeleted.Id })),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An occurrence the server no longer serves, or serves outside the account's window, is never stored again, so it is not followed either.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_AnUndeletedOccurrenceTheServerNoLongerServes_StopsFollowingItWithoutStoringAnything()
+    {
+        // Arrange
+        var context = CreateReconciliationContext(storedCheckpoint: SynchronizationCheckpoint.None(ImapUidValidity.Create(5)));
+        var undeleted = ArrangeUndeletedErasedOccurrence(context, uid: 20);
+
+        // Act
+        await context.Synchronizer.SynchronizeAsync(MailAccountId.Create("primary"), InboxMapping, CancellationToken.None);
+
+        // Assert
+        await context.MetadataRepository.DidNotReceive().UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<RemoteEmailMetadata>(),
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<StoredEmailContentAvailability>(),
+            Arg.Any<CancellationToken>());
+        await context.ReconciliationStore.Received(1).RetireDeletesLeftFlaggedAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Is<IReadOnlyList<DeleteLeftFlaggedId>>(ids => ids!.SequenceEqual(new[] { undeleted.Id })),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Composes a run over a folder that holds one occurrence awaiting reconciliation and no new mail.</summary>
     private static ReconciliationContext CreateReconciliationContext(SynchronizationCheckpoint storedCheckpoint)
     {
@@ -2599,17 +2656,24 @@ public sealed class MailboxSynchronizerTests
             .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences([], folderHighestModSeq: null)));
 
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
             persistenceSessionFactory,
-            metadataRepository: Substitute.For<IEmailMetadataRepository>(),
+            metadataRepository,
             contentStore: ContentStores.Substituted(),
             new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)),
             new MailboxSynchronizationOptions(),
             reconciliationStore: reconciliationStore);
 
-        return new ReconciliationContext(synchronizer, session, checkpointStore, persistenceSession);
+        return new ReconciliationContext(
+            synchronizer,
+            session,
+            checkpointStore,
+            persistenceSession,
+            reconciliationStore,
+            metadataRepository);
     }
 
     /// <summary>The parts of a composed run that a test about the backward pass arranges and then asserts against.</summary>
@@ -2617,7 +2681,34 @@ public sealed class MailboxSynchronizerTests
         MailboxSynchronizer Synchronizer,
         IMailboxSession Session,
         ISynchronizationCheckpointStore CheckpointStore,
-        IPersistenceSession PersistenceSession);
+        IPersistenceSession PersistenceSession,
+        IStoredEmailReconciliationStore ReconciliationStore,
+        IEmailMetadataRepository MetadataRepository);
+
+    /// <summary>Arranges one occurrence whose local copy a flag-only delete erased and whose flag the server has since removed.</summary>
+    private static DeleteLeftFlagged ArrangeUndeletedErasedOccurrence(ReconciliationContext context, uint uid)
+    {
+        var undeleted = new DeleteLeftFlagged(new DeleteLeftFlaggedId(Guid.CreateVersion7()), ImapUid.Create(uid), KeptEmail: null);
+        context.ReconciliationStore
+            .GetDeletesLeftFlaggedAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<DeleteLeftFlagged>>([undeleted]));
+        context.Session
+            .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(RemoteFolderWindowObservation.FromDescribedOccurrences(
+                [
+                    new RemoteEmailFlagObservation(
+                        ImapUid.Create(uid),
+                        RemoteEmailFlagSnapshot.NeverObserved with { ObservedAt = DateTimeOffset.UnixEpoch }),
+                ],
+                folderHighestModSeq: null)));
+
+        return undeleted;
+    }
 
     private static IMailTransportSecurityPolicyReader CreateTransportSecurityPolicyReader(MailTransportSecurityPolicy policy)
     {
@@ -3015,6 +3106,7 @@ public sealed class MailboxSynchronizerTests
             new PersistenceConcurrencyOptions(),
             timeProvider);
         var mutations = mutationStore ?? new InMemoryMailboxMutationReconciliationStore();
+        var reconciliation = reconciliationStore ?? CreateReconciliationStoreWithNothingToDo();
 
         return new MailboxSynchronizer(
             folderResolver ?? CreateFolderResolverBoundToInbox(persistenceSessionFactory, timeProvider),
@@ -3033,8 +3125,15 @@ public sealed class MailboxSynchronizerTests
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             mutations,
             filingStore ?? CreateFilingStoreWithNothingFiled(),
+            new FlaggedDeleteFollower(
+                reconciliation,
+                mutations,
+                concurrencyRetryPolicy,
+                ClientSignalPublishers.ReachingNobody,
+                timeProvider,
+                options),
             new MailboxReconciler(
-                reconciliationStore ?? CreateReconciliationStoreWithNothingToDo(),
+                reconciliation,
                 mutations,
                 CreateDispositionReader(RemotelyDeletedEmailDisposition.RetainTombstone),
                 custodyStore ?? InMemoryMailAccountCustodyStore.Mirroring(ClassifiedAccount),

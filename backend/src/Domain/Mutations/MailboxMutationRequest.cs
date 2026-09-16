@@ -40,7 +40,8 @@ public sealed record MailboxMutationRequest
         bool? desiredSeenState,
         bool? desiredFlaggedState,
         AuthoredMailKeywords? keywords,
-        AuthoredDeleteEmailDisposition? localDisposition)
+        AuthoredDeleteEmailDisposition? localDisposition,
+        AuthoredDeleteServerDisposition? serverDisposition)
     {
         this.StoredEmailId = storedEmailId;
         this.Occurrence = occurrence;
@@ -51,6 +52,7 @@ public sealed record MailboxMutationRequest
         this.DesiredFlaggedState = desiredFlaggedState;
         this.Keywords = keywords;
         this.LocalDisposition = localDisposition;
+        this.ServerDisposition = serverDisposition;
     }
 
     /// <summary>Gets the local email the change is about.</summary>
@@ -103,6 +105,14 @@ public sealed record MailboxMutationRequest
     /// </remarks>
     public AuthoredDeleteEmailDisposition? LocalDisposition { get; }
 
+    /// <summary>Gets what a delete does to the message on the server, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>
+    /// Resolved from the account's configuration when the request is built and written down with the record, for the
+    /// reason <see cref="LocalDisposition" /> is. Only a delete carries one: the removal half of a relocation and the
+    /// withdrawal of a filed copy are not deletes a person authored, and they expunge whatever this says.
+    /// </remarks>
+    public AuthoredDeleteServerDisposition? ServerDisposition { get; }
+
     /// <summary>Asks for one email to be moved out of its folder and into another.</summary>
     /// <param name="storedEmailId">The local email being moved.</param>
     /// <param name="occurrence">Where the email is now.</param>
@@ -135,18 +145,20 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition);
+            localDisposition,
+            serverDisposition: null);
 
     /// <summary>Asks for one email to be removed from the folder it is in.</summary>
     /// <param name="storedEmailId">The local email being removed.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
-    /// <param name="localDisposition">What becomes of the local copy once the server no longer holds the message.</param>
+    /// <param name="localDisposition">What becomes of the local copy once the server no longer serves the message as live.</param>
+    /// <param name="serverDisposition">Whether the delete expunges the message or only flags it <c>\Deleted</c>.</param>
     /// <returns>The request to write down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="localDisposition" /> names no declared disposition.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when either disposition names no declared value.</exception>
     /// <remarks>
-    /// The disposition is a parameter rather than something read where the delete completes, because completion happens
+    /// Both dispositions are parameters rather than something read where the delete completes, because completion happens
     /// in a later synchronization run that would read whatever the configuration says by then. Taking it here is what
     /// makes the answer the one that was true when the user asked.
     /// </remarks>
@@ -154,7 +166,8 @@ public sealed record MailboxMutationRequest
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
-        AuthoredDeleteEmailDisposition localDisposition) => Create(
+        AuthoredDeleteEmailDisposition localDisposition,
+        AuthoredDeleteServerDisposition serverDisposition) => Create(
             storedEmailId,
             occurrence,
             MailboxMutation.Delete,
@@ -163,7 +176,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition);
+            localDisposition,
+            serverDisposition);
 
     /// <summary>Asks for the remote <c>\Seen</c> flag of one email to be set or cleared.</summary>
     /// <param name="storedEmailId">The local email being flagged.</param>
@@ -185,7 +199,8 @@ public sealed record MailboxMutationRequest
             isSeen,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
 
     /// <summary>Asks for a second live occurrence of one email to be put into another folder.</summary>
     /// <param name="storedEmailId">The local email being copied.</param>
@@ -207,7 +222,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords: null,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
 
     /// <summary>Asks for the remote <c>\Flagged</c> flag of one email to be set or cleared.</summary>
     /// <param name="storedEmailId">The local email being flagged.</param>
@@ -229,7 +245,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             isFlagged,
             keywords: null,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
 
     /// <summary>Asks for keywords to be put on one email, beside whatever it already carries.</summary>
     /// <param name="storedEmailId">The local email being labelled.</param>
@@ -258,7 +275,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
     }
 
     /// <summary>Asks for keywords to be taken off one email, leaving the ones it is not asked about.</summary>
@@ -288,7 +306,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
     }
 
     /// <summary>Asks for one email's keywords to become exactly the set that was named.</summary>
@@ -317,7 +336,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState: null,
             desiredFlaggedState: null,
             keywords,
-            localDisposition: null);
+            localDisposition: null,
+            serverDisposition: null);
     }
 
     /// <summary>Restores the request a durable record was written for.</summary>
@@ -330,10 +350,11 @@ public sealed record MailboxMutationRequest
     /// <param name="desiredFlaggedState">The stored <c>\Flagged</c> direction, where the mutation takes one.</param>
     /// <param name="keywords">The stored keywords, where the mutation takes them.</param>
     /// <param name="localDisposition">The stored local disposition, where the mutation takes one.</param>
+    /// <param name="serverDisposition">The stored server disposition, where the mutation takes one.</param>
     /// <returns>The request those values name.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="mutation" /> is unspecified, or when the parameters present are not the ones it takes.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="localDisposition" /> names no declared disposition.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when either disposition names no declared value.</exception>
     /// <remarks>
     /// This is the one route that accepts the parameters loose, because a stored row hands them back that way. It
     /// validates the shape the factories above guarantee, so a row edited by hand into a combination no mutation has is
@@ -348,7 +369,8 @@ public sealed record MailboxMutationRequest
         bool? desiredSeenState,
         bool? desiredFlaggedState,
         AuthoredMailKeywords? keywords,
-        AuthoredDeleteEmailDisposition? localDisposition)
+        AuthoredDeleteEmailDisposition? localDisposition,
+        AuthoredDeleteServerDisposition? serverDisposition)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(requester);
@@ -358,7 +380,14 @@ public sealed record MailboxMutationRequest
             throw new ArgumentException("A mutation request must name a permitted mutation.", nameof(mutation));
         }
 
-        RequireParametersOf(mutation, destinationPath, desiredSeenState, desiredFlaggedState, keywords, localDisposition);
+        RequireParametersOf(
+            mutation,
+            destinationPath,
+            desiredSeenState,
+            desiredFlaggedState,
+            keywords,
+            localDisposition,
+            serverDisposition);
 
         return new MailboxMutationRequest(
             storedEmailId,
@@ -369,7 +398,8 @@ public sealed record MailboxMutationRequest
             desiredSeenState,
             desiredFlaggedState,
             keywords,
-            localDisposition);
+            localDisposition,
+            serverDisposition);
     }
 
     /// <summary>Refuses a parameter set that is not the one the named mutation takes.</summary>
@@ -379,7 +409,8 @@ public sealed record MailboxMutationRequest
         bool? desiredSeenState,
         bool? desiredFlaggedState,
         AuthoredMailKeywords? keywords,
-        AuthoredDeleteEmailDisposition? localDisposition)
+        AuthoredDeleteEmailDisposition? localDisposition,
+        AuthoredDeleteServerDisposition? serverDisposition)
     {
         var takesDestination = mutation == MailboxMutation.Relocate || mutation == MailboxMutation.Copy;
         var takesSeenState = mutation == MailboxMutation.SetSeen;
@@ -463,6 +494,23 @@ public sealed record MailboxMutationRequest
                 nameof(localDisposition),
                 disposition,
                 "The local disposition of a delete must be one of the declared dispositions.");
+        }
+
+        if (requiresLocalDisposition != serverDisposition.HasValue)
+        {
+            throw new ArgumentException(
+                requiresLocalDisposition
+                    ? $"The {mutation.Name} mutation names a server disposition and none was supplied."
+                    : $"The {mutation.Name} mutation names no server disposition.",
+                nameof(serverDisposition));
+        }
+
+        if (serverDisposition is { } server && !Enum.IsDefined(server))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(serverDisposition),
+                server,
+                "The server disposition of a delete must be one of the declared dispositions.");
         }
     }
 }

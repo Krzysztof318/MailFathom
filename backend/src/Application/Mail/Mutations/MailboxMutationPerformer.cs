@@ -395,7 +395,11 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
 
         if (request.Mutation == MailboxMutation.Delete)
         {
-            await session.DeleteAsync(request.Occurrence, journal, cancellationToken);
+            await session.DeleteAsync(
+                request.Occurrence,
+                request.ServerDisposition!.Value,
+                journal,
+                cancellationToken);
 
             return RemoteEmailPlacement.NotReported();
         }

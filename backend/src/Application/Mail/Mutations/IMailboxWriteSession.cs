@@ -93,21 +93,26 @@ public interface IMailboxWriteSession : IAsyncDisposable
 
     /// <summary>Removes one email from this session's folder on the server.</summary>
     /// <param name="occurrenceId">The occurrence to remove, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="serverDisposition">Whether the email is expunged or only flagged <c>\Deleted</c>, as the delete was recorded under.</param>
     /// <param name="journal">The durable record of this deletion, which the session announces each stage to and resumes from.</param>
     /// <param name="cancellationToken">Cancels the deletion.</param>
-    /// <returns>A task that completes when the server has removed the email.</returns>
+    /// <returns>A task that completes when the server has removed the email, or flagged it where only that was asked for.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
-    /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises no <c>UIDPLUS</c>, so no message-scoped expunge exists.</exception>
+    /// <exception cref="MailboxMutationUnsupportedException">
+    /// Thrown when the server advertises no <c>UIDPLUS</c>, so no message-scoped expunge exists. A delete that only flags
+    /// is refused on the same server as well, so what a server can delete does not depend on an account setting.
+    /// </exception>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the deletion within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
-    /// What becomes of the local copy is not decided here. This operation says the message is gone from the server, and
-    /// nothing else, so an account's disposition for mail somebody else deleted never silently governs mail MailFathom
-    /// deleted. The remote <c>\Seen</c> flag is untouched.
+    /// What becomes of the local copy is not decided here. This operation says what the server now does with the
+    /// message, and nothing else, so an account's disposition for mail somebody else deleted never silently governs mail
+    /// MailFathom deleted. The remote <c>\Seen</c> flag is untouched.
     /// </remarks>
     Task DeleteAsync(
         EmailOccurrenceId occurrenceId,
+        AuthoredDeleteServerDisposition serverDisposition,
         IMailboxMutationJournal journal,
         CancellationToken cancellationToken);
 

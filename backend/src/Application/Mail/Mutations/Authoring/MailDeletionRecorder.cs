@@ -132,10 +132,12 @@ public sealed class MailDeletionRecorder
         }
 
         AuthoredDeleteEmailDisposition localDisposition;
+        AuthoredDeleteServerDisposition serverDisposition;
 
         try
         {
             localDisposition = this.deleteDispositions.GetAuthoredDeleteDisposition(target.Occurrence.AccountId);
+            serverDisposition = this.deleteDispositions.GetAuthoredDeleteServerDisposition(target.Occurrence.AccountId);
         }
         catch (InvalidOperationException)
         {
@@ -146,7 +148,8 @@ public sealed class MailDeletionRecorder
             storedEmailId,
             target.Occurrence,
             requester,
-            localDisposition);
+            localDisposition,
+            serverDisposition);
 
         // A zero window is no wait, and is opened as the unheld record it is rather than as one held until the instant
         // it was written — which would be due at once and still skip the raise below.

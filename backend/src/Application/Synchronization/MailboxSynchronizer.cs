@@ -47,6 +47,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMimeReader mimeReader;
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly IOutgoingMailFilingStore filingStore;
+    private readonly FlaggedDeleteFollower flaggedDeleteFollower;
     private readonly MailboxReconciler reconciler;
     private readonly DerivedWorkGate derivedWorkGate;
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
@@ -76,6 +77,7 @@ public sealed class MailboxSynchronizer
         IEmailMimeReader mimeReader,
         IMailboxMutationReconciliationStore mutationStore,
         IOutgoingMailFilingStore filingStore,
+        FlaggedDeleteFollower flaggedDeleteFollower,
         MailboxReconciler reconciler,
         DerivedWorkGate derivedWorkGate,
         IDerivedWorkGateTelemetry gateTelemetry,
@@ -103,6 +105,7 @@ public sealed class MailboxSynchronizer
         this.mimeReader = mimeReader;
         this.mutationStore = mutationStore;
         this.filingStore = filingStore;
+        this.flaggedDeleteFollower = flaggedDeleteFollower;
         this.reconciler = reconciler;
         this.derivedWorkGate = derivedWorkGate;
         this.gateTelemetry = gateTelemetry;
@@ -456,11 +459,30 @@ public sealed class MailboxSynchronizer
         // folder: a mailbox whose backfill spans many runs must still notice a deletion in the part of it that is
         // already stored.
         MailboxReconciliationResult reconciliation;
+        FlaggedDeleteFollowUp flaggedDeletes;
 
         using (var reconcilingFolder = this.phaseTelemetry.BeginPhase(
             MailSynchronizationPhase.ReconcileFolder,
             cancellationToken))
         {
+            // Before the backward pass, so a row a flag-only delete disposes of is already out of that pass's window.
+            flaggedDeletes = await this.flaggedDeleteFollower.FollowAsync(
+                mailboxSession,
+                account,
+                folder,
+                uidValidity,
+                cancellationToken);
+
+            await this.RestoreUndeletedEmailsAsync(
+                mailboxSession,
+                synchronizationWindow,
+                flaggedDeletes.AwaitingRestore,
+                account,
+                budget,
+                collection,
+                arrivalSource,
+                cancellationToken);
+
             reconciliation = await this.reconciler.ReconcileAsync(
                 mailboxSession,
                 account,
@@ -514,7 +536,7 @@ public sealed class MailboxSynchronizer
             hasMore,
             checkpoint,
             reconciliation,
-            [.. suppressedChanges, .. reconciliation.SuppressedChanges],
+            [.. suppressedChanges, .. flaggedDeletes.SuppressedChanges, .. reconciliation.SuppressedChanges],
             new MailboxContentVolume(
                 budget.FetchedBytes,
                 budget.StoredBytes,
@@ -722,6 +744,57 @@ public sealed class MailboxSynchronizer
         }
 
         return new DeferredContentRefill(refilledCount, unreadableMimeCount, stoppedForContentBudget);
+    }
+
+    /// <summary>Stores again the messages whose local copy a flag-only delete erased and whose flag was then removed on the server.</summary>
+    /// <remarks>
+    /// Each is an ordinary discovery of the one occurrence, asked for by the UID the followed record names, so the row it
+    /// produces is the one a first discovery would have. The record is retired once that store is durable, and equally
+    /// when the occurrence is no longer served or falls outside the account's window, because nothing would ever store
+    /// it then. A run whose byte budget cannot cover the next one leaves it, and everything behind it, for the next run.
+    /// </remarks>
+    private async Task RestoreUndeletedEmailsAsync(
+        IMailboxSession mailboxSession,
+        MailSynchronizationWindow synchronizationWindow,
+        IReadOnlyList<DeleteLeftFlagged> awaitingRestore,
+        MailAccountId account,
+        SynchronizationContentBudget budget,
+        ContactCollectionRun collection,
+        LocalMailFolderArrivalSource arrivalSource,
+        CancellationToken cancellationToken)
+    {
+        foreach (var undeleted in awaitingRestore)
+        {
+            var batch = await mailboxSession.GetEmailBatchAfterAsync(
+                undeleted.Uid.Value > 1 ? ImapUid.Create(undeleted.Uid.Value - 1) : null,
+                maxEmailCount: 1,
+                synchronizationWindow,
+                cancellationToken);
+            var metadata = batch.Emails.FirstOrDefault(email => email.OccurrenceId.Uid == undeleted.Uid);
+
+            if (metadata is not null)
+            {
+                if (this.WouldFetchContentOf(metadata) && !budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
+                {
+                    return;
+                }
+
+                await this.StoreOccurrenceAsync(
+                    mailboxSession,
+                    metadata,
+                    placement: null,
+                    filing: null,
+                    isFiledCopy: false,
+                    account,
+                    budget,
+                    collection,
+                    storageAlreadyRefused: null,
+                    arrivalSource,
+                    cancellationToken);
+            }
+
+            await this.flaggedDeleteFollower.RetireAsync(undeleted, cancellationToken);
+        }
     }
 
     /// <summary>Reads the mutations whose destination is this folder and whose placement is one of the UIDs this batch discovered.</summary>

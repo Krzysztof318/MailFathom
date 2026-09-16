@@ -280,7 +280,8 @@ public sealed class MailboxChangeSubmissionTests
             Email,
             Occurrence,
             MailboxMutationRequester.Rule("tidy-newsletters", "revision-1"),
-            AuthoredDeleteEmailDisposition.RetainLocalCopy);
+            AuthoredDeleteEmailDisposition.RetainLocalCopy,
+            AuthoredDeleteServerDisposition.Expunge);
         await submission.SubmitAsync(this.session, ruleDelete, null, null, Token);
 
         // Act
@@ -462,7 +463,8 @@ public sealed class MailboxChangeSubmissionTests
         Email,
         Occurrence,
         Requester,
-        AuthoredDeleteEmailDisposition.RetainLocalCopy);
+        AuthoredDeleteEmailDisposition.RetainLocalCopy,
+        AuthoredDeleteServerDisposition.Expunge);
 
     private static MailboxDestination JunkDestination() => new(
         MailFolderResolution.FirstBindingOf(MailFolderAlias.Create("Junk"), RemoteFolderPath.Create("Junk")),

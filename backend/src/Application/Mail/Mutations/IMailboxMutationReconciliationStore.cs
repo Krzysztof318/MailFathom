@@ -200,4 +200,37 @@ public interface IMailboxMutationReconciliationStore
         MailboxMutationRecordId recordId,
         DateTimeOffset observedAt,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads the completed deletes of one folder binding that left their message flagged and have not been settled yet.</summary>
+    /// <param name="account">The account the folder belongs to.</param>
+    /// <param name="folderResolutionId">The binding the occurrences belong to.</param>
+    /// <param name="uidValidity">The UIDVALIDITY the open session reports, which the occurrences must have been recorded under.</param>
+    /// <param name="maxRecordCount">The greatest number of records to return.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The records, oldest first, never more than <paramref name="maxRecordCount" />.</returns>
+    /// <remarks>
+    /// A delete whose occurrence has already been seen to leave its folder is not one of them: the backward pass settled
+    /// it the way it settles a delete that expunged.
+    /// </remarks>
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadUnsettledFlaggedDeletesAsync(
+        MailAccountId account,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        int maxRecordCount,
+        CancellationToken cancellationToken);
+
+    /// <summary>Writes down that a delete which left its message flagged has been answered for.</summary>
+    /// <param name="session">The session the write joins, which is the one the local disposition is applied in.</param>
+    /// <param name="recordId">The delete.</param>
+    /// <param name="settledAt">When the folder was read.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>A task that completes when the settlement is written.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="recordId" />.</exception>
+    /// <remarks>The first settlement is kept. An erased local copy removes the record in the same transaction.</remarks>
+    Task RecordDeleteFlagSettledAsync(
+        IPersistenceSession session,
+        MailboxMutationRecordId recordId,
+        DateTimeOffset settledAt,
+        CancellationToken cancellationToken);
 }

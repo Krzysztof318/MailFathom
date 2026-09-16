@@ -24,9 +24,7 @@ public enum AuthoredDeleteEmailDisposition
     /// <summary>Keeps the local email readable and searchable although the server no longer holds it.</summary>
     /// <remarks>
     /// The remote occurrence is gone and the local copy is not, which is what separates freeing space on the server from
-    /// forgetting the mail. Nothing is destroyed, so it is the default for the same reason
-    /// <see cref="RemotelyDeletedEmailDisposition.RetainTombstone" /> is: a disposition an operator has not thought about
-    /// must not be the reason mail stops being readable.
+    /// forgetting the mail. Nothing is destroyed, and an account asks for it by name.
     /// </remarks>
     RetainLocalCopy = 0,
 
@@ -40,9 +38,11 @@ public enum AuthoredDeleteEmailDisposition
 
     /// <summary>Removes the local row together with its raw MIME and everything derived from it.</summary>
     /// <remarks>
-    /// Nothing of the email survives locally, so a deployment that must not retain mail past the server's own copy can
-    /// say so for its own deletions as well as for the server's. The removal happens as the disappearance is observed,
-    /// which is deliberate and irreversible.
+    /// Nothing of the email survives locally, which is what deleting a message means, so it is the default: every
+    /// deletion setting of an account defaults to deleting completely. The removal happens once the server is seen to
+    /// no longer serve the message as live — gone, or flagged <c>\Deleted</c> by a delete that issued no expunge — and
+    /// is deliberate. Where the server still holds the message and somebody removes the flag, synchronization fetches it
+    /// again rather than leaving it lost.
     /// </remarks>
     EraseLocalCopy = 2,
 }

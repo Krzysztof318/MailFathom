@@ -163,7 +163,8 @@ public sealed class MailboxMutationRecordTests
                 LocalEmail,
                 SourceOccurrence(),
                 Requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
         };
         var setSeen = CompletedRelocation() with
         {
@@ -378,7 +379,8 @@ public sealed class MailboxMutationRecordTests
                 LocalEmail,
                 SourceOccurrence(),
                 Requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
             Placement = RemoteEmailPlacement.NotReported(),
         };
         var setSeen = delete with
@@ -396,6 +398,58 @@ public sealed class MailboxMutationRecordTests
         // A flag change moves no occurrence, so there is nothing for synchronization to come back and meet. Its
         // provenance is settled against the occurrence's own observation rather than against anything on this row.
         Assert.True(setSeen.IsReconciled);
+    }
+
+    /// <summary>A delete that leaves its message flagged never sees it disappear, so reading the flag once is what settles it.</summary>
+    [Fact]
+    public void IsReconciled_FlagOnlyDelete_IsSettledByTheFirstReadingOfTheFlag()
+    {
+        // Arrange
+        var delete = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.Delete(
+                LocalEmail,
+                SourceOccurrence(),
+                Requester,
+                AuthoredDeleteEmailDisposition.EraseLocalCopy,
+                AuthoredDeleteServerDisposition.FlagDeleted),
+            Placement = RemoteEmailPlacement.NotReported(),
+        };
+
+        // Act
+        var settled = delete with { DeleteFlagSettledAt = RecordedAt.AddMinutes(1) };
+        var expungedFirst = delete with { SourceRemovalObservedAt = RecordedAt.AddMinutes(1) };
+
+        // Assert
+        Assert.True(delete.LeavesMessageOnServer);
+        Assert.False(delete.IsReconciled);
+        Assert.True(settled.IsReconciled);
+        Assert.True(expungedFirst.IsReconciled);
+    }
+
+    /// <summary>A settlement recorded against an expunging delete is not what that delete waits for.</summary>
+    [Fact]
+    public void IsReconciled_ExpungingDeleteWithOnlyAFlagSettlement_IsNotYetSettled()
+    {
+        // Arrange
+        var delete = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.Delete(
+                LocalEmail,
+                SourceOccurrence(),
+                Requester,
+                AuthoredDeleteEmailDisposition.EraseLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
+            Placement = RemoteEmailPlacement.NotReported(),
+            DeleteFlagSettledAt = RecordedAt.AddMinutes(1),
+        };
+
+        // Act
+        var reconciled = delete.IsReconciled;
+
+        // Assert
+        Assert.False(delete.LeavesMessageOnServer);
+        Assert.False(reconciled);
     }
 
     /// <summary>The lifecycle is what somebody watching a deployment reads, and the three converging stages are one answer to them.</summary>

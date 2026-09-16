@@ -6,10 +6,12 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Accounts.Custody;
@@ -44,6 +46,7 @@ public sealed class MailAccountCustodySwitch
     private readonly IMailTransportSecurityPolicyReader transportSecurity;
     private readonly IWorkLeaseStore leases;
     private readonly IMailAccountCustodyAuditor auditor;
+    private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly AccessAuthorization authorization;
     private readonly TimeProvider timeProvider;
@@ -55,6 +58,7 @@ public sealed class MailAccountCustodySwitch
     /// <param name="transportSecurity">Supplies the policy the source is reached under.</param>
     /// <param name="leases">Reports which replicas are holding work, and under which build.</param>
     /// <param name="auditor">Records the decision.</param>
+    /// <param name="deleteDispositions">Reports what the account's own deletions do on its source server.</param>
     /// <param name="concurrencyRetryPolicy">Commits the write, deciding again from a fresh read when another write won.</param>
     /// <param name="authorization">Decides whether the caller may switch custody at all.</param>
     /// <param name="timeProvider">Supplies the instant the decision is recorded at.</param>
@@ -66,6 +70,7 @@ public sealed class MailAccountCustodySwitch
         IMailTransportSecurityPolicyReader transportSecurity,
         IWorkLeaseStore leases,
         IMailAccountCustodyAuditor auditor,
+        IAuthoredDeleteEmailDispositionReader deleteDispositions,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         AccessAuthorization authorization,
         TimeProvider timeProvider)
@@ -76,6 +81,7 @@ public sealed class MailAccountCustodySwitch
         ArgumentNullException.ThrowIfNull(transportSecurity);
         ArgumentNullException.ThrowIfNull(leases);
         ArgumentNullException.ThrowIfNull(auditor);
+        ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -86,6 +92,7 @@ public sealed class MailAccountCustodySwitch
         this.transportSecurity = transportSecurity;
         this.leases = leases;
         this.auditor = auditor;
+        this.deleteDispositions = deleteDispositions;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.authorization = authorization;
         this.timeProvider = timeProvider;
@@ -162,7 +169,11 @@ public sealed class MailAccountCustodySwitch
         MailAccountId account,
         MailAccountCustody requested,
         CancellationToken cancellationToken) => requested is MailAccountCustody.HoldMailbox
-        ? [.. this.FindVirtualFolders(account), .. await this.FindOlderBuildsAsync(cancellationToken)]
+        ? [
+            .. this.FindVirtualFolders(account),
+            .. this.FindFlagOnlyDeletes(account),
+            .. await this.FindOlderBuildsAsync(cancellationToken),
+        ]
         : await this.FindUnusableMappingsAsync(account, cancellationToken);
 
     /// <summary>Finds the synchronized folders whose role makes them a view over other folders.</summary>
@@ -175,6 +186,28 @@ public sealed class MailAccountCustodySwitch
                 MailAccountCustodySwitchRefusal.SynchronizedVirtualFolder,
                 mapping.Alias.Value)),
     ];
+
+    /// <summary>Finds whether the account's own deletions are meant to leave the message on the source.</summary>
+    /// <remarks>
+    /// An account the configuration does not declare has no answer here, and none is invented to refuse it over.
+    /// </remarks>
+    private IReadOnlyList<MailAccountCustodyRefusalDetail> FindFlagOnlyDeletes(MailAccountId account)
+    {
+        AuthoredDeleteServerDisposition disposition;
+
+        try
+        {
+            disposition = this.deleteDispositions.GetAuthoredDeleteServerDisposition(account);
+        }
+        catch (InvalidOperationException)
+        {
+            return [];
+        }
+
+        return disposition is AuthoredDeleteServerDisposition.FlagDeleted
+            ? [new MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRefusal.FlagOnlyAuthoredDelete, null)]
+            : [];
+    }
 
     /// <summary>Finds the replicas holding work under a build that does not know this mode.</summary>
     /// <remarks>

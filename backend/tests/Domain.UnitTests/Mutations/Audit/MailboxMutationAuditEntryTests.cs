@@ -150,7 +150,8 @@ public sealed class MailboxMutationAuditEntryTests
                 LocalEmail,
                 SourceOccurrence(),
                 Requester,
-                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
             Placement = RemoteEmailPlacement.NotReported(),
         };
 

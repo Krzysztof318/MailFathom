@@ -254,7 +254,7 @@ public sealed class MailboxMutationResumptionTests
         var journal = new RecordingMailboxMutationJournal(MailboxMutationStage.SourceFlaggedDeleted);
 
         // Act
-        await session.DeleteAsync(CreateOccurrenceId(42U), journal, CancellationToken.None);
+        await session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.Expunge, journal, CancellationToken.None);
 
         // Assert
         await openFolder.DidNotReceive().StoreAsync(
@@ -264,6 +264,29 @@ public sealed class MailboxMutationResumptionTests
         await openFolder.Received(1).ExpungeAsync(
             Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 1 && uids[0].Id == 42U),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A flag-only delete resumed after its flag landed has nothing left to issue.</summary>
+    [Fact]
+    public async Task DeleteAsync_FlagOnlyResumedAfterTheSourceWasFlagged_IssuesNothing()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+        var journal = new RecordingMailboxMutationJournal(MailboxMutationStage.SourceFlaggedDeleted);
+
+        // Act
+        await session.DeleteAsync(CreateOccurrenceId(42U), AuthoredDeleteServerDisposition.FlagDeleted, journal, CancellationToken.None);
+
+        // Assert
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>

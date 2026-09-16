@@ -11,8 +11,9 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// <summary>States which stored rows a tombstone hides, once for every query that has to exclude one.</summary>
 /// <remarks>
 /// <para>
-/// A row whose remote occurrence has gone is hidden by default and readable only where an authored delete said to keep
-/// it, so the rule is two columns rather than one and no longer reads as an obvious null check at its call sites. Every
+/// A row whose remote occurrence has gone, or which a delete that issued no expunge left flagged, is hidden by default
+/// and readable only where an authored delete said to keep it, so the rule is three columns rather than one and no
+/// longer reads as an obvious null check at its call sites. Every
 /// query that narrows to mail a reader may see composes this expression instead of restating it: a listing, a search, a
 /// content read, and both backfills, which must not spend extraction or a provider's embeddings on mail nothing may
 /// retrieve.
@@ -32,5 +33,6 @@ internal static class StoredEmailTombstone
     /// helper called inside a lambda would either fail to translate or drag the rest of the pipeline into the process.
     /// </remarks>
     internal static Expression<Func<StoredEmailEntity, bool>> IsNotTombstoned { get; } =
-        email => email.RemoteExpungeObservedAt == null || email.IsRetainedAfterAuthoredDelete;
+        email => (email.RemoteExpungeObservedAt == null && email.AuthoredDeleteFlaggedAt == null)
+            || email.IsRetainedAfterAuthoredDelete;
 }

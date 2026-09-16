@@ -15,4 +15,8 @@ internal sealed class ConfiguredAuthoredDeleteEmailDispositionReader(MailSynchro
     /// <inheritdoc />
     public AuthoredDeleteEmailDisposition GetAuthoredDeleteDisposition(MailAccountId accountId) =>
         settings.RequireAccount(accountId).AuthoredDeleteEmailDisposition;
+
+    /// <inheritdoc />
+    public AuthoredDeleteServerDisposition GetAuthoredDeleteServerDisposition(MailAccountId accountId) =>
+        settings.RequireAccount(accountId).AuthoredDeleteServerDisposition;
 }

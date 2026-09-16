@@ -333,7 +333,7 @@ public sealed class MailRuleActionRecorder
         }
 
         return this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
-            ? MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, destination.Path, disposition)
+            ? MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, destination.Path, disposition.Local)
             : null;
     }
 
@@ -359,18 +359,20 @@ public sealed class MailRuleActionRecorder
         MailboxMutationRequester requester,
         List<MailRuleActionFailure> failures) =>
         this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
-            ? MailboxMutationRequest.Delete(storedEmailId, occurrence, requester, disposition)
+            ? MailboxMutationRequest.Delete(storedEmailId, occurrence, requester, disposition.Local, disposition.Server)
             : null;
 
-    /// <summary>Reads what becomes of the local copy, or records that the account deciding it is no longer declared.</summary>
-    private AuthoredDeleteEmailDisposition? TryReadDeleteDisposition(
+    /// <summary>Reads what the delete does locally and on the server, or records that the account deciding it is no longer declared.</summary>
+    private (AuthoredDeleteEmailDisposition Local, AuthoredDeleteServerDisposition Server)? TryReadDeleteDisposition(
         MailAccountId accountId,
         PlannedMailRuleAction planned,
         List<MailRuleActionFailure> failures)
     {
         try
         {
-            return this.deleteDispositions.GetAuthoredDeleteDisposition(accountId);
+            return (
+                this.deleteDispositions.GetAuthoredDeleteDisposition(accountId),
+                this.deleteDispositions.GetAuthoredDeleteServerDisposition(accountId));
         }
         catch (InvalidOperationException)
         {
