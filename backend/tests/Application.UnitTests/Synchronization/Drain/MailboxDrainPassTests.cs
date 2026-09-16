@@ -224,6 +224,27 @@ public sealed class MailboxDrainPassTests
         Assert.Empty(context.Store.Cleared);
     }
 
+    /// <summary>
+    /// A credential the source refused is told apart from a source that was busy, because waiting does not clear it:
+    /// every later run fails the same way until somebody supplies a new one.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_SourceRefusedTheCredential_CountsThatFailureRatherThanAnUnavailableSource()
+    {
+        // Arrange
+        var context = new DrainContext(Held)
+            .Storing(Stored(Inbox, uid: 11))
+            .WithSourceThatRefusedTheCredential();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.FailedBatches[MailboxDrainFailure.SourceRefusedTheCredential]);
+        Assert.False(report.FailedBatches.ContainsKey(MailboxDrainFailure.SourceUnavailable));
+        Assert.Empty(context.Store.Cleared);
+    }
+
     [Fact]
     public async Task DrainAsync_SourceStoppedServingAMessageScopedExpunge_SaysSoRatherThanCountingATransientFailure()
     {
@@ -665,6 +686,19 @@ public sealed class MailboxDrainPassTests
                     Inbox.Alias,
                     "drain expunge",
                     "UIDPLUS"));
+
+            return this;
+        }
+
+        internal DrainContext WithSourceThatRefusedTheCredential()
+        {
+            this.WriteSession.ExpungeDrainedAsync(
+                    Arg.Any<ImapUidValidity>(),
+                    Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                    Arg.Any<CancellationToken>())
+                .ThrowsAsync(new MailboxCredentialRefusedException(
+                    Account,
+                    new InvalidOperationException("The server refused the credential.")));
 
             return this;
         }

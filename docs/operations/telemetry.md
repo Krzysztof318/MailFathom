@@ -952,6 +952,11 @@ wait out, because repeating the batch gets past neither until the server or the 
 folder reported a `UIDVALIDITY` other than the one the occurrences named, which synchronization resolves rather than
 the drain. Both are additive.
 
+One condition is a log line rather than a counter: a source that advertises no message-scoped expunge at all attempts
+no batch, so there is nothing to count. Every pass over such an account writes a warning naming the account and the
+missing capability, and the switch stays pending — `Requested: HoldMailbox`, `Phase: Mirrored` — until the source or
+its server changes.
+
 The three standing figures an operator reads beside them — how much of the source is still to go, what the gate is
 holding, and how many erased copies are still to be removed — are not instruments. They are counted from the database
 on request and served by `mfctl account custody show`, because they are a level of the shared state rather than of one

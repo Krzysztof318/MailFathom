@@ -66,10 +66,15 @@ internal sealed class StoredMailFolderMirrorStore(TimeProvider timeProvider) : I
             [.. removed.Select(static email => email.Id)],
             cancellationToken);
 
-        // Owed for the same reason every other erasure path owes it: on a held account the source still holds these
-        // messages, and the rows about to go are the only things that say where. Read before the removal is staged,
-        // like the two reads above, because the occurrence each record names lives on the row itself.
-        MailboxSourceRemovalRecords.Stage(sessionContext, removed, timeProvider.GetUtcNow());
+        // Owed only by an account whose own mailbox is the truth, and read before the removal is staged like the two
+        // reads above, because the occurrence each record names lives on the row itself. A mirrored account's source
+        // holds the mail rather than a copy of it, so erasing what MailFathom mirrors of a folder says nothing about
+        // what that server should keep — and a record written there would be expunged from later, by a drain that has
+        // no gate over this half of its work.
+        if (await HoldsItsOwnMailboxAsync(sessionContext, accountIdValue, cancellationToken))
+        {
+            MailboxSourceRemovalRecords.Stage(sessionContext, removed, timeProvider.GetUtcNow());
+        }
 
         sessionContext.StoredEmails.RemoveRange(removed);
 
@@ -80,6 +85,24 @@ internal sealed class StoredMailFolderMirrorStore(TimeProvider timeProvider) : I
 
         return new MailFolderMirrorErasure(emailsRemain ? maxEmails : erased.Length, emailsRemain);
     }
+
+    /// <summary>Answers whether MailFathom is what holds this account's mailbox, which is what makes a source removal owed.</summary>
+    /// <param name="sessionContext">The context the erasure is committing through, so the phase is read in its transaction.</param>
+    /// <param name="accountIdValue">The account the folder belongs to.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> while the account is holding its own mailbox or putting it back.</returns>
+    /// <remarks>
+    /// An account with no row yet has never been switched, so the absent row answers the same way a mirrored one does.
+    /// </remarks>
+    private static async Task<bool> HoldsItsOwnMailboxAsync(
+        MailFathomDbContext sessionContext,
+        string accountIdValue,
+        CancellationToken cancellationToken) =>
+        await sessionContext.MailboxAccounts
+            .Where(account => account.Id == accountIdValue)
+            .Select(static account => account.CustodyPhase)
+            .SingleOrDefaultAsync(cancellationToken)
+            is MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring;
 
     /// <summary>Removes the checkpoints of every binding the alias has had, once nothing of the folder is stored.</summary>
     /// <remarks>

@@ -808,6 +808,46 @@ public sealed class MailKitImapWriteSessionTests
         await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The reading the whole hold gate rests on: an account may leave mirroring for holding only where its source
+    /// advertises a message-scoped expunge, so this answering wrongly would move an account onto a source that can
+    /// never be emptied.
+    /// </summary>
+    [Fact]
+    public async Task SupportsDrainAsync_AServerAdvertisingUidPlus_ReportsTheSourceCanBeDrained()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var supportsDrain = await session.SupportsDrainAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(supportsDrain);
+    }
+
+    /// <summary>A server without <c>UIDPLUS</c> can never serve a drain batch, and the switch is what has to hear it.</summary>
+    [Fact]
+    public async Task SupportsDrainAsync_AServerWithoutUidPlus_ReportsTheSourceCannotBeDrained()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var supportsDrain = await session.SupportsDrainAsync(CancellationToken.None);
+
+        // Assert
+        Assert.False(supportsDrain);
+    }
+
     /// <summary>Without <c>UID EXPUNGE</c> there is no message-scoped removal, so the drain has nothing safe to issue.</summary>
     [Fact]
     public async Task ExpungeDrainedAsync_AServerWithoutUidPlus_RefusesBeforeFlaggingAnythingDeleted()

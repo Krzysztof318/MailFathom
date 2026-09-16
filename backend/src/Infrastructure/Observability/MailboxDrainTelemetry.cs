@@ -71,11 +71,20 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
     /// <inheritdoc />
     /// <remarks>
     /// A pass that did nothing emits no line and adds nothing, because most passes of a mirrored account have nothing
-    /// to do and a line per account per interval is noise an operator learns to ignore.
+    /// to do and a line per account per interval is noise an operator learns to ignore. The source that cannot be
+    /// drained at all is the one pass that did nothing and still has to be said: it counts no batch because none was
+    /// attempted, and without a line the operator sees a switch that stays pending for ever with nothing naming why.
     /// </remarks>
     public void Report(MailAccountId account, MailboxDrainReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
+
+        if (report.SourceCannotBeDrained)
+        {
+            this.LogSourceCannotBeDrained(account.Value);
+
+            return;
+        }
 
         if (DidNothing(report))
         {
@@ -145,6 +154,17 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
         int drainedCount,
         int removedErasedCount,
         int failedBatchCount);
+
+    /// <summary>States that the account's source advertises no way to remove one named message.</summary>
+    /// <remarks>
+    /// Written on every pass rather than once, because nothing else reports it: the switch stays pending until the
+    /// source or its server changes, and a line per synchronization interval is what an operator reading the account's
+    /// log finds. It names the capability rather than anything the source said.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The source of account {AccountId} advertises no message-scoped expunge (UIDPLUS), so its mailbox cannot be held; the account goes on mirroring it.")]
+    private partial void LogSourceCannotBeDrained(string accountId);
 
     /// <summary>Names what refused a pass's failed batches, one line per kind.</summary>
     /// <remarks>

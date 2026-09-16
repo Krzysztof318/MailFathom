@@ -44,15 +44,17 @@ namespace MailFathom.Application.Mail.Mutations;
 /// <para>
 /// A relocation and a delete are not atomic on a server that lacks <c>MOVE</c>, and nothing here makes them so. A crash
 /// between the commands leaves the mailbox in a state this session cannot describe, which is why every operation that
-/// places or removes an authored change takes an <see cref="IMailboxMutationJournal" />: the caller has written the
+/// changes a message the user already has takes an <see cref="IMailboxMutationJournal" />: the caller has written the
 /// change down before calling, the session announces each stage of the sequence as it passes it, and a resumed attempt
 /// reads <see cref="IMailboxMutationJournal.Stage" /> and continues from there instead of starting over.
 /// </para>
 /// <para>
-/// <see cref="ExpungeDrainedAsync" /> is the one operation here that takes no journal, and its own remarks say why: it
-/// authors nothing, both its commands are idempotent against the UIDs they name, and the row that selected each UID
-/// still carries the occurrence until the expunge is answered — so the durable record a journal would add is one the
-/// selecting state already holds, per message of a whole mailbox.
+/// Three operations take none, and each rests on a durable record of its own instead.
+/// <see cref="AppendAsync" /> and <see cref="WithdrawAppendedAsync" /> put a copy MailFathom composed into a folder and
+/// take it back again, and the outgoing or draft record the caller wrote before calling is what a resumed attempt
+/// reads. <see cref="ExpungeDrainedAsync" /> authors nothing at all: both its commands are idempotent against the UIDs
+/// they name, and the row that selected each UID still carries the occurrence until the expunge is answered — so the
+/// durable record a journal would add is one the selecting state already holds, per message of a whole mailbox.
 /// </para>
 /// <para>
 /// Resuming is decided here rather than by the caller because it depends on what the connection advertises, which is

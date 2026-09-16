@@ -99,6 +99,44 @@ public sealed class MailAccountCustodyEndpointsTests
             Assert.IsType<ProblemHttpResult>(answer.Result).StatusCode);
     }
 
+    /// <summary>
+    /// An account the deployment serves whose record no synchronization run has written yet is a wait rather than a
+    /// name to correct, so it is told apart from one this deployment does not serve.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountServedButNotBoundYet_SaysSoRatherThanCallingItUnknown()
+    {
+        // Act
+        var answer = await MailAccountCustodyEndpoints.ReadAsync(
+            Account.Value,
+            CatalogServing(Account),
+            SwitchOver(CustodyStoreHoldingNothing()),
+            DrainOver(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(answer.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("bound no folder yet", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>The switch answers the same way, because there is no record to change either.</summary>
+    [Fact]
+    public async Task SwitchAsync_AnAccountServedButNotBoundYet_SaysSoRatherThanCallingItUnknown()
+    {
+        // Act
+        var answer = await MailAccountCustodyEndpoints.SwitchAsync(
+            new MailAccountCustodySwitchRequest(Account.Value, "HoldMailbox"),
+            CatalogServing(Account),
+            SwitchOver(CustodyStoreHoldingNothing()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(answer.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains("bound no folder yet", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task SwitchAsync_ARequestNamingNoCustody_IsRefusedNamingTheValuesItCouldHaveNamed()
     {
@@ -184,6 +222,15 @@ public sealed class MailAccountCustodyEndpointsTests
     }
 
     /// <summary>Answers every read of the one account as the state a test stated, and accepts whatever is written.</summary>
+    /// <summary>A store with no row for the account, which is every account before its first folder binds.</summary>
+    private static IMailAccountCustodyStore CustodyStoreHoldingNothing()
+    {
+        var store = Substitute.For<IMailAccountCustodyStore>();
+        store.ReadAsync(Account, Arg.Any<CancellationToken>()).Returns(Task.FromResult<MailAccountCustodyState?>(null));
+
+        return store;
+    }
+
     private static IMailAccountCustodyStore CustodyStoreHolding(MailAccountCustodyState state)
     {
         var store = Substitute.For<IMailAccountCustodyStore>();

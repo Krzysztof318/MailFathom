@@ -19,10 +19,16 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// message of a mailbox the drain has already emptied, which is why an account far into holding pays nothing here.
 /// </para>
 /// <para>
-/// It is shared rather than written per store because every path that erases a stored row owes it: an erased folder's
-/// mail, the local copy of a folder MailFathom no longer mirrors, one message erased by identity, and the delete a
-/// person authored in the client whose trash window has passed. A path that wrote its own copy is a path that would
-/// stop matching the others without anything saying so.
+/// It is shared rather than written per store because every path that erases a held account's stored row owes it: an
+/// erased folder's mail, the local copy of a folder MailFathom no longer mirrors, one message erased by identity, and
+/// the delete a person authored in the client whose trash window has passed. A path that wrote its own copy is a path
+/// that would stop matching the others without anything saying so.
+/// </para>
+/// <para>
+/// Whether the account is held is each caller's to establish, because each of them knows it differently: the mutation
+/// paths are reached only for a held account's own acts, and the folder mirror's erasure reads the phase in its own
+/// transaction. Staging for a mirrored account would be worse than staging nothing — its source holds the mail rather
+/// than a copy of it, and the record would be expunged from if that account were ever switched to holding.
 /// </para>
 /// </remarks>
 internal static class MailboxSourceRemovalRecords

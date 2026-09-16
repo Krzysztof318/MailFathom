@@ -70,7 +70,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="custody">Reads the account's custody.</param>
     /// <param name="drain">Reads how much of the source is still to be emptied.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the state and the standing figures, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>200</c> with the state and the standing figures, <c>400</c> naming what was wrong with the request, or <c>409</c> where the account is served but has bound no folder yet.</returns>
     internal static async Task<Results<Ok<MailAccountCustodyResponse>, ProblemHttpResult>> ReadAsync(
         [FromQuery] string? account,
         [FromServices] IDeploymentMailAccountCatalog accounts,
@@ -89,7 +89,7 @@ internal static class MailAccountCustodyEndpoints
 
         if (await custody.ReadAsync(servedAccount, cancellationToken) is not { } state)
         {
-            return AdminAccountRequest.Refuse(account);
+            return NoAccountRecordYet(servedAccount);
         }
 
         var standing = await drain.ReadStandingAsync(servedAccount, cancellationToken);
@@ -111,7 +111,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="custody">Performs the switch.</param>
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
-    /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, or <c>503</c> where the source could not be read.</returns>
+    /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, <c>409</c> where the account is served but has bound no folder yet, or <c>503</c> where the source could not be read.</returns>
     /// <remarks>
     /// <para>
     /// A refused switch answers <c>200</c> with the refusals rather than an error status, because every one of them is
@@ -161,7 +161,7 @@ internal static class MailAccountCustodyEndpoints
 
         if (outcome is null)
         {
-            return AdminAccountRequest.Refuse(request?.Account);
+            return NoAccountRecordYet(servedAccount);
         }
 
         return TypedResults.Ok(new MailAccountCustodySwitchResponse(
@@ -171,6 +171,20 @@ internal static class MailAccountCustodyEndpoints
             outcome.State.Phase.ToString(),
             [.. outcome.Refusals.Select(refusal => refusal.Describe())]));
     }
+
+    /// <summary>States that the deployment serves the account but holds no record of it yet.</summary>
+    /// <param name="account">The served account.</param>
+    /// <returns>The refusal, which is a statement about the deployment rather than about the request.</returns>
+    /// <remarks>
+    /// Told apart from an account this deployment does not serve, because the operator's next act differs: that one is
+    /// a name to correct, and this one is a wait. The account row is written by whichever synchronization run first
+    /// binds one of the account's folders, and custody is a property of that row — so an account configured a minute
+    /// ago has none to report and none to change, and answering with the unknown-account sentence would tell an
+    /// operator their configuration never took.
+    /// </remarks>
+    private static ProblemHttpResult NoAccountRecordYet(MailAccountId account) => TypedResults.Problem(
+        $"The account '{account.Value}' is served by this deployment but has bound no folder yet, so it holds no custody to report or change. Its record is written by the first synchronization run that binds one of its folders; ask again once that run has happened.",
+        statusCode: StatusCodes.Status409Conflict);
 
     /// <summary>Resolves the custody a request names, against the member names this API publishes.</summary>
     /// <param name="written">The custody as the request wrote it.</param>
