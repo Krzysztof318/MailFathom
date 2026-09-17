@@ -107,7 +107,7 @@ public sealed class AdministratorAdmissionTests
         Assert.Empty(logs.Records);
     }
 
-    /// <summary>A mapped IPv6 address is not an IPv4 network's, and a neighbouring address is not a single named one.</summary>
+    /// <summary>An address outside every configured network is refused in either spelling, and recorded in its IPv4 form where it has one.</summary>
     [Theory]
     [InlineData("198.51.100.7", "198.51.100.7")]
     [InlineData("::ffff:198.51.100.7", "198.51.100.7")]

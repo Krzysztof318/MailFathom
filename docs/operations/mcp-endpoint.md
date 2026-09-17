@@ -743,10 +743,12 @@ overshoot in the allowance: the allowance is read before a verification and spen
 arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the first minute and by nothing after it.
 
 **A peer this deployment cannot tell apart from the world is bounded by username alone.** A request through a proxy
-[`ReverseProxy:TrustedProxies`](configuration-endpoints.md#reverseproxy) names is bounded by the client address that
-proxy forwarded in `X-Forwarded-For`, which tells two callers apart as a direct connection does. What still arrives
-carrying the proxy's own address is a request it forwarded no client for, and a per-source allowance over that would
-be one allowance for the whole world — a single guesser filling it would close password sign-in for every user at
+[`ReverseProxy:TrustedProxies`](configuration-endpoints.md#reverseproxy) names, narrower than a whole address family,
+is bounded by the client address that proxy forwarded in `X-Forwarded-For`, which tells two callers apart as a direct
+connection does. A section trusting a range that covers a whole family reads no forwarded address, so every caller
+there is bounded by username alone. What still arrives carrying a named proxy's own address is a request it forwarded
+no client for, or a client whose own address falls inside a network named as a proxy, and a per-source allowance over
+that would be one allowance for the whole world — a single guesser filling it would close password sign-in for every user at
 once. The source axis is therefore skipped for such a peer rather than applied to an address that distinguishes
 nobody, and the per-username allowance is what holds. The peer is read in its IPv4 form
 where it has one, exactly as the forwarded-headers policy reads the same list, so a dual-stack listener reporting an

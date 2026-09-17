@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
@@ -210,7 +211,7 @@ public sealed class PublishedOAuthMetadataTests
     public void For_AnAdministratorNarrowedByTokenScopes_PublishesItsPermissionsBesideTheScopes()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") });
         administrator.PermissionsFromTokenScopes = true;
         administrator.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
@@ -226,7 +227,7 @@ public sealed class PublishedOAuthMetadataTests
     public void For_AnAdministratorNarrowedByTokenScopesGrantingASubtree_PublishesTheResolvedNames()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") });
         administrator.PermissionsFromTokenScopes = true;
         administrator.Permissions.Add("mailfathom.admin.audit.*");
 
@@ -242,7 +243,7 @@ public sealed class PublishedOAuthMetadataTests
     public void For_AnAdministratorGrantedFromConfiguration_PublishesNoneOfItsPermissions()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") });
         administrator.Permissions.Add(MailFathomPermission.AdminOperate.Name);
 
         // Act
@@ -257,7 +258,7 @@ public sealed class PublishedOAuthMetadataTests
     public void For_AnAdministratorNarrowedByTokenScopesThatWroteNoGrant_PublishesTheWholeSurface()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce"));
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = EntryFor(WorkforceIssuer, "workforce") });
         administrator.PermissionsFromTokenScopes = true;
         administrator.GrantTheWholeSurface();
 
@@ -275,7 +276,7 @@ public sealed class PublishedOAuthMetadataTests
     public void For_AnAdministratorNarrowedByTokenScopesThatGrantsNothing_PublishesNoPermission()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce"));
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = EntryFor(WorkforceIssuer, "workforce") });
         administrator.PermissionsFromTokenScopes = true;
 
         // Act
@@ -310,15 +311,7 @@ public sealed class PublishedOAuthMetadataTests
     /// <remarks>The unit is the administrator rather than the block, because the grant belongs to the administrator; a test about a grant builds its own, and the ones here are about what the blocks publish.</remarks>
     private static PublishedOAuthMetadata Published(params OAuthValidationOptions[] oauthMethods) =>
         PublishedOAuthMetadata.For(
-            [.. oauthMethods.Index().Select(indexed => AdministratorSigningInWith(indexed.Item, $"administrator-{indexed.Index}"))]);
-
-    private static AdministratorOptions AdministratorSigningInWith(OAuthValidationOptions oauth, string name = "alice")
-    {
-        var administrator = new AdministratorOptions { Name = name };
-        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauth });
-
-        return administrator;
-    }
+            [.. oauthMethods.Index().Select(indexed => ConfiguredAuthentication.Administrator($"administrator-{indexed.Index}", new AdministratorCredentialOptions { OAuth = indexed.Item }))]);
 
     private static OAuthValidationOptions EntryFor(string issuer, string name, params string[] requiredScopes)
     {

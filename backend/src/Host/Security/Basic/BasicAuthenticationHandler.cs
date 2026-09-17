@@ -139,8 +139,11 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// forwarded no client for — no header, or a chain longer than the section believes — and a per-source partition
     /// on that would be one partition for the whole world, which a single guesser could empty and so close password
     /// sign-in for every user at once. The username bound is what holds there, and it holds per user rather than
-    /// across all of them. A section declaring no proxy reads no forwarded address at all, so the peer there is the
-    /// one that opened the connection and nothing a client wrote.
+    /// across all of them. Two further requests reach the same branch and keep only that bound: every request under a
+    /// section trusting a range that covers a whole address family, which reads no forwarded address and so matches
+    /// every peer as a declared proxy, and a forwarded client whose own address falls inside a declared network, as a
+    /// client sharing the subnet of an ingress pool named as one does. A section declaring no proxy reads no forwarded
+    /// address at all, so the peer there is the one that opened the connection and nothing a client wrote.
     /// <para>
     /// The question is asked of the peer rather than of the deployment, because <c>ReverseProxy</c> is one section for
     /// the whole process while a listener is not: a deployment declaring a proxy for one surface may serve another

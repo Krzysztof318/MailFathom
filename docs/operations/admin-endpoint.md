@@ -2349,8 +2349,8 @@ Every profile is a deployment you are signed in to, and one of them is the one c
 ```console
 $ mfctl profiles
 In use  Profile     Endpoint                           Credential
-*       production  https://mail.example.test:8443     workstation
-        staging     https://staging.example.test:8443  workstation
+*       production  https://mail.example.test:8443     alice
+        staging     https://staging.example.test:8443  alice
 
 $ mfctl switch staging
 Now acting on 'staging' (https://staging.example.test:8443) as 'alice'.

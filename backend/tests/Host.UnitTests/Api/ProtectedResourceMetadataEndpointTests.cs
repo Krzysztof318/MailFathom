@@ -7,6 +7,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -31,7 +32,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([AdministratorSigningInWith(oauthSettings)]));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -65,7 +66,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
         // Act
         var document = ProtectedResourceMetadataDocument.For(
             PublishedOAuthMetadata.For(
-                [AdministratorSigningInWith(Configured()), AdministratorSigningInWith(partners, "partner")]));
+                [ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() }), ConfiguredAuthentication.Administrator("partner", new AdministratorCredentialOptions { OAuth = partners })]));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -89,7 +90,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([AdministratorSigningInWith(oauthSettings)]));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -101,7 +102,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([AdministratorSigningInWith(Configured())]));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -116,7 +117,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     public void For_AnEntryNarrowedByTokenScopes_PublishesTheAdministrativeHalfOfTheVocabulary()
     {
         // Arrange
-        var administrator = AdministratorSigningInWith(Configured());
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() });
         administrator.PermissionsFromTokenScopes = true;
         administrator.GrantTheWholeSurface();
 
@@ -135,7 +136,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Arrange
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([AdministratorSigningInWith(Configured())]));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));
@@ -172,14 +173,6 @@ public sealed class ProtectedResourceMetadataEndpointTests
     }
 
     /// <summary>Wraps a configured OAuth block in the administrator whose credential carries it, which is the unit the document is composed from.</summary>
-    private static AdministratorOptions AdministratorSigningInWith(OAuthValidationOptions oauth, string name = "alice")
-    {
-        var administrator = new AdministratorOptions { Name = name };
-        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauth });
-
-        return administrator;
-    }
-
     private static OAuthValidationOptions Configured()
     {
         var oauthSettings = new OAuthValidationOptions { Resource = Resource };

@@ -162,10 +162,10 @@ internal sealed class ReverseProxyOptions
         [.. this.EffectiveTrustedProxies().Where(static entry => !ConfiguredAddressRanges.NamesNetwork(entry)).Select(IPAddress.Parse)];
 
     /// <summary>Maps the trusted entries onto the proxy networks among them.</summary>
-    /// <returns>The networks, in configuration order, empty when every entry names a single address.</returns>
+    /// <returns>The networks, in configuration order and in the form a peer is compared against, empty when every entry names a single address.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPNetwork> ToTrustedProxyNetworks() =>
-        [.. this.EffectiveTrustedProxies().Where(ConfiguredAddressRanges.NamesNetwork).Select(IPNetwork.Parse)];
+        ConfiguredAddressRanges.ToNetworks(this.EffectiveTrustedProxies().Where(ConfiguredAddressRanges.NamesNetwork));
 
     /// <summary>Reports the trusted ranges that cover every address, and so believe any peer that can open a connection.</summary>
     /// <returns>The ranges, in configuration order, empty when every entry names a proxy this deployment could have meant.</returns>

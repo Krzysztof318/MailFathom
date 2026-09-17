@@ -210,6 +210,8 @@ public sealed class ReverseProxyOptionsTests
     [InlineData("", false)]
     [InlineData("0.0.0.0/0", false)]
     [InlineData("10.0.0.5 ::/0", false)]
+    [InlineData("::ffff:10.0.0.0/104", true)]
+    [InlineData("::ffff:0:0/96", false)]
     public void ForwardsTheClientAddress_TheTrustedProxies_DecideWhetherAForwardedClientIsBelieved(string trustedProxies, bool expected)
     {
         // Arrange
@@ -279,6 +281,20 @@ public sealed class ReverseProxyOptionsTests
         Assert.Equal(
             [IPNetwork.Parse("10.1.0.0/16"), IPNetwork.Parse("2001:db8::/32")],
             networks);
+    }
+
+    /// <summary>A network written in its IPv4-mapped form is the IPv4 network it maps, which is the form a peer is compared in.</summary>
+    [Fact]
+    public void ToTrustedProxyNetworks_AMappedNetwork_IsTheIPv4NetworkItMaps()
+    {
+        // Arrange
+        var settings = ProxiesTrusted("::ffff:10.1.0.0/112");
+
+        // Act
+        var networks = settings.ToTrustedProxyNetworks();
+
+        // Assert
+        Assert.Equal([IPNetwork.Parse("10.1.0.0/16")], networks);
     }
 
     private static ReverseProxyOptions ProxiesTrusted(params string[] trustedProxies)

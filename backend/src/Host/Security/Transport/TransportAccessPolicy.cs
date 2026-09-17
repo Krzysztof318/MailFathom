@@ -22,8 +22,9 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// The rule is the same for every surface, and it is the registration that differs: each surface names its own policy
-/// through <see cref="TransportSurface.AccessPolicyName" /> and hands in its own authorized identities and required
-/// scopes. Sharing the judgement while separating the inputs is what keeps two surfaces from drifting into two
+/// through <see cref="TransportSurface.AccessPolicyName" /> and hands in its own required scopes — keyed by the
+/// administrator's identity on the administrative surface, and by the issuer that signed the token on a mail-serving
+/// one. Sharing the judgement while separating the inputs is what keeps two surfaces from drifting into two
 /// definitions of what an authorized caller is.
 /// </para>
 /// <para>

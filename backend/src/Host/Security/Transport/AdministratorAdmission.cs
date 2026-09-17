@@ -55,6 +55,7 @@ internal sealed partial class AdministratorAdmission
     /// <returns>The admission.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="administrator" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the administrator has not passed its configuration errors.</exception>
+    /// <exception cref="FormatException">Thrown when an entry of <see cref="AdministratorOptions.AllowedSourceNetworks" /> has not passed those errors.</exception>
     internal static AdministratorAdmission For(AdministratorOptions administrator)
     {
         ArgumentNullException.ThrowIfNull(administrator);
