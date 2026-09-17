@@ -1267,7 +1267,10 @@ the ability to redefine the deployment it operates.
 **`mfctl config edit` is the command for a change that is several settings at once**, committed as one transaction over
 the version the buffer was opened at, and it needs `$VISUAL` or `$EDITOR` — a graphical editor needs the flag that makes
 it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the editor exits. An emptied
-buffer abandons the session and a buffer saved unchanged writes nothing.
+buffer abandons the session and a buffer saved unchanged writes nothing. `--format yaml` opens the document as YAML and
+converts what was saved back to JSON before it is sent, as [editing a document as
+YAML](configuration-sources.md#editing-a-document-as-yaml) describes; `mfctl user edit`, `mfctl user show`, and
+`mfctl account edit` take the same option.
 
 **`mfctl config adopt` is previewed and then confirmed**, because after it the files stop deciding the settings it
 copied. `--yes` states the agreement where nobody is at the terminal, and `mfctl config unset` is what gives a setting
@@ -1319,8 +1322,8 @@ such user exists rather than editing somebody else's mailboxes.
 | --- | --- |
 | `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, whether the running process serves them, and which of the MCP and client endpoints each one is served on |
 | `mfctl user add --display-name <name>` | Records a user this deployment did not hold, and reports the identifier they were minted under |
-| `mfctl user show` | Reads one user's record as this deployment holds it, secrets redacted |
-| `mfctl user edit` | Opens that record in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
+| `mfctl user show [--format json\|yaml]` | Reads one user's record as this deployment holds it, secrets redacted, as JSON or as YAML |
+| `mfctl user edit [--format json\|yaml]` | Opens that record in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
 | `mfctl user set-organization (--organization <id> \| --none)` | Moves that user into an [organization](#organizations), or out of every one, which changes the login their passwords are typed as |
@@ -1584,7 +1587,7 @@ over exactly that set.
 | `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, and who it is assigned to, and says so when more were held than it lists |
 | `mfctl account show --account <id>` | Reads one account's declaration, secrets redacted |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file, assigns it to that user, and reports the identifier it was generated under |
-| `mfctl account edit --account <id>` | Opens that declaration in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
+| `mfctl account edit --account <id> [--format json\|yaml]` | Opens that declaration in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl account assign --account <id> --user <id>` | Assigns an account to that user, beside whoever else is already assigned it |
 | `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing what they authored there, and erasing the account and its mail when it was the last one |
 | `mfctl account delete --account <id>` | Erases the account and every message this deployment holds for it |

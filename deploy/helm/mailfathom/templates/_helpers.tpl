@@ -325,13 +325,14 @@ compares them rather than for emptiness, because `"Enabled": "false"` is a spell
 template reads any non-empty string as true. Both are ranged over rather than looked up by name for the same reason:
 the JSON provider and the environment provider both key their data with an ordinal-ignore-case comparer, so
 `"clientEndpoint": { "enabled": true }` and `CLIENTENDPOINT__ENABLED` each serve the surface exactly as the spelling
-written here does, while an exact-case lookup into a Go map would see neither. A file that is not a JSON object is
-skipped rather than failing the render: `config.files` is the operator's text, and a refusal about the backplane is the
-wrong place to report a malformed one.
+written here does, while an exact-case lookup into a Go map would see neither. A file is parsed in the format its
+extension names, as MailFathom reads it: a `.yaml` or `.yml` key through `fromYaml`, anything else through `fromJson`.
+A file that is not an object is skipped rather than failing the render: `config.files` is the operator's text, and a
+refusal about the backplane is the wrong place to report a malformed one.
 */}}
 {{- $clientSurfaceServed := .Values.client.enabled -}}
 {{- range $name, $contents := .Values.config.files -}}
-  {{- $document := fromJson $contents -}}
+  {{- $document := ternary (fromYaml $contents) (fromJson $contents) (regexMatch "(?i)\\.ya?ml$" $name) -}}
   {{- if kindIs "map" $document -}}
     {{- range $section, $body := $document -}}
       {{- if and (eq (lower $section) "clientendpoint") (kindIs "map" $body) -}}

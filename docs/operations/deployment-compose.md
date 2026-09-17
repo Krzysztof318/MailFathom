@@ -130,8 +130,8 @@ startup failure when it is missed:
   permission error, because MailFathom collapses every file-system failure into one result so that no diagnostic
   quotes the path it was handed — which makes a mode the least visible way to break this deployment. `0711` is what
   the secrets directory takes: traversable by that account, and still not listable by anything but you. The
-  configuration directory is *listed* rather than opened by name, because MailFathom layers in every `*.json` it finds
-  there, so that one needs read as well, which is the `0755` above. It is set rather than assumed because Git records
+  configuration directory is *listed* rather than opened by name, because MailFathom layers in every `*.json`, `*.yaml`, and
+  `*.yml` it finds there, so that one needs read as well, which is the `0755` above. It is set rather than assumed because Git records
   no directory mode: `config/` arrives with whatever `umask` the clone ran under, and a strict one leaves a directory
   the container cannot list.
 - **The files inside both are read, so they have to be readable.** `0444` for a secret and `0644` for a configuration
@@ -144,12 +144,15 @@ startup failure when it is missed:
 
 Every file you add under `secrets/mailfathom/` needs the same `0444`.
 
-`.env`, `secrets/`, and `config/*.json` are all ignored by Git. The two `.example` files are tracked and contain
-placeholders only.
+`.env`, `secrets/`, and `config/*.json`, `config/*.yaml`, and `config/*.yml` are all ignored by Git. The `.example`
+files are tracked and contain placeholders only.
 
-The extension of the configuration file matters. MailFathom layers in `*.json` and nothing else, so
-`10-mailfathom.json.example` sits in the mounted directory without being read — and so does a `.bak` left behind after an
-edit. Files are layered in file-name order, so `20-…` overrides `10-…`. See
+The extension of the configuration file matters. MailFathom layers in `*.json`, `*.yaml`, and `*.yml` and nothing else,
+so the examples sit in the mounted directory without being read — and so does a `.bak` left behind after an edit. Files
+are layered in file-name order whatever their format, so `20-…` overrides `10-…`. To write the configuration in YAML,
+copy `config/10-mailfathom.yaml.example` to `config/10-mailfathom.yaml` in place of the JSON steps above; it holds the
+same settings. Copy one of the two and never both, because two names differing only by extension stop the host, and
+[JSON and YAML](configuration-sources.md#json-and-yaml) states what a YAML file may not use. See
 [configuration sources](configuration-sources.md) for the full precedence.
 
 ### Credentials

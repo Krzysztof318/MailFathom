@@ -57,6 +57,12 @@ config:
           ]
         }
       }
+    # A YAML file beside the JSON one, so the rendering proves a key of either format reaches the ConfigMap. The
+    # directory is layered by file name whichever format a file is written in.
+    20-mailfathom.yaml: |
+      # Tuning rather than deployment shape, which is what belongs in a file.
+      MailboxSearch:
+        SnippetsPerEmail: 3
 
 # The external-analyzer shape, matching the external-database choice above: nothing of the analyzer Deployment or its
 # Service is rendered, and the application is pointed at the address given here. An address inside the cluster, because

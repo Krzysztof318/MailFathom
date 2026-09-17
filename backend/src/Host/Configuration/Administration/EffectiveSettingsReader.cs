@@ -296,6 +296,7 @@ internal sealed class EffectiveSettingsReader(
         CommandLineConfigurationProvider => SettingSource.CommandLine,
         EnvironmentVariablesConfigurationProvider => SettingSource.EnvironmentVariable,
         JsonConfigurationProvider { Source: ProvisionedJsonConfigurationSource } => SettingSource.File,
+        ProvisionedYamlConfigurationProvider => SettingSource.File,
         JsonConfigurationProvider json => IsUserSecrets(json) ? SettingSource.UserSecrets : SettingSource.File,
         _ => SettingSource.Unclassified,
     };
@@ -310,5 +311,5 @@ internal sealed class EffectiveSettingsReader(
     /// they did not remember mounting.
     /// </remarks>
     private static string? OriginOf(IConfigurationProvider provider) =>
-        provider is JsonConfigurationProvider { Source.Path: { Length: > 0 } path } ? path : null;
+        provider is FileConfigurationProvider { Source.Path: { Length: > 0 } path } ? path : null;
 }

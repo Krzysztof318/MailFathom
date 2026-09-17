@@ -52,6 +52,7 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 internal sealed class ComposedConfigurationDeployment : IDisposable
 {
     private const string DeploymentFileName = "10-deployment.json";
+    private const string DeploymentYamlFileName = "10-deployment.yaml";
     private const string OperatorOverrideFileName = "secrets.json";
 
     private readonly ConfigurationManager configuration;
@@ -91,14 +92,18 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
     /// <summary>Gets the name the deployment's provisioned file is composed under, which a reading reports as an origin.</summary>
     public static string ProvisionedFileName => DeploymentFileName;
 
+    /// <summary>Gets the name the deployment's provisioned file is composed under when it is written in YAML.</summary>
+    public static string ProvisionedYamlFileName => DeploymentYamlFileName;
+
     /// <summary>Composes the deployment's file, the persisted layer, and an optional operator override.</summary>
-    /// <param name="provisioned">The deployment's own configuration file, as JSON.</param>
+    /// <param name="provisioned">The deployment's own configuration file, as JSON unless <paramref name="provisionedAsYaml" /> says otherwise.</param>
     /// <param name="persisted">The persisted configuration document, as JSON.</param>
     /// <param name="operatorOverride">An override composed above the persisted layer, as JSON, or nothing.</param>
     /// <param name="version">The version the persisted document stands at.</param>
     /// <param name="granted">What the entry that admitted the caller resolved to, defaulting to both permissions the configuration surface is published under.</param>
     /// <param name="environmentVariables">The variables an environment provider supplies above the layer, keyed as configuration paths, or nothing.</param>
     /// <param name="commandLineArguments">The arguments a command-line provider supplies above every other source, or nothing.</param>
+    /// <param name="provisionedAsYaml">Whether the deployment's own file is written in YAML, composed under <see cref="ProvisionedYamlFileName" />.</param>
     /// <returns>The composed deployment.</returns>
     public static ComposedConfigurationDeployment Composed(
         string provisioned,
@@ -107,23 +112,27 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
         long version = 1,
         MailFathomPermission[]? granted = null,
         IReadOnlyDictionary<string, string?>? environmentVariables = null,
-        string[]? commandLineArguments = null)
+        string[]? commandLineArguments = null,
+        bool provisionedAsYaml = false)
     {
         var configuration = new ConfigurationManager();
-        var files = new InMemoryConfigurationFileProvider().WithFile(DeploymentFileName, provisioned);
+        var provisionedFileName = provisionedAsYaml ? DeploymentYamlFileName : DeploymentFileName;
+        var files = new InMemoryConfigurationFileProvider().WithFile(provisionedFileName, provisioned);
 
         // The provisioned source the host constructs rather than a plain JSON one, because that type is how a reading
         // tells the deployment's own file from the operator's User Secrets store — which the framework identifies by
         // the file name 'secrets.json' alone, a name a deployment is free to give its own ConfigMap key. Composing a
         // plain source here would leave every File assertion resolving through the fall-through arm of SourceOf, so
         // deleting the arm that makes the distinction would break nothing in the suite.
-        configuration.Sources.Add(new ProvisionedJsonConfigurationSource
-        {
-            FileProvider = files,
-            Path = DeploymentFileName,
-            Optional = false,
-            ReloadOnChange = false,
-        });
+        FileConfigurationSource provisionedSource = provisionedAsYaml
+            ? new ProvisionedYamlConfigurationSource()
+            : new ProvisionedJsonConfigurationSource();
+
+        provisionedSource.FileProvider = files;
+        provisionedSource.Path = provisionedFileName;
+        provisionedSource.Optional = false;
+        provisionedSource.ReloadOnChange = false;
+        configuration.Sources.Add(provisionedSource);
 
         if (operatorOverride is not null)
         {

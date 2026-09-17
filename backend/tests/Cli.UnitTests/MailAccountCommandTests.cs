@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Editing;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -287,6 +288,38 @@ public sealed class MailAccountCommandTests : IDisposable
 
         Assert.Equal(FakeMailAccountDeployment.AccountVersion, body.GetProperty("version").GetInt64());
         Assert.Equal(edited, body.GetProperty("account").GetString());
+    }
+
+    /// <summary>A declaration is edited through the same YAML view a user's record is, and saved as JSON.</summary>
+    [Fact]
+    public async Task Edit_AYamlView_SavesTheEditAsJson()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+
+        this.harness.EditsTheBufferInto("EmailAddress: alex@example.test\nDisplayName: Personal\n");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "edit",
+            "--account",
+            $"{Account:D}",
+            "--format",
+            "yaml",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var saved = Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountPath(Account)));
+        var body = JsonDocument.Parse(saved.ContentAsUtf8String()).RootElement;
+
+        Assert.True(YamlDocumentView.DescribeTheSameDocument(
+            """{"EmailAddress":"alex@example.test","DisplayName":"Personal"}""",
+            body.GetProperty("account").GetString()!));
     }
 
     public void Dispose()

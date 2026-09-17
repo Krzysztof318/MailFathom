@@ -41,17 +41,20 @@ internal static class EditConfigurationCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var formatOption = CliOptions.DocumentFormat();
         var shadowedOption = ConfigurationOptions.EvenIfShadowed();
 
         Command command = new("edit", "Edit this deployment's persisted configuration document in your editor, and commit it as one change.")
         {
             shadowedOption,
+            formatOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(shadowedOption),
+            result.GetValue(formatOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -61,6 +64,7 @@ internal static class EditConfigurationCommand
     private static async Task<int> RunAsync(
         CliContext context,
         bool evenIfShadowed,
+        DocumentView view,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -79,6 +83,7 @@ internal static class EditConfigurationCommand
             "configuration",
             "the deployment's configuration",
             document,
+            view,
             cancellationToken);
 
         return saved is null

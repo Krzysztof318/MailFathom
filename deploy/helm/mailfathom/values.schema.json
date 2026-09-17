@@ -689,8 +689,8 @@
         "files": {
           "type": "object",
           "propertyNames": {
-            "pattern": "\\.json$",
-            "description": "MailFathom layers in *.json only, so a key with another extension would be a setting that silently never applied."
+            "pattern": "\\.(json|yaml|yml)$",
+            "description": "MailFathom layers in *.json, *.yaml, and *.yml only, so a key with another extension would be a setting that silently never applied."
           },
           "additionalProperties": {
             "type": "string"

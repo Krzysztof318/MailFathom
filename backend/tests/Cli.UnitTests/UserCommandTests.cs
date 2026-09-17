@@ -466,6 +466,175 @@ public sealed class UserCommandTests : IDisposable
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
     }
 
+    /// <summary>JSON is what an operator gets unless they ask, and the buffer is named so their editor highlights it as JSON.</summary>
+    [Fact]
+    public async Task Edit_NoFormatNamed_OpensAJsonBuffer()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        var opened = string.Empty;
+        this.harness.OpensTheBufferWith((_, path) =>
+        {
+            opened = path;
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.EndsWith(".json", opened, StringComparison.Ordinal);
+    }
+
+    /// <summary>The YAML view is a rendering of the record, and what is committed is the JSON document it describes.</summary>
+    [Fact]
+    public async Task Edit_AYamlView_OpensTheRecordAsYamlAndCommitsTheEditAsJson()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        var openedPath = string.Empty;
+        var openedText = string.Empty;
+        this.harness.OpensTheBufferWith((_, path) =>
+        {
+            openedPath = path;
+            openedText = File.ReadAllText(path);
+            File.WriteAllText(path, "# two mailboxes now\nMailAccounts:\n- AccountId: work\n- AccountId: family\n");
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "edit",
+            "--user",
+            $"{User:D}",
+            "--format",
+            "yaml",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.EndsWith(".yaml", openedPath, StringComparison.Ordinal);
+        Assert.Equal("MailAccounts:\n- AccountId: work\n", openedText.ReplaceLineEndings("\n"));
+
+        var sent = Assert.Single(
+            deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+
+        Assert.True(YamlDocumentView.DescribeTheSameDocument(
+            """{"MailAccounts":[{"AccountId":"work"},{"AccountId":"family"}]}""",
+            ReadField(sent.ContentAsUtf8String(), "document")));
+    }
+
+    /// <summary>A YAML view saved as it was opened, or changed only in its comments, describes the record already held.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("# only a comment was added\n")]
+    public async Task Edit_AYamlViewDescribingTheSameRecord_WritesNothing(string prefix)
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.OpensTheBufferWith((_, path) =>
+        {
+            File.WriteAllText(path, prefix + File.ReadAllText(path));
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "edit",
+            "--user",
+            $"{User:D}",
+            "--format",
+            "yaml",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    /// <summary>A YAML buffer this command refuses reached nobody, so the edit is kept where the operator can recover it.</summary>
+    [Fact]
+    public async Task Edit_AYamlBufferThatIsRefused_FailsNamingWhyAndKeepsTheEdit()
+    {
+        // Arrange
+        const string refused = "MailAccounts:\n- &first\n  AccountId: work\n- *first\n";
+
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        var buffer = string.Empty;
+        this.harness.OpensTheBufferWith((_, path) =>
+        {
+            buffer = path;
+            File.WriteAllText(path, refused);
+
+            return true;
+        });
+
+        try
+        {
+            // Act
+            var exitCode = await this.RunAsync(
+                deployment,
+                "user",
+                "edit",
+                "--user",
+                $"{User:D}",
+                "--format",
+                "yaml",
+                "--endpoint",
+                Endpoint);
+
+            // Assert
+            Assert.Equal(CliExitCode.Failure, exitCode);
+            Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+            Assert.Equal(refused, File.ReadAllText(buffer));
+            Assert.Contains(
+                this.harness.Console.Errors,
+                line => line.Contains("anchor", StringComparison.Ordinal) && line.Contains(buffer, StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(buffer)!, recursive: true);
+        }
+    }
+
+    /// <summary>The printed record matches the view an operator would edit it in.</summary>
+    [Fact]
+    public async Task Show_AYamlView_PrintsTheRecordAsYaml()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "show",
+            "--user",
+            $"{User:D}",
+            "--format",
+            "yaml",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("- AccountId: work", StringComparison.Ordinal));
+    }
+
     /// <summary>Nothing is opened without an editor to open it in, and nothing about one person's mailboxes is fetched for a session that cannot start.</summary>
     [Fact]
     public async Task Edit_NoEditorNamedByTheShell_FailsWithoutReadingTheRecord()

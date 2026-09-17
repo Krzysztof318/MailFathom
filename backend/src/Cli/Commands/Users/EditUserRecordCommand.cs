@@ -38,17 +38,20 @@ internal static class EditUserRecordCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var formatOption = CliOptions.DocumentFormat();
         var userOption = UserOptions.User();
 
         Command command = new("edit", "Edit one user's record in your editor, and commit it as one change.")
         {
             userOption,
+            formatOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(userOption),
+            result.GetValue(formatOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -64,6 +67,7 @@ internal static class EditUserRecordCommand
     private static async Task<int> RunAsync(
         CliContext context,
         Guid? requestedUser,
+        DocumentView view,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -87,6 +91,7 @@ internal static class EditUserRecordCommand
             "user-record",
             "this user's record",
             opened.Document ?? string.Empty,
+            view,
             cancellationToken);
 
         return saved is null

@@ -92,6 +92,8 @@ deploy/compose/secrets/mailfathom/*
 # The operator's own copy of the example beside it. The example is tracked; the file MailFathom actually reads is not,
 # because it names the mailboxes a person reads.
 deploy/compose/config/*.json
+deploy/compose/config/*.yaml
+deploy/compose/config/*.yml
 deploy/compose/compose.override.yaml
 # The mailbox declaration the quick start collects and hands to `mfctl account add`. The deployment reads it never:
 # it names one person's mailbox, and what reads it is an administrator recording that mailbox and assigning it to them.
@@ -104,6 +106,8 @@ deploy/compose/openssl-legacy.cnf
 # ~/.config — so the only thing to keep out is a configuration edited in place beside the example rather than after the
 # copy. It names the mailboxes a person reads, exactly as the Compose one does.
 deploy/quadlet/config/*.json
+deploy/quadlet/config/*.yaml
+deploy/quadlet/config/*.yml
 
 # Agent sandboxes mask developer and editor configuration by bind-mounting an empty file over each
 # path, so these appear in the worktree as zero-byte files that `git add -A` will happily stage.

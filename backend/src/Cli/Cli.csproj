@@ -31,6 +31,7 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
   <!-- The only project reference, and a deliberate limit rather than the first of several. The command is an HTTP

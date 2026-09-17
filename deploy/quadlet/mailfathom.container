@@ -48,11 +48,14 @@ After=mailfathom-postgres.service
 
 # At least one file MailFathom will actually read, which is a narrower thing than the directory existing. Podman
 # creates a missing bind source as an empty directory rather than refusing, the setup creates that directory in a step
-# of its own, and MailFathom layers in `*.json` and nothing else — so a directory that is absent, empty, or holds only
-# the tracked `.json.example` all produce the same start: synchronization off, no account, no MCP endpoint, and nothing
-# saying why. The glob covers all three and couples to no particular file name, so a deployment that splits its
-# configuration across `10-` and `20-` files satisfies it unchanged.
-AssertPathExistsGlob=%h/.config/mailfathom/config/*.json
+# of its own, and MailFathom layers in `*.json`, `*.yaml`, and `*.yml` and nothing else — so a directory that is absent,
+# empty, or holds only the tracked `.example` files all produce the same start: synchronization off, no account, no MCP
+# endpoint, and nothing saying why. The globs cover all three and couple to no particular file name, so a deployment
+# that splits its configuration across `10-` and `20-` files satisfies them unchanged. The leading `|` makes each one a
+# triggering assertion, so any one of the three formats is enough.
+AssertPathExistsGlob=|%h/.config/mailfathom/config/*.json
+AssertPathExistsGlob=|%h/.config/mailfathom/config/*.yaml
+AssertPathExistsGlob=|%h/.config/mailfathom/config/*.yml
 
 [Container]
 # There is no default version here, deliberately, and the placeholder is invalid on purpose: an unedited unit fails

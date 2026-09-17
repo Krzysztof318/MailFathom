@@ -182,7 +182,7 @@ dotnet publish backend/src/Host/Host.csproj --configuration Release --output /op
 
 Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.NET Core service:
 
-- Configuration arrives through `appsettings.json` beside the binaries, a deployment-provisioned JSON file or
+- Configuration arrives through `appsettings.json` beside the binaries, a deployment-provisioned JSON or YAML file or
   directory named by [`ConfigurationSources`](../operations/configuration-sources.md), command-line arguments, or
   environment variables.
 - Credentials arrive as systemd credentials: `LoadCredential=` in the unit, `systemd-credential:` references in the

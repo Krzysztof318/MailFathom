@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Provisioning;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
@@ -81,15 +82,27 @@ internal sealed partial class BootstrapLogger : IDisposable
             this.settings.ServiceVersion,
             this.settings.ServiceRevision);
 
-    /// <summary>Reports how many deployment-provisioned configuration files were layered into the host's configuration.</summary>
-    /// <param name="fileCount">The number of files layered in, which is zero when the deployment provisioned none.</param>
+    /// <summary>Reports which deployment-provisioned configuration files were layered into the host's configuration, and in which format.</summary>
+    /// <param name="files">The files layered in, lowest precedence first, which is empty when the deployment provisioned none.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="files" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The count is what makes a mount that did not arrive visible at the moment it matters. A directory the deployment
     /// named is required to exist, so an absent one already fails startup; a mounted directory that is empty is a
     /// legitimate intermediate state during a rollout and reports itself here as zero rather than as a failure.
+    /// </para>
+    /// <para>
+    /// Each file is named with its format, because the extension decides how a file is read and a file read under the
+    /// other format's rules is otherwise indistinguishable from one whose settings are wrong. The paths are the
+    /// deployment's own mount points and file names, which name where non-secret settings live and nothing more.
+    /// </para>
     /// </remarks>
-    public void RecordProvisionedConfigurationFiles(int fileCount) =>
-        this.LogProvisionedConfigurationFiles(this.settings.ServiceName, fileCount);
+    public void RecordProvisionedConfigurationFiles(IReadOnlyList<ProvisionedConfigurationFile> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        this.LogProvisionedConfigurationFiles(this.settings.ServiceName, files.Count, files);
+    }
 
     /// <summary>Reports the version of the persisted configuration the host composed itself from.</summary>
     /// <param name="version">The version of the document read from the persisted configuration layer.</param>
@@ -171,8 +184,8 @@ internal sealed partial class BootstrapLogger : IDisposable
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Host {ServiceName} layered {FileCount} deployment-provisioned configuration files below the environment.")]
-    private partial void LogProvisionedConfigurationFiles(string serviceName, int fileCount);
+        Message = "Host {ServiceName} layered {FileCount} deployment-provisioned configuration files below the environment: {ProvisionedFiles}.")]
+    private partial void LogProvisionedConfigurationFiles(string serviceName, int fileCount, IReadOnlyList<ProvisionedConfigurationFile> provisionedFiles);
 
     [LoggerMessage(
         Level = LogLevel.Information,

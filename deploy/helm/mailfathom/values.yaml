@@ -396,11 +396,14 @@ secrets:
 
 ### Configuration
 #
-# Rendered into a ConfigMap and mounted as a directory of JSON files, which MailFathom layers in file-name order beneath
-# the environment block. Nothing here may be a secret: a ConfigMap is readable by anything with `get` on it.
+# Rendered into a ConfigMap and mounted as a directory of JSON and YAML files, which MailFathom layers in file-name order
+# beneath the environment block, whichever format each is written in. Nothing here may be a secret: a ConfigMap is
+# readable by anything with `get` on it.
 config:
-  # Map of file name to file contents. The name must end in `.json`; anything else is ignored by the loader and would
-  # be a setting that silently never applied, so the schema rejects it.
+  # Map of file name to file contents. The name must end in `.json`, `.yaml`, or `.yml`, and the extension decides how
+  # the file is read; anything else is ignored by the loader and would be a setting that silently never applied, so the
+  # schema rejects it. Two names differing only by extension, such as `10-mail.json` and `10-mail.yaml`, stop the host,
+  # because their order would be decided by the extension rather than by the name.
   files: {}
   mountPath: /etc/mailfathom/config
 

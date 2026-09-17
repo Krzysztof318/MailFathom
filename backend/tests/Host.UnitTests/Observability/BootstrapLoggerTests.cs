@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,31 @@ public sealed class BootstrapLoggerTests
                 KeyValuePair.Create("ServiceVersion", (object?)"1.2.3"),
             ],
             record.Properties.OrderBy(property => property.Key, StringComparer.Ordinal));
+    }
+
+    /// <summary>Each provisioned file is named with the format it was read in, because the extension decides how it was read.</summary>
+    [Fact]
+    public void RecordProvisionedConfigurationFiles_LayeredFiles_NamesEachWithItsFormat()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        using var bootstrapLogger = new BootstrapLogger(loggerFactory, Settings);
+        ProvisionedConfigurationFile[] files =
+        [
+            new("/etc/mailfathom/config/10-mail.yaml", ProvisionedConfigurationFormat.Yaml),
+            new("/etc/mailfathom/override.json", ProvisionedConfigurationFormat.Json),
+        ];
+
+        // Act
+        bootstrapLogger.RecordProvisionedConfigurationFiles(files);
+
+        // Assert
+        var record = Assert.Single(loggerFactory.Records);
+        Assert.Equal(LogLevel.Information, record.Level);
+        var properties = record.Properties.ToDictionary(property => property.Key, property => property.Value, StringComparer.Ordinal);
+        Assert.Equal(2, properties["FileCount"]);
+        Assert.Contains("/etc/mailfathom/config/10-mail.yaml (Yaml)", record.Message, StringComparison.Ordinal);
+        Assert.Contains("/etc/mailfathom/override.json (Json)", record.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -155,6 +155,7 @@ secrets:
 
 config:
   files:
+    # A key ending in .yaml or .yml is read as YAML instead; the extension decides, and the chart refuses any other.
     10-mailfathom.json: |
       {
         "MailSynchronization": {

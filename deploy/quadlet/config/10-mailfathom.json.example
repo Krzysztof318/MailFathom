@@ -1,6 +1,7 @@
 // Copy to ~/.config/mailfathom/config/10-mailfathom.json and edit — this file stays in the repository and is never the
-// one the container reads. The extension matters: MailFathom layers in `*.json` only, so an example or a `.bak` left in
-// that directory is ignored. Files are layered in file-name order, so `20-…` overrides `10-…`.
+// one the container reads. The extension matters: MailFathom layers in `*.json`, `*.yaml`, and `*.yml` only, so an
+// example or a `.bak` left in that directory is ignored. Files are layered in file-name order, so `20-…` overrides
+// `10-…`. 10-mailfathom.yaml.example beside this file is the same configuration in YAML; copy one of the two, never both.
 //
 // Nothing here is a secret. Every credential is a *reference* to material systemd decrypted for the unit and placed in
 // the directory mailfathom.container mounts at /etc/mailfathom/credentials, which is what the container's

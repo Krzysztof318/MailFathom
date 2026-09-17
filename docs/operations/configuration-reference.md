@@ -39,6 +39,11 @@ is the three-field shape [secret provisioning](secret-provisioning.md#the-secret
 { "Name": "imap-primary-password", "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password", "Lifetime": "NoLimit" }
 ```
 
+The examples on these pages are JSON, and a provisioned file may say the same thing in YAML — the keys and values are
+identical, and [JSON and YAML](configuration-sources.md#json-and-yaml) states the rules that keep them so: a scalar is
+the text written, and anchors, aliases, tags, several documents, and a key written twice are refused. `appsettings.json`
+and the persisted document are JSON only.
+
 `Name` is the identity diagnostics use, `SecretReference` is `<scheme>:<target>` with the schemes
 `systemd-credential:`, `file:`, `env:`, `database:`, and `plaintext:`, and `Lifetime` is `NoLimit` (the default) or the ISO 8601
 instant the material stops being accepted. Trust-anchor and certificate blocks nest a fourth field, `Password`, itself

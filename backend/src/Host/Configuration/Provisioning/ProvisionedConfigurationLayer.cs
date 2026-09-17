@@ -11,8 +11,6 @@ namespace MailFathom.Host.Configuration.Provisioning;
 /// </remarks>
 internal static class ProvisionedConfigurationLayer
 {
-    private const string JsonFileExtension = ".json";
-
     /// <summary>
     /// The prefix Kubernetes gives the entries it manages inside a mounted volume: <c>..data</c>, which is a symbolic
     /// link to the live version, and the timestamped directory that link points at.
@@ -22,14 +20,17 @@ internal static class ProvisionedConfigurationLayer
     /// <summary>Finds the provisioned configuration files, in the order they are layered.</summary>
     /// <param name="paths">The directory and file the deployment named.</param>
     /// <param name="fileSystem">Reports what the deployment actually mounted.</param>
-    /// <returns>The absolute paths to layer, lowest precedence first, empty when the deployment provisioned nothing.</returns>
+    /// <returns>The files to layer with the format each is read in, lowest precedence first, empty when the deployment provisioned nothing.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="paths" /> or <paramref name="fileSystem" /> is <see langword="null" />.</exception>
-    /// <exception cref="ProvisionedConfigurationSourceInvalidException">Thrown when a configured path does not exist.</exception>
+    /// <exception cref="ProvisionedConfigurationSourceInvalidException">
+    /// Thrown when a configured path does not exist, the named file is neither JSON nor YAML, or the directory holds two
+    /// files whose names differ only by extension.
+    /// </exception>
     /// <remarks>
     /// The single file is layered above the directory, so a deployment that mounts a shared ConfigMap and then names one
     /// file of its own gets the specific value rather than an order decided by how the two happen to sort.
     /// </remarks>
-    public static IReadOnlyList<string> FindFiles(
+    public static IReadOnlyList<ProvisionedConfigurationFile> FindFiles(
         ProvisionedConfigurationPaths paths,
         IProvisionedConfigurationFileSystem fileSystem)
     {
@@ -51,7 +52,12 @@ internal static class ProvisionedConfigurationLayer
                 $"The configuration file named by {ProvisionedConfigurationPaths.FileKey} does not exist: {paths.FilePath}.");
         }
 
-        return [.. directoryFiles, paths.FilePath];
+        var format = ProvisionedConfigurationFile.FormatOf(paths.FilePath)
+            ?? throw new ProvisionedConfigurationSourceInvalidException(
+                $"The configuration file named by {ProvisionedConfigurationPaths.FileKey} is neither JSON nor YAML: {paths.FilePath}. "
+                + "Name it with a .json, .yaml, or .yml extension, which is what decides how it is read.");
+
+        return [.. directoryFiles, new ProvisionedConfigurationFile(paths.FilePath, format)];
     }
 
     /// <summary>Finds the position at which provisioned configuration is layered into the host's own sources.</summary>
@@ -67,7 +73,7 @@ internal static class ProvisionedConfigurationLayer
     public static int FindInsertionIndex(IReadOnlyList<IConfigurationSource> sources) =>
         OperatorOverrideBoundary.FindIn(sources);
 
-    private static IReadOnlyList<string> FindDirectoryFiles(
+    private static IReadOnlyList<ProvisionedConfigurationFile> FindDirectoryFiles(
         string directoryPath,
         IProvisionedConfigurationFileSystem fileSystem)
     {
@@ -78,23 +84,52 @@ internal static class ProvisionedConfigurationLayer
         }
 
         // Ordered ordinally rather than by the host's culture, so the same ConfigMap layers the same way on every
-        // machine that mounts it.
+        // machine that mounts it, and by the whole name so a JSON and a YAML file interleave by what they are called.
+        var layered = fileSystem.ListFileNames(directoryPath)
+            .Where(fileName => !IsVolumeBookkeeping(fileName))
+            .Select(fileName => (Name: fileName, Format: ProvisionedConfigurationFile.FormatOf(fileName)))
+            .Where(entry => entry.Format is not null)
+            .OrderBy(entry => entry.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        RejectNamesThatDifferOnlyByExtension(directoryPath, [.. layered.Select(entry => entry.Name)]);
+
         return
         [
-            .. fileSystem.ListFileNames(directoryPath)
-                .Where(IsLayeredJsonFile)
-                .Order(StringComparer.Ordinal)
-                .Select(fileName => Path.Combine(directoryPath, fileName)),
+            .. layered.Select(entry => new ProvisionedConfigurationFile(
+                Path.Combine(directoryPath, entry.Name),
+                entry.Format!.Value)),
         ];
     }
 
-    /// <summary>Reports whether a directory entry is a configuration file rather than the volume's own bookkeeping.</summary>
+    /// <summary>Fails when two layered files share a name apart from their extension.</summary>
+    /// <remarks>
+    /// <c>10-mail.json</c> and <c>10-mail.yaml</c> would be ordered by the extension, which is a choice nobody made:
+    /// the operator names a file to place it, and two files at the same place leave the later one's precedence to how
+    /// <c>.json</c> and <c>.yaml</c> happen to sort.
+    /// </remarks>
+    private static void RejectNamesThatDifferOnlyByExtension(string directoryPath, IReadOnlyList<string> fileNames)
+    {
+        var colliding = fileNames
+            .GroupBy(Path.GetFileNameWithoutExtension, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .SelectMany(group => group)
+            .ToArray();
+
+        if (colliding.Length > 0)
+        {
+            throw new ProvisionedConfigurationSourceInvalidException(
+                $"The configuration directory named by {ProvisionedConfigurationPaths.DirectoryKey} holds files whose names differ only by extension: {string.Join(", ", colliding)} in {directoryPath}. "
+                + "Their order would be decided by the extension rather than by their names, so rename one of them.");
+        }
+    }
+
+    /// <summary>Reports whether a directory entry is the volume's own bookkeeping rather than a file an operator wrote.</summary>
     /// <remarks>
     /// Kubernetes updates a mounted ConfigMap by writing a new timestamped directory and repointing the <c>..data</c>
     /// symbolic link at it, which is what makes the update atomic. Both entries live beside the keys and neither is
     /// configuration; skipping them by name keeps that true whichever way an enumerator classifies a link.
     /// </remarks>
-    private static bool IsLayeredJsonFile(string fileName) =>
-        !fileName.StartsWith(VolumeBookkeepingPrefix, StringComparison.Ordinal)
-        && fileName.EndsWith(JsonFileExtension, StringComparison.OrdinalIgnoreCase);
+    private static bool IsVolumeBookkeeping(string fileName) =>
+        fileName.StartsWith(VolumeBookkeepingPrefix, StringComparison.Ordinal);
 }

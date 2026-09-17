@@ -262,7 +262,8 @@
           "MailFathom.Common": "[0.8.0, )",
           "Spectre.Console": "[0.57.2, )",
           "System.CommandLine": "[2.0.10, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "Microsoft.Extensions.Configuration": {
@@ -295,6 +296,12 @@
         "requested": "[10.0.10, )",
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
+      },
+      "YamlDotNet": {
+        "type": "CentralTransitive",
+        "requested": "[18.1.0, )",
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       }
     }
   }

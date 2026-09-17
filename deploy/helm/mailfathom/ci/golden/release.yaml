@@ -62,6 +62,11 @@ data:
         ]
       }
     }
+
+  20-mailfathom.yaml: |
+    # Tuning rather than deployment shape, which is what belongs in a file.
+    MailboxSearch:
+      SnippetsPerEmail: 3
 ---
 # Source: mailfathom/templates/service.yaml
 apiVersion: v1
@@ -109,7 +114,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 145e99d56d7d7d8fd8c2945555f0f0759114a113bb355a84abcaf78ad95299f6
+        checksum/config: a846f3268cb14ccb2342aa06303cb1d634ae484a2c4935eb228d92326b55999c
       labels:
         app.kubernetes.io/name: mailfathom
         app.kubernetes.io/instance: mailfathom
