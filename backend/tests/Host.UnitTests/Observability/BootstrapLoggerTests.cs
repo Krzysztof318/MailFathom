@@ -65,8 +65,9 @@ public sealed class BootstrapLoggerTests
         Assert.Equal(LogLevel.Information, record.Level);
         var properties = record.Properties.ToDictionary(property => property.Key, property => property.Value, StringComparer.Ordinal);
         Assert.Equal(2, properties["FileCount"]);
-        Assert.Contains("/etc/mailfathom/config/10-mail.yaml (Yaml)", record.Message, StringComparison.Ordinal);
-        Assert.Contains("/etc/mailfathom/override.json (Json)", record.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "Host mailfathom-host layered 2 deployment-provisioned configuration files below the environment: [\"/etc/mailfathom/config/10-mail.yaml (Yaml)\",\"/etc/mailfathom/override.json (Json)\"].",
+            record.Message);
     }
 
     [Fact]

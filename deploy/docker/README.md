@@ -82,7 +82,7 @@ chmod 444 secrets/postgres-superuser-password secrets/mailfathom-database-passwo
 cp config/10-mailfathom.json.example config/10-mailfathom.json
 $EDITOR config/10-mailfathom.json
 chmod 644 config/10-mailfathom.json          # after the editor, which may rewrite it under your umask
-# or, in YAML: the same three steps with config/10-mailfathom.yaml.example and 10-mailfathom.yaml — one of the two, never both
+# or, in YAML: the same three steps with config/10-mailfathom.yaml.example and config/10-mailfathom.yaml — one of the two, never both
 
 docker compose up -d postgres    # creates the role, the database, and the vector extension
 # apply mailfathom-schema-<version>.sql — the guide below has the command

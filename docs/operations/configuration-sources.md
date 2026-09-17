@@ -420,7 +420,7 @@ The configuration directory named by ConfigurationSources:Directory holds files 
 Every start records which provisioned files were layered in, in the order they were layered, each with the format it was read in, at `Information`:
 
 ```
-Host MailFathom.Host layered 2 deployment-provisioned configuration files below the environment: /etc/mailfathom/config/10-mail.json (Json), /etc/mailfathom/config/20-search.yaml (Yaml).
+Host MailFathom.Host layered 2 deployment-provisioned configuration files below the environment: ["/etc/mailfathom/config/10-mail.json (Json)","/etc/mailfathom/config/20-search.yaml (Yaml)"].
 ```
 
 A `0` on a deployment that mounts a ConfigMap means the mount is empty or did not arrive where the key says it did, and a file missing from the list means its extension is not one of the three.
