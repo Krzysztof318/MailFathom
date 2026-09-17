@@ -126,6 +126,9 @@ wrong.
 {{- if not .Values.image.repository -}}
   {{- fail "image.repository is not set. There is no default: a chart that guessed one would deploy an image nobody named." -}}
 {{- end -}}
+{{- if and .Values.service.externalTrafficPolicy (eq .Values.service.type "ClusterIP") -}}
+  {{- fail (printf "service.externalTrafficPolicy is %q while service.type is ClusterIP, which has no external traffic to route. Set service.type to NodePort or LoadBalancer, or remove the policy; a policy preserving the client address belongs on whichever Service first receives traffic from outside the cluster, which behind an ingress is the ingress controller's own." .Values.service.externalTrafficPolicy) -}}
+{{- end -}}
 
 {{/*
 Deploying a version other than the one this chart documents is allowed and sometimes necessary, but it is stated rather

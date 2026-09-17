@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Security.Transport;
 
@@ -36,6 +37,36 @@ internal static class TransportGrant
     /// kind, because the permission name already says which surface it belongs to and a principal never crosses one.
     /// </remarks>
     internal const string PermissionClaimType = "urn:mailfathom:permission";
+
+    /// <summary>Reports which of a credential's permissions one validated token holds.</summary>
+    /// <param name="tokenIdentity">The minimal identity kept from the validated token.</param>
+    /// <param name="grant">The permissions the credential admitting the token was granted.</param>
+    /// <param name="narrowedByTokenScopes">Whether the token's own scopes narrow that grant.</param>
+    /// <returns>The permissions the token holds, in the order the grant lists them.</returns>
+    /// <remarks>
+    /// Without the narrowing setting every token holds the whole grant, because the deployment wrote it and the
+    /// authorization server was never asked. With it, a scope bearing a published permission name grants that
+    /// permission and nothing else does — so the intersection is the answer, and a scope naming anything else is
+    /// ignored rather than refused, since a token legitimately carries scopes about its client's own session and about
+    /// resources that are not this one.
+    /// </remarks>
+    internal static IReadOnlyList<MailFathomPermission> HeldByToken(
+        ClaimsIdentity tokenIdentity,
+        IReadOnlyList<MailFathomPermission> grant,
+        bool narrowedByTokenScopes)
+    {
+        if (!narrowedByTokenScopes)
+        {
+            return grant;
+        }
+
+        var tokenScopes = tokenIdentity
+            .FindAll(OAuthIdentity.ScopeClaimType)
+            .Select(scope => scope.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return [.. grant.Where(permission => tokenScopes.Contains(permission.Name))];
+    }
 
     /// <summary>Turns a resolved grant into the claims an identity carries it as.</summary>
     /// <param name="permissions">The permissions the entry granted, empty when it granted none.</param>

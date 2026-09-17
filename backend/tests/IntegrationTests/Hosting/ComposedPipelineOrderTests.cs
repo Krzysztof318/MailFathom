@@ -512,10 +512,12 @@ public sealed class ComposedPipelineOrderTests
         .. adminAuthenticates
             ?
             [
-                new("AdminEndpoint:Authentication:0:ApiKey:Name", AdminKeyName),
-                new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
-                new("AdminEndpoint:Authentication:1:ApiKey:Name", SecondAdminKeyName),
-                new KeyValuePair<string, string?>("AdminEndpoint:Authentication:1:ApiKey:SecretReference", $"plaintext:{SecondAdminKey}"),
+                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
+                new("AdminEndpoint:Administrators:1:Name", "administrator-1"),
+                new("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:Name", SecondAdminKeyName),
+                new KeyValuePair<string, string?>("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:SecretReference", $"plaintext:{SecondAdminKey}"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
     ];
@@ -534,10 +536,11 @@ public sealed class ComposedPipelineOrderTests
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", "8082"),
         .. McpOAuthEntry,
-        new("AdminEndpoint:Authentication:0:OAuth:Resource", "https://mail.example.test/api/admin"),
-        new("AdminEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
-        new("AdminEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", Issuer),
-        new("AdminEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "someone"),
+        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:Resource", "https://mail.example.test/api/admin"),
+        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
+        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:Issuer", Issuer),
+        new("AdminEndpoint:Administrators:0:Credentials:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "someone"),
     ];
 
     /// <summary>The MCP endpoint's one OAuth entry, stated once because two shapes carry it.</summary>

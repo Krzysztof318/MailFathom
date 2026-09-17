@@ -400,11 +400,17 @@ client that stopped working is diagnosed from here rather than from anything it 
 surface names the permission to the caller as well, and is still counted here, because `mfctl` reporting one refusal to
 one operator is not a rate anybody can watch.
 
-Beside each measurement is a `Warning`, and it carries the one thing the counter deliberately does not: the credential
-the caller was admitted as, which is what an operator repairs the grant of. That value is on the log alone because its
-cardinality follows the credentials an operator wrote and, where a token admitted the caller, it is an issuer and that
-authorization server's identifier for a person — which belongs in a record a deployment sets a level on rather than in
+Beside each measurement is a `Warning`, and it carries the one thing the counter deliberately does not: who the caller
+was admitted as, which is what an operator repairs the grant of — on the administrative surface the administrator's
+`Name`, whichever of its credentials was presented, and on a mail-serving surface the credential. That value is on the
+log alone because its cardinality follows what an operator wrote and, where a token admitted a user's caller, it is an
+issuer and that authorization server's identifier for a person — which belongs in a record a deployment sets a level on rather than in
 an exported series that never goes away. Work reached under no principal at all is recorded as `(none)`.
+
+A request refused because it arrived from outside an administrator's
+[`AllowedSourceNetworks`](admin-endpoint.md#where-an-administrator-may-act-from) is not an authorization refusal and is
+not counted here: it is refused at authentication, answered as a wrong credential is, and recorded by a `Warning` of
+its own naming the administrator, the source address, and the authentication scheme.
 
 The operation dimension is bounded the same way the tool dimension above is, and for the same reason: a tool name is
 used only where this surface publishes a tool answering to it and anything else is `(unpublished)`, while an

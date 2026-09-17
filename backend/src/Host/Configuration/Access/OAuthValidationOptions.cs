@@ -70,7 +70,7 @@ internal sealed class OAuthValidationOptions
     /// written here is refused at startup: it would close the door on a caller the deployment meant to serve less
     /// rather than granting them less. Where the grant lives follows the surface, which is why the refusal takes the
     /// admission this block was configured for: on the administrative surface it is
-    /// <see cref="TransportAuthenticationOptions.Permissions" /> on the entry this block sits in, and on a mail-serving
+    /// <see cref="AdministratorOptions.Permissions" /> on the administrator this block sits under, and on a mail-serving
     /// surface it is the user credential record the subject resolves to, written when the credential is provisioned.
     /// </para>
     /// </remarks>
@@ -279,11 +279,11 @@ internal sealed class OAuthValidationOptions
     private static string GrantRemedy(OAuthSubjectAdmission admission) =>
         admission == OAuthSubjectAdmission.ResolvedUserCredentials
             ? "Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, which is what decides what an admitted caller may do."
-            : $"Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry, which is what decides what an admitted caller may do.";
+            : $"Write it in '{nameof(AdministratorOptions.Permissions)}' on this administrator, which is what decides what an admitted caller may do.";
 
     /// <summary>Names where a grant taken from the token's own scopes is turned on, on the surface this block was configured for.</summary>
     private static string ScopeGrantRemedy(OAuthSubjectAdmission admission) =>
         admission == OAuthSubjectAdmission.ResolvedUserCredentials
             ? $"Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, or set '{nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes)}' on this entry to take the grant from the token instead."
-            : $"Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry and set '{nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes)}'.";
+            : $"Write it in '{nameof(AdministratorOptions.Permissions)}' on this administrator and set '{nameof(AdministratorOptions.PermissionsFromTokenScopes)}'.";
 }

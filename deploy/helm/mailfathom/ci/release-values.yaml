@@ -26,6 +26,13 @@ database:
 secrets:
   existingSecret: mailfathom-secrets
 
+# A Service exposed through a cloud load balancer, keeping the client's address, which is the half of the Service the
+# defaults do not render.
+service:
+  type: LoadBalancer
+  port: 8080
+  externalTrafficPolicy: Local
+
 config:
   files:
     10-mailfathom.json: |

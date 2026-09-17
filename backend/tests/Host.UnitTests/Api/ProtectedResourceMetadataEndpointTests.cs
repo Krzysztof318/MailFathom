@@ -6,8 +6,8 @@ using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -32,9 +32,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For(
-                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
-                AdminEndpointOptions.GrantedSurface));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -68,8 +66,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
         // Act
         var document = ProtectedResourceMetadataDocument.For(
             PublishedOAuthMetadata.For(
-                [Entry(), new TransportAuthenticationOptions { OAuth = partners }],
-                AdminEndpointOptions.GrantedSurface));
+                [ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() }), ConfiguredAuthentication.Administrator("partner", new AdministratorCredentialOptions { OAuth = partners })]));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -93,9 +90,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
 
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For(
-                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
-                AdminEndpointOptions.GrantedSurface));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = oauthSettings })]));
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -107,27 +102,27 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Act
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([Entry()], AdminEndpointOptions.GrantedSurface));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
     }
 
     /// <summary>
-    /// The document is composed against this endpoint's own half of the vocabulary, and it is the only place that
-    /// argument is supplied. Composing it against the other half would tell an operator to create mail scopes in their
-    /// authorization server for the administrative surface, and leave every token they then minted holding nothing.
+    /// The document is composed against the administrative half of the vocabulary. Composing it against the other half
+    /// would tell an operator to create mail scopes in their authorization server for the administrative surface, and
+    /// leave every token they then minted holding nothing.
     /// </summary>
     [Fact]
     public void For_AnEntryNarrowedByTokenScopes_PublishesTheAdministrativeHalfOfTheVocabulary()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions { OAuth = Configured(), PermissionsFromTokenScopes = true };
-        entry.GrantTheWholeSurface();
+        var administrator = ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() });
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.GrantTheWholeSurface();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([entry], AdminEndpointOptions.GrantedSurface));
+        var document = ProtectedResourceMetadataDocument.For(PublishedOAuthMetadata.For([administrator]));
 
         // Assert
         Assert.Equal(
@@ -141,7 +136,7 @@ public sealed class ProtectedResourceMetadataEndpointTests
     {
         // Arrange
         var document = ProtectedResourceMetadataDocument.For(
-            PublishedOAuthMetadata.For([Entry()], AdminEndpointOptions.GrantedSurface));
+            PublishedOAuthMetadata.For([ConfiguredAuthentication.Administrator("alice", new AdministratorCredentialOptions { OAuth = Configured() })]));
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));
@@ -176,9 +171,6 @@ public sealed class ProtectedResourceMetadataEndpointTests
         // Assert
         Assert.Equal("/.well-known/oauth-protected-resource/api/admin", path);
     }
-
-    /// <summary>Wraps the configured OAuth block in the entry that carries it, which is the unit the document is composed from.</summary>
-    private static TransportAuthenticationOptions Entry() => new() { OAuth = Configured() };
 
     private static OAuthValidationOptions Configured()
     {

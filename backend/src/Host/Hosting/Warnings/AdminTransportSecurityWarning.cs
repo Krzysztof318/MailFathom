@@ -73,11 +73,11 @@ internal sealed partial class AdminTransportSecurityWarning : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The administrative endpoint is enabled on {AdminRoutePrefix} with no authentication method "
-            + "configured, so anything that can reach this address can administer this service. Add an entry to "
-            + "AdminEndpoint:Authentication carrying an ApiKey block, a PublicKey block, an OAuth block, or any "
-            + "combination of them, unless the address "
-            + "is reachable only from this machine or from a network you control.")]
+        Message = "The administrative endpoint is enabled on {AdminRoutePrefix} with no administrator configured, "
+            + "so anything that can reach this address can administer this service. Add an administrator to "
+            + "AdminEndpoint:Administrators with a Name and a credential carrying an ApiKey block, a PublicKey block, "
+            + "or an OAuth block, unless the address is reachable only from this machine or from a network you "
+            + "control.")]
     private partial void LogEndpointServedWithoutAuthentication(string adminRoutePrefix);
 
     [LoggerMessage(

@@ -47,14 +47,24 @@ service that reads it are different authorities.
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Authentication": [
-      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+    "Administrators": [
+      {
+        "Name": "alice",
+        "Credentials": [
+          { "ApiKey": { "Name": "alice-workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+        ]
+      }
     ]
   }
 }
 ```
 
-Five things about that block are worth understanding before you copy it:
+Six things about that block are worth understanding before you copy it:
+
+- **An administrator is a named person or system, and its credentials are how it signs in.** `alice` is what
+  `mfctl status` prints and what every act is attributed to; give each person their own entry, with their own
+  `Permissions` and, where it helps, the `AllowedSourceNetworks` they may act from.
+  [Who administers the deployment](../operations/admin-endpoint.md#who-administers-the-deployment) is the whole of it.
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a
@@ -97,7 +107,7 @@ is the rule in full.
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is typed at the prompt or piped in, never passed as an argument — an argument reaches your shell
@@ -176,7 +186,7 @@ it, so a lost laptop is a reason to rotate the key on the server rather than to 
 
 ```console
 $ mfctl status
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```

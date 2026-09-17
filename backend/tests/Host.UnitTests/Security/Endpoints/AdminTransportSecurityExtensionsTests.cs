@@ -126,13 +126,17 @@ public sealed class AdminTransportSecurityExtensionsTests
             Resource = $"https://mail.example.test:8090{AdminEndpointOptions.RoutePrefix}",
         };
 
-        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
+        var authorizationServer = new AuthorizationServerOptions
         {
             Name = "workforce",
             Issuer = "https://sso.example.test",
-        });
+        };
+        authorizationServer.AuthorizedSubjects.Add("alice-subject");
+        oauthSettings.AuthorizationServers.Add(authorizationServer);
 
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauthSettings });
+        var administrator = new AdministratorOptions { Name = "alice" };
+        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauthSettings });
+        endpointSettings.Administrators.Add(administrator);
 
         services.AddAdminTransportSecurity(endpointSettings);
 

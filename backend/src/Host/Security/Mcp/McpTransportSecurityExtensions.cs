@@ -196,7 +196,7 @@ internal static class McpTransportSecurityExtensions
 
         services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
             new InsufficientScopeResultHandler(
-                TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods),
+                UserFacingAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods),
                 ProtectedResourceMetadataAddress.AddressFor(oauthMethods[0].CanonicalResource())));
     }
 

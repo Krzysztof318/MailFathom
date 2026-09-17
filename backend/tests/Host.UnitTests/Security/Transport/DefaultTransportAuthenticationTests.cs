@@ -3,9 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Encodings.Web;
-using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -181,12 +180,7 @@ public sealed class DefaultTransportAuthenticationTests
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,
-            [
-                new TransportAuthenticationOptions
-                {
-                    ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" },
-                },
-            ],
+            [ConfiguredAuthentication.AdministratorWithApiKey("workstation")],
             surface.ApiKeySchemeName);
 
     /// <summary>Hands the handler the one options instance it is built with, which is all the framework's monitor does for a scheme nothing reconfigures.</summary>

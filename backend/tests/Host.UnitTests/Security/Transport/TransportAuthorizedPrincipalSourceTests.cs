@@ -253,7 +253,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         if (adminConfiguresACredential)
         {
-            adminEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+            adminEndpoint.Administrators.Add(new AdministratorOptions());
         }
 
         if (clientConfiguresACredential)

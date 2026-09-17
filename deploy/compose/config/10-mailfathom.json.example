@@ -78,8 +78,13 @@
   "AdminEndpoint": {
     "Enabled": true,
     "Port": 8090,
-    "Authentication": [
-      { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
+    "Administrators": [
+      {
+        "Name": "admin",
+        "Credentials": [
+          { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
+        ]
+      }
     ]
   },
   // The surface MailFathom's own client calls, and the listeners its page is served from. It shares the container's

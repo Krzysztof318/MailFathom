@@ -1242,6 +1242,15 @@
         },
         "annotations": {
           "type": "object"
+        },
+        "externalTrafficPolicy": {
+          "type": "string",
+          "enum": [
+            "",
+            "Cluster",
+            "Local"
+          ],
+          "description": "The traffic policy a NodePort or LoadBalancer Service is rendered with. Empty renders none, which leaves the cluster default of Cluster, rewriting the client's source address to a node's; Local keeps the client's address for the proxy in front of the pod to see and does not replace it: an administrator's AllowedSourceNetworks still needs an HTTP-terminating proxy named in ReverseProxy:TrustedProxies. Refused on a ClusterIP Service, which has no such policy."
         }
       },
       "additionalProperties": false

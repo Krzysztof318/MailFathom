@@ -300,12 +300,14 @@ public sealed class TrustedReverseProxyExtensionsTests
         Assert.True(authentication.Result.None);
     }
 
-    /// <summary>The client address is deliberately out of scope: nothing here partitions, limits, or logs by one.</summary>
-    [Fact]
-    public async Task AddTrustedReverseProxy_RequestCarryingAForwardedClientAddress_KeepsThePeerItObservedItself()
+    /// <summary>A proxy the operator named is believed about the client it forwarded, which is what an administrator's network restriction and the password bound compare.</summary>
+    [Theory]
+    [InlineData("10.0.0.5")]
+    [InlineData("::ffff:10.0.0.5")]
+    public async Task AddTrustedReverseProxy_ANamedProxyForwardingAClientAddress_ServesTheRequestAsThatClient(string peer)
     {
         // Arrange
-        var request = RequestFrom(ProxyAddress);
+        var request = RequestFrom(IPAddress.Parse(peer));
         request.Request.Headers["X-Forwarded-For"] = "203.0.113.9";
         request.Request.Headers["X-Forwarded-Proto"] = "https";
 
@@ -313,11 +315,51 @@ public sealed class TrustedReverseProxyExtensionsTests
         await ForwardThrough(TrustingProxies("10.0.0.5"), request);
 
         // Assert
+        Assert.Equal(IPAddress.Parse("203.0.113.9"), request.Connection.RemoteIpAddress);
+    }
+
+    /// <summary>A client address written by a peer nobody named is the client's own claim about itself, so the peer stays what the socket observed.</summary>
+    [Fact]
+    public async Task AddTrustedReverseProxy_AnUnnamedPeerForwardingAClientAddress_KeepsThePeerItObservedItself()
+    {
+        // Arrange
+        var peer = IPAddress.Parse("198.51.100.7");
+        var request = RequestFrom(peer);
+        request.Request.Headers["X-Forwarded-For"] = "10.1.2.3";
+
+        // Act
+        await ForwardThrough(TrustingProxies("10.0.0.5"), request);
+
+        // Assert
+        Assert.Equal(peer, request.Connection.RemoteIpAddress);
+    }
+
+    /// <summary>
+    /// Believing every peer about its scheme costs a deployment nothing it had, while believing every peer about its
+    /// address would let any client choose the address a restriction compares. So a section naming no proxy, or one
+    /// trusting a whole family, reads the scheme and the host and never the client address.
+    /// </summary>
+    [Theory]
+    [InlineData]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("10.0.0.5", "::/0")]
+    public async Task AddTrustedReverseProxy_ASectionTrustingEveryPeer_KeepsThePeerItObservedItself(params string[] trustedProxies)
+    {
+        // Arrange
+        var request = RequestFrom(ProxyAddress);
+        request.Request.Headers["X-Forwarded-For"] = "10.1.2.3";
+        request.Request.Headers["X-Forwarded-Proto"] = "https";
+
+        // Act
+        await ForwardThrough(TrustingProxies(trustedProxies), request);
+
+        // Assert
         Assert.Equal(ProxyAddress, request.Connection.RemoteIpAddress);
+        Assert.Equal("https", request.Request.Scheme);
     }
 
     [Fact]
-    public void AddTrustedReverseProxy_AnyConfiguration_ConsumesTheSchemeAndHostHeadersAlone()
+    public void AddTrustedReverseProxy_ANamedProxy_ConsumesTheClientAddressBesideTheSchemeAndHost()
     {
         // Arrange
         // Act
@@ -325,8 +367,20 @@ public sealed class TrustedReverseProxyExtensionsTests
 
         // Assert
         Assert.Equal(
-            ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+            ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
             forwardedHeaders.ForwardedHeaders);
+    }
+
+    [Theory]
+    [InlineData]
+    [InlineData("0.0.0.0/0")]
+    public void ForwardedHeadersFor_ASectionTrustingEveryPeer_ConsumesTheSchemeAndHostHeadersAlone(params string[] trustedProxies)
+    {
+        // Act
+        var forwardedHeaders = TrustedReverseProxyExtensions.ForwardedHeadersFor(TrustingProxies(trustedProxies));
+
+        // Assert
+        Assert.Equal(ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost, forwardedHeaders);
     }
 
     [Fact]

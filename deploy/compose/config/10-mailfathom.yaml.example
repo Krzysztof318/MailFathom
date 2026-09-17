@@ -35,10 +35,12 @@ MailSynchronization:
 AdminEndpoint:
   Enabled: true
   Port: 8090
-  Authentication:
-    - ApiKey:
-        Name: admin
-        SecretReference: file:/etc/mailfathom/secrets/admin-api-key
+  Administrators:
+    - Name: admin
+      Credentials:
+        - ApiKey:
+            Name: admin
+            SecretReference: file:/etc/mailfathom/secrets/admin-api-key
 
 # Uncomment beside MAILFATHOM_CLIENT=true in .env to serve MailFathom's own client, and provision a password credential
 # with `mfctl credential create --method password --username <name>`.

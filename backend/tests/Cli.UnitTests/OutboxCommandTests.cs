@@ -462,7 +462,7 @@ public sealed class OutboxCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
-                && line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
+                && line.Contains("AdminEndpoint:Administrators", StringComparison.Ordinal));
     }
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>

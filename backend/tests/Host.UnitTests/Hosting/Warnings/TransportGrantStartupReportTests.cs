@@ -15,7 +15,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting.Warnings;
 
-/// <summary>Covers what an operator is told about how much each configured credential may do.</summary>
+/// <summary>Covers what an operator is told about how much each configured credential and administrator may do.</summary>
 /// <remarks>
 /// A grant nobody wrote down reaches the whole of its surface, and this report is the only place a deployment running
 /// on that default can read it. What matters most here is that an entry which never narrowed says so in its own line
@@ -122,7 +122,9 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         var record = Assert.Single(logs.Records);
         Assert.Contains("writes down no grant", record.Message, StringComparison.Ordinal);
-        Assert.Equal("AdminEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
+        Assert.Equal("AdminEndpoint:Administrators:0", Assert.Contains("AdministratorSettingPath", record.Properties));
+        Assert.Equal("alice", Assert.Contains("AdministratorName", record.Properties));
+        Assert.Equal("from any network", Assert.Contains("AllowedSources", record.Properties));
         Assert.Equal(
             WholeAdministrativeSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
@@ -191,12 +193,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" },
-            PermissionsFromTokenScopes = true,
-        };
-
+        var entry = AnAdministratorSigningInByToken();
         entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
         var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
@@ -216,12 +213,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" },
-            PermissionsFromTokenScopes = true,
-        };
-
+        var entry = AnAdministratorSigningInByToken();
         entry.GrantTheWholeSurface();
 
         var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
@@ -352,11 +344,10 @@ public sealed class TransportGrantStartupReportTests
 
         // Assert
         Assert.Equal(
-            ["MCP", "administrative", "client"],
-            logs.Records.Select(record => Assert.Contains("EndpointName", record.Properties)));
-        Assert.Equal(
-            ["McpEndpoint:Authentication:0", "AdminEndpoint:Authentication:0", "ClientEndpoint:Authentication:0"],
-            logs.Records.Select(record => Assert.Contains("EntrySettingPath", record.Properties)));
+            ["McpEndpoint:Authentication:0", "AdminEndpoint:Administrators:0", "ClientEndpoint:Authentication:0"],
+            logs.Records.Select(record => record.Properties
+                .Single(property => property.Key is "EntrySettingPath" or "AdministratorSettingPath")
+                .Value));
         Assert.Equal(
             ["api-key", "password"],
             logs.Records
@@ -382,9 +373,9 @@ public sealed class TransportGrantStartupReportTests
         await report.StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(
-            ["MCP", "administrative"],
-            logs.Records.Select(record => Assert.Contains("EndpointName", record.Properties)));
+        Assert.Equal(2, logs.Records.Count);
+        Assert.Equal("MCP", Assert.Contains("EndpointName", logs.Records.ElementAt(0).Properties));
+        Assert.Equal("alice", Assert.Contains("AdministratorName", logs.Records.ElementAt(1).Properties));
         Assert.Contains(
             "served only the tools its grant permits",
             Assert.Contains("GrantEnforcement", logs.Records.ElementAt(0).Properties)?.ToString(),
@@ -407,8 +398,72 @@ public sealed class TransportGrantStartupReportTests
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.DoesNotContain("workstation", record.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("alice-workstation", record.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("plaintext:", record.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>An operator who confined an administrator reads back which networks they confined it to, beside what it holds.</summary>
+    [Fact]
+    public async Task StartAsync_AnAdministratorConfinedToNetworks_NamesThoseNetworks()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var administrator = AnEntryThatStatedNoGrant();
+        administrator.AllowedSourceNetworks.Add("10.0.0.0/8");
+        administrator.AllowedSourceNetworks.Add("192.0.2.10");
+
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(administrator), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal("only from 10.0.0.0/8, 192.0.2.10/32", Assert.Contains("AllowedSources", record.Properties));
+        Assert.Contains("may act only from 10.0.0.0/8, 192.0.2.10/32", record.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Each administrator is a line of its own, named by the name every act of theirs is attributed to.</summary>
+    [Fact]
+    public async Task StartAsync_SeveralAdministrators_ReportsEachUnderItsOwnName()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var adminEndpoint = AdminEndpointWith(AnEntryThatStatedNoGrant());
+        var auditor = ConfiguredAuthentication.AdministratorWithApiKey("auditor");
+        auditor.Permissions.Add(MailFathomPermission.AdminAuditRead.Name);
+        adminEndpoint.Administrators.Add(auditor);
+
+        var report = ReportFor(new McpEndpointOptions(), adminEndpoint, logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["alice", "auditor"], logs.Records.Select(record => Assert.Contains("AdministratorName", record.Properties)));
+        Assert.Equal(
+            ["AdminEndpoint:Administrators:0", "AdminEndpoint:Administrators:1"],
+            logs.Records.Select(record => Assert.Contains("AdministratorSettingPath", record.Properties)));
+        Assert.Equal(
+            "mailfathom.admin.audit.read",
+            Assert.Contains("GrantedPermissions", logs.Records.ElementAt(1).Properties));
+    }
+
+    /// <summary>An enabled administrative endpoint naming nobody is the permissive posture, and the line says where an administrator would be added.</summary>
+    [Fact]
+    public async Task StartAsync_AnEnabledAdministrativeEndpointWithNoAdministrator_SaysEveryCallerHoldsTheWholeSurface()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(new McpEndpointOptions(), new AdminEndpointOptions { Enabled = true }, logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(WholeAdministrativeSurface, Assert.Contains("GrantedPermissions", record.Properties));
+        Assert.Equal("AdminEndpoint:Administrators", Assert.Contains("AdministratorsSettingPath", record.Properties));
     }
 
     [Fact]
@@ -445,13 +500,25 @@ public sealed class TransportGrantStartupReportTests
         ", ",
         MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name));
 
-    private static TransportAuthenticationOptions AnApiKeyEntry() => new()
-    {
-        ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" },
-    };
+    private static AdministratorOptions AnApiKeyEntry() => ConfiguredAuthentication.Administrator(
+        "alice",
+        new AdministratorCredentialOptions
+        {
+            ApiKey = new ConfiguredSecret { Name = "alice-workstation", SecretReference = "plaintext:a-key" },
+        });
 
-    /// <summary>An entry the endpoint's own read found no grant on, which is the permissive posture the report exists to state.</summary>
-    private static TransportAuthenticationOptions AnEntryThatStatedNoGrant()
+    private static AdministratorOptions AnAdministratorSigningInByToken()
+    {
+        var administrator = ConfiguredAuthentication.Administrator(
+            "alice",
+            ConfiguredAuthentication.OAuthFor("https://mail.example.test/admin"));
+        administrator.PermissionsFromTokenScopes = true;
+
+        return administrator;
+    }
+
+    /// <summary>An administrator the endpoint's own read found no grant on, which is the permissive posture the report exists to state.</summary>
+    private static AdministratorOptions AnEntryThatStatedNoGrant()
     {
         var entry = AnApiKeyEntry();
         entry.GrantTheWholeSurface();
@@ -470,10 +537,10 @@ public sealed class TransportGrantStartupReportTests
         return endpointSettings;
     }
 
-    private static AdminEndpointOptions AdminEndpointWith(TransportAuthenticationOptions entry)
+    private static AdminEndpointOptions AdminEndpointWith(AdministratorOptions administrator)
     {
         var endpointSettings = new AdminEndpointOptions { Enabled = true };
-        endpointSettings.Authentication.Add(entry);
+        endpointSettings.Administrators.Add(administrator);
 
         return endpointSettings;
     }

@@ -21,11 +21,11 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// </para>
 /// <para>
 /// The endpoint is disabled by default, so a deployment that configures nothing serves no administrative surface at
-/// all. What guards an enabled one is the list of <see cref="Authentication" /> methods, which starts empty, so
-/// authentication is something an operator turns on; leaving it off is announced at startup rather than assumed to be
-/// intended. Each entry carries the settings its own method needs, so a method cannot be selected without being
-/// configured or configured without being selected, and the spellings that could have meant to turn one on — a
-/// misspelled key, an entry naming no method, a value written where the list belongs — fail startup instead.
+/// all. What guards an enabled one is the list of <see cref="Administrators" />, which starts empty, so authentication
+/// is something an operator turns on; leaving it off is announced at startup rather than assumed to be intended. Each
+/// administrator is a name with credentials, a grant, and the networks it may act from, and the spellings that could
+/// have meant to turn one on — a misspelled key, a credential naming no method, a value written where the list belongs
+/// — fail startup instead.
 /// </para>
 /// <para>
 /// There is no client-certificate profile here, which is not an omission: the trust question a certificate answers is
@@ -85,15 +85,15 @@ internal sealed class AdminEndpointOptions
     /// <remarks>The same setting the MCP endpoint carries, read the same way. Clear text unless a deployment states otherwise, which is the right posture behind a TLS-terminating reverse proxy and wrong anywhere else, so startup warns about it.</remarks>
     public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
-    /// <summary>Gets the credentials a client may present, one entry per authentication method with that method's own settings.</summary>
+    /// <summary>Gets the people and systems that may administer this deployment, each with its credentials, its grant, and the networks it may act from.</summary>
     /// <remarks>
-    /// Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the
-    /// entries, because the methods identify different kinds of caller rather than layering checks on one. These are
-    /// this endpoint's own methods, configured separately from the MCP endpoint's even where both name one authorization
-    /// server: an entry here says nothing about that endpoint and consults none of its keys, and the resource a token is
-    /// issued for is what separates administering this service from reading a mailbox through it.
+    /// Empty by default, which is the unauthenticated posture. A request is served when one of an administrator's
+    /// credentials admits it, and it is then attributed to that administrator by name. These are this endpoint's own
+    /// credentials, configured separately from the other surfaces' even where both name one authorization server: an
+    /// administrator here says nothing about those endpoints and consults none of their credentials, and the resource a
+    /// token is issued for is what separates administering this service from reading a mailbox through it.
     /// </remarks>
-    public IList<TransportAuthenticationOptions> Authentication { get; } = [];
+    public IList<AdministratorOptions> Administrators { get; } = [];
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     /// <remarks>
@@ -137,7 +137,7 @@ internal sealed class AdminEndpointOptions
     public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
-    public bool RequiresAuthentication => this.Authentication.Count > 0;
+    public bool RequiresAuthentication => this.Administrators.Count > 0;
 
     /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
     public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
@@ -182,9 +182,8 @@ internal sealed class AdminEndpointOptions
             settings.Https.Redirect.MarkStated();
         }
 
-        // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
-        // method so the absent-versus-emptied reading exists once.
-        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+        // Each administrator's grant is read the same way and for the same reason.
+        AdministratorConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Administrators]);
 
         return settings;
     }
@@ -198,18 +197,18 @@ internal sealed class AdminEndpointOptions
     /// decided by the order reflection happens to report them in.
     /// </remarks>
     public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
-        TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+        AdministratorConfiguration.ApiKeysIn(this.Administrators);
 
     /// <summary>Reports every client public key a signed assertion may be verified against, in configuration order.</summary>
     /// <returns>The configured public keys, empty when the endpoint accepts no assertion.</returns>
     /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
     public IReadOnlyList<ConfiguredSecret> PublicKeys() =>
-        TransportAuthenticationConfiguration.PublicKeysIn(this.Authentication);
+        AdministratorConfiguration.PublicKeysIn(this.Administrators);
 
-    /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
+    /// <summary>Reports what an access token must prove, once per credential that states OAuth.</summary>
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+        AdministratorConfiguration.OAuthMethodsIn(this.Administrators);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -234,10 +233,9 @@ internal sealed class AdminEndpointOptions
             return [];
         }
 
-        var authenticationErrors = TransportAuthenticationConfiguration.FindConfigurationErrors(
+        var authenticationErrors = AdministratorConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Authentication],
-            GrantedSurface);
+            [.. this.Administrators]);
 
         var errors = new List<string>(authenticationErrors);
 
@@ -270,7 +268,38 @@ internal sealed class AdminEndpointOptions
     }
 
 
-    /// <summary>Reports the OAuth entries whose resource does not name the path these routes answer at.</summary>
+    /// <summary>Finds the administrators confined to networks this process cannot tell a client's address for.</summary>
+    /// <param name="reverseProxySettings">The reverse-proxy settings the same start reads, already free of their own errors.</param>
+    /// <returns>One message per restricted administrator, empty when every restriction can be enforced.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reverseProxySettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="FormatException">Thrown when the reverse-proxy settings have not passed their own configuration errors.</exception>
+    /// <remarks>
+    /// A restriction compares the client's address, and this process believes a forwarded one only from a proxy the
+    /// reverse-proxy section names narrower than a whole address family. Without one, the address a request reports is
+    /// either whatever proxy stands in front — so every request passes or fails together — or one any client could
+    /// write. Both would leave a restriction written in configuration and absent in effect, so the start is refused
+    /// instead. A deployment clients reach directly is refused as well, because the section cannot tell it apart from
+    /// one whose proxy nobody named, and a restriction is only as good as that statement.
+    /// </remarks>
+    public IReadOnlyList<string> FindSourceNetworkTrustErrors(ReverseProxyOptions reverseProxySettings)
+    {
+        ArgumentNullException.ThrowIfNull(reverseProxySettings);
+
+        if (!this.Enabled || reverseProxySettings.ForwardsTheClientAddress())
+        {
+            return [];
+        }
+
+        return
+        [
+            .. this.Administrators
+                .Index()
+                .Where(indexed => indexed.Item.RestrictsSourceNetworks)
+                .Select(indexed => $"{AdministratorConfiguration.SettingPathOf(SectionName, indexed.Item, indexed.Index)}:{nameof(AdministratorOptions.AllowedSourceNetworks)} — a network restriction compares the client's address, and this process believes a forwarded client address only from a proxy '{ReverseProxyOptions.SectionName}:{nameof(ReverseProxyOptions.TrustedProxies)}' names, narrower than every address of a family. Name the proxy standing in front of this process there, or remove the restriction."),
+        ];
+    }
+
+    /// <summary>Reports the OAuth credentials whose resource does not name the path these routes answer at.</summary>
     /// <remarks>
     /// A resource identifier is a name rather than an address to fetch, so nothing about OAuth requires it to match a
     /// route. What requires it here is discovery: <c>mfctl</c> is handed a host and a port and has to find the protected
@@ -286,14 +315,14 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     private IEnumerable<string> FindResourcePrefixErrors()
     {
-        foreach (var (index, method) in this.Authentication.Index())
+        foreach (var (settingPath, credential) in AdministratorConfiguration.CredentialsWithPathsIn(SectionName, this.Administrators))
         {
-            if (method.OAuth is not { } oauth || NamesTheRoutePrefix(oauth))
+            if (credential.OAuth is not { } oauth || NamesTheRoutePrefix(oauth))
             {
                 continue;
             }
 
-            yield return $"{TransportAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{settingPath}:{nameof(AdministratorCredentialOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 

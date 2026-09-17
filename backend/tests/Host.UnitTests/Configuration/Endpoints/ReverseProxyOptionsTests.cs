@@ -203,6 +203,29 @@ public sealed class ReverseProxyOptionsTests
         Assert.Contains(errors, error => error.Contains("TrustedProxies:2", StringComparison.Ordinal));
     }
 
+    /// <summary>Only a named proxy narrower than a whole family is believed about the client it forwarded.</summary>
+    [Theory]
+    [InlineData("10.0.0.5", true)]
+    [InlineData("10.0.0.0/8", true)]
+    [InlineData("", false)]
+    [InlineData("0.0.0.0/0", false)]
+    [InlineData("10.0.0.5 ::/0", false)]
+    [InlineData("::ffff:10.0.0.0/104", true)]
+    [InlineData("::ffff:0:0/96", false)]
+    public void ForwardsTheClientAddress_TheTrustedProxies_DecideWhetherAForwardedClientIsBelieved(string trustedProxies, bool expected)
+    {
+        // Arrange
+        var settings = new ReverseProxyOptions();
+
+        foreach (var trustedProxy in trustedProxies.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            settings.TrustedProxies.Add(trustedProxy);
+        }
+
+        // Act, Assert
+        Assert.Equal(expected, settings.ForwardsTheClientAddress());
+    }
+
     [Fact]
     public void MaximumForwardedHops_UnconfiguredSection_BelievesOneProxy()
     {
@@ -258,6 +281,34 @@ public sealed class ReverseProxyOptionsTests
         Assert.Equal(
             [IPNetwork.Parse("10.1.0.0/16"), IPNetwork.Parse("2001:db8::/32")],
             networks);
+    }
+
+    /// <summary>An address written in its IPv4-mapped form is the IPv4 address it maps, so a peer mapped down still matches it.</summary>
+    [Fact]
+    public void ToTrustedProxyAddresses_AMappedAddress_IsTheIPv4AddressItMaps()
+    {
+        // Arrange
+        var settings = ProxiesTrusted("::ffff:10.0.0.5");
+
+        // Act
+        var addresses = settings.ToTrustedProxyAddresses();
+
+        // Assert
+        Assert.Equal([IPAddress.Parse("10.0.0.5")], addresses);
+    }
+
+    /// <summary>A network written in its IPv4-mapped form is the IPv4 network it maps, which is the form a peer is compared in.</summary>
+    [Fact]
+    public void ToTrustedProxyNetworks_AMappedNetwork_IsTheIPv4NetworkItMaps()
+    {
+        // Arrange
+        var settings = ProxiesTrusted("::ffff:10.1.0.0/112");
+
+        // Act
+        var networks = settings.ToTrustedProxyNetworks();
+
+        // Assert
+        Assert.Equal([IPNetwork.Parse("10.1.0.0/16")], networks);
     }
 
     private static ReverseProxyOptions ProxiesTrusted(params string[] trustedProxies)

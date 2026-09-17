@@ -363,11 +363,11 @@ internal sealed partial class SecretConfigurationValidator
 
         errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
             AdminEndpointOptions.SectionName,
-            candidate.Authentication,
+            [.. candidate.Administrators],
             cancellationToken));
         errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
             AdminEndpointOptions.SectionName,
-            candidate.Authentication,
+            [.. candidate.Administrators],
             cancellationToken));
 
         return errors;
@@ -481,19 +481,18 @@ internal sealed partial class SecretConfigurationValidator
     /// </remarks>
     private async Task<IReadOnlyList<string>> FindClientPublicKeyErrorsAsync(
         string sectionName,
-        IList<TransportAuthenticationOptions> authentication,
+        IReadOnlyList<AdministratorOptions> administrators,
         CancellationToken cancellationToken)
     {
         var errors = new List<string>();
 
-        // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
-        foreach (var (entryIndex, configuredKey) in authentication
-            .Index()
-            .Where(entry => entry.Item.PublicKey is not null)
-            .Select(entry => (entry.Index, Key: entry.Item.PublicKey!)))
+        // The loop stays because each step awaits a retrieval, and the path is part of the report.
+        foreach (var (credentialPath, configuredKey) in AdministratorConfiguration
+            .CredentialsWithPathsIn(sectionName, administrators)
+            .Where(entry => entry.Credential.PublicKey is not null)
+            .Select(entry => (entry.SettingPath, Key: entry.Credential.PublicKey!)))
         {
-            var configurationPath =
-                $"{sectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.PublicKey)}";
+            var configurationPath = $"{credentialPath}:{nameof(AdministratorCredentialOptions.PublicKey)}";
 
             var resolution = await this.secretReferenceResolver.ResolveAsync(
                 configuredKey.SecretReference,
@@ -567,19 +566,18 @@ internal sealed partial class SecretConfigurationValidator
     /// appears, because a key is a credential and the issuer was read out of one.
     /// </para>
     /// <para>
-    /// It takes the section's name and its entries rather than one endpoint's settings, because the shape it reports is
-    /// a property of a list of credentials rather than of the surface serving them: every endpoint admitting both an
-    /// API key and an access token can be configured into it.
+    /// It takes the section's name and its administrators rather than the endpoint's settings, because the shape it
+    /// reports is a property of the credentials those administrators hold rather than of the surface serving them.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<string>> FindUnreachableApiKeyErrorsAsync(
         string sectionName,
-        IList<TransportAuthenticationOptions> methods,
+        IReadOnlyList<AdministratorOptions> administrators,
         CancellationToken cancellationToken)
     {
-        var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
+        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
 
-        if (TransportAuthenticationConfiguration.ApiKeysIn(methods).Count == 0 || oauthMethods.Count == 0)
+        if (AdministratorConfiguration.ApiKeysIn(administrators).Count == 0 || oauthMethods.Count == 0)
         {
             return [];
         }
@@ -595,11 +593,11 @@ internal sealed partial class SecretConfigurationValidator
 
         var errors = new List<string>();
 
-        // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
-        foreach (var (entryIndex, configuredKey) in methods
-            .Index()
-            .Where(entry => entry.Item.ApiKey is not null)
-            .Select(entry => (entry.Index, Key: entry.Item.ApiKey!)))
+        // The loop stays because each step awaits a retrieval, and the path is part of the report.
+        foreach (var (credentialPath, configuredKey) in AdministratorConfiguration
+            .CredentialsWithPathsIn(sectionName, administrators)
+            .Where(entry => entry.Credential.ApiKey is not null)
+            .Select(entry => (entry.SettingPath, Key: entry.Credential.ApiKey!)))
         {
             var resolution = await this.secretReferenceResolver.ResolveAsync(
                 configuredKey.SecretReference,
@@ -616,7 +614,7 @@ internal sealed partial class SecretConfigurationValidator
                 if (NamesAConfiguredIssuer(material, configuredIssuers))
                 {
                     errors.Add(
-                        $"{sectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
+                        $"{credentialPath}:{nameof(AdministratorCredentialOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
                 }
             }
         }

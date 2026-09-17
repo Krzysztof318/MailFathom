@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Workers/MailAccountWork*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/Access/Administrator*.cs, backend/src/Host/Security/Transport/AdministratorAdmission.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Workers/MailAccountWork*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -19,8 +19,13 @@ A deployment that configures nothing serves no administrative surface. Enabling 
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Authentication": [
-      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+    "Administrators": [
+      {
+        "Name": "alice",
+        "Credentials": [
+          { "ApiKey": { "Name": "alice-workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+        ]
+      }
     ]
   }
 }
@@ -51,27 +56,87 @@ there. Reading a mailbox and administering the service that reads it are differe
 mechanical rather than conventional: each endpoint registers its own authentication schemes and its own authorization
 policy, and a policy consults only its own schemes.
 
-`Authentication` takes the same entries `McpEndpoint:Authentication` takes — one entry per credential, each carrying an
-`ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them — and every one of them is this
-endpoint's own. The one method the other two surfaces accept and this one refuses is
-[a password](mcp-endpoint.md#passwords): startup names the section rather than starting, because this surface answers
-for the deployment rather than for a person and a credential naming one user would have nothing here to act for. A misspelled key fails startup rather than binding a default. Each method is documented once, under
-[the MCP endpoint](mcp-endpoint.md#authentication): what a key is, what a
+Each method is documented once, under [the MCP endpoint](mcp-endpoint.md#authentication): what a key is, what a
 [key pair](mcp-endpoint.md#key-pairs) is and what a client signs to present one, and what a token must prove. The
 difference here is the audience an assertion names — `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` — which is
 what keeps a credential minted to read a mailbox from administering the service even where one client is registered on
 both.
 
-**With an `OAuth` entry configured, every one of them must name a `Resource` ending in `/api/admin`** — the path these routes answer
+## Who administers the deployment
+
+`AdminEndpoint:Administrators` names the people and systems that administer this deployment, one entry each. An
+administrator is the unit everything on this surface is written against: it carries the grant, the network it may act
+from, and the name every act it performs is attributed to. Its credentials are what it signs in with, and there may be
+several.
+
+| Key | What it states |
+| --- | --- |
+| `Name` | Required, and unique across the list ignoring case. It is the caller's identity: what `mfctl status` prints, and what every log scope and every authorization refusal reads. A key, a public key, or a token never appears in that place. |
+| `Credentials` | Required, at least one. Each entry carries an `ApiKey` block naming one key, a `PublicKey` block naming one client's public key, an `OAuth` block naming the resource and its authorization servers, or any combination of them, and every block admits this administrator. |
+| `Permissions` | What the administrator may do, on every credential it presents. See [what a credential may do](#what-a-credential-may-do). |
+| `PermissionsFromTokenScopes` | Whether a token's own scopes narrow `Permissions` further. It is refused on an administrator that also carries a key or a public key, since neither carries a scope — give the token its own administrator. |
+| `AllowedSourceNetworks` | Where the administrator may act from. See [where an administrator may act from](#where-an-administrator-may-act-from). |
+
+```jsonc
+"Administrators": [
+  {
+    "Name": "alice",
+    "Permissions": ["mailfathom.admin.read", "mailfathom.admin.operate"],
+    "AllowedSourceNetworks": ["10.20.0.0/16"],
+    "Credentials": [
+      { "ApiKey": { "Name": "alice-laptop", "SecretReference": "systemd-credential:alice-laptop-key" } },
+      { "PublicKey": { "Name": "alice-cron", "SecretReference": "file:/etc/mailfathom/keys/alice-cron.pub" } }
+    ]
+  },
+  {
+    "Name": "reporting",
+    "Permissions": ["mailfathom.admin.read"],
+    "Credentials": [
+      {
+        "OAuth": {
+          "Resource": "https://mail.example.test/api/admin",
+          "AuthorizationServers": [
+            {
+              "Name": "workforce",
+              "Issuer": "https://sso.example.test/realms/mailfathom",
+              "AuthorizedSubjects": ["service-account-reporting"]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
+```
+
+Startup refuses an administrator with no name, a name another administrator already carries, and an administrator with
+no credential, each naming the setting. No two credentials in the section may carry the same key name or public key
+name either, because a presented credential has to resolve to exactly one administrator. Every refusal a credential block already
+had keeps its wording and names the path under the administrator, such as
+`AdminEndpoint:Administrators:0:Credentials:1:OAuth:Resource`.
+
+**A token belongs to exactly one administrator, by its issuer and subject.** `AuthorizedSubjects` on the authorization
+server is how an `OAuth` credential names whose tokens it admits, and startup refuses a subject that two administrators
+claim at the same server. A token that validates and names no configured administrator is answered `401`, exactly as a
+token that did not validate. A client-credentials token carries the service account's subject, so a system signing in
+without a person is bound the same way. Several administrators may name one authorization server; it is registered
+once, and each of them lists its own subjects.
+
+The one method the other two surfaces accept and this one refuses is [a password](mcp-endpoint.md#passwords): startup
+names the setting rather than starting, because this surface answers for the deployment rather than for a person and a
+credential naming one user would have nothing here to act for. A misspelled key fails startup rather than binding a
+default.
+
+**With an `OAuth` credential configured, every one of them must name a `Resource` ending in `/api/admin`** — the path these routes answer
 beneath. Startup refuses anything else, naming the setting. The reason is discovery rather than OAuth: `mfctl` is handed
 a host and a port and finds the metadata document by appending that prefix, which reaches the document's RFC 9728
 location exactly when the resource names the same one. A deployment whose resource said something else would publish a
 document nothing could find, and OAuth sign-in would be unreachable for a reason no refusal would explain. Behind a
 reverse proxy, write the public URL and keep the path: `https://mail.example.test/api/admin`.
 
-> **An entry that writes no grant reaches every administrative operation.** The grant is what bounds a credential here,
-> and an entry that never narrowed one holds the whole surface — so provision one per client, narrow it to what that
-> client does, and rotate it like any other secret.
+> **An administrator that writes no grant reaches every administrative operation.** The grant is what bounds a caller
+> here, and an administrator that never narrowed one holds the whole surface — so name one per person or system, narrow
+> each to what it does, and rotate its credentials like any other secret.
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
@@ -84,7 +149,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 
 ## What a credential may do
 
-Each entry states what the credentials it admits may do, as `Permissions`. This surface's half of the published set is
+Each administrator states what it may do, as `Permissions`, and that grant holds on every credential it presents. This surface's half of the published set is
 seven names — `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`,
 `mailfathom.admin.credentials.write`, `mailfathom.admin.spend`, `mailfathom.admin.erase`, and
 `mailfathom.admin.configuration.write` — allocated so that the
@@ -100,23 +165,27 @@ sign in and read that it holds nothing. `mfctl status` prints what that route re
 their own grant back:
 
 ```text
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 ```
 
-Startup records what every entry resolved to, one line per entry, and names the ones that wrote no grant:
+Startup records what every administrator resolved to, one line each, naming its grant and where it may act from, and
+names the ones that wrote no grant:
 
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
-      The administrative endpoint entry AdminEndpoint:Authentication:0 grants mailfathom.admin.read,
-      mailfathom.admin.operate to every credential it admits. A route here is served only to a caller whose grant holds
-      the one permission that route publishes, and every other caller is refused with that permission named.
+      The administrative endpoint administrator alice (AdminEndpoint:Administrators:0) holds mailfathom.admin.read,
+      mailfathom.admin.operate on every credential it presents, and may act only from 10.20.0.0/16. A route here is
+      served only to a caller whose grant holds the one permission that route publishes, and every other caller is
+      refused with that permission named.
 ```
 
 Every line closes with what a grant on that surface does, which differs in what a refusal looks like rather than in
 whether the grant is enforced: the MCP endpoint answers a call naming a tool the grant omits as a tool that does not
 exist, and this one names the permission. Nothing in those lines names a key, a public key, a token, an authorization
-server, or a subject: a grant is what the deployment wrote, never who presented something.
+server, or a subject: a grant is what the deployment wrote about an administrator, never which credential it
+presented. An endpoint that names no administrator says so instead, and states that every caller holds the whole
+surface.
 
 The contact book needed no name of its own on this surface and is reachable from the other one under that surface's
 name — [the contact book draws from both halves](permissions.md#the-contact-book-draws-from-both-halves) is why, and
@@ -142,7 +211,7 @@ replace:
 
 ```text
 The deployment refused the operation: this credential does not hold 'mailfathom.admin.read'. Add that permission to the
-credential's entry under AdminEndpoint:Authentication, or sign in with one that already holds it.
+administrator's Permissions under AdminEndpoint:Administrators, or sign in as one that already holds it.
 ```
 
 Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
@@ -160,6 +229,42 @@ surface, route, and the permission that was missing, and a warning beside it nam
 admitted as. One operator reading one `403` is not a rate anybody can watch, and a credential that starts asking for
 what it was never granted is what the record exists to make visible.
 [Telemetry](telemetry.md#what-an-authorization-refusal-records) says what it carries and what it deliberately does not.
+
+## Where an administrator may act from
+
+`AllowedSourceNetworks` on an administrator lists the addresses it may act from: a network such as `10.20.0.0/16`, or a
+single address, which reads as `/32` or `/128`. An absent or empty list is no restriction. A request presenting a valid
+credential from anywhere else is answered `401`, the same answer a wrong key gets, so a refusal says nothing about
+whether the credential was good. The deployment's own log carries the difference: a warning naming the administrator
+and the source address the request came from.
+
+The entries are validated the way `ReverseProxy:TrustedProxies` is. A value that is neither an address nor a network,
+a DNS name, and a network with bits set past its prefix — `10.20.30.0/16`, which means `10.20.0.0/16` and was almost
+certainly meant as something narrower — each fail startup naming the setting. An IPv4-mapped IPv6 address, which is
+what a dual-stack listener reports for an IPv4 client, is compared as the IPv4 address it carries, so
+`::ffff:10.20.30.40` is inside `10.20.0.0/16`.
+
+**The address compared is the client's, and behind a proxy that has to be stated.** A request that reached this
+process through a reverse proxy arrives from the proxy's address, and the only record of the client's is the
+`X-Forwarded-For` header the proxy wrote. That header is believed only from a proxy
+[`ReverseProxy:TrustedProxies`](configuration-endpoints.md#reverseproxy) names, and never where that list is empty or
+trusts a whole address family — otherwise any client could write the address a restriction compares. So **startup
+refuses `AllowedSourceNetworks` on any administrator while `ReverseProxy:TrustedProxies` names no proxy**, naming the
+setting; name the proxy in front of this process, or remove the restriction.
+
+Two deployment shapes need care beyond that, because in both the address the process sees is not the client's even
+without a proxy of your own in front:
+
+- **A Kubernetes `Service` of type `LoadBalancer` or `NodePort`** rewrites the source address to a node's unless its
+  `externalTrafficPolicy` is `Local`. With the default `Cluster`, every request arrives from inside the cluster and a
+  restriction to an office network refuses everyone. See
+  [preserving the client address](deployment-kubernetes.md#preserving-the-client-address).
+- **A load balancer passing TCP through** — rather than terminating HTTP and writing `X-Forwarded-For` — hands the
+  process its own address unless it speaks the PROXY protocol, which MailFathom does not read. Put an HTTP-terminating
+  proxy that writes `X-Forwarded-For` between the two and name it in `ReverseProxy:TrustedProxies`.
+
+The restriction applies to every credential the administrator holds, and it is checked after the credential is: a
+request from a permitted network still needs a valid credential, and a request with none is refused as any other.
 
 ## What the endpoint serves
 
@@ -1828,7 +1933,7 @@ None is refused, because each is legitimate somewhere and only you know which yo
 
 | Startup warning | What it means |
 | --- | --- |
-| No authentication method turned on | Anything that can reach the address can administer the service. Right only for a loopback bind or a network you control. |
+| No administrator named | Anything that can reach the address can administer the service. Right only for a loopback bind or a network you control. |
 | Served in clear text | Any credential a client presents is readable on the path. Right only behind a TLS-terminating reverse proxy, or on a loopback bind. |
 | `AdminEndpoint:RateLimiting:Enabled` set to `false` | Nothing bounds how fast a caller may present wrong credentials. Right only where something in front of the process already bounds the traffic reaching it. |
 | `AdminEndpoint:RequestTimeout:Enabled` set to `false` | Nothing bounds how long one administrative request may hold a concurrency permit. Right only where something in front of the process already abandons a stalled request. |
@@ -1875,9 +1980,9 @@ full, including what the unnamed default gives up; three things are worth statin
 - **It is one process-wide setting, not one per endpoint.** This surface is a separate listener over the same request
   pipeline, so naming your proxy once covers it along with the MCP and probe listeners. There is no
   `AdminEndpoint:ReverseProxy`, deliberately.
-- **The OAuth entry's `Resource` is unaffected.** It stays the value you wrote, still ends in `/api/admin`, and is
+- **The OAuth credential's `Resource` is unaffected.** It stays the value you wrote, still ends in `/api/admin`, and is
   still what a token's audience is compared against. The mode never derives it from a header.
-- **A proxy that authenticates its own callers is not this endpoint's authentication.** `AdminEndpoint:Authentication`
+- **A proxy that authenticates its own callers is not this endpoint's authentication.** `AdminEndpoint:Administrators`
   still decides who may administer the service, and the clear-text warning above still fires, because the hop between
   the proxy and this process is still clear text.
 
@@ -2000,7 +2105,7 @@ with no browser on a redirect that can never arrive.
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is read from standard input rather than taken as an argument, because an argument reaches the shell
@@ -2020,7 +2125,7 @@ $ chmod 600 ~/.config/MailFathom/production.key
 $ openssl pkey -in ~/.config/MailFathom/production.key -pubout
 ```
 
-Register that public key under `AdminEndpoint:Authentication` as a `PublicKey` entry — see
+Register that public key as a `PublicKey` credential of your administrator under `AdminEndpoint:Administrators` — see
 [Key pairs](mcp-endpoint.md#key-pairs) for the block and what it accepts — then sign in:
 
 ```console
@@ -2065,7 +2170,7 @@ metadata document at `/.well-known/oauth-protected-resource/api/admin`, and the 
 authorize. Nothing is transcribed, so nothing is transcribed wrongly.
 
 **The scope list is taken verbatim, and that includes `offline_access`.** A refresh token is what makes the sign-in
-outlive its first access token, and a client is issued one by naming that scope — so the entry serving this endpoint has
+outlive its first access token, and a client is issued one by naming that scope — so the `OAuth` credential serving this endpoint has
 to advertise it, in
 [`AdvertisedScopes`](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) rather than in `RequiredScopes`. Without
 it the sign-in is refused where the token is issued rather than an hour later, naming what to do:
@@ -2135,7 +2240,7 @@ Accepting it stores this fingerprint on the profile. Every later command then ac
 so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.
 
 Trust this certificate for this profile? [y/N]: y
-Signed in to https://mail.internal.example:8443 as 'workstation' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
+Signed in to https://mail.internal.example:8443 as 'alice' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
 ```
 
 Read the fingerprint against the deployment's own before answering — `openssl x509 -in server.crt -noout -fingerprint
@@ -2208,7 +2313,7 @@ before it sends anything and exchanges the refresh token for a new one when it i
 what keeps that hour from being an hourly interruption.
 
 **Whether there is a refresh token at all is the deployment's decision**, taken by advertising `offline_access` on the
-OAuth entry serving this endpoint — see [with OAuth](#with-oauth) above. The command asks for exactly the scopes the
+`OAuth` credential serving this endpoint — see [with OAuth](#with-oauth) above. The command asks for exactly the scopes the
 metadata document lists and adds nothing of its own, so a deployment that advertises the scope gives every client a
 renewable session and one that does not gives none of them one.
 
@@ -2244,11 +2349,11 @@ Every profile is a deployment you are signed in to, and one of them is the one c
 ```console
 $ mfctl profiles
 In use  Profile     Endpoint                           Credential
-*       production  https://mail.example.test:8443     workstation
-        staging     https://staging.example.test:8443  workstation
+*       production  https://mail.example.test:8443     alice
+        staging     https://staging.example.test:8443  alice
 
 $ mfctl switch staging
-Now acting on 'staging' (https://staging.example.test:8443) as 'workstation'.
+Now acting on 'staging' (https://staging.example.test:8443) as 'alice'.
 ```
 
 `--endpoint` overrides the selection for one invocation without changing it, and takes either a profile name or an
@@ -2256,7 +2361,7 @@ address:
 
 ```console
 $ mfctl status --endpoint production
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```
@@ -2329,13 +2434,13 @@ moved between entries does not decrypt.
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is held by the Windows Credential Manager.
 ```
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is sealed in the credentials file under a key beside it, because this session has no D-Bus session bus, so no Secret Service provider can be reached.
 ```
 
@@ -2481,8 +2586,8 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `No default profile is set.` | Profiles exist but none is selected, which is what forgetting the selected one leaves behind. Run `mfctl switch <name>`. |
 | `There is no profile named …` | A typo, or a profile that was never created. The message lists the ones that exist. |
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
-| `The deployment refused the credential.` | The key is not one this endpoint is configured with, or its lifetime has ended. Note that an MCP API key is not one of them. |
-| `this credential does not hold …` | The credential was accepted and the operation was not: its entry's `Permissions` omits the name the message states. Add that name to the entry, or run the command with a credential that already holds it. `mfctl status` prints what the one in use holds. |
+| `The deployment refused the credential.` | The key is not one this endpoint is configured with, or its lifetime has ended, or the token names no configured administrator, or the request arrived from outside the administrator's `AllowedSourceNetworks`. The answer is the same for all four by design; the deployment's own log names the administrator and the source address in the last case. Note that an MCP API key is not one of them. |
+| `this credential does not hold …` | The credential was accepted and the operation was not: its administrator's `Permissions` omits the name the message states. Add that name to the administrator, or run the command as one that already holds it. `mfctl status` prints what the one in use holds. |
 | `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
@@ -2508,7 +2613,7 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `did not accept the code the redirect carried` | The authorization code was already redeemed or had expired by the time it was exchanged, which is what a redirect answered twice or approved long after it was opened looks like. Run `login` again. |
 | `The device code is no longer valid` | Nobody finished at the verification address before the code expired, or the authorization server withdrew it. Run `login --mode device` again. |
 | `not a usable web address` | The authorization server published a `verification_uri` that is not an absolute `http` or `https` address, so there is nothing to put in front of the person signing in. This is a fault at the authorization server rather than in its configuration here. |
-| `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add an `OAuth` entry to `AdminEndpoint:Authentication`. |
+| `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add an `OAuth` credential to an administrator under `AdminEndpoint:Administrators`. |
 | `with something that is not a token response` | The authorization server was reached — at its token endpoint, or at its device authorization endpoint on `login --mode device` — and what came back is not the response the flow expects, with the status it answered named. A proxy, a login page, or an error page in front of the server looks like this, and so does an answer naming a character set this machine does not carry. Renewing a stored session fails the same way, so this reaches an ordinary command as well as `login`; nothing was stored either way. |
 | `accepts tokens from several authorization servers` | More than one is configured and only you know which population you belong to. Name it with `--issuer`. |
 | `issued no refresh token` | Nothing asked for offline access, so the session would end within the hour. Two settings can be missing: the deployment advertising `offline_access` in [`AdvertisedScopes`](mcp-endpoint.md#scopes-you-advertise-but-do-not-require), and the client being granted the scope at the authorization server. Check the metadata document first — if `scopes_supported` does not list it, nothing asked. |

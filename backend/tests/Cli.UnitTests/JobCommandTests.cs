@@ -228,7 +228,7 @@ public sealed class JobCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
-                && line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
+                && line.Contains("AdminEndpoint:Administrators", StringComparison.Ordinal));
     }
 
     /// <summary>A refusal naming no permission is repeated as it was written, because widening a grant would not have helped.</summary>
@@ -249,7 +249,7 @@ public sealed class JobCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("was not admitted to this operation", StringComparison.Ordinal)
-                && !line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
+                && !line.Contains("AdminEndpoint:Administrators", StringComparison.Ordinal));
     }
 
     /// <summary>A job something else already dealt with is named as that rather than as a job nobody has.</summary>

@@ -742,12 +742,15 @@ ceiling and a caller varying the name would meet no per-axis limit at all. The p
 overshoot in the allowance: the allowance is read before a verification and spent only after a wrong one, so a burst
 arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the first minute and by nothing after it.
 
-**A peer this deployment cannot tell apart from the world is bounded by username alone.** MailFathom never reads
-`X-Forwarded-For`, so a request arriving from an address
-[`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names carries that proxy's address and nobody else's — a
-per-source allowance over it would be one allowance for the whole world, and a single guesser filling it would close
-password sign-in for every user at once. The source axis is therefore skipped for such a peer rather than applied to
-an address that distinguishes nobody, and the per-username allowance is what holds. The peer is read in its IPv4 form
+**A peer this deployment cannot tell apart from the world is bounded by username alone.** A request through a proxy
+[`ReverseProxy:TrustedProxies`](configuration-endpoints.md#reverseproxy) names, narrower than a whole address family,
+is bounded by the client address that proxy forwarded in `X-Forwarded-For`, which tells two callers apart as a direct
+connection does. A section trusting a range that covers a whole family reads no forwarded address, so every caller
+there is bounded by username alone. What still arrives carrying a named proxy's own address is a request it forwarded
+no client for, or a client whose own address falls inside a network named as a proxy, and a per-source allowance over
+that would be one allowance for the whole world — a single guesser filling it would close password sign-in for every user at
+once. The source axis is therefore skipped for such a peer rather than applied to an address that distinguishes
+nobody, and the per-username allowance is what holds. The peer is read in its IPv4 form
 where it has one, exactly as the forwarded-headers policy reads the same list, so a dual-stack listener reporting an
 IPv4 proxy as `::ffff:10.0.0.5` still recognizes the `10.0.0.5` the operator wrote. Every other peer is the client that
 reached this process, whether or not anything is named in front, and both axes apply to it.
@@ -1456,9 +1459,9 @@ certificate's names carry.
 ## Behind a TLS-terminating reverse proxy
 
 When nginx, Traefik, or an ingress controller holds your certificate, the request that reaches MailFathom arrives as
-`http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop only in
-`X-Forwarded-Proto` and `X-Forwarded-Host`. MailFathom always reads both; the one thing you configure is which peers it
-believes them from:
+`http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop in
+`X-Forwarded-Proto` and `X-Forwarded-Host`, and the client's address in `X-Forwarded-For`. The one thing you configure
+is which peers MailFathom believes them from:
 
 ```json
 {
@@ -1470,8 +1473,8 @@ believes them from:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `TrustedProxies` | empty, which trusts every peer | The proxy addresses or CIDR networks a forwarded scheme and host are accepted from |
-| `MaximumForwardedHops` | `1` | How many proxies may have appended a value to either header |
+| `TrustedProxies` | empty, which trusts every peer | The proxy addresses or CIDR networks a forwarded scheme and host are accepted from. It also decides whether the forwarded client address is read: that needs a named proxy, and an entry covering a whole address family (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96`) switches it off |
+| `MaximumForwardedHops` | `1` | How many proxies may have appended a value to `X-Forwarded-Proto`, `X-Forwarded-Host`, or `X-Forwarded-For` |
 
 The forwarded scheme and host are applied to the request before anything reads it, so OAuth discovery, the `401`
 challenge, and every absolute address MailFathom writes carry your public name — see
@@ -1532,9 +1535,13 @@ Both are said once, while the host starts, and never per request. A merely wide 
 nothing at all. How wide is too wide inside a network you own is a judgement only you can make, and a warning that
 fired on it would be a line you learn to scroll past before it ever mattered.
 
-**Only the two headers are read.** `X-Forwarded-For` is not, so the peer MailFathom observes stays the one that opened
-the connection. Nothing here partitions, limits, or logs by client address, so adopting one from a header would replace
-an observed fact with a claim and buy nothing. Each header is read right to left, and `MaximumForwardedHops` says how
+**The client address is read only from a proxy you named.** `X-Forwarded-For` is applied beside the scheme and the
+host when `TrustedProxies` names at least one proxy and none of its entries covers a whole address family; the address
+it carries then replaces the peer as the client address, which is what the password bound partitions by and what
+[an administrator's network restriction](admin-endpoint.md#where-an-administrator-may-act-from) compares. An
+unconfigured section, or one trusting `0.0.0.0/0` or `::/0`, reads the scheme and the host and never the client
+address, because believing every peer about who it is would let any client choose the address those two read. Each
+header is read right to left, and `MaximumForwardedHops` says how
 far back the chain is believed — raise it only to the number of proxies a request genuinely passes through. A value
 that parses as no scheme or no host is discarded and the request keeps what it arrived with for that component; nothing
 is half-read out of it.
@@ -1547,6 +1554,7 @@ location /mcp {
     proxy_pass         http://10.4.2.11:8080;
     proxy_http_version 1.1;
     proxy_set_header   Host              $host;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header   X-Forwarded-Proto $scheme;
     proxy_set_header   X-Forwarded-Host  $host;
     proxy_buffering    off;

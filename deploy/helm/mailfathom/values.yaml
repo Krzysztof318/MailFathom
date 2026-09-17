@@ -789,6 +789,13 @@ service:
   type: ClusterIP
   port: 8080
   annotations: {}
+  # Whether a `NodePort` or `LoadBalancer` Service keeps the client's source address. Empty leaves the cluster default,
+  # `Cluster`, which rewrites the source to a node's address — so an administrator's `AllowedSourceNetworks` would see a
+  # node rather than the client. `Local` keeps the client's address and serves only from nodes running a pod. It
+  # preserves the address a proxy in front of the pod sees rather than replacing that proxy: a restriction still needs an
+  # HTTP-terminating proxy that writes `X-Forwarded-For`, named in `ReverseProxy:TrustedProxies`. A `ClusterIP` Service
+  # has no such policy, and the chart refuses one stated for it.
+  externalTrafficPolicy: ""
 
 # MailFathom speaks plain HTTP and terminates no TLS of its own. TLS belongs to the ingress, which is also the only place
 # a certificate has to exist — the chart never templates, issues, or stores certificate material. Name a Secret the

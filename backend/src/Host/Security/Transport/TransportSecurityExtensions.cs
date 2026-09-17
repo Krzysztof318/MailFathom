@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Claims;
-using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.ClientAssertions;
@@ -43,16 +42,17 @@ internal static partial class TransportSecurityExtensions
     /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
-    /// <param name="methods">The surface's configured credential entries, in configuration order.</param>
+    /// <param name="administrators">The surface's configured administrators, in configuration order.</param>
     /// <param name="challengeSchemeName">The scheme answering a request that presented no credential this surface can place, which is both what authenticates it and what challenges it.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
     /// <remarks>
     /// <para>
-    /// The whole entries rather than the credentials pulled out of them, because an entry is what carries a grant as
-    /// well as a credential, and the two have to be registered together: a key is compared by the scheme its entry
-    /// selected, and what the caller may do afterwards is what that same entry wrote down.
+    /// The whole administrators rather than the credentials pulled out of them, because an administrator is what carries
+    /// a name, a grant, and its networks as well as its credentials, and they have to be registered together: a key is
+    /// compared by the scheme its credential selected, and who the caller is afterwards is the administrator it sits
+    /// under.
     /// </para>
     /// <para>
     /// Nothing here decides what the application authenticates with by default. There is one such default and one
@@ -65,11 +65,11 @@ internal static partial class TransportSecurityExtensions
     internal static AuthenticationBuilder AddTransportAuthentication(
         this IServiceCollection services,
         TransportSurface surface,
-        IReadOnlyList<TransportAuthenticationOptions> methods,
+        IReadOnlyList<AdministratorOptions> administrators,
         string challengeSchemeName)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(methods);
+        ArgumentNullException.ThrowIfNull(administrators);
         ArgumentNullException.ThrowIfNull(challengeSchemeName);
 
         if (!surface.IsSpecified)
@@ -77,16 +77,18 @@ internal static partial class TransportSecurityExtensions
             throw new ArgumentException("A transport surface is required to name the schemes and the policy.", nameof(surface));
         }
 
-        var apiKeys = TransportAuthenticationConfiguration.ApiKeysIn(methods);
-        var publicKeys = TransportAuthenticationConfiguration.PublicKeysIn(methods);
-        var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
+        var apiKeys = AdministratorConfiguration.ApiKeysIn(administrators);
+        var publicKeys = AdministratorConfiguration.PublicKeysIn(administrators);
+        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
+        var authorizationServers = AdministratorConfiguration.DistinctAuthorizationServersIn(administrators);
+        var admissions = AdministratorAdmission.ForEach(administrators);
 
         var authentication = services.AddAuthentication();
 
         AddRoutingScheme(
             authentication,
             surface,
-            OAuthSchemesByIssuer(surface, oauthMethods),
+            OAuthSchemesByIssuer(surface, authorizationServers),
             apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
             publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
 
@@ -116,9 +118,9 @@ internal static partial class TransportSecurityExtensions
                 {
                     schemeOptions.Surface = surface;
                     schemeOptions.PublicKeys = publicKeys;
-                    schemeOptions.GrantsByKeyName = TransportAuthenticationConfiguration.GrantsByPublicKeyName(
-                        methods,
-                        surface.GrantedSurface);
+                    schemeOptions.AdministratorsByKeyName = AdmissionsByCredentialName(
+                        AdministratorConfiguration.AdministratorsByPublicKeyName(administrators),
+                        admissions);
                 });
         }
 
@@ -134,9 +136,9 @@ internal static partial class TransportSecurityExtensions
                 {
                     schemeOptions.Surface = surface;
                     schemeOptions.ApiKeys = apiKeys;
-                    schemeOptions.GrantsByKeyName = TransportAuthenticationConfiguration.GrantsByApiKeyName(
-                        methods,
-                        surface.GrantedSurface);
+                    schemeOptions.AdministratorsByKeyName = AdmissionsByCredentialName(
+                        AdministratorConfiguration.AdministratorsByApiKeyName(administrators),
+                        admissions);
                 });
         }
 
@@ -145,34 +147,28 @@ internal static partial class TransportSecurityExtensions
             AddMetadataBackchannel(services);
         }
 
-        // Each entry's own servers are registered against that entry's resource and that entry's grant, which is what
-        // makes an entry the unit a token is judged by rather than one merged set the whole endpoint shares.
-        foreach (var method in methods.Where(method => method.OAuth is not null))
+        // One validator per authorization server however many administrators sign in through it. What a validated
+        // token then becomes is decided by the issuer and subject it carries, which bind it to exactly one administrator.
+        var tokenAdmissions = TokenAdmissionsByIdentity(
+            AdministratorConfiguration.TokenBindingsByIdentity(administrators),
+            admissions);
+
+        foreach (var authorizationServer in authorizationServers)
         {
-            var oauthMethod = method.OAuth!;
-            var grant = method.GrantedPermissions(surface.GrantedSurface);
-            var narrowedByTokenScopes = method.PermissionsFromTokenScopes;
+            var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
 
-            foreach (var authorizationServer in oauthMethod.AuthorizationServers)
-            {
-                var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
-
-                authentication.AddJwtBearer(schemeName);
-                services.AddOptions<JwtBearerOptions>(schemeName)
-                    .Configure<IHttpClientFactory>((jwtOptions, transportFactory) =>
-                        ConfigureAuthorizationServer(
-                            jwtOptions,
-                            authorizationServer,
-                            oauthMethod,
-                            transportFactory,
-                            context => ReplacePrincipalWithMinimalIdentity(
-                                context,
-                                grant,
-                                narrowedByTokenScopes)));
-            }
+            authentication.AddJwtBearer(schemeName);
+            services.AddOptions<JwtBearerOptions>(schemeName)
+                .Configure<IHttpClientFactory>((jwtOptions, transportFactory) =>
+                    ConfigureAuthorizationServer(
+                        jwtOptions,
+                        authorizationServer,
+                        oauthMethods[0],
+                        transportFactory,
+                        context => ReplacePrincipalWithAdministratorIdentity(context, tokenAdmissions)));
         }
 
-        AddAuthorizationPolicy(services, surface, oauthMethods);
+        AddAuthorizationPolicy(services, surface, administrators);
 
         return authentication;
     }
@@ -258,16 +254,32 @@ internal static partial class TransportSecurityExtensions
         int localPort);
 
     /// <summary>Reports the scheme each configured issuer's tokens are validated by, keyed by the issuer a token names.</summary>
-    /// <remarks>Composed here rather than in the selector because it is what a surface's registration already knows: which entries it read, and what each authorization server on them is called.</remarks>
+    /// <remarks>Composed here rather than in the selector because it is what a surface's registration already knows: which servers it registered, and what each is called.</remarks>
     private static Dictionary<string, string> OAuthSchemesByIssuer(
         TransportSurface surface,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods) =>
-        oauthMethods
-            .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
-            .ToDictionary(
-                authorizationServer => authorizationServer.ValidatedIssuer(),
-                authorizationServer => surface.OAuthSchemeNameFor(authorizationServer.Name!),
-                StringComparer.Ordinal);
+        IReadOnlyList<AuthorizationServerOptions> authorizationServers) =>
+        authorizationServers.ToDictionary(
+            authorizationServer => authorizationServer.ValidatedIssuer(),
+            authorizationServer => surface.OAuthSchemeNameFor(authorizationServer.Name!),
+            StringComparer.Ordinal);
+
+    /// <summary>Replaces each credential's administrator with the admission composed for it.</summary>
+    private static Dictionary<string, AdministratorAdmission> AdmissionsByCredentialName(
+        IReadOnlyDictionary<string, AdministratorOptions> administratorsByCredentialName,
+        IReadOnlyDictionary<AdministratorOptions, AdministratorAdmission> admissions) =>
+        administratorsByCredentialName.ToDictionary(
+            entry => entry.Key,
+            entry => admissions[entry.Value],
+            StringComparer.Ordinal);
+
+    /// <summary>Replaces each token identity's administrator with the admission composed for it.</summary>
+    private static Dictionary<string, AdministratorAdmission> TokenAdmissionsByIdentity(
+        IReadOnlyDictionary<string, AdministratorTokenBinding> bindingsByIdentity,
+        IReadOnlyDictionary<AdministratorOptions, AdministratorAdmission> admissions) =>
+        bindingsByIdentity.ToDictionary(
+            entry => entry.Key,
+            entry => admissions[entry.Value.Administrator],
+            StringComparer.Ordinal);
 
     /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
     /// <remarks>
@@ -376,7 +388,7 @@ internal static partial class TransportSecurityExtensions
         };
     }
 
-    /// <summary>Reduces a validated token to the identity MailFathom keeps of it, and writes the grant it holds.</summary>
+    /// <summary>Reduces a validated token to the identity MailFathom keeps of it, binds it to its administrator, and writes the grant it holds.</summary>
     /// <remarks>
     /// <para>
     /// The validated principal carries every claim the authorization server chose to include, which routinely means a
@@ -384,57 +396,49 @@ internal static partial class TransportSecurityExtensions
     /// cannot start depending on a claim the operator never mapped.
     /// </para>
     /// <para>
-    /// The grant is written onto the identity that survives rather than left to be recomposed later, which is what
-    /// keeps a permission the entry never granted unreachable however a token is read afterwards.
+    /// A token whose issuer and subject name no administrator is refused here, as an authentication failure, rather than
+    /// admitted and forbidden later: a validly signed token for somebody this deployment never named is no more a
+    /// credential here than a key nobody configured. The same holds for an administrator's token arriving from outside
+    /// the networks that administrator may act from.
     /// </para>
     /// </remarks>
-    private static Task ReplacePrincipalWithMinimalIdentity(
+    private static Task ReplacePrincipalWithAdministratorIdentity(
         TokenValidatedContext context,
-        IReadOnlyList<MailFathomPermission> grant,
-        bool narrowedByTokenScopes)
+        Dictionary<string, AdministratorAdmission> admissionsByIdentity)
     {
-        var identity = context.Principal is { } validatedPrincipal
+        var tokenIdentity = context.Principal is { } validatedPrincipal
             ? OAuthIdentity.FromValidatedToken(validatedPrincipal.Claims, context.Scheme.Name)
             : null;
 
-        if (identity is null)
+        if (tokenIdentity is null)
         {
             context.Fail("The validated token names no subject.");
 
             return Task.CompletedTask;
         }
 
-        identity.AddClaims(TransportGrant.ClaimsFor(GrantHeldByToken(identity, grant, narrowedByTokenScopes)));
-
-        context.Principal = new ClaimsPrincipal(identity);
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>Reports which of the entry's permissions this particular token holds.</summary>
-    /// <remarks>
-    /// Without the narrowing setting every token the entry admits holds the whole ceiling, because the deployment wrote
-    /// the grant and the authorization server was never asked. With it, a scope bearing a published permission name
-    /// grants that permission and nothing else does — so the intersection is the answer, and a scope naming anything
-    /// else is ignored rather than refused, since a token legitimately carries scopes about its client's own session
-    /// and about resources that are not this one.
-    /// </remarks>
-    private static IEnumerable<MailFathomPermission> GrantHeldByToken(
-        ClaimsIdentity identity,
-        IReadOnlyList<MailFathomPermission> grant,
-        bool narrowedByTokenScopes)
-    {
-        if (!narrowedByTokenScopes)
+        if (OAuthIdentity.IdentityCarriedBy(new ClaimsPrincipal(tokenIdentity)) is not { } identity
+            || !admissionsByIdentity.TryGetValue(identity, out var administrator))
         {
-            return grant;
+            context.Fail("The validated token names no configured administrator.");
+
+            return Task.CompletedTask;
         }
 
-        var tokenScopes = identity
-            .FindAll(OAuthIdentity.ScopeClaimType)
-            .Select(scope => scope.Value)
-            .ToHashSet(StringComparer.Ordinal);
+        var logger = context.HttpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(TransportSecurityExtensions));
 
-        return grant.Where(permission => tokenScopes.Contains(permission.Name));
+        if (!administrator.AdmitsSourceOf(context.HttpContext, context.Scheme.Name, logger))
+        {
+            context.Fail("The administrator may not act from the network this request arrived from.");
+
+            return Task.CompletedTask;
+        }
+
+        context.Principal = new ClaimsPrincipal(administrator.IdentityForToken(tokenIdentity, OAuthIdentity.RoleClaimType));
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Registers the transport the discovery document and key set are retrieved through.</summary>
@@ -482,19 +486,19 @@ internal static partial class TransportSecurityExtensions
     private static void AddAuthorizationPolicy(
         IServiceCollection services,
         TransportSurface surface,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods)
+        IReadOnlyList<AdministratorOptions> administrators)
     {
-        var requiredScopesByIssuer = TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods);
-
-        var authorizedIdentities = oauthMethods
-            .SelectMany(oauthMethod => oauthMethod.AuthorizedIdentities())
-            .ToHashSet(StringComparer.Ordinal);
+        var requiredScopesByIdentity = AdministratorConfiguration.TokenBindingsByIdentity(administrators)
+            .ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.RequiredScopes,
+                StringComparer.Ordinal);
 
         services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
             surface.AccessPolicyName,
             policy => policy
                 .AddAuthenticationSchemes(surface.RoutingSchemeName)
                 .RequireAssertion(context =>
-                    TransportAccessPolicy.IsAuthorized(context.User, authorizedIdentities, requiredScopesByIssuer))));
+                    TransportAccessPolicy.IsAuthorized(context.User, requiredScopesByIdentity))));
     }
 }
