@@ -62,7 +62,7 @@ internal static class AdminTransportSecurityExtensions
 
         services.AddTransportAuthentication(
             TransportSurface.Admin,
-            [.. endpointSettings.Authentication],
+            [.. endpointSettings.Administrators],
             ChallengeSchemeFor(endpointSettings));
 
         return services;

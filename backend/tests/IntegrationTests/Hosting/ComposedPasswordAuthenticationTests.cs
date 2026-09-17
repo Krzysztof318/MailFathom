@@ -221,7 +221,8 @@ public sealed class ComposedPasswordAuthenticationTests
         [
             new("AdminEndpoint:Enabled", "true"),
             new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-            new("AdminEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"),
+            new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+            new("AdminEndpoint:Administrators:0:Credentials:0:Basic:AttemptsPerMinute", "10"),
             new("ReverseProxy:TrustedProxies:0", "10.0.0.5"),
         ];
 
@@ -298,8 +299,9 @@ public sealed class ComposedPasswordAuthenticationTests
         new("McpEndpoint:Authentication:0:Basic:AttemptsPerMinute", "60"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-        new("AdminEndpoint:Authentication:0:ApiKey:Name", AdminKeyName),
-        new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
+        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
+        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
         new("ClientEndpoint:Authentication:0:Method", "password"),

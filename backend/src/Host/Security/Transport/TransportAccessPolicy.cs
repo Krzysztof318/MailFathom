@@ -35,7 +35,8 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// There are two judgements rather than one, and the difference is what a subject decides. On the administrative
-/// surface a configured list of subjects is who may sign in, so <see cref="IsAuthorized" /> compares against it. On a
+/// surface the subjects written under each administrator are who may sign in, so <see cref="IsAuthorized" /> compares
+/// against them. On a
 /// mail-serving surface a subject resolves one user's credential record, so <see cref="IsUserAuthorized" /> asks that
 /// the credential named a user at all. Everything else — the scopes, the held-credential shortcut, the requirement
 /// that the principal be authenticated — is shared, which is what keeps the two from drifting into two definitions of
@@ -45,7 +46,7 @@ namespace MailFathom.Host.Security.Transport;
 /// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions travel on
 /// the principal this judges, written by whichever scheme authenticated it, and where they were granted follows the
 /// same split as the user: on a mail-serving surface the credential record carries the grant beside the user it
-/// names, and on the administrative surface the configured entry states it. Either way admission stays one shared
+/// names, and on the administrative surface the administrator it admits states it. Either way admission stays one shared
 /// judgement while each surface comes to enforce the grant in the terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
 /// application layer is handed. The MCP surface serves each caller the tools its grant permits and answers a call for
 /// any other as a tool that does not exist; the administrative surface refuses a route the grant does not admit and
@@ -54,30 +55,29 @@ namespace MailFathom.Host.Security.Transport;
 /// </remarks>
 internal static class TransportAccessPolicy
 {
-    /// <summary>Judges an authenticated principal against the people the deployment serves and the scopes it requires.</summary>
+    /// <summary>Judges an authenticated principal against the administrators the deployment names and the scopes each one's credential requires.</summary>
     /// <param name="principal">The principal a validated credential produced.</param>
-    /// <param name="authorizedIdentities">The issuer and subject pairs a token may name, taken from the configured authorization servers.</param>
-    /// <param name="requiredScopesByIssuer">The scopes an access token must carry, keyed by the issuer whose entry asks for them.</param>
+    /// <param name="requiredScopesByIdentity">The scopes an access token must carry, keyed by the issuer and subject of the administrator's credential that asks for them.</param>
     /// <returns><see langword="true" /> when the caller may reach the surface; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// A token has to satisfy both: a subject the deployment serves and every scope it requires. Neither substitutes for
-    /// the other, because a scope says what a token was issued for and a subject says whose it is.
+    /// A token has to satisfy both: a subject an administrator was written with and every scope that administrator's
+    /// credential requires. Neither substitutes for the other, because a scope says what a token was issued for and a
+    /// subject says whose it is. Authentication has already refused a token naming nobody, so the first half is asked
+    /// again here only so a principal something else assembled cannot pass on a grant alone.
     /// <para>
-    /// The scopes are looked up by the token's own issuer, because each configured entry states what it asks of the
-    /// servers it configures. A token whose issuer is in no entry is refused rather than admitted with nothing asked of
-    /// it — it cannot arise from a validated token, since only a configured issuer has a validator at all, and treating
-    /// the absence as "no scopes required" is the reading that turns a future gap into an open door.
+    /// The scopes are looked up by the token's own identity rather than by its issuer, because two administrators
+    /// signing in through one server may each be asked for different ones. An identity no credential names is refused
+    /// rather than admitted with nothing asked of it — treating the absence as "no scopes required" is the reading that
+    /// turns a future gap into an open door.
     /// </para>
     /// </remarks>
     internal static bool IsAuthorized(
         ClaimsPrincipal principal,
-        IReadOnlySet<string> authorizedIdentities,
-        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer)
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIdentity)
     {
         ArgumentNullException.ThrowIfNull(principal);
-        ArgumentNullException.ThrowIfNull(authorizedIdentities);
-        ArgumentNullException.ThrowIfNull(requiredScopesByIssuer);
+        ArgumentNullException.ThrowIfNull(requiredScopesByIdentity);
 
         if (principal.Identity is not { IsAuthenticated: true })
         {
@@ -89,8 +89,9 @@ internal static class TransportAccessPolicy
             return true;
         }
 
-        return NamesAnAuthorizedSubject(principal, authorizedIdentities)
-            && CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
+        return OAuthIdentity.IdentityCarriedBy(principal) is { } identity
+            && requiredScopesByIdentity.TryGetValue(identity, out var requiredScopes)
+            && OAuthIdentity.CarriesEveryScope(principal, requiredScopes);
     }
 
     /// <summary>Judges an authenticated principal on a surface whose every credential resolves the user it acts for.</summary>
@@ -134,15 +135,6 @@ internal static class TransportAccessPolicy
         principal.FindFirst(OAuthIdentity.IssuerClaimType)?.Value is { } issuer
         && requiredScopesByIssuer.TryGetValue(issuer, out var requiredScopes)
         && OAuthIdentity.CarriesEveryScope(principal, requiredScopes);
-
-    /// <summary>Reports whether an authenticated token names one of the people this deployment serves.</summary>
-    /// <remarks>
-    /// The comparison is against the issuer and subject together, so a subject one authorization server authorized is
-    /// not authorized by another server that happens to name someone the same way. A principal carrying no identity at
-    /// all is refused rather than treated as unrestricted.
-    /// </remarks>
-    private static bool NamesAnAuthorizedSubject(ClaimsPrincipal principal, IReadOnlySet<string> authorizedIdentities) =>
-        OAuthIdentity.IdentityCarriedBy(principal) is { } identity && authorizedIdentities.Contains(identity);
 
     /// <summary>Reports whether a credential this deployment holds rather than a token an authorization server issued produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
     /// <remarks>

@@ -133,11 +133,14 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
 
     /// <summary>Reports the address to bound this attempt by, or nothing where this peer tells two callers apart.</summary>
     /// <remarks>
-    /// The peer is the client except when the peer is itself a proxy this deployment declared. Every request through
-    /// such a proxy arrives from its address — <c>X-Forwarded-For</c> is deliberately never read, so the peer this
-    /// process observes stays the one that opened the connection — and a per-source partition on it would be one
-    /// partition for the whole world, which a single guesser could empty and so close password sign-in for every user
-    /// at once. The username bound is what holds there, and it holds per user rather than across all of them.
+    /// The address is the client's once the forwarded-headers policy has run: behind a proxy this deployment declared,
+    /// it is the address that proxy forwarded in <c>X-Forwarded-For</c>, and a partition on it tells two callers apart
+    /// as it does on a direct connection. What is left as a declared proxy's own address is a request that proxy
+    /// forwarded no client for — no header, or a chain longer than the section believes — and a per-source partition
+    /// on that would be one partition for the whole world, which a single guesser could empty and so close password
+    /// sign-in for every user at once. The username bound is what holds there, and it holds per user rather than
+    /// across all of them. A section declaring no proxy reads no forwarded address at all, so the peer there is the
+    /// one that opened the connection and nothing a client wrote.
     /// <para>
     /// The question is asked of the peer rather than of the deployment, because <c>ReverseProxy</c> is one section for
     /// the whole process while a listener is not: a deployment declaring a proxy for one surface may serve another

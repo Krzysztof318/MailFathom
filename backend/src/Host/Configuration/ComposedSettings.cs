@@ -221,10 +221,11 @@ internal static class ComposedSettings
         var client = ClientEndpointOptions.ReadFrom(configuration);
         var health = HealthEndpointOptions.ReadFrom(configuration);
         var signalBackplane = SignalBackplaneOptions.ReadFrom(configuration);
+        var reverseProxyErrors = reverseProxy.FindConfigurationErrors();
 
         List<SettingsRefusal> refusals =
         [
-            .. Refusal<ReverseProxyOptions>(ReverseProxyOptions.SectionName, reverseProxy.FindConfigurationErrors()),
+            .. Refusal<ReverseProxyOptions>(ReverseProxyOptions.SectionName, reverseProxyErrors),
             .. Refusal<ConnectionLimitsOptions>(ConnectionLimitsOptions.SectionName, connectionLimits.FindConfigurationErrors()),
 
             // Every listener this process opens is bound in code, from the section of the surface it belongs to, so the
@@ -241,6 +242,12 @@ internal static class ComposedSettings
             // validator that proves every other section's.
             .. Refusal<McpEndpointOptions>(McpEndpointOptions.SectionName, mcp.FindConfigurationErrors()),
             .. Refusal<AdminEndpointOptions>(AdminEndpointOptions.SectionName, admin.FindConfigurationErrors()),
+
+            // Whether a network restriction can be enforced turns on the reverse-proxy section, so it is asked only once
+            // that section parsed; a proxy list with a fault in it is already the refusal an operator reads first.
+            .. Refusal<AdminEndpointOptions>(
+                AdminEndpointOptions.SectionName,
+                reverseProxyErrors.Count == 0 ? admin.FindSourceNetworkTrustErrors(reverseProxy) : []),
             .. Refusal<ClientEndpointOptions>(ClientEndpointOptions.SectionName, client.FindConfigurationErrors()),
             .. Refusal<HealthEndpointOptions>(HealthEndpointOptions.SectionName, health.FindConfigurationErrors()),
 

@@ -76,7 +76,7 @@ internal static partial class TransportSecurityExtensions
         AddRoutingScheme(
             authentication,
             surface,
-            OAuthSchemesByIssuer(surface, oauthMethods),
+            OAuthSchemesByIssuer(surface, [.. oauthMethods.SelectMany(oauthMethod => oauthMethod.AuthorizationServers)]),
             acceptsApiKey ? surface.ApiKeySchemeName : null,
             acceptsPublicKey ? surface.ClientAssertionSchemeName : null,
             basicMethod is null ? null : surface.BasicSchemeName,
@@ -220,7 +220,7 @@ internal static partial class TransportSecurityExtensions
         }
 
         identity.AddClaims(
-            TransportGrant.ClaimsFor(GrantHeldByToken(identity, admitted.Permissions, narrowedByTokenScopes)));
+            TransportGrant.ClaimsFor(TransportGrant.HeldByToken(identity, admitted.Permissions, narrowedByTokenScopes)));
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
         identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));
 
@@ -239,7 +239,7 @@ internal static partial class TransportSecurityExtensions
         TransportSurface surface,
         IReadOnlyList<OAuthValidationOptions> oauthMethods)
     {
-        var requiredScopesByIssuer = TransportAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods);
+        var requiredScopesByIssuer = UserFacingAuthenticationConfiguration.RequiredScopesByIssuer(oauthMethods);
 
         services.AddAuthorization(authorizationOptions => authorizationOptions.AddPolicy(
             surface.AccessPolicyName,

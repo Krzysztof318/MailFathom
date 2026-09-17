@@ -163,8 +163,13 @@ config:
         },
         "AdminEndpoint": {
           "Enabled": true,
-          "Authentication": [
-            { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
+          "Administrators": [
+            {
+              "Name": "admin",
+              "Credentials": [
+                { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
+              ]
+            }
           ]
         },
         "McpEndpoint": {
@@ -350,7 +355,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | --- | --- | --- |
 | API keys | `McpEndpoint:Authentication`, which names the method; each user's key is minted with [`mfctl credential create`](admin-endpoint.md#user-credentials) rather than mounted as a Secret | [Authentication](mcp-endpoint.md#authentication) |
 | An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
-| Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
+| Reading the public scheme, host, and client address from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
 | Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` or `ClientEndpoint:RateLimiting` for the other surfaces | [Rate limiting](mcp-endpoint.md#rate-limiting) |
@@ -371,6 +376,29 @@ usually what an operator already has.
 The credentials any of them reads stay `file:` references into the mounted Secret. Keep them out of `config.files` and
 out of `config.extraEnvironment`; the values schema rejects an environment name that reads like a credential, because
 an environment block is visible to anything that can read `/proc` and cannot be erased from process memory.
+
+### Preserving the client address
+
+An administrator's [`AllowedSourceNetworks`](admin-endpoint.md#where-an-administrator-may-act-from) compares the
+address the request came from, and inside a cluster that address is only as good as every hop in front of the pod
+keeps it. Startup refuses a restriction while `ReverseProxy:TrustedProxies` names no proxy, so naming the ingress
+controller's pod CIDR, as above, is the first step. It is not the only one:
+
+- **The ingress controller has to see the client's address before it can forward it.** A cloud load balancer in front
+  of the controller's own `Service` reaches it through a node, and with the default `externalTrafficPolicy: Cluster`
+  the node rewrites the source to its own address. Set `externalTrafficPolicy: Local` on that `Service` — the
+  controller's, not MailFathom's — or have the load balancer speak the PROXY protocol to the controller and turn its
+  PROXY protocol support on. Either way the controller then writes the real client into `X-Forwarded-For`, and
+  MailFathom believes it because the controller is the proxy you named.
+- **MailFathom itself does not read the PROXY protocol.** A load balancer passing TCP straight to the pod — a
+  `LoadBalancer` or `NodePort` `Service` of MailFathom's own, with no ingress in between — hands the pod a node's
+  address under `Cluster`, and the pod's peer is then the client only with `externalTrafficPolicy: Local`. The chart
+  renders a `ClusterIP` `Service` by default; a deployment exposing the pod directly sets `service.type` and
+  `service.externalTrafficPolicy: Local` together, and the chart refuses the policy on a `ClusterIP` `Service`.
+
+The deployment's log names the administrator and the address a refused request came from, which is the fastest way to
+see which of these a cluster needs: an office network refused from `10.x` node addresses is the rewritten source,
+not a wrong list.
 
 ## Serving the client
 

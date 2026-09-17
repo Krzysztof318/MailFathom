@@ -101,8 +101,8 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
 
 - **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — the
   identifier of the user credential the presented value resolved to on a mail-serving surface, and on the
-  administrative surface the configured name of an API key or a client public key, or the issuer and subject the access
-  policy checked against the configured authorization servers. The permissions travel as claims the scheme wrote when
+  administrative surface the `Name` of the configured administrator the key, public key, or token's issuer and subject
+  belongs to — whichever of its credentials was presented. The permissions travel as claims the scheme wrote when
   the credential was judged, so nothing per request re-reads a configuration section or the credential's row.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
@@ -214,7 +214,7 @@ own.
 
 **Every surface records its refusals, and no surface's answer is the record.** A refusal is counted by
 `mailfathom.authorization.refusals` — by surface, by the tool or route that was refused, and by the permission that
-would have sufficed — with a warning beside it naming the credential the work was admitted as, which the boundary reads
+would have sufficed — with a warning beside it naming who the work was admitted as, which the boundary reads
 from `AccessAuthorization` rather than from the refusal, since the failure itself is barred from carrying an identity. A
 tool withheld from a listing is not a refusal and is not recorded: nothing was refused, and every narrowed caller would
 produce one on every listing.

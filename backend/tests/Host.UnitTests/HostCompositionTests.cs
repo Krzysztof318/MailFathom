@@ -163,8 +163,9 @@ public sealed class HostCompositionTests
                 new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
-                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
-                new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", "operator"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
             ],
             ["client served"] =
             [
@@ -193,8 +194,9 @@ public sealed class HostCompositionTests
                 .. HttpsProfile(McpEndpointOptions.SectionName, "mcp", 8443),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Transport", "HttpsOnly"),
-                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
-                new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", "operator"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
                 .. HttpsProfile(AdminEndpointOptions.SectionName, "admin", 8444),
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Transport", "HttpsOnly"),
@@ -305,8 +307,9 @@ public sealed class HostCompositionTests
                 new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
-                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
-                new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", "operator"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
                 new("ClientEndpoint:Authentication:0:Method", "api-key"),
@@ -946,8 +949,9 @@ public sealed class HostCompositionTests
         .. adminAuthenticates
             ?
             [
-                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
-                new KeyValuePair<string, string?>("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+                new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", "operator"),
+                new KeyValuePair<string, string?>("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
         .. clientAuthenticates

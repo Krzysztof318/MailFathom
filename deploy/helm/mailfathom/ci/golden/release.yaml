@@ -81,7 +81,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  externalTrafficPolicy: Local
   ports:
     - name: http
       port: 8080

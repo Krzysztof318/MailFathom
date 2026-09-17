@@ -430,21 +430,27 @@ if (runsIntegrationTests)
         .WithEndpoint(name: OrchestrationContract.HostAdminEndpointName, scheme: "tcp", env: "AdminEndpoint__Port")
         .WithEnvironment("AdminEndpoint__Enabled", "true")
         .WithEnvironment("AdminEndpoint__BindAddress", OrchestrationContract.AdminEndpointBindAddress)
-        .WithEnvironment("AdminEndpoint__Authentication__0__ApiKey__Name", OrchestrationContract.AdminApiKeyName)
+        // Each administrator is named after the one key it holds, so what a session read reports is the name the suite
+        // already knows the credential by.
+        .WithEnvironment("AdminEndpoint__Administrators__0__Name", OrchestrationContract.AdminApiKeyName)
         .WithEnvironment(
-            "AdminEndpoint__Authentication__0__ApiKey__SecretReference",
+            "AdminEndpoint__Administrators__0__Credentials__0__ApiKey__Name",
+            OrchestrationContract.AdminApiKeyName)
+        .WithEnvironment(
+            "AdminEndpoint__Administrators__0__Credentials__0__ApiKey__SecretReference",
             $"plaintext:{OrchestrationContract.AdminApiKey}")
-        // A second entry, narrowed to one permission. The entry above writes no grant and therefore reaches every
+        // A second administrator, narrowed to one permission. The one above writes no grant and therefore reaches every
         // administrative route, so it is the arrangement under which a route's published permission decides nothing a
         // caller can observe; this one is what makes the enforcement visible from where an operator stands.
+        .WithEnvironment("AdminEndpoint__Administrators__1__Name", OrchestrationContract.AdminNarrowedApiKeyName)
         .WithEnvironment(
-            "AdminEndpoint__Authentication__1__ApiKey__Name",
+            "AdminEndpoint__Administrators__1__Credentials__0__ApiKey__Name",
             OrchestrationContract.AdminNarrowedApiKeyName)
         .WithEnvironment(
-            "AdminEndpoint__Authentication__1__ApiKey__SecretReference",
+            "AdminEndpoint__Administrators__1__Credentials__0__ApiKey__SecretReference",
             $"plaintext:{OrchestrationContract.AdminNarrowedApiKey}")
         .WithEnvironment(
-            "AdminEndpoint__Authentication__1__Permissions__0",
+            "AdminEndpoint__Administrators__1__Permissions__0",
             OrchestrationContract.AdminNarrowedPermission)
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.

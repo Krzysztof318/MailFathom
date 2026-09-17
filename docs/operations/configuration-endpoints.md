@@ -99,7 +99,8 @@ Two specific addresses on one port are two sockets and are accepted; none of the
 
 ## `ReverseProxy`
 
-Which peers this process accepts a public scheme and host from, when something in front of it terminates TLS. One
+Which peers this process accepts a public scheme, host, and client address from, when something in front of it
+terminates TLS. One
 section for the whole process rather than one per surface: it runs at the front of the one request pipeline every
 listener shares, so a proxy named here is trusted on each of them.
 [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) is the page.
@@ -112,8 +113,12 @@ carries is who they are believed from, and **an unconfigured section believes ev
 | `ReverseProxy:TrustedProxies` | string list | empty, which trusts `0.0.0.0/0` and `::/0` | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name. What is named replaces the default rather than adding to it, and the framework's loopback default is cleared rather than inherited. Left empty, or written as `0.0.0.0/0` and `::/0`, it trusts every peer and so disables the refusal of an OAuth token that arrived without TLS — see [what the default costs](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) | restart |
 | `ReverseProxy:MaximumForwardedHops` | int | `1` | At least 1; how far right-to-left through each header a value is believed | restart |
 
-`X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and the
-configured OAuth `Resource` stays a value you wrote rather than anything derived from a header.
+`X-Forwarded-For` is read only when `TrustedProxies` names a proxy and no entry covers a whole address family, and
+then only from a peer it names; otherwise the peer MailFathom observes stays the one that opened the connection. The
+client address it yields is what the password bound and
+[an administrator's `AllowedSourceNetworks`](admin-endpoint.md#where-an-administrator-may-act-from) compare, which is
+why a restriction is refused at startup while no proxy is named. The configured OAuth `Resource` stays a value you
+wrote rather than anything derived from a header.
 
 ## `ConnectionLimits`
 
@@ -352,7 +357,12 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP and client endpoints' default as well, so enabling several without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Authentication` | list of credentials | empty | The deployment's own credentials, one entry per credential, each carrying an `ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them. This is a different shape from the two mail-serving endpoints, and deliberately: a deployment administrator is not a user, so their credential is configured here rather than provisioned as a record beside somebody's mail. A `Basic` block is refused at startup for the same reason. Every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin`; `AuthorizedSubjects` names whose tokens are served and at least one is required; and `Permissions` draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here | restart; material per request |
+| `AdminEndpoint:Administrators:<n>` | list of administrators | empty, which serves every caller the whole surface | The people and systems that administer the deployment — see [who administers the deployment](admin-endpoint.md#who-administers-the-deployment). This is a different shape from the two mail-serving endpoints, and deliberately: a deployment administrator is not a user, so they are configured here rather than provisioned as a record beside somebody's mail | restart |
+| `AdminEndpoint:Administrators:<n>:Name` | string | — | Required; unique ignoring case; no control characters. The identity every act the administrator performs is attributed to | restart |
+| `AdminEndpoint:Administrators:<n>:Credentials:<m>` | list of credentials | — | At least one. Each entry carries an `ApiKey` block, a `PublicKey` block, or an `OAuth` block; a `Basic` block is refused at startup. Key and public key names are unique across the section. Every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin`; `AuthorizedSubjects` names whose tokens bind to this administrator, at least one is required, and a subject may belong to only one administrator at one issuer | restart; material per request |
+| `AdminEndpoint:Administrators:<n>:Permissions` | string list | absent = the whole surface | Draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here; an empty list grants nothing | restart |
+| `AdminEndpoint:Administrators:<n>:PermissionsFromTokenScopes` | bool | `false` | Narrows `Permissions` by each token's own scopes; refused on an administrator that also carries an `ApiKey` or `PublicKey` credential, since neither carries a scope | restart |
+| `AdminEndpoint:Administrators:<n>:AllowedSourceNetworks` | string list | empty = any network | Each entry an IP address or a CIDR network whose host bits are clear — not a DNS name — compared with IPv4-mapped addresses in their IPv4 form. Refused while `ReverseProxy:TrustedProxies` names no proxy narrower than a whole family. A request from elsewhere is answered `401` | restart |
 | `AdminEndpoint:Cors:AllowedOrigins` | string list | absent = every origin | `*` for every origin, a list for exactly those, an empty list for none. The same setting the MCP and client endpoints carry, configured separately | restart |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |

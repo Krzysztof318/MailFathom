@@ -7,12 +7,12 @@ using Microsoft.AspNetCore.HttpOverrides;
 
 namespace MailFathom.Host.Security.Transport;
 
-/// <summary>Composes the rule under which a forwarded scheme and host are applied to a request.</summary>
+/// <summary>Composes the rule under which a forwarded scheme, host, and client address are applied to a request.</summary>
 /// <remarks>
 /// <para>
-/// The platform's own forwarded-headers middleware does the work, and this states the policy it runs under. Two of
-/// its defaults are deliberately replaced rather than accepted: it trusts loopback, which is the wrong peer inside a
-/// container, and it processes <c>X-Forwarded-For</c> when asked to, which this deployment never asks for.
+/// The platform's own forwarded-headers middleware does the work, and this states the policy it runs under. One of its
+/// defaults is deliberately replaced rather than accepted: it trusts loopback, which is the wrong peer inside a
+/// container.
 /// </para>
 /// <para>
 /// A policy is composed on every startup, because there is no posture in which no forwarded header is read. A section
@@ -21,15 +21,16 @@ namespace MailFathom.Host.Security.Transport;
 /// gives up and the startup warning names it.
 /// </para>
 /// <para>
-/// The client address is out of scope on purpose. Nothing here partitions, limits, or logs by remote address, so
-/// rewriting <see cref="ConnectionInfo.RemoteIpAddress" /> from a header would replace the
-/// one address this process observes for itself — the peer that opened the connection — with one an upstream wrote,
-/// and buy nothing for it.
+/// The client address is read only where a proxy is named, and named narrower than a whole address family. <see cref="ConnectionInfo.RemoteIpAddress" /> is what an
+/// administrator's network restriction and the password attempt bound read, so behind a proxy it has to be the client
+/// rather than the proxy — and on a section that believes every peer, rewriting it from a header would let any caller
+/// write the address it is judged by. Refusing a network restriction on such a section is startup's job, so here the
+/// header is simply left unread and the address stays the peer that opened the connection.
 /// </para>
 /// </remarks>
 internal static class TrustedReverseProxyExtensions
 {
-    /// <summary>Adds the policy under which a trusted proxy's forwarded scheme and host reach the request.</summary>
+    /// <summary>Adds the policy under which a trusted proxy's forwarded scheme, host, and client address reach the request.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="reverseProxySettings">The reverse-proxy settings composition read.</param>
     /// <returns>The container, so composition reads as one sequence.</returns>
@@ -47,7 +48,7 @@ internal static class TrustedReverseProxyExtensions
 
         return services.Configure<ForwardedHeadersOptions>(forwardedHeaders =>
         {
-            forwardedHeaders.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+            forwardedHeaders.ForwardedHeaders = ForwardedHeadersFor(reverseProxySettings);
             forwardedHeaders.ForwardLimit = reverseProxySettings.MaximumForwardedHops;
 
             // Both lists arrive holding loopback. Left in place, a deployment that named its ingress controller would
@@ -66,5 +67,19 @@ internal static class TrustedReverseProxyExtensions
                 forwardedHeaders.KnownIPNetworks.Add(network);
             }
         });
+    }
+
+    /// <summary>Names the forwarded headers a request is rewritten from under the given settings.</summary>
+    /// <param name="reverseProxySettings">The reverse-proxy settings composition read.</param>
+    /// <returns>The scheme and the host always, and the client address only where <see cref="ReverseProxyOptions.ForwardsTheClientAddress" /> says so.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reverseProxySettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="ReverseProxyOptions.FindConfigurationErrors" />.</exception>
+    internal static ForwardedHeaders ForwardedHeadersFor(ReverseProxyOptions reverseProxySettings)
+    {
+        ArgumentNullException.ThrowIfNull(reverseProxySettings);
+
+        var schemeAndHost = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+
+        return reverseProxySettings.ForwardsTheClientAddress() ? schemeAndHost | ForwardedHeaders.XForwardedFor : schemeAndHost;
     }
 }

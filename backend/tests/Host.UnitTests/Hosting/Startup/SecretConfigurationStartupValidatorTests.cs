@@ -480,7 +480,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Authentication:0:ApiKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:ApiKey", failure, StringComparison.Ordinal);
         Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), failure, StringComparison.Ordinal);
     }
 
@@ -499,7 +499,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Authentication:1:ApiKey:Name", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators:1:Credentials:0:ApiKey:Name", failure, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -525,7 +525,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Authentication:1:ApiKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators:1:Credentials:0:ApiKey", failure, StringComparison.Ordinal);
         Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
     }
 
@@ -568,7 +568,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:PublicKey", failure, StringComparison.Ordinal);
         Assert.Contains("private key", failure, StringComparison.Ordinal);
     }
 
@@ -586,7 +586,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("AdminEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Administrators:0:Credentials:0:PublicKey", failure, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -892,7 +892,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         oauth.AuthorizationServers.Add(authorizationServer);
 
         var endpoint = EndpointAcceptingApiKeys();
-        endpoint.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauth });
+        AcceptCredential(endpoint, new AdministratorCredentialOptions { OAuth = oauth });
 
         return endpoint;
     }
@@ -904,7 +904,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     private static AdminEndpointOptions EndpointAcceptingPublicKey(string secretReference)
     {
         var endpoint = new AdminEndpointOptions { Enabled = true };
-        endpoint.Authentication.Add(new TransportAuthenticationOptions
+        AcceptCredential(endpoint, new AdministratorCredentialOptions
         {
             PublicKey = new ConfiguredSecret { Name = "nightly-digest", SecretReference = secretReference },
         });
@@ -912,9 +912,17 @@ public sealed class SecretConfigurationStartupValidatorTests
         return endpoint;
     }
 
-    /// <summary>Adds one key as an entry of its own, which is what a configured credential is.</summary>
+    /// <summary>Adds one key held by an administrator of its own.</summary>
     private static void AcceptKey(AdminEndpointOptions endpoint, ConfiguredSecret key) =>
-        endpoint.Authentication.Add(new TransportAuthenticationOptions { ApiKey = key });
+        AcceptCredential(endpoint, new AdministratorCredentialOptions { ApiKey = key });
+
+    /// <summary>Adds one credential as the only one of an administrator of its own, named after its position.</summary>
+    private static void AcceptCredential(AdminEndpointOptions endpoint, AdministratorCredentialOptions credential)
+    {
+        var administrator = new AdministratorOptions { Name = $"administrator-{endpoint.Administrators.Count}" };
+        administrator.Credentials.Add(credential);
+        endpoint.Administrators.Add(administrator);
+    }
 
     private static string TokenShapedKeyIssuedBy(string issuer)
     {

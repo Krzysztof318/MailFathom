@@ -184,80 +184,102 @@ public sealed class PublishedOAuthMetadataTests
 
     /// <summary>
     /// The field tells a client what to ask its authorization server for, so a permission the deployment grants from
-    /// configuration is not in it: no client can ask for one. Only an entry whose grant a token narrows contributes.
+    /// configuration is not in it: no client can ask for one. Only an administrator whose grant a token narrows
+    /// contributes.
     /// </summary>
     [Fact]
-    public void For_AnEntryNarrowedByTokenScopes_PublishesItsPermissionsBesideTheScopes()
+    public void For_AnAdministratorNarrowedByTokenScopes_PublishesItsPermissionsBesideTheScopes()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"),
-            PermissionsFromTokenScopes = true,
-        };
-
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
         // Act
-        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+        var published = PublishedOAuthMetadata.For([administrator]);
 
         // Assert
-        Assert.Equal(["mailfathom.read", "mailfathom.mail.read"], published.ScopesSupported);
+        Assert.Equal(["mailfathom.read", "mailfathom.admin.read"], published.ScopesSupported);
     }
 
     /// <summary>A client asks for scopes an authorization server can mint, so the document names what the subtree resolved to and never the subtree itself.</summary>
     [Fact]
-    public void For_AnEntryNarrowedByTokenScopesGrantingASubtree_PublishesTheResolvedNames()
+    public void For_AnAdministratorNarrowedByTokenScopesGrantingASubtree_PublishesTheResolvedNames()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"),
-            PermissionsFromTokenScopes = true,
-        };
-
-        entry.Permissions.Add("mailfathom.mail.contacts.*");
+        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.Permissions.Add("mailfathom.admin.audit.*");
 
         // Act
-        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+        var published = PublishedOAuthMetadata.For([administrator]);
 
         // Assert
-        Assert.Equal(
-            ["mailfathom.read", "mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write"],
-            published.ScopesSupported);
+        Assert.Equal(["mailfathom.read", "mailfathom.admin.audit.read"], published.ScopesSupported);
     }
 
-    /// <summary>An entry granting from configuration alone advertises none of its permissions, because a client asking for one would be asking for something nothing reads.</summary>
+    /// <summary>An administrator granted from configuration alone advertises none of its permissions, because a client asking for one would be asking for something nothing reads.</summary>
     [Fact]
-    public void For_AnEntryGrantingFromConfiguration_PublishesNoneOfItsPermissions()
+    public void For_AnAdministratorGrantedFromConfiguration_PublishesNoneOfItsPermissions()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") };
-
-        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"));
+        administrator.Permissions.Add(MailFathomPermission.AdminOperate.Name);
 
         // Act
-        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+        var published = PublishedOAuthMetadata.For([administrator]);
 
         // Assert
         Assert.Equal(["mailfathom.read"], published.ScopesSupported);
     }
 
-    /// <summary>Such an entry genuinely admits a token bringing any of them, so the document names the half an operator has to create in their authorization server.</summary>
+    /// <summary>Such an administrator genuinely admits a token bringing any of them, so the document names the half an operator has to create in their authorization server.</summary>
     [Fact]
-    public void For_AnEntryNarrowedByTokenScopesThatWroteNoGrant_PublishesTheWholeSurface()
+    public void For_AnAdministratorNarrowedByTokenScopesThatWroteNoGrant_PublishesTheWholeSurface()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
+        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce"));
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.GrantTheWholeSurface();
+
+        // Act
+        var published = PublishedOAuthMetadata.For([administrator]);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name),
+            published.ScopesSupported);
+    }
+
+    /// <summary>An emptied grant grants nothing, so there is nothing a client should be told to ask for.</summary>
+    [Fact]
+    public void For_AnAdministratorNarrowedByTokenScopesThatGrantsNothing_PublishesNoPermission()
+    {
+        // Arrange
+        var administrator = AdministratorSigningInWith(EntryFor(WorkforceIssuer, "workforce"));
+        administrator.PermissionsFromTokenScopes = true;
+
+        // Act
+        var published = PublishedOAuthMetadata.For([administrator]);
+
+        // Assert
+        Assert.Empty(published.ScopesSupported);
+    }
+
+    /// <summary>A mail-serving endpoint narrowed by token scopes advertises the whole of its own half, since what each token holds is decided by the user's credential record.</summary>
+    [Fact]
+    public void ForUserFacing_AnEntryNarrowedByTokenScopes_PublishesTheWholeMailSurface()
+    {
+        // Arrange
+        var entry = new UserFacingAuthenticationOptions
         {
+            Method = UserCredentialMethod.OAuthSubject.Name,
             OAuth = EntryFor(WorkforceIssuer, "workforce"),
             PermissionsFromTokenScopes = true,
         };
 
-        entry.GrantTheWholeSurface();
-
         // Act
-        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+        var published = PublishedOAuthMetadata.ForUserFacing([entry], ProtectedSurface.Mail);
 
         // Assert
         Assert.Equal(
@@ -265,31 +287,19 @@ public sealed class PublishedOAuthMetadataTests
             published.ScopesSupported);
     }
 
-    /// <summary>An emptied grant grants nothing, so there is nothing a client should be told to ask for.</summary>
-    [Fact]
-    public void For_AnEntryNarrowedByTokenScopesThatGrantsNothing_PublishesNoPermission()
-    {
-        // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = EntryFor(WorkforceIssuer, "workforce"),
-            PermissionsFromTokenScopes = true,
-        };
-
-
-        // Act
-        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
-
-        // Assert
-        Assert.Empty(published.ScopesSupported);
-    }
-
-    /// <summary>Publishes what the given OAuth blocks say, each on an entry of its own that writes down no grant.</summary>
-    /// <remarks>The unit is the entry rather than the block, because the grant belongs to the entry; a test about a grant builds its own entries, and the ones here are about what the blocks publish.</remarks>
+    /// <summary>Publishes what the given OAuth blocks say, each held by an administrator of its own that narrows nothing by token.</summary>
+    /// <remarks>The unit is the administrator rather than the block, because the grant belongs to the administrator; a test about a grant builds its own, and the ones here are about what the blocks publish.</remarks>
     private static PublishedOAuthMetadata Published(params OAuthValidationOptions[] oauthMethods) =>
         PublishedOAuthMetadata.For(
-            [.. oauthMethods.Select(oauth => new TransportAuthenticationOptions { OAuth = oauth })],
-            ProtectedSurface.Mail);
+            [.. oauthMethods.Index().Select(indexed => AdministratorSigningInWith(indexed.Item, $"administrator-{indexed.Index}"))]);
+
+    private static AdministratorOptions AdministratorSigningInWith(OAuthValidationOptions oauth, string name = "alice")
+    {
+        var administrator = new AdministratorOptions { Name = name };
+        administrator.Credentials.Add(new AdministratorCredentialOptions { OAuth = oauth });
+
+        return administrator;
+    }
 
     private static OAuthValidationOptions EntryFor(string issuer, string name, params string[] requiredScopes)
     {

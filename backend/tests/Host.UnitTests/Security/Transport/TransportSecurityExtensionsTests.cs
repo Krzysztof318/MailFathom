@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using System.Security.Claims;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Domain.Access;
@@ -9,6 +10,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.TestSupport;
@@ -203,7 +205,7 @@ public sealed class TransportSecurityExtensionsTests
         // Act
         services.AddTransportAuthentication(
             TransportSurface.Admin,
-            [new TransportAuthenticationOptions { PublicKey = publicKey }],
+            [ConfiguredAuthentication.Administrator("reporting-job", new AdministratorCredentialOptions { PublicKey = publicKey })],
             TransportSurface.Admin.ClientAssertionSchemeName);
 
         // Assert
@@ -308,7 +310,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
+            [AnAdministratorSigningInByToken()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -340,7 +342,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
+            [AnAdministratorSigningInByToken()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -370,7 +372,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
+            [AnAdministratorSigningInByToken()],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -406,7 +408,7 @@ public sealed class TransportSecurityExtensionsTests
         {
             services.AddTransportAuthentication(
                 surface,
-                [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
+                [AnAdministratorSigningInByToken()],
                 surface.OAuthSchemeNameFor("workforce"));
         }
 
@@ -422,67 +424,60 @@ public sealed class TransportSecurityExtensionsTests
     }
 
     /// <summary>
-    /// The grant belongs to the entry, so the scheme has to be registered with each key's own entry's grant rather
-    /// than with one set for the surface. Registering a shared set would give a key an operator narrowed whatever the
-    /// entry beside it holds, which is the failure the entry-scoped grant exists to prevent.
+    /// The grant belongs to the administrator, so the scheme has to be registered with each key's own administrator
+    /// rather than with one set for the surface. Registering a shared set would give a key an operator narrowed
+    /// whatever the administrator beside it holds, and attribute its acts to somebody else.
     /// </summary>
     [Fact]
-    public void AddTransportAuthentication_TwoKeysGrantedDifferently_GivesTheApiKeySchemeTheGrantOfEachEntry()
+    public void AddTransportAuthentication_TwoAdministratorsGrantedDifferently_GivesTheApiKeySchemeEachKeysOwnAdministrator()
     {
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var narrowed = new TransportAuthenticationOptions
-        {
-            ApiKey = new ConfiguredSecret { Name = "reporting-job", SecretReference = "plaintext:a-key" },
-        };
+        var auditor = ConfiguredAuthentication.AdministratorWithApiKey("auditor");
+        auditor.Permissions.Add(MailFathomPermission.AdminAuditRead.Name);
 
-        narrowed.Permissions.Add(MailFathomPermission.MailRead.Name);
-
-        var unnarrowed = new TransportAuthenticationOptions
-        {
-            ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:another-key" },
-        };
-
-        unnarrowed.GrantTheWholeSurface();
+        var alice = ConfiguredAuthentication.Administrator(
+            "alice",
+            ConfiguredAuthentication.ApiKey("alice-2026"),
+            ConfiguredAuthentication.ApiKey("alice-2027"));
+        alice.GrantTheWholeSurface();
 
         // Act
         services.AddTransportAuthentication(
-            TransportSurface.Mcp,
-            [narrowed, unnarrowed],
-            TransportSurface.Mcp.ApiKeySchemeName);
+            TransportSurface.Admin,
+            [auditor, alice],
+            TransportSurface.Admin.ApiKeySchemeName);
 
         // Assert
         using var composed = services.BuildServiceProvider();
         var schemeOptions = composed
             .GetRequiredService<IOptionsMonitor<ApiKeyAuthenticationSchemeOptions>>()
-            .Get(TransportSurface.Mcp.ApiKeySchemeName);
+            .Get(TransportSurface.Admin.ApiKeySchemeName);
 
-        Assert.Equal([MailFathomPermission.MailRead], schemeOptions.GrantsByKeyName["reporting-job"]);
+        Assert.Equal("auditor", schemeOptions.AdministratorsByKeyName["auditor"].Name);
+        Assert.Equal([MailFathomPermission.AdminAuditRead], schemeOptions.AdministratorsByKeyName["auditor"].Grant);
+        Assert.Same(schemeOptions.AdministratorsByKeyName["alice-2026"], schemeOptions.AdministratorsByKeyName["alice-2027"]);
         Assert.Equal(
-            MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
-            schemeOptions.GrantsByKeyName["workstation"]);
+            MailFathomPermission.PublishedFor(ProtectedSurface.Administration),
+            schemeOptions.AdministratorsByKeyName["alice-2026"].Grant);
     }
 
-    /// <summary>The assertion scheme carries the same map for the same reason, because a public key's entry is where its grant was written too.</summary>
+    /// <summary>The assertion scheme carries the same map for the same reason, because a public key's administrator is where its grant was written too.</summary>
     [Fact]
-    public void AddTransportAuthentication_AnAssertionEntryGrantedNothing_GivesTheSchemeAnEmptyGrantForThatKey()
+    public void AddTransportAuthentication_AnAdministratorGrantedNothing_GivesTheAssertionSchemeAnEmptyGrantForItsKey()
     {
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var retired = new TransportAuthenticationOptions
-        {
-            PublicKey = new ConfiguredSecret { Name = "nightly", SecretReference = "plaintext:a-public-key" },
-        };
-
+        var suspended = ConfiguredAuthentication.Administrator("nightly", ConfiguredAuthentication.PublicKey("nightly-key"));
 
         // Act
         services.AddTransportAuthentication(
             TransportSurface.Admin,
-            [retired],
+            [suspended],
             TransportSurface.Admin.ClientAssertionSchemeName);
 
         // Assert
@@ -491,135 +486,260 @@ public sealed class TransportSecurityExtensionsTests
             .GetRequiredService<IOptionsMonitor<ClientAssertionAuthenticationSchemeOptions>>()
             .Get(TransportSurface.Admin.ClientAssertionSchemeName);
 
-        Assert.Empty(schemeOptions.GrantsByKeyName["nightly"]);
+        Assert.Equal("nightly", schemeOptions.AdministratorsByKeyName["nightly-key"].Name);
+        Assert.Empty(schemeOptions.AdministratorsByKeyName["nightly-key"].Grant);
     }
 
-    /// <summary>Without the narrowing setting the deployment wrote the grant and the authorization server was never asked, so every token the entry admits holds the whole ceiling.</summary>
+    /// <summary>Several administrators signing in through one server share one validator rather than registering the server once each.</summary>
     [Fact]
-    public async Task OnTokenValidated_AnEntryGrantingFromConfiguration_GivesEveryTokenTheWholeGrant()
+    public void AddTransportAuthentication_TwoAdministratorsAtOneServer_RegistersOneSchemeForIt()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() };
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-
-        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
+        var services = new ServiceCollection();
+        services.AddLogging();
 
         // Act
-        await ValidatedTokenEventOf(entry).Invoke(context);
+        services.AddTransportAuthentication(
+            TransportSurface.Admin,
+            [AnAdministratorSigningInByToken("alice"), AnAdministratorSigningInByToken("bob")],
+            TransportSurface.Admin.OAuthSchemeNameFor("workforce"));
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var schemes = composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.Schemes;
+
+        Assert.Single(schemes, scheme => scheme.Name == TransportSurface.Admin.OAuthSchemeNameFor("workforce"));
+    }
+
+    /// <summary>Without the narrowing setting the deployment wrote the grant and the authorization server was never asked, so every token holds the whole of it.</summary>
+    [Fact]
+    public async Task OnTokenValidated_AnAdministratorGrantedByConfiguration_GivesEveryTokenTheWholeGrant()
+    {
+        // Arrange
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.Permissions.Add(MailFathomPermission.AdminRead.Name);
+
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: "mailfathom.admin.operate");
+
+        // Act
+        await ValidatedTokenEventOf(administrator).Invoke(context);
 
         // Assert
         Assert.Equal(
-            [MailFathomPermission.MailRead],
+            [MailFathomPermission.AdminRead],
             TransportGrant.PermissionsCarriedBy(context.Principal!));
     }
 
-    /// <summary>With it, the authorization server decides per subject within the bound the deployment fixed, so a token holds the intersection and nothing else.</summary>
+    /// <summary>The principal is the administrator the subject is bound to, so every act is attributed by the name the operator wrote rather than by an opaque subject.</summary>
     [Fact]
-    public async Task OnTokenValidated_AnEntryNarrowedByTokenScopes_GivesTheTokenOnlyWhatItsScopesCarry()
+    public async Task OnTokenValidated_ATokenNamingABoundSubject_IsTheAdministratorItIsBoundTo()
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = AnAuthorizationServer(),
-            PermissionsFromTokenScopes = true,
-        };
+        var alice = AnAdministratorSigningInByToken("alice");
+        var bob = AnAdministratorSigningInByToken("bob");
 
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
-
-        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.read offline_access");
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(bob, requestServices, tokenScopes: string.Empty);
 
         // Act
-        await ValidatedTokenEventOf(entry).Invoke(context);
+        await ValidatedTokenEventOf(alice, bob).Invoke(context);
+
+        // Assert
+        Assert.Null(context.Result);
+        Assert.Equal("bob", context.Principal!.Identity!.Name);
+        Assert.Equal("bob", TransportCallerIdentity.NameOf(context.Principal));
+    }
+
+    /// <summary>A token the server signed for a subject no administrator names proves who somebody is, and nothing about whether they administer this deployment.</summary>
+    [Fact]
+    public async Task OnTokenValidated_ATokenNamingNoConfiguredSubject_FailsAuthentication()
+    {
+        // Arrange
+        var administrator = AnAdministratorSigningInByToken("alice");
+
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: string.Empty, subject: "mallory-subject");
+
+        // Act
+        await ValidatedTokenEventOf(administrator).Invoke(context);
+
+        // Assert
+        Assert.NotNull(context.Result?.Failure);
+        Assert.Equal("The validated token names no configured administrator.", context.Result.Failure.Message);
+    }
+
+    /// <summary>With the narrowing setting the authorization server decides per subject within the bound the deployment fixed, so a token holds the intersection and nothing else.</summary>
+    [Fact]
+    public async Task OnTokenValidated_AnAdministratorNarrowedByTokenScopes_GivesTheTokenOnlyWhatItsScopesCarry()
+    {
+        // Arrange
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.Permissions.Add(MailFathomPermission.AdminRead.Name);
+        administrator.Permissions.Add(MailFathomPermission.AdminOperate.Name);
+
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: "mailfathom.admin.read offline_access");
+
+        // Act
+        await ValidatedTokenEventOf(administrator).Invoke(context);
 
         // Assert
         Assert.Equal(
-            [MailFathomPermission.MailRead],
+            [MailFathomPermission.AdminRead],
             TransportGrant.PermissionsCarriedBy(context.Principal!));
     }
 
-    /// <summary>A scope naming a permission the entry never granted must not widen it, or the authorization server would be deciding the ceiling rather than the deployment.</summary>
-    [Fact]
-    public async Task OnTokenValidated_ATokenCarryingAPermissionOutsideTheCeiling_HoldsNoneOfIt()
+    /// <summary>A scope naming a permission the administrator was never granted must not widen the grant, or the authorization server would be deciding the ceiling rather than the deployment.</summary>
+    [Theory]
+    [InlineData("mailfathom.admin.operate")]
+    [InlineData("mailfathom.admin.*")]
+    public async Task OnTokenValidated_ATokenCarryingAScopeOutsideTheCeiling_HoldsNoneOfIt(string tokenScopes)
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = AnAuthorizationServer(),
-            PermissionsFromTokenScopes = true,
-        };
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.PermissionsFromTokenScopes = true;
+        administrator.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-
-        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes);
 
         // Act
-        await ValidatedTokenEventOf(entry).Invoke(context);
+        await ValidatedTokenEventOf(administrator).Invoke(context);
 
         // Assert
         Assert.Empty(TransportGrant.PermissionsCarriedBy(context.Principal!));
     }
 
-    /// <summary>A scope is compared byte for byte, so the shorthand a deployment may write in its own configuration grants nothing when a token brings it instead.</summary>
-    [Fact]
-    public async Task OnTokenValidated_ATokenCarryingASubtreePattern_HoldsNoneOfIt()
+    /// <summary>An address inside a named network is admitted, and one the dual-stack listener reports in its IPv4-mapped form is compared as the IPv4 address it is.</summary>
+    [Theory]
+    [InlineData("10.20.30.40")]
+    [InlineData("::ffff:10.20.30.40")]
+    public async Task OnTokenValidated_AnAdministratorActingFromAnAllowedNetwork_IsAdmitted(string source)
     {
         // Arrange
-        var entry = new TransportAuthenticationOptions
-        {
-            OAuth = AnAuthorizationServer(),
-            PermissionsFromTokenScopes = true,
-        };
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.AllowedSourceNetworks.Add("10.0.0.0/8");
 
-        entry.Permissions.Add("mailfathom.mail.*");
-
-        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.*");
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: string.Empty, source: source);
 
         // Act
-        await ValidatedTokenEventOf(entry).Invoke(context);
+        await ValidatedTokenEventOf(administrator).Invoke(context);
 
         // Assert
-        Assert.Empty(TransportGrant.PermissionsCarriedBy(context.Principal!));
+        Assert.Null(context.Result);
+        Assert.Equal("alice", context.Principal!.Identity!.Name);
     }
 
-    /// <summary>Reads the registered event that reduces a validated token to the identity this host keeps and writes the grant onto it.</summary>
-    /// <remarks>Reached through the registration rather than called directly, because what is under test is that the entry's grant was captured where the scheme was configured.</remarks>
-    private static Func<TokenValidatedContext, Task> ValidatedTokenEventOf(TransportAuthenticationOptions entry)
+    /// <summary>
+    /// A valid token from outside the named networks is refused as unauthenticated, which says nothing to the caller
+    /// about the token having been good; the log line is where an operator reads which administrator it was and from
+    /// where.
+    /// </summary>
+    [Fact]
+    public async Task OnTokenValidated_AnAdministratorActingFromOutsideItsNetworks_FailsAndLogsTheAdministratorAndSource()
+    {
+        // Arrange
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.AllowedSourceNetworks.Add("10.0.0.0/8");
+
+        using var logs = new RecordingLoggerProvider();
+        using var requestServices = RequestServicesLoggingTo(logs);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: string.Empty, source: "198.51.100.7");
+
+        // Act
+        await ValidatedTokenEventOf(administrator).Invoke(context);
+
+        // Assert
+        Assert.Equal(
+            "The administrator may not act from the network this request arrived from.",
+            context.Result?.Failure?.Message);
+
+        var record = Assert.Single(logs.Records, record => record.Level == LogLevel.Warning);
+        Assert.Equal("alice", Assert.Contains("AdministratorName", record.Properties));
+        Assert.Equal("198.51.100.7", Assert.Contains("SourceAddress", record.Properties)?.ToString());
+    }
+
+    /// <summary>A request whose peer address nobody knows cannot be shown to come from an allowed network, so it is refused rather than admitted.</summary>
+    [Fact]
+    public async Task OnTokenValidated_ARestrictedAdministratorOnARequestWithNoPeerAddress_Fails()
+    {
+        // Arrange
+        var administrator = AnAdministratorSigningInByToken();
+        administrator.AllowedSourceNetworks.Add("10.0.0.0/8");
+
+        using var requestServices = RequestServicesLoggingTo(null);
+        var context = TokenValidatedFor(administrator, requestServices, tokenScopes: string.Empty, source: null);
+
+        // Act
+        await ValidatedTokenEventOf(administrator).Invoke(context);
+
+        // Assert
+        Assert.NotNull(context.Result?.Failure);
+    }
+
+    /// <summary>Reads the registered event that binds a validated token to its administrator and writes the grant onto it.</summary>
+    /// <remarks>Reached through the registration rather than called directly, because what is under test is that the administrators were captured where the scheme was configured.</remarks>
+    private static Func<TokenValidatedContext, Task> ValidatedTokenEventOf(params AdministratorOptions[] administrators)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTransportAuthentication(
-            TransportSurface.Mcp,
-            [entry],
-            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+            TransportSurface.Admin,
+            administrators,
+            TransportSurface.Admin.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
 
         var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
-            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+            .Get(TransportSurface.Admin.OAuthSchemeNameFor("workforce"));
 
         return schemeOptions.Events!.OnTokenValidated;
     }
 
     /// <summary>Builds the context the authentication framework hands the event once a token's signature, issuer, audience, and lifetime have been checked.</summary>
-    private static TokenValidatedContext TokenValidatedFor(TransportAuthenticationOptions entry, string tokenScopes)
+    private static TokenValidatedContext TokenValidatedFor(
+        AdministratorOptions administrator,
+        IServiceProvider requestServices,
+        string tokenScopes,
+        string? subject = null,
+        string? source = "192.0.2.1")
     {
         var scheme = new AuthenticationScheme(
-            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
+            TransportSurface.Admin.OAuthSchemeNameFor("workforce"),
             displayName: null,
             typeof(JwtBearerHandler));
 
-        return new TokenValidatedContext(new DefaultHttpContext(), scheme, new JwtBearerOptions())
+        var request = new DefaultHttpContext { RequestServices = requestServices };
+        request.Connection.RemoteIpAddress = source is null ? null : IPAddress.Parse(source);
+
+        var authorizationServer = administrator.Credentials[0].OAuth!.AuthorizationServers[0];
+
+        return new TokenValidatedContext(request, scheme, new JwtBearerOptions())
         {
             Principal = new ClaimsPrincipal(new ClaimsIdentity(
                 [
-                    new Claim("iss", entry.OAuth!.AuthorizationServers[0].Issuer!),
-                    new Claim("sub", "11111111-2222-3333-4444-555555555555"),
+                    new Claim("iss", authorizationServer.Issuer!),
+                    new Claim("sub", subject ?? authorizationServer.AuthorizedSubjects[0]),
                     new Claim("scope", tokenScopes),
                 ],
                 "test")),
         };
     }
+
+    /// <summary>The services a request carries, which is where the event takes the logger a refusal is written to.</summary>
+    private static ServiceProvider RequestServicesLoggingTo(RecordingLoggerProvider? logs) =>
+        new ServiceCollection()
+            .AddLogging(logging =>
+            {
+                if (logs is not null)
+                {
+                    logging.AddProvider(logs);
+                }
+            })
+            .BuildServiceProvider();
 
     /// <summary>Reads a built handler chain from its outermost handler down to the one that opens the connection.</summary>
     /// <remarks><see cref="DelegatingHandler.InnerHandler" /> is public, so the walk needs no reflection; the chain ends at the first handler that delegates to nothing.</remarks>
@@ -635,27 +755,19 @@ public sealed class TransportSecurityExtensionsTests
         return chain;
     }
 
-    private static OAuthValidationOptions AnAuthorizationServer()
-    {
-        var oauthSettings = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
-        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
-        {
-            Name = "workforce",
-            Issuer = "https://sso.example.test",
-        });
-
-        return oauthSettings;
-    }
+    /// <summary>An administrator signing in by a token the workforce server issues for the subject named after it.</summary>
+    private static AdministratorOptions AnAdministratorSigningInByToken(string name = "alice") =>
+        ConfiguredAuthentication.Administrator(
+            name,
+            ConfiguredAuthentication.OAuthFor(
+                "https://mail.example.test/api/admin",
+                issuer: "https://sso.example.test",
+                subject: $"{name}-subject"));
 
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,
-            [
-                new TransportAuthenticationOptions
-                {
-                    ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" },
-                },
-            ],
+            [ConfiguredAuthentication.AdministratorWithApiKey("workstation")],
             surface.IsSpecified ? surface.ApiKeySchemeName : "unused");
 
     private static MessageReceivedContext MessageReceivedOver(

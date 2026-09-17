@@ -16,8 +16,7 @@ namespace MailFathom.Host.Configuration.Access;
 internal static class UserFacingAuthenticationConfiguration
 {
     /// <summary>The key beneath an endpoint section that the accepted methods are configured under.</summary>
-    /// <remarks>The same key the administrative endpoint's own list is written under, because it answers the same question — which credentials does this endpoint accept — and an operator moving between two sections should not have to learn a second name for it.</remarks>
-    internal const string SettingName = TransportAuthenticationConfiguration.SettingName;
+    internal const string SettingName = "Authentication";
 
     /// <summary>The settings an entry used to carry, anywhere beneath the list, and what replaced each of them.</summary>
     /// <remarks>
@@ -45,6 +44,27 @@ internal static class UserFacingAuthenticationConfiguration
             + "a user rather than being admitted for whoever the deployment serves. Map each with "
             + "'mfctl credential create --method oauth-subject --issuer <issuer> --subject <subject>'.",
     };
+
+    /// <summary>Maps each configured issuer onto the scopes the entry that trusts it requires.</summary>
+    /// <param name="oauthMethods">The configured OAuth blocks.</param>
+    /// <returns>The required scopes, keyed by the issuer whose tokens they are asked of.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Keyed by issuer rather than held as one set, because an entry states the scopes asked of the servers <em>it</em>
+    /// configures. A token is judged against what its own issuer's entry requires, which is what makes two entries
+    /// independent rather than merged into whichever of them asked for least.
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, IReadOnlyCollection<string>> RequiredScopesByIssuer(
+        IEnumerable<OAuthValidationOptions> oauthMethods)
+    {
+        ArgumentNullException.ThrowIfNull(oauthMethods);
+
+        return oauthMethods
+            .SelectMany(oauth => oauth.AuthorizationServers.Select(server => (
+                Issuer: server.ValidatedIssuer(),
+                Scopes: (IReadOnlyCollection<string>)[.. oauth.RequiredScopes])))
+            .ToDictionary(entry => entry.Issuer, entry => entry.Scopes, StringComparer.Ordinal);
+    }
 
     /// <summary>Reports the entry that accepts a user's username and password, where the endpoint accepts one.</summary>
     /// <param name="methods">The configured entries, in configuration order.</param>
@@ -77,7 +97,7 @@ internal static class UserFacingAuthenticationConfiguration
     /// <param name="methods">The configured entries, in configuration order.</param>
     /// <returns>The OAuth blocks, in configuration order, empty when the endpoint accepts no token.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
-    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource, for the reason <see cref="TransportAuthenticationConfiguration" /> gives about the same rule.</remarks>
+    /// <remarks>Several blocks rather than one, because each states its own required scopes and its own authorization servers. What they may not disagree about is the resource, for the reason <see cref="AdministratorConfiguration" /> gives about the same rule.</remarks>
     internal static IReadOnlyList<OAuthValidationOptions> OAuthMethodsIn(
         IEnumerable<UserFacingAuthenticationOptions> methods)
     {

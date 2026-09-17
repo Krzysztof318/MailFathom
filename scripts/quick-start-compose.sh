@@ -583,20 +583,25 @@ JSON
 fi
 
 admin_api_key=''
-admin_authentication_block='[]'
+admin_administrators_block='[]'
 
 if [[ "$admin_endpoint" == 'api-key' ]]; then
   admin_api_key="$(openssl rand -base64 33 | tr -d '\n')"
   write_secret "secrets/mailfathom/$admin_key_name" "$admin_api_key"
-  admin_authentication_block=$(
+  admin_administrators_block=$(
     cat << JSON
 [
       {
-        "ApiKey": {
-          "Name": "workstation",
-          "SecretReference": "file:/etc/mailfathom/secrets/$admin_key_name",
-          "Lifetime": "NoLimit"
-        }
+        "Name": "workstation",
+        "Credentials": [
+          {
+            "ApiKey": {
+              "Name": "workstation",
+              "SecretReference": "file:/etc/mailfathom/secrets/$admin_key_name",
+              "Lifetime": "NoLimit"
+            }
+          }
+        ]
       }
     ]
 JSON
@@ -613,7 +618,7 @@ admin_section=$(
   "AdminEndpoint": {
     "Enabled": true,
     "Port": $admin_port,
-    "Authentication": $admin_authentication_block
+    "Administrators": $admin_administrators_block
   },
 JSON
 )

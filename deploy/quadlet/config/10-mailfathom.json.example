@@ -84,8 +84,13 @@
   "AdminEndpoint": {
     "Enabled": true,
     "Port": 8090,
-    "Authentication": [
-      { "ApiKey": { "Name": "admin", "SecretReference": "systemd-credential:admin-api-key" } }
+    "Administrators": [
+      {
+        "Name": "admin",
+        "Credentials": [
+          { "ApiKey": { "Name": "admin", "SecretReference": "systemd-credential:admin-api-key" } }
+        ]
+      }
     ]
   },
   "McpEndpoint": {

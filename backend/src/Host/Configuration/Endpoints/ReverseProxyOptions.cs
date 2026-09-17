@@ -7,7 +7,7 @@ using System.Net;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
-/// <summary>Configures which reverse proxy this process accepts a public scheme and host from.</summary>
+/// <summary>Configures which reverse proxy this process accepts a public scheme, a public host, and a client address from.</summary>
 /// <remarks>
 /// <para>
 /// Behind a proxy that terminates TLS, the request arrives as <c>http</c> under whichever internal name the proxy
@@ -16,7 +16,13 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// and every address composed from a request agree with the name a client actually used.
 /// </para>
 /// <para>
-/// Reading them is not a mode to switch on. The middleware is always in the pipeline and the section carries one
+/// The client's own address arrives the same way, as <c>X-Forwarded-For</c>, and it is read only from a proxy this
+/// section names. A section naming none believes every peer, so reading the address there would let any client write
+/// the address it is judged by — which is what an administrator's network restriction and the password attempt bound
+/// both read. With a proxy named, the address a request reports is the one that proxy saw.
+/// </para>
+/// <para>
+/// Reading the scheme and the host is not a mode to switch on. The middleware is always in the pipeline and the section carries one
 /// decision — which peers a forwarded value is believed from — because that is the only question an operator has to
 /// answer. A section that names a proxy believes that proxy and nothing else; a section that names none believes every
 /// peer that can open a connection, which is the default and is announced at startup rather than assumed to be
@@ -53,6 +59,11 @@ internal sealed class ReverseProxyOptions
     /// write to state the posture explicitly.
     /// </remarks>
     private static readonly string[] EveryAddress = ["0.0.0.0/0", "::/0"];
+
+    private static readonly ConfiguredAddressRangeWording ProxyWording = new(
+        "proxy",
+        "trust",
+        "A proxy is trusted by the address its connection arrives from, so a DNS name cannot stand in for one.");
 
     /// <summary>Gets the proxy addresses or CIDR networks a forwarded scheme and host are accepted from.</summary>
     /// <remarks>
@@ -97,6 +108,17 @@ internal sealed class ReverseProxyOptions
     /// </remarks>
     public bool NamesAProxy => this.TrustedProxies.Count > 0;
 
+    /// <summary>Reports whether a request's client address is read from what the named proxy forwarded.</summary>
+    /// <returns><see langword="true" /> when a proxy is named and no trusted range covers every address of a family.</returns>
+    /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
+    /// <remarks>
+    /// A range covering a whole family believes every peer of it exactly as naming nothing does, so reading the address
+    /// there would let any client of that family write the address it is judged by. Such a section keeps the peer that
+    /// opened the connection, and a setting that needs the forwarded address is refused against it.
+    /// </remarks>
+    public bool ForwardsTheClientAddress() =>
+        this.NamesAProxy && this.ToTrustedProxyRangesCoveringEveryAddress().Count == 0;
+
     /// <summary>Reads the section the way composition does, defaults included.</summary>
     /// <param name="configuration">The application configuration.</param>
     /// <returns>The bound settings.</returns>
@@ -137,13 +159,13 @@ internal sealed class ReverseProxyOptions
     /// <returns>The addresses, in configuration order, empty when every entry names a network.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPAddress> ToTrustedProxyAddresses() =>
-        [.. this.EffectiveTrustedProxies().Where(static entry => !NamesNetwork(entry)).Select(IPAddress.Parse)];
+        [.. this.EffectiveTrustedProxies().Where(static entry => !ConfiguredAddressRanges.NamesNetwork(entry)).Select(IPAddress.Parse)];
 
     /// <summary>Maps the trusted entries onto the proxy networks among them.</summary>
     /// <returns>The networks, in configuration order, empty when every entry names a single address.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPNetwork> ToTrustedProxyNetworks() =>
-        [.. this.EffectiveTrustedProxies().Where(NamesNetwork).Select(IPNetwork.Parse)];
+        [.. this.EffectiveTrustedProxies().Where(ConfiguredAddressRanges.NamesNetwork).Select(IPNetwork.Parse)];
 
     /// <summary>Reports the trusted ranges that cover every address, and so believe any peer that can open a connection.</summary>
     /// <returns>The ranges, in configuration order, empty when every entry names a proxy this deployment could have meant.</returns>
@@ -156,66 +178,10 @@ internal sealed class ReverseProxyOptions
     public IReadOnlyList<IPNetwork> ToTrustedProxyRangesCoveringEveryAddress() =>
         [.. this.ToTrustedProxyNetworks().Where(static network => network.PrefixLength == 0)];
 
-    private static bool NamesNetwork(string entry) => entry.Contains('/', StringComparison.Ordinal);
-
-    /// <summary>Refuses a prefix that is not a network, and one that names a host inside a network rather than the network.</summary>
-    /// <remarks>
-    /// The framework's parser accepts a base address whose host bits are set and silently masks them off, so
-    /// <c>10.0.0.5/24</c> would bind as <c>10.0.0.0/24</c>: an operator who meant to trust one proxy would have trusted
-    /// two hundred and fifty-six addresses without being told. The base address is therefore compared against what the
-    /// parse produced, which is the same comparison that catches an IPv6 prefix written one bit too wide.
-    /// </remarks>
-    private static IEnumerable<string> FindNetworkErrors(string entry, string entryPath)
-    {
-        var configuredBaseAddress = entry[..entry.IndexOf('/', StringComparison.Ordinal)];
-
-        if (!IPNetwork.TryParse(entry, out var network) || !IPAddress.TryParse(configuredBaseAddress, out var baseAddress))
-        {
-            yield return $"{entryPath} — '{entry}' is not a CIDR network; state a network address and its prefix length, for example '10.0.0.0/24'.";
-
-            yield break;
-        }
-
-        if (!network.BaseAddress.Equals(baseAddress))
-        {
-            yield return $"{entryPath} — '{entry}' names an address inside '{network}' rather than the network itself. Write '{network}' to trust that whole range, or drop the prefix to trust the one address.";
-        }
-    }
-
-    private static string Normalize(string? entry) => entry?.Trim() ?? string.Empty;
-
     /// <summary>Produces the entries trust is actually composed from, which is every address when none is named.</summary>
     private IEnumerable<string> EffectiveTrustedProxies() =>
-        this.NamesAProxy ? this.TrustedProxies.Select(Normalize) : EveryAddress;
+        this.NamesAProxy ? this.TrustedProxies.Select(ConfiguredAddressRanges.Normalize) : EveryAddress;
 
-    private IEnumerable<string> FindTrustedProxyErrors()
-    {
-        foreach (var (index, configuredEntry) in this.TrustedProxies.Index())
-        {
-            var entryPath = $"{SectionName}:{nameof(this.TrustedProxies)}:{index}";
-            var entry = Normalize(configuredEntry);
-
-            if (entry.Length == 0)
-            {
-                yield return $"{entryPath} — an empty entry names no proxy; state an IP address such as '10.0.0.5' or a CIDR network such as '10.0.0.0/24', or remove it.";
-
-                continue;
-            }
-
-            if (NamesNetwork(entry))
-            {
-                foreach (var error in FindNetworkErrors(entry, entryPath))
-                {
-                    yield return error;
-                }
-
-                continue;
-            }
-
-            if (!IPAddress.TryParse(entry, out _))
-            {
-                yield return $"{entryPath} — '{entry}' is neither an IP address nor a CIDR network. A proxy is trusted by the address its connection arrives from, so a DNS name cannot stand in for one.";
-            }
-        }
-    }
+    private IEnumerable<string> FindTrustedProxyErrors() =>
+        ConfiguredAddressRanges.FindErrors(this.TrustedProxies, $"{SectionName}:{nameof(this.TrustedProxies)}", ProxyWording);
 }

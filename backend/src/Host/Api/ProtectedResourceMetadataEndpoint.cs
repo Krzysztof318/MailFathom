@@ -34,21 +34,19 @@ internal static class ProtectedResourceMetadataEndpoint
 {
     /// <summary>Maps one surface's document at the address its resource identifier places it.</summary>
     /// <param name="endpoints">The route builder.</param>
-    /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
-    /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's grants draw from, which decides what an entry narrowed by token scopes advertises.</param>
+    /// <param name="administrators">The endpoint's configured administrators, in configuration order.</param>
     /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when no entry states OAuth, which is a surface accepting no token at all.</exception>
-    /// <remarks>The administrative endpoint maps this one; a mail-serving surface maps <see cref="MapUserFacingProtectedResourceMetadata" /> beside it, because a token admitted there resolves a user's credential rather than a configured entry. The surface stays a parameter rather than a constant so neither can publish the other's advertised scopes.</remarks>
-    internal static RouteHandlerBuilder MapProtectedResourceMetadata(
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="administrators" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when no credential states OAuth, which is a surface accepting no token at all.</exception>
+    /// <remarks>The administrative endpoint maps this one; a mail-serving surface maps <see cref="MapUserFacingProtectedResourceMetadata" /> beside it, because a token admitted there resolves a user's credential rather than a configured administrator.</remarks>
+    internal static RouteHandlerBuilder MapAdministrativeProtectedResourceMetadata(
         this IEndpointRouteBuilder endpoints,
-        IReadOnlyList<TransportAuthenticationOptions> methods,
-        ProtectedSurface grantedSurface)
+        IReadOnlyList<AdministratorOptions> administrators)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentNullException.ThrowIfNull(methods);
+        ArgumentNullException.ThrowIfNull(administrators);
 
-        return endpoints.Map(PublishedOAuthMetadata.For(methods, grantedSurface));
+        return endpoints.Map(PublishedOAuthMetadata.For(administrators));
     }
 
     /// <summary>Maps a mail-serving surface's document at the address its resource identifier places it.</summary>

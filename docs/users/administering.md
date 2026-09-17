@@ -47,14 +47,24 @@ service that reads it are different authorities.
     "Enabled": true,
     "BindAddress": "127.0.0.1",
     "Port": 8090,
-    "Authentication": [
-      { "ApiKey": { "Name": "workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+    "Administrators": [
+      {
+        "Name": "alice",
+        "Credentials": [
+          { "ApiKey": { "Name": "alice-workstation", "SecretReference": "systemd-credential:admin-workstation-key" } }
+        ]
+      }
     ]
   }
 }
 ```
 
-Five things about that block are worth understanding before you copy it:
+Six things about that block are worth understanding before you copy it:
+
+- **An administrator is a named person or system, and its credentials are how it signs in.** `alice` is what
+  `mfctl status` prints and what every act is attributed to; give each person their own entry, with their own
+  `Permissions` and, where it helps, the `AllowedSourceNetworks` they may act from.
+  [Who administers the deployment](../operations/admin-endpoint.md#who-administers-the-deployment) is the whole of it.
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a

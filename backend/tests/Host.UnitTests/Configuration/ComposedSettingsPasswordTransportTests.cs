@@ -77,7 +77,8 @@ public sealed class ComposedSettingsPasswordTransportTests
         // Arrange
         var configuration = Settings(
             new("AdminEndpoint:Enabled", "true"),
-            new("AdminEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"));
+            new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+            new("AdminEndpoint:Administrators:0:Credentials:0:Basic:AttemptsPerMinute", "10"));
 
         // Act
         var refusals = ComposedSettings.FindSurfaceRefusals(configuration);

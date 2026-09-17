@@ -203,6 +203,27 @@ public sealed class ReverseProxyOptionsTests
         Assert.Contains(errors, error => error.Contains("TrustedProxies:2", StringComparison.Ordinal));
     }
 
+    /// <summary>Only a named proxy narrower than a whole family is believed about the client it forwarded.</summary>
+    [Theory]
+    [InlineData("10.0.0.5", true)]
+    [InlineData("10.0.0.0/8", true)]
+    [InlineData("", false)]
+    [InlineData("0.0.0.0/0", false)]
+    [InlineData("10.0.0.5 ::/0", false)]
+    public void ForwardsTheClientAddress_TheTrustedProxies_DecideWhetherAForwardedClientIsBelieved(string trustedProxies, bool expected)
+    {
+        // Arrange
+        var settings = new ReverseProxyOptions();
+
+        foreach (var trustedProxy in trustedProxies.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            settings.TrustedProxies.Add(trustedProxy);
+        }
+
+        // Act, Assert
+        Assert.Equal(expected, settings.ForwardsTheClientAddress());
+    }
+
     [Fact]
     public void MaximumForwardedHops_UnconfiguredSection_BelievesOneProxy()
     {

@@ -582,8 +582,9 @@ public sealed class ComposedClientEndpointSecurityTests
         new("McpEndpoint:Authentication:0:Method", "api-key"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
-        new("AdminEndpoint:Authentication:0:ApiKey:Name", AdminKeyName),
-        new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
+        new("AdminEndpoint:Administrators:0:Name", "administrator-0"),
+        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:Name", AdminKeyName),
+        new("AdminEndpoint:Administrators:0:Credentials:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
     ];
 
     /// <summary>

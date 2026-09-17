@@ -36,7 +36,7 @@ namespace MailFathom.Host.Configuration.Access;
 /// A permission joins that list from every entry whose grant a token's own scopes narrow, and from no other, which
 /// follows from the same reading of the field: a permission the deployment grants without consulting the token is not
 /// something any client can ask for. What that set is depends on which axis the entry belongs to. On the administrative
-/// surface it is the union of those entries' own configured ceilings, which is exactly what an operator has to create
+/// surface it is the union of those administrators' own configured ceilings, which is exactly what an operator has to create
 /// as scopes in their authorization server. On a mail-serving surface there is no configured ceiling to read — each
 /// credential record carries its own — so the whole published vocabulary of that surface is advertised, and a token
 /// still holds only the intersection of its scopes with the record that resolved its user.
@@ -47,36 +47,34 @@ internal sealed record PublishedOAuthMetadata(
     IReadOnlyList<string> AuthorizationServers,
     IReadOnlyList<string> ScopesSupported)
 {
-    /// <summary>Composes what the configured entries publish between them.</summary>
-    /// <param name="methods">The configured credential entries, in configuration order.</param>
-    /// <param name="surface">The surface these entries guard, which decides what an entry that wrote no grant advertises.</param>
+    /// <summary>Composes what the configured administrators publish between them.</summary>
+    /// <param name="administrators">The configured administrators, in configuration order.</param>
     /// <returns>The published metadata.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when no entry states OAuth, which is a surface accepting no token at all.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="administrators" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when no credential states OAuth, which is a surface accepting no token at all.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed their configuration errors.</exception>
     /// <remarks>
-    /// The whole entry rather than its OAuth block, because the grant belongs to the entry and the document has to
-    /// carry it. Reading the blocks alone would leave the two halves of one entry consulted in two places, which is how
-    /// a document comes to advertise a ceiling the entry beside it never granted.
+    /// The whole administrator rather than its OAuth blocks, because the grant belongs to the administrator and the
+    /// document has to carry it. Reading the blocks alone would leave the two halves of one administrator consulted in
+    /// two places, which is how a document comes to advertise a ceiling nobody granted.
     /// </remarks>
-    internal static PublishedOAuthMetadata For(
-        IReadOnlyList<TransportAuthenticationOptions> methods,
-        ProtectedSurface surface)
+    internal static PublishedOAuthMetadata For(IReadOnlyList<AdministratorOptions> administrators)
     {
-        ArgumentNullException.ThrowIfNull(methods);
+        ArgumentNullException.ThrowIfNull(administrators);
 
-        var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
+        var oauthMethods = AdministratorConfiguration.OAuthMethodsIn(administrators);
 
         if (oauthMethods.Count == 0)
         {
             throw new ArgumentException(
                 "A protected resource metadata document describes the configured OAuth methods, and none was configured.",
-                nameof(methods));
+                nameof(administrators));
         }
 
-        var advertisedPermissions = methods
-            .Where(method => method.PermissionsFromTokenScopes && method.OAuth is not null)
-            .SelectMany(method => method.GrantedPermissions(surface))
+        var advertisedPermissions = administrators
+            .Where(administrator => administrator.PermissionsFromTokenScopes
+                && administrator.Credentials.Any(credential => credential.OAuth is not null))
+            .SelectMany(administrator => administrator.GrantedPermissions())
             .Select(permission => permission.Name);
 
         return Compose(oauthMethods, advertisedPermissions);
