@@ -394,7 +394,11 @@ controller's pod CIDR, as above, is the first step. It is not the only one:
   `LoadBalancer` or `NodePort` `Service` of MailFathom's own, with no ingress in between — hands the pod a node's
   address under `Cluster`, and the pod's peer is then the client only with `externalTrafficPolicy: Local`. The chart
   renders a `ClusterIP` `Service` by default; a deployment exposing the pod directly sets `service.type` and
-  `service.externalTrafficPolicy: Local` together, and the chart refuses the policy on a `ClusterIP` `Service`.
+  `service.externalTrafficPolicy: Local` together, and the chart refuses the policy on a `ClusterIP` `Service`. That
+  keeps the address and is still not enough for a restriction: with nothing in front of the pod,
+  `ReverseProxy:TrustedProxies` names no proxy and startup refuses every `AllowedSourceNetworks`. A deployment that
+  wants one puts an HTTP-terminating proxy that writes `X-Forwarded-For` in front of the pod and names it there —
+  `externalTrafficPolicy: Local` then preserves the address that proxy sees, rather than standing in for it.
 
 The deployment's log names the administrator and the address a refused request came from, which is the fastest way to
 see which of these a cluster needs: an office network refused from `10.x` node addresses is the rewritten source,

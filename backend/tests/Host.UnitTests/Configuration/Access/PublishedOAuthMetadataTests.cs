@@ -56,6 +56,25 @@ public sealed class PublishedOAuthMetadataTests
         Assert.Equal([WorkforceIssuer, PartnerIssuer], published.AuthorizationServers);
     }
 
+    /// <summary>
+    /// Several administrators may sign in through one authorization server, and a client that finds its issuer twice
+    /// reads two servers and asks which one to use. So a server named by several administrators is published once.
+    /// </summary>
+    [Fact]
+    public void For_SeveralAdministratorsSharingAnAuthorizationServer_PublishesItsIssuerOnce()
+    {
+        // Arrange
+        var alice = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+        var bob = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+        var partners = EntryFor(PartnerIssuer, "partners");
+
+        // Act
+        var published = Published(alice, bob, partners);
+
+        // Assert
+        Assert.Equal([WorkforceIssuer, PartnerIssuer], published.AuthorizationServers);
+    }
+
     /// <summary>The document lists what this resource supports, so a scope two entries both ask for is named once rather than twice.</summary>
     [Fact]
     public void For_SeveralEntriesSharingAScope_PublishesThatScopeOnce()

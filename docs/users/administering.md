@@ -107,7 +107,7 @@ is the rule in full.
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is typed at the prompt or piped in, never passed as an argument — an argument reaches your shell
@@ -186,7 +186,7 @@ it, so a lost laptop is a reason to rotate the key on the server rather than to 
 
 ```console
 $ mfctl status
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```

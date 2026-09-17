@@ -139,9 +139,6 @@ internal sealed class AdminEndpointOptions
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Administrators.Count > 0;
 
-    /// <summary>Gets whether any administrator is confined to named networks.</summary>
-    public bool RestrictsSourceNetworks => this.Administrators.Any(administrator => administrator.RestrictsSourceNetworks);
-
     /// <summary>Gets whether Kestrel terminates TLS for this endpoint.</summary>
     public bool TerminatesTls => TransportListenerConfiguration.TerminatesTls(this.Transport);
 

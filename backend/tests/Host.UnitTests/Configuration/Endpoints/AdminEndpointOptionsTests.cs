@@ -140,7 +140,6 @@ public sealed class AdminEndpointOptionsTests
         Assert.True(settings.AllowsApiKey);
         Assert.True(settings.AllowsOAuth);
         Assert.True(settings.RequiresAuthentication);
-        Assert.True(settings.RestrictsSourceNetworks);
         Assert.Empty(settings.FindConfigurationErrors());
     }
 

@@ -53,7 +53,7 @@ public sealed class AdministratorAdmissionTests
         Assert.Equal([MailFathomPermission.AdminRead], TransportGrant.PermissionsCarriedBy(caller));
     }
 
-    /// <summary>Two keys of one administrator are one person, so both produce the same name and the same grant.</summary>
+    /// <summary>Two keys of one administrator are one person, so both resolve the one admission holding its name and grant.</summary>
     [Fact]
     public void ForEach_AnAdministratorWithTwoKeys_ComposesOneAdmissionForBoth()
     {
@@ -69,6 +69,8 @@ public sealed class AdministratorAdmissionTests
         var admissions = AdministratorAdmission.ForEach([alice, bob]);
 
         // Assert
+        var byKeyName = AdministratorConfiguration.AdministratorsByApiKeyName([alice, bob]);
+        Assert.Same(admissions[byKeyName["alice-2026"]], admissions[byKeyName["alice-2027"]]);
         Assert.Equal("alice", admissions[alice].Name);
         Assert.Empty(admissions[alice].Grant);
         Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Administration), admissions[bob].Grant);

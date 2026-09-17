@@ -23,6 +23,9 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// </remarks>
 internal static class ConfiguredAddressRanges
 {
+    /// <summary>The prefix length of <c>::ffff:0:0/96</c>, the block every IPv4-mapped address sits in.</summary>
+    private const int MappedBlockPrefixLength = 96;
+
     /// <summary>Reports whether a configured entry names a network rather than one address.</summary>
     /// <param name="entry">The entry, trimmed.</param>
     /// <returns><see langword="true" /> when the entry carries a prefix length.</returns>
@@ -132,11 +135,22 @@ internal static class ConfiguredAddressRanges
         }
     }
 
+    /// <summary>Reads a validated entry as the network a peer is compared against.</summary>
+    /// <remarks>
+    /// A network written in its IPv4-mapped form is read as the IPv4 network it maps, for the reason a single address
+    /// is: a peer is compared in its IPv4 form, and <see cref="IPNetwork.Contains" /> matches nothing across address
+    /// families, so <c>::ffff:10.20.0.0/112</c> kept as written would hold no peer at all. A prefix shorter than the
+    /// mapped block reaches addresses outside it and stays the IPv6 network it names.
+    /// </remarks>
     private static IPNetwork ToNetwork(string entry)
     {
         if (NamesNetwork(entry))
         {
-            return IPNetwork.Parse(entry);
+            var network = IPNetwork.Parse(entry);
+
+            return network.BaseAddress.IsIPv4MappedToIPv6 && network.PrefixLength >= MappedBlockPrefixLength
+                ? new IPNetwork(network.BaseAddress.MapToIPv4(), network.PrefixLength - MappedBlockPrefixLength)
+                : network;
         }
 
         var address = InComparableForm(IPAddress.Parse(entry));

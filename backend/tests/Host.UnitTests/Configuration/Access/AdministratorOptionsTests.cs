@@ -480,6 +480,30 @@ public sealed class AdministratorOptionsTests
             networks);
     }
 
+    /// <summary>A network written in its mapped form holds the IPv4 peers it maps, since a peer is compared in its IPv4 form; a shorter prefix reaches past the mapped block and stays IPv6.</summary>
+    [Fact]
+    public void SourceNetworks_AMappedNetwork_IsTheIPv4NetworkItMaps()
+    {
+        // Arrange
+        var administrator = ConfiguredAuthentication.AdministratorWithApiKey("alice");
+        administrator.AllowedSourceNetworks.Add("::ffff:10.20.0.0/112");
+        administrator.AllowedSourceNetworks.Add("::ffff:0:0/96");
+        administrator.AllowedSourceNetworks.Add("::/80");
+
+        // Act
+        var networks = administrator.SourceNetworks();
+
+        // Assert
+        Assert.Equal(
+            [
+                new IPNetwork(IPAddress.Parse("10.20.0.0"), 16),
+                new IPNetwork(IPAddress.Parse("0.0.0.0"), 0),
+                new IPNetwork(IPAddress.Parse("::"), 80),
+            ],
+            networks);
+        Assert.Empty(administrator.FindConfigurationErrors(SettingPath));
+    }
+
     [Fact]
     public void RestrictsSourceNetworks_AnEmptyList_LeavesTheAdministratorUnrestricted()
     {

@@ -72,7 +72,7 @@ several.
 | Key | What it states |
 | --- | --- |
 | `Name` | Required, and unique across the list ignoring case. It is the caller's identity: what `mfctl status` prints, and what every log scope and every authorization refusal reads. A key, a public key, or a token never appears in that place. |
-| `Credentials` | Required, at least one. Each entry carries an `ApiKey` block, a `PublicKey` block, or an `OAuth` block — the same blocks `McpEndpoint:Authentication` takes — and every one of them admits this administrator. |
+| `Credentials` | Required, at least one. Each entry carries an `ApiKey` block naming one key, a `PublicKey` block naming one client's public key, an `OAuth` block naming the resource and its authorization servers, or any combination of them, and every block admits this administrator. |
 | `Permissions` | What the administrator may do, on every credential it presents. See [what a credential may do](#what-a-credential-may-do). |
 | `PermissionsFromTokenScopes` | Whether a token's own scopes narrow `Permissions` further. It is refused on an administrator that also carries a key or a public key, since neither carries a scope — give the token its own administrator. |
 | `AllowedSourceNetworks` | Where the administrator may act from. See [where an administrator may act from](#where-an-administrator-may-act-from). |
@@ -165,7 +165,7 @@ sign in and read that it holds nothing. `mfctl status` prints what that route re
 their own grant back:
 
 ```text
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 ```
 
@@ -2105,7 +2105,7 @@ with no browser on a redirect that can never arrive.
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443 --name production
 Administrative credential (an API key, or an access token from the configured authorization server):
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.2.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.2.0), saved as profile 'production' and selected.
 ```
 
 The credential is read from standard input rather than taken as an argument, because an argument reaches the shell
@@ -2240,7 +2240,7 @@ Accepting it stores this fingerprint on the profile. Every later command then ac
 so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.
 
 Trust this certificate for this profile? [y/N]: y
-Signed in to https://mail.internal.example:8443 as 'workstation' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
+Signed in to https://mail.internal.example:8443 as 'alice' (MailFathom 0.5.0), saved as profile 'internal' and selected. The connection is protected by a pinned certificate rather than by a chain this machine trusts; the profile now accepts 3B:9A:1C:…:7F and refuses any other.
 ```
 
 Read the fingerprint against the deployment's own before answering — `openssl x509 -in server.crt -noout -fingerprint
@@ -2353,7 +2353,7 @@ In use  Profile     Endpoint                           Credential
         staging     https://staging.example.test:8443  workstation
 
 $ mfctl switch staging
-Now acting on 'staging' (https://staging.example.test:8443) as 'workstation'.
+Now acting on 'staging' (https://staging.example.test:8443) as 'alice'.
 ```
 
 `--endpoint` overrides the selection for one invocation without changing it, and takes either a profile name or an
@@ -2361,7 +2361,7 @@ address:
 
 ```console
 $ mfctl status --endpoint production
-'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```
@@ -2434,13 +2434,13 @@ moved between entries does not decrypt.
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is held by the Windows Credential Manager.
 ```
 
 ```console
 $ mfctl login --endpoint https://mail.example.test:8443
-Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+Signed in to https://mail.example.test:8443 as 'alice' (MailFathom 0.8.0), saved as profile 'production' and selected.
 The credential is sealed in the credentials file under a key beside it, because this session has no D-Bus session bus, so no Secret Service provider can be reached.
 ```
 

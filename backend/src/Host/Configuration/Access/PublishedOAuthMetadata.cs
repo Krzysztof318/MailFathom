@@ -125,7 +125,8 @@ internal sealed record PublishedOAuthMetadata(
             [
                 .. oauthMethods
                     .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
-                    .Select(authorizationServer => authorizationServer.ValidatedIssuer()),
+                    .Select(authorizationServer => authorizationServer.ValidatedIssuer())
+                    .Distinct(StringComparer.Ordinal),
             ],
             [
                 .. oauthMethods
