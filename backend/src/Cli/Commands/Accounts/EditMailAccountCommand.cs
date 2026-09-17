@@ -28,17 +28,20 @@ internal static class EditMailAccountCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var formatOption = CliOptions.DocumentFormat();
         var accountOption = MailAccountOptions.Account();
 
         Command command = new("edit", "Edit one mail account's declaration in your editor, and commit it as one change.")
         {
             accountOption,
+            formatOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(accountOption),
+            result.GetValue(formatOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -50,6 +53,7 @@ internal static class EditMailAccountCommand
     private static async Task<int> RunAsync(
         CliContext context,
         Guid accountId,
+        DocumentView view,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -67,6 +71,7 @@ internal static class EditMailAccountCommand
             "mail-account",
             "this mail account's declaration",
             opened.Declaration ?? string.Empty,
+            view,
             cancellationToken);
 
         if (saved is null)

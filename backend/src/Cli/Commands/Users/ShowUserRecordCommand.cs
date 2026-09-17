@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Editing;
 
 namespace MailFathom.Cli.Commands.Users;
 
@@ -28,17 +29,20 @@ internal static class ShowUserRecordCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var formatOption = CliOptions.DocumentFormat();
         var userOption = UserOptions.User();
 
         Command command = new("show", "Read one user's record as this deployment holds it.")
         {
             userOption,
+            formatOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(userOption),
+            result.GetValue(formatOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
@@ -48,6 +52,7 @@ internal static class ShowUserRecordCommand
     private static async Task<int> RunAsync(
         CliContext context,
         Guid? requestedUser,
+        DocumentView view,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
@@ -66,7 +71,7 @@ internal static class ShowUserRecordCommand
 
         context.Console.WriteLine($"{record.DisplayName} ({record.User:D})");
         context.Console.WriteLine($"  version: {record.Version.ToString(CultureInfo.InvariantCulture)}");
-        context.Console.WriteLine(record.Document ?? "{}");
+        context.Console.WriteLine(EditorDrivenDocument.Show(record.Document ?? "{}", view));
 
         return CliExitCode.Success;
     }

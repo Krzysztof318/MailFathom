@@ -35,6 +35,26 @@ public sealed class EffectiveSettingsReaderTests
         Assert.Equal(ComposedConfigurationDeployment.ProvisionedFileName, setting.Origin);
     }
 
+    /// <summary>A provisioned YAML file is the deployment's file too, and is named as the origin exactly as a JSON one is.</summary>
+    [Fact]
+    public void Read_ASettingOnlyAYamlFileSupplies_NamesTheFile()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "MailboxSearch:\n  SnippetsPerEmail: 2\n",
+            persisted: "{}",
+            provisionedAsYaml: true);
+
+        // Act
+        var reading = deployment.Reader.Read("MailboxSearch");
+
+        // Assert
+        var setting = Assert.Single(reading.Settings);
+        Assert.Equal("2", setting.Value);
+        Assert.Equal(SettingSource.File, setting.Source);
+        Assert.Equal(ComposedConfigurationDeployment.ProvisionedYamlFileName, setting.Origin);
+    }
+
     /// <summary>The persisted layer beats the files beneath it, which is the precedence the layer was inserted at.</summary>
     [Fact]
     public void Read_ASettingThePersistedLayerAlsoCarries_NamesTheLayer()

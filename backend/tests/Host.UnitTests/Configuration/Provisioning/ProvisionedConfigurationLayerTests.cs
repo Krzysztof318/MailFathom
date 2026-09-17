@@ -53,17 +53,94 @@ public sealed class ProvisionedConfigurationLayerTests
     }
 
     [Fact]
-    public void FindFiles_MountedDirectory_SkipsEntriesThatAreNotJsonFiles()
+    public void FindFiles_MountedDirectory_SkipsEntriesThatAreNeitherJsonNorYaml()
     {
         // Arrange
         var fileSystem = new FakeProvisionedConfigurationFileSystem()
-            .WithDirectory(MountPath, "settings.json", "notes.txt", "settings.json.bak", "README");
+            .WithDirectory(MountPath, "settings.json", "notes.txt", "settings.json.bak", "values.yaml.orig", "README");
 
         // Act
         var files = ProvisionedConfigurationLayer.FindFiles(new ProvisionedConfigurationPaths(MountPath, null), fileSystem);
 
         // Assert
         Assert.Equal([MountedFile("settings.json")], files);
+    }
+
+    /// <summary>JSON and YAML files interleave by their whole names, so an operator orders them by naming them.</summary>
+    [Fact]
+    public void FindFiles_MountedDirectoryMixingFormats_LayersThemByNameAndReadsEachInItsOwnFormat()
+    {
+        // Arrange
+        var fileSystem = new FakeProvisionedConfigurationFileSystem()
+            .WithDirectory(MountPath, "30-search.yml", "10-mail.YAML", "20-persistence.json");
+
+        // Act
+        var files = ProvisionedConfigurationLayer.FindFiles(new ProvisionedConfigurationPaths(MountPath, null), fileSystem);
+
+        // Assert
+        Assert.Equal(
+            [
+                MountedFile("10-mail.YAML", ProvisionedConfigurationFormat.Yaml),
+                MountedFile("20-persistence.json"),
+                MountedFile("30-search.yml", ProvisionedConfigurationFormat.Yaml),
+            ],
+            files);
+    }
+
+    /// <summary>Two files at the same place in the order would be ordered by their extension, which nobody chose.</summary>
+    [Theory]
+    [InlineData("10-mail.json", "10-mail.yaml")]
+    [InlineData("10-mail.yaml", "10-mail.yml")]
+    [InlineData("10-mail.json", "10-mail.JSON")]
+    public void FindFiles_FilesWhoseNamesDifferOnlyByExtension_FailsNamingBoth(string first, string second)
+    {
+        // Arrange
+        var fileSystem = new FakeProvisionedConfigurationFileSystem()
+            .WithDirectory(MountPath, first, "20-search.json", second);
+
+        // Act
+        var failure = Assert.Throws<ProvisionedConfigurationSourceInvalidException>(
+            () => ProvisionedConfigurationLayer.FindFiles(new ProvisionedConfigurationPaths(MountPath, null), fileSystem));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ProvisionedConfigurationSourceInvalid, failure.ErrorCode);
+        Assert.Contains(first, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(second, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("20-search.json", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/etc/mailfathom/override.yaml", true)]
+    [InlineData("/etc/mailfathom/override.yml", true)]
+    [InlineData("/etc/mailfathom/override.json", false)]
+    public void FindFiles_MountedFile_IsReadInTheFormatItsExtensionNames(string filePath, bool readAsYaml)
+    {
+        // Arrange
+        var fileSystem = new FakeProvisionedConfigurationFileSystem().WithFile(filePath);
+
+        // Act
+        var files = ProvisionedConfigurationLayer.FindFiles(new ProvisionedConfigurationPaths(null, filePath), fileSystem);
+
+        // Assert
+        var expectedFormat = readAsYaml ? ProvisionedConfigurationFormat.Yaml : ProvisionedConfigurationFormat.Json;
+        Assert.Equal([new ProvisionedConfigurationFile(filePath, expectedFormat)], files);
+    }
+
+    /// <summary>A file whose extension names neither format would otherwise be read under a guess.</summary>
+    [Fact]
+    public void FindFiles_MountedFileThatIsNeitherJsonNorYaml_FailsNamingTheConfigurationKeyAndThePath()
+    {
+        // Arrange
+        const string filePath = "/etc/mailfathom/override.conf";
+        var fileSystem = new FakeProvisionedConfigurationFileSystem().WithFile(filePath);
+
+        // Act
+        var failure = Assert.Throws<ProvisionedConfigurationSourceInvalidException>(
+            () => ProvisionedConfigurationLayer.FindFiles(new ProvisionedConfigurationPaths(null, filePath), fileSystem));
+
+        // Assert
+        Assert.Contains(ProvisionedConfigurationPaths.FileKey, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(filePath, failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>The atomic-update entries Kubernetes writes beside the keys are bookkeeping, never configuration.</summary>
@@ -110,7 +187,9 @@ public sealed class ProvisionedConfigurationLayerTests
             fileSystem);
 
         // Assert
-        Assert.Equal([MountedFile("settings.json"), overridePath], files);
+        Assert.Equal(
+            [MountedFile("settings.json"), new ProvisionedConfigurationFile(overridePath, ProvisionedConfigurationFormat.Json)],
+            files);
     }
 
     /// <summary>A mount that never arrived must stop the host rather than leave it running on defaults.</summary>
@@ -210,5 +289,8 @@ public sealed class ProvisionedConfigurationLayerTests
         Assert.Equal(2, insertionIndex);
     }
 
-    private static string MountedFile(string fileName) => Path.Combine(MountPath, fileName);
+    private static ProvisionedConfigurationFile MountedFile(
+        string fileName,
+        ProvisionedConfigurationFormat format = ProvisionedConfigurationFormat.Json) =>
+        new(Path.Combine(MountPath, fileName), format);
 }

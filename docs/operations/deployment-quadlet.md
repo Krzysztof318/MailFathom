@@ -107,6 +107,11 @@ cp deploy/quadlet/config/10-mailfathom.json.example ~/.config/mailfathom/config/
 cp deploy/compose/postgres/10-create-mailfathom-database.sh ~/.config/mailfathom/postgres-init/
 ```
 
+`deploy/quadlet/config/10-mailfathom.yaml.example` holds the same configuration in YAML; copy it to
+`~/.config/mailfathom/config/10-mailfathom.yaml` instead of the JSON one if you prefer that format, and never both —
+two names differing only by extension stop the host. [JSON and YAML](configuration-sources.md#json-and-yaml) states what
+a YAML file may not use.
+
 The `.container` files and the one `.volume` are named rather than globbed because there are four more container units
 and a second volume, and those are the parts of this directory that are optional: `mailfathom-presidio.container`,
 `mailfathom-spamassassin.container`, `mailfathom-valkey.container`, and `mailfathom-silo.container` with
@@ -126,9 +131,9 @@ start fails naming one. Podman creates a missing bind source as an empty directo
 above creates both directories a step earlier, so a skipped or mistyped `cp` leaves something that exists and is empty.
 An empty `postgres-init` initializes a database with no `mailfathom` role and then reports healthy, and an empty
 `config` starts MailFathom with synchronization off and no account. Neither says why, which is what the assertions are
-for: `AssertFileIsExecutable=` on the initialization script, and `AssertPathExistsGlob=` on `*.json` in the
-configuration directory — the latter also catching the directory that holds only the tracked `.json.example`, which
-MailFathom does not read.
+for: `AssertFileIsExecutable=` on the initialization script, and `AssertPathExistsGlob=` on `*.json`, `*.yaml`, and `*.yml` in
+the configuration directory, any one of which satisfies it — the latter also catching the directory that holds only a
+tracked `.example`, which MailFathom does not read.
 
 Then edit `~/.config/containers/systemd/mailfathom.container` and replace `<version>` in `Image=` with the release you
 are installing. The placeholder is invalid on purpose, so an unedited unit fails with an unparseable image reference

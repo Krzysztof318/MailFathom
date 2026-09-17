@@ -11,13 +11,14 @@ to the rest of the sections.
 
 ## `ConfigurationSources`
 
-Names JSON configuration provisioned outside the application — a mounted ConfigMap, a systemd drop-in.
-[Configuration sources](configuration-sources.md) is the page.
+Names JSON or YAML configuration provisioned outside the application — a mounted ConfigMap, a systemd drop-in.
+[Configuration sources](configuration-sources.md) is the page, and
+[JSON and YAML](configuration-sources.md#json-and-yaml) states what each format admits and what YAML refuses.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `ConfigurationSources:Directory` | string | unset | Must exist when named | restart |
-| `ConfigurationSources:File` | string | unset | Must exist when named | restart |
+| `ConfigurationSources:Directory` | string | unset | Must exist when named; layers `*.json`, `*.yaml`, and `*.yml` by ordinal file name; two names differing only by extension fail startup | restart |
+| `ConfigurationSources:File` | string | unset | Must exist when named; `.json`, `.yaml`, or `.yml`, which decides how it is read | restart |
 
 The *content* of files that existed at startup reloads; adding or removing a file is a restart.
 

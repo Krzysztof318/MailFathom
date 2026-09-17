@@ -1,0 +1,49 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The YAML form of 10-mailfathom.json.example beside it, holding the same settings. Copy exactly one of the two to
+# ~/.config/mailfathom/config/ — this one as 10-mailfathom.yaml — because two names differing only by extension stop the
+# host. The extension decides how a file is read: MailFathom layers in `*.json`, `*.yaml`, and `*.yml`, so this example
+# and a `.bak` are ignored. Files are layered in file-name order whatever their format, so `20-…` overrides `10-…`.
+#
+# The JSON example carries the reasoning behind every block below, and it holds here unchanged: every credential is a
+# `systemd-credential:` reference whose name matches a LoadCredentialEncrypted= line in mailfathom.container, and the
+# database is configured by that unit's environment block rather than here.
+#
+# A value is read as the text written: `no` stays the word no rather than becoming false, and `0x10` stays that text.
+# Anchors, aliases, tags, several documents in one file, and a key written twice are refused, naming the file and the
+# line. docs/operations/configuration-sources.md says why.
+
+# Uncomment together with the matching LoadCredentialEncrypted= line when a recorded account authenticates with OAuth.
+# The material is `openssl rand -base64 32`, and its own base64 is what is backed up, never the `.cred` file.
+#
+# DataEncryption:
+#   ActiveKeyId: "2026-08"
+#   Keys:
+#     - KeyId: "2026-08"
+#       Material:
+#         Name: mailfathom-data-key
+#         SecretReference: systemd-credential:mailfathom-data-key
+
+# No mailbox is declared here: every account is a record, created with `mfctl account add --from-file mailbox.json`
+# once the deployment is running, and `mfctl account edit --format yaml` shows one for editing in this format.
+MailSynchronization:
+  Enabled: true
+  Interval: "00:05:00"
+
+# How the mailbox is recorded. Port 8090 is the one mailfathom.container publishes, on loopback.
+AdminEndpoint:
+  Enabled: true
+  Port: 8090
+  Authentication:
+    - ApiKey:
+        Name: admin
+        SecretReference: systemd-credential:admin-api-key
+
+McpEndpoint:
+  Enabled: true
+  Authentication:
+    - Method: api-key
+  Cors:
+    AllowedOrigins: []

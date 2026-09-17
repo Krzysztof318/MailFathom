@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Editing;
 
 namespace MailFathom.Cli;
 
@@ -139,6 +140,19 @@ internal static class CliOptions
     internal static Option<int?> PageSize(string noun) => new("--page-size")
     {
         Description = $"How many {noun} to read. Defaults to what the deployment serves.",
+    };
+
+    /// <summary>Builds the option choosing the syntax a document the deployment holds is shown and edited in.</summary>
+    /// <returns>The option, which defaults to <see cref="DocumentView.Json" />.</returns>
+    /// <remarks>
+    /// Declared once rather than per command because every command that opens a document in the operator's editor, and
+    /// the one that prints a user's record beside it, has to offer the same two views under the same name — an operator
+    /// who reads a record as YAML expects to edit it as YAML.
+    /// </remarks>
+    internal static Option<DocumentView> DocumentFormat() => new("--format")
+    {
+        Description = "Show the document as json or yaml. Defaults to json; a yaml view is converted back to JSON before anything is committed.",
+        DefaultValueFactory = _ => DocumentView.Json,
     };
 
     /// <summary>Builds the option an operator states an irreversible act's agreement in the command with.</summary>

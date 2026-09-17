@@ -792,6 +792,13 @@ password reference in one of their accounts that had already stopped resolving d
 commits and the command prints that problem after it, so you can correct it before the deployment next restarts —
 [the endpoint reference](../operations/admin-endpoint.md#users-and-their-records) holds the rule.
 
+**Add `--format yaml` to read and edit in YAML instead of JSON.** `mfctl user edit`, `mfctl user show`,
+`mfctl account edit`, and `mfctl config edit` all take it, and `json` stays the default. What you save is converted back
+to JSON before anything is sent, so `true`, `3`, and an empty value mean what they meant; write `"3"` in quotes when you
+mean the text. Comments you add are not kept. A buffer that is not acceptable YAML — an anchor, a tag, a key written
+twice — changes nothing, and the command tells you why and where it kept your edit so you can fix it rather than start
+again; [editing a document as YAML](../operations/configuration-sources.md#editing-a-document-as-yaml) has the whole rule.
+
 ```console
 $ mfctl user edit --user 7c02...
 Committed user record version 4.
@@ -901,7 +908,7 @@ persisted layer, because persisting it would spend a version and change nothing 
 `mfctl config unset` gives one setting back to the file beneath it. `mfctl config edit` opens the whole persisted
 document in your `$VISUAL` or `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a
 section — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the file back
-when the editor exits. And `mfctl config adopt` copies what your files decide beneath a path into the database, which
+when the editor exits; `--format yaml` opens it as YAML instead. And `mfctl config adopt` copies what your files decide beneath a path into the database, which
 is the one thing here that stops a file deciding a value; it shows you exactly what it would take and asks first.
 
 A setting that holds a credential reads back as `(redacted)` everywhere, including in the editor — the document holds a

@@ -85,6 +85,25 @@ public sealed class RootSettingsLayerPrecedenceTests
         Assert.Equal("fromDatabase", effective);
     }
 
+    /// <summary>A provisioned YAML file is the same layer a JSON one is: above the application's files, below the persisted layer.</summary>
+    [Theory]
+    [InlineData("""{ "Unrelated": "value" }""", "fromMountedYaml")]
+    [InlineData("""{ "Layered": { "Setting": "fromDatabase" } }""", "fromDatabase")]
+    public void ProvisionedYamlFile_HostOrder_SitsWhereAProvisionedJsonFileSits(string persisted, string expected)
+    {
+        // Arrange
+        using var configuration = this.ComposeHostSources(
+            persisted: persisted,
+            provisioned: "Layered:\n  Setting: fromMountedYaml\n",
+            provisionedFileName: "10-provisioned.yaml");
+
+        // Act
+        var effective = configuration[SettingKey];
+
+        // Assert
+        Assert.Equal(expected, effective);
+    }
+
     /// <summary>
     /// Every override an operator reaches for still wins, which is the property a bad persisted value is repaired
     /// through: neither User Secrets nor a command-line argument has to reach the database first.
@@ -304,6 +323,7 @@ public sealed class RootSettingsLayerPrecedenceTests
         MemoryConfigurationSource => "memory",
         EnvironmentVariablesConfigurationSource environment => $"environment:{environment.Prefix}",
         ProvisionedJsonConfigurationSource provisioned => $"provisioned:{provisioned.Path}",
+        ProvisionedYamlConfigurationSource provisioned => $"provisioned:{provisioned.Path}",
         JsonConfigurationSource json => $"json:{json.Path}",
         _ => source.GetType().Name,
     };
@@ -362,13 +382,14 @@ public sealed class RootSettingsLayerPrecedenceTests
     {
         this.files.WithFile(fileName, content);
 
-        var source = new ProvisionedJsonConfigurationSource
-        {
-            Path = fileName,
-            FileProvider = this.files,
-            Optional = false,
-            ReloadOnChange = false,
-        };
+        FileConfigurationSource source = ProvisionedConfigurationFile.FormatOf(fileName) == ProvisionedConfigurationFormat.Yaml
+            ? new ProvisionedYamlConfigurationSource()
+            : new ProvisionedJsonConfigurationSource();
+
+        source.Path = fileName;
+        source.FileProvider = this.files;
+        source.Optional = false;
+        source.ReloadOnChange = false;
 
         configuration.Sources.Insert(
             ProvisionedConfigurationLayer.FindInsertionIndex([.. configuration.Sources]),

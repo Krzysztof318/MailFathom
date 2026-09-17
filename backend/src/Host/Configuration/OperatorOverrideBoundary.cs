@@ -29,7 +29,10 @@ namespace MailFathom.Host.Configuration;
 /// file name is something a deployment chooses, so the name alone would not settle it — a provisioned file called
 /// <c>secrets.json</c> resolves to that same bare name and would be read as an override, placing both MailFathom
 /// layers below it. What settles it is the type: the provisioned layer constructs
-/// <see cref="ProvisionedJsonConfigurationSource" />, which this recognizes as the deployment's however it is named.
+/// <see cref="ProvisionedJsonConfigurationSource" />, which this recognizes as the deployment's however it is named. A
+/// provisioned YAML file is <see cref="ProvisionedYamlConfigurationSource" />, which is no JSON source and so is never
+/// mistaken for User Secrets in the first place; it is still named here, so the rule reads as one about provisioned
+/// files rather than about one format of them.
 /// </para>
 /// </remarks>
 internal static class OperatorOverrideBoundary
@@ -63,7 +66,7 @@ internal static class OperatorOverrideBoundary
 
         // Ahead of the JSON arm below, which it would otherwise match: a provisioned file is the deployment's
         // whatever the deployment named it.
-        ProvisionedJsonConfigurationSource => false,
+        ProvisionedJsonConfigurationSource or ProvisionedYamlConfigurationSource => false,
         JsonConfigurationSource json => string.Equals(json.Path, UserSecretsFileName, StringComparison.Ordinal),
 
         // Command-line arguments are an operator's override and are still not the boundary, because the boundary is

@@ -124,6 +124,8 @@ config:
       { "MailSynchronization": { "Enabled": true, "Interval": "00:05:00" } }
 ```
 
+A `config.files` key names its format by its extension: `.json` is read as JSON, `.yaml` or `.yml` as YAML, and the schema refuses any other. Keys are layered by name whatever their format, and two differing only by extension stop the host; [JSON and YAML](https://krzysztof318.github.io/MailFathom/operations/configuration-sources.html#json-and-yaml) states what a YAML file may not use.
+
 [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html) carries the whole values document, both `kubectl create secret` commands, and what each key is for.
 
 ## The first install does not become ready, and that is the design

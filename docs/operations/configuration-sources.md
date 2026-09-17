@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
 
-MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
+MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON or YAML configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
 Secrets are a separate contract and stay one. A secret-bearing setting holds a reference rather than material, whichever source the setting itself arrived from; [secret provisioning](secret-provisioning.md) is that contract, and the [Kubernetes mapping](#kubernetes) below states how the two meet.
 
@@ -39,8 +39,8 @@ Two keys, both unset by default. A deployment that names neither keeps exactly t
 
 | Key | Environment form | Names |
 | --- | --- | --- |
-| `ConfigurationSources:Directory` | `ConfigurationSources__Directory` | A directory whose `*.json` files are layered in |
-| `ConfigurationSources:File` | `ConfigurationSources__File` | One JSON file layered above that directory |
+| `ConfigurationSources:Directory` | `ConfigurationSources__Directory` | A directory whose `*.json`, `*.yaml`, and `*.yml` files are layered in |
+| `ConfigurationSources:File` | `ConfigurationSources__File` | One JSON or YAML file layered above that directory |
 
 They are read from configuration rather than from the environment directly, so the same setting arrives as an environment variable in a container, as `--ConfigurationSources:Directory=/etc/mailfathom/config` under systemd, and from `appsettings.json` during local development, without a second mechanism per deployment shape. A blank value reads as unset, because templating a manifest routinely emits an empty string for a setting the operator left alone.
 
@@ -50,12 +50,42 @@ Both settings are **restart-required**. They decide which sources exist, which i
 
 ### What a directory contributes
 
-- Files matching `*.json`, and nothing else. A `notes.txt` or a `settings.json.bak` left beside them is ignored rather than parsed.
-- Ordered by file name, compared ordinally, so the same ConfigMap layers the same way on every machine that mounts it. Later names win: `20-persistence.json` overrides `10-defaults.json`.
+- Files matching `*.json`, `*.yaml`, and `*.yml`, and nothing else. A `notes.txt` or a `settings.json.bak` left beside them is ignored rather than parsed.
+- Ordered by the whole file name, compared ordinally, whatever format each file is written in, so the same ConfigMap layers the same way on every machine that mounts it. Later names win: `20-persistence.yaml` overrides `10-defaults.json`.
+- No two names that differ only by extension. `10-mail.json` beside `10-mail.yaml` fails startup naming both, because their order would then be decided by how `.json` and `.yaml` sort rather than by a name anybody chose.
 - Top-level entries only. Subdirectories are not searched.
 - Entries beginning with `..` are skipped. Kubernetes updates a mounted volume by writing a new timestamped directory and repointing the `..data` symbolic link at it, which is what makes the update atomic; both entries live beside the keys and neither is configuration.
 
 An existing but empty directory is permitted and contributes nothing. A ConfigMap with no keys is a legitimate state during a rollout, and the startup record below reports the count so the case is visible rather than silent.
+
+### JSON and YAML
+
+**The extension decides the format**, in a directory and for the single file alike: `.json` is read by the framework's own JSON provider, and `.yaml` or `.yml` by MailFathom's YAML reader. The single file must carry one of the three; any other extension fails startup naming the file rather than guessing. The two formats are one contract with two spellings, so a file can be rewritten from one to the other without a key changing:
+
+- Mappings flatten to colon-delimited keys, and a sequence's elements are numbered from `0`, exactly as a JSON array's are. The [index-keyed override](#the-persisted-layer) works the same way: a mapping keyed `"1"` sets the second element and nothing else.
+- An empty mapping and an empty sequence contribute what `{}` and `[]` do in JSON, and a key written with no value, `~`, or `null` is JSON's `null`.
+- **Every other scalar is the text written.** YAML 1.1 would read `no` and `on` as booleans and `0x10` as sixteen; a binder reading `MailSynchronization:Enabled: no` would then see `False` while a reviewer saw a word. Nothing is reinterpreted here: the binder receives `no`, and a boolean setting written that way fails to bind, naming the key, instead of quietly taking a value. A quoted scalar is text even when it spells `null`.
+- Comments are allowed and are ignored, and a file holding nothing but comments contributes nothing, like an empty ConfigMap key.
+
+**What YAML adds beyond that is refused**, each naming the file and the line and column it was found at, and each stopping the start as a malformed JSON file does:
+
+| Refused | Why |
+| --- | --- |
+| Anchors and aliases | A value defined elsewhere in the file is not the value a reviewer reads where it is used, and a diff changing the anchor changes every alias without showing any of them |
+| Tags, `!!str` and custom ones alike | A tag changes how a value is read without that showing in the value |
+| More than one document in a file | Which document wins would be a rule of its own; a configuration file is one document, and a second one is a second file |
+| A key written twice in one mapping, compared without regard to case | JSON refuses it for the same reason: the configuration keys are case-insensitive, so the second would silently replace the first |
+| A root that is not a mapping, and a mapping key that is not text | Neither names a setting |
+| Nesting deeper than 64 levels | The JSON reader's own limit, so neither format admits a document the other would refuse |
+
+A refusal reaches the log as the framework's `Failed to load configuration from file '<path>'`, carrying the reason:
+
+```
+Failed to load configuration from file '/etc/mailfathom/config/10-mail.yaml'.
+ ---> System.FormatException: An alias is refused, because a value defined elsewhere in the file is not the value a reviewer reads where it is used, at line 4, column 13.
+```
+
+YAML is a format for the files a deployment provisions and nothing else. `appsettings.json`, the persisted document, and every request body stay JSON; [`--format yaml`](#editing-a-document-as-yaml) only *shows* the last two as YAML.
 
 ## The persisted layer
 
@@ -359,6 +389,10 @@ Source:  file (10-deployment.json)
 
 **`mfctl config edit` is one transaction over the document.** `set` and `unset` each name one path, so a change spanning half a section is a run of commands each committing a version of its own, every intermediate one a configuration the deployment briefly ran on. The editing session fetches the document with its version, opens it, and commits what was saved against that version, so it is accepted whole or refused whole. Three things the buffer is not: it is not the deployment's whole configuration, because the layer is sparse and what is absent is inherited; it carries no secret material, for the reason above; and it is not a file the deployment reads — nothing here edits a configuration file, and what was saved is committed through the same writer every other change goes through. An emptied buffer abandons the session and a buffer saved unchanged writes nothing; both are reported as what they are. A session refused under `12008` is told which settings differ between the version it was opened over and the version now in force, so the operator can decide again against it — and nothing of the abandoned session is applied on top, because merging two edits neither author saw is the outcome the version guard exists to prevent. One further refusal belongs to the marker: it stands for whatever the document held at the path it was saved at, so a save that changed what stands around it is refused under `12007` rather than committed. What the marker is judged against is the block the secret belongs to — the mail account, the model provider, whatever the credential is presented to — and everything at or beneath that block has to be saved as the buffer was opened. Two things that block catches. An array position moves: deleting the first of two mail accounts leaves the second one's marker standing where the first one's stood, so a save adding or removing an element of a secret-bearing array is refused naming the element. And a credential can be repointed without moving at all: a save changing an account's host, or a model provider's address, while leaving its credential at the marker would present the provisioned material to whatever was written there, so that save is refused too, naming the block. Neither is a dead end — changing a neighbouring setting of a secret-bearing block is done with `mfctl config set`, which names one path and never rewrites a reference.
 
+### Editing a document as YAML
+
+**`--format yaml` shows a document as YAML and commits it as JSON.** `mfctl config edit`, `mfctl account edit`, and `mfctl user edit` take `--format json|yaml`, and `mfctl user show` takes it too; `json` is the default. The buffer is then a `.yaml` file rendered from the JSON the deployment holds, and what was saved is converted back under the YAML 1.2 core schema before anything is sent, so a number, a boolean, and a `null` stay what they were, and a string that would read as one of them is written quoted. Anchors, aliases, tags, several documents, and a key written twice are [refused](#json-and-yaml) in the buffer as well, and so are `.inf` and `.nan`, which JSON has no number for: a refused buffer changes nothing, and the command names the reason and the path it kept the edit at, so the operator corrects it rather than retyping it. A buffer that describes the same document — only its layout or its comments differ — writes nothing, and comments are not carried back, because the document they would be carried into is JSON.
+
 **`mfctl config adopt` is the one thing in MailFathom that moves a decision out of a file and into the database.** No upgrade, no import, and no first start does it, so a deployment that never runs it keeps its files as the whole truth about its own configuration — which is what makes a committed ConfigMap reviewable as the thing actually in force. It is previewed and then confirmed because of what it costs afterwards: the settings it copies stop being decided by the files, and editing the file one came from no longer changes what the deployment does. The preview names every setting and the file behind it, which is the moment to notice that a path covers more than was meant; `--yes` states the agreement where nobody is at the terminal. A setting the persisted layer already carries is not offered, because adopting it would replace a value somebody persisted deliberately with the file's — changing a persisted value is what `set` is for. A setting on the [bootstrap-only list](#what-it-may-not-carry) is not offered either, for the stronger reason that the commit behind the preview refuses it: those settings are how the layer is reached and are not the layer's to carry, so `mfctl config adopt Persistence` previews what the files decide beneath it *except* those. `mfctl config unset` is what gives a setting back to its file.
 
 ## Failure and startup behavior
@@ -377,19 +411,25 @@ ConfigurationSources carries settings MailFathom does not define: Directroy. The
 
 Both are deliberate and are the point of the feature. A host that ignored an absent mount or a misspelled key would report success while serving configuration nobody wrote, and the divergence would only surface later, through behavior. Both carry error code `12001` and end the process through the bootstrap logging pipeline described in [host startup telemetry](host-startup-telemetry.md).
 
-Every start records how many provisioned files were layered in, at `Information`:
+A single file with an extension that names neither format fails the same way, and so does a directory holding two names that [differ only by extension](#what-a-directory-contributes):
 
 ```
-Host MailFathom.Host layered 3 deployment-provisioned configuration files below the environment.
+The configuration directory named by ConfigurationSources:Directory holds files whose names differ only by extension: 10-mail.json, 10-mail.yaml in /etc/mailfathom/config. Their order would be decided by the extension rather than by their names, so rename one of them.
 ```
 
-A `0` on a deployment that mounts a ConfigMap means the mount is empty or did not arrive where the key says it did.
+Every start records which provisioned files were layered in, in the order they were layered, each with the format it was read in, at `Information`:
+
+```
+Host MailFathom.Host layered 2 deployment-provisioned configuration files below the environment: ["/etc/mailfathom/config/10-mail.json (Json)","/etc/mailfathom/config/20-search.yaml (Yaml)"].
+```
+
+A `0` on a deployment that mounts a ConfigMap means the mount is empty or did not arrive where the key says it did, and a file missing from the list means its extension is not one of the three.
 
 ## Reload
 
 Most of this section is about the files. The persisted layer and the users' records reload on a committed change instead, and [what reaches every replica](#what-reaches-every-replica) at its end says how that change arrives in a replica that did not commit it.
 
-What reloads is the **content of the files that existed when the host started**. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
+What reloads is the **content of the files that existed when the host started**, whichever format each is written in. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
 
 **Adding or removing a ConfigMap key is restart-required.** The directory is enumerated once, while the host is composing itself, and each file found becomes its own provider; nothing watches the directory for membership. A key added to a mounted ConfigMap therefore produces a file no provider reads, and a key removed empties its provider rather than removing the layer. Restart the pod after changing which keys a ConfigMap holds. Editing the value inside a key that already existed needs no restart.
 

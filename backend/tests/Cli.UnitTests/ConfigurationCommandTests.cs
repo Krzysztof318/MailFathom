@@ -374,6 +374,27 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.True(SentWrite(deployment).GetProperty("evenIfShadowed").GetBoolean());
     }
 
+    /// <summary>The configuration document is edited through the same YAML view a user's record is, and committed as JSON.</summary>
+    [Fact]
+    public async Task Edit_AYamlView_CommitsTheEditAsJson()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding(
+            documents: [FakeConfigurationDeployment.Document(version: 1, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")],
+            write: FakeConfigurationDeployment.Committed(version: 2));
+
+        this.harness.EditsTheBufferInto("MailboxSearch:\n  SnippetsPerEmail: \"5\"\n");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "config", "edit", "--format", "yaml", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.True(YamlDocumentView.DescribeTheSameDocument(
+            """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            SentWrite(deployment).GetProperty("document").GetString()!));
+    }
+
     /// <summary>The adoption half of the same claim, over the request record an adoption composes.</summary>
     [Fact]
     public async Task Adopt_TheShadowingFlag_StatesItInTheAdoptionRequest()

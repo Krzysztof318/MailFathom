@@ -9,10 +9,11 @@ namespace MailFathom.Cli.Editing;
 /// <summary>Puts a document the deployment handed over in front of the operator, and reports what they left to commit.</summary>
 /// <remarks>
 /// <para>
-/// Two commands fetch a JSON document with the version it was read at, let the operator change it whole, and commit it
-/// against that version: the deployment's own persisted configuration, and one user's record. Everything between the
-/// fetch and the commit is the same act, so it is written once — which is also what keeps the guidance an operator
-/// reads when their editor does not cooperate from existing in two versions that drift apart.
+/// Three commands fetch a JSON document with the version it was read at, let the operator change it whole, and commit
+/// it against that version: the deployment's own persisted configuration, one user's record, and one mail account's
+/// declaration. Everything between the fetch and the commit is the same act, so it is written once — which is also what
+/// keeps the guidance an operator reads when their editor does not cooperate, and the YAML view an operator may ask
+/// for instead of JSON, from existing in several versions that drift apart.
 /// </para>
 /// <para>
 /// What each command keeps is the part that is genuinely its own: which document it fetched, what the version guard is
@@ -42,14 +43,22 @@ internal static class EditorDrivenDocument
     /// <param name="buffered">What the session's directory and its buffer are named after, as a filename segment.</param>
     /// <param name="describedAs">What the deployment holds, as the sentence reporting an abandoned session names it.</param>
     /// <param name="document">The document as the deployment handed it over.</param>
+    /// <param name="view">The syntax the operator edits the document in.</param>
     /// <param name="cancellationToken">Cancels the read back.</param>
-    /// <returns>What the operator left to commit, or <see langword="null" /> where the session asked for no change.</returns>
+    /// <returns>The JSON document the operator left to commit, or <see langword="null" /> where the session asked for no change.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the buffer could not be written or read back, or the editor did not finish.</exception>
+    /// <exception cref="CliFailure">Thrown when the buffer could not be written or read back, the editor did not finish, or a YAML buffer could not be read as JSON.</exception>
     /// <remarks>
+    /// <para>
     /// The buffer is removed however the session ended, including when the commit that follows throws, which is why the
     /// caller's commit stays outside: a document left on disk is what this is careful about, and a caller that had to
     /// remember to clean up would be the one place it is forgotten.
+    /// </para>
+    /// <para>
+    /// A YAML buffer this command refuses is the one exception, and it is kept. The refusal is local — nothing reached the
+    /// deployment — so the edit exists nowhere else, and discarding it would throw away an operator's work over a typo.
+    /// It stays in the session's own directory, readable by its user alone, and the failure names the path.
+    /// </para>
     /// </remarks>
     internal static async Task<string?> OpenAsync(
         CliContext context,
@@ -57,6 +66,7 @@ internal static class EditorDrivenDocument
         string buffered,
         string describedAs,
         string document,
+        DocumentView view,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -66,11 +76,13 @@ internal static class EditorDrivenDocument
         ArgumentNullException.ThrowIfNull(document);
 
         var session = Path.Combine(Path.GetTempPath(), $"mailfathom-{buffered}-{Guid.NewGuid():N}");
-        var buffer = Path.Combine(session, $"{buffered}.json");
+        var buffer = Path.Combine(session, buffered + ExtensionOf(view));
+        var shown = Show(document, view);
+        var keepSession = false;
 
         try
         {
-            Open(session, buffer, document);
+            Open(session, buffer, shown);
 
             if (context.Edit(editor, buffer) is { Saved: false } ended)
             {
@@ -79,12 +91,80 @@ internal static class EditorDrivenDocument
 
             var saved = await ReadBackAsync(buffer, cancellationToken);
 
-            return Abandoned(context, describedAs, document, saved) ? null : saved;
+            if (Abandoned(context, describedAs, shown, saved))
+            {
+                return null;
+            }
+
+            if (view == DocumentView.Json)
+            {
+                return saved;
+            }
+
+            string? committed;
+
+            try
+            {
+                committed = YamlDocumentView.ReadBack(saved);
+            }
+            catch (FormatException refusal)
+            {
+                keepSession = true;
+
+                throw EditKeptAfterRefusal(refusal, buffer);
+            }
+
+            return AbandonedAfterConversion(context, describedAs, document, committed) ? null : committed;
         }
         finally
         {
-            Discard(session);
+            if (!keepSession)
+            {
+                Discard(session);
+            }
         }
+    }
+
+    /// <summary>Renders a document in the syntax an operator asked to see it in.</summary>
+    /// <param name="document">The document as the deployment handed it over.</param>
+    /// <param name="view">The syntax to show it in.</param>
+    /// <returns>The document as the operator reads it.</returns>
+    /// <exception cref="CliFailure">Thrown when a YAML view is asked of something that is not JSON.</exception>
+    internal static string Show(string document, DocumentView view) =>
+        view == DocumentView.Yaml ? YamlDocumentView.Render(document) : document;
+
+    /// <summary>Names the extension a buffer carries, so the operator's editor highlights the syntax it holds.</summary>
+    private static string ExtensionOf(DocumentView view) => view == DocumentView.Yaml ? ".yaml" : ".json";
+
+    /// <summary>Says why a YAML buffer was refused, where, and which file the edit is kept in.</summary>
+    private static CliFailure EditKeptAfterRefusal(FormatException refusal, string buffer) =>
+        new(
+            $"The YAML in the editing buffer could not be read as a JSON document, so nothing was written. {refusal.Message} "
+            + $"The edit is kept at {buffer}, readable by you alone: copy what you need from it before editing again, and remove its directory once you have.",
+            refusal);
+
+    /// <summary>Reports whether a YAML buffer that did change still asks for nothing once it is read as JSON.</summary>
+    /// <remarks>
+    /// A buffer holding only comments is an emptied one, and a buffer whose comments or layout alone changed describes
+    /// the document the deployment already holds, which a commit would only give a new version.
+    /// </remarks>
+    private static bool AbandonedAfterConversion(CliContext context, string describedAs, string document, string? committed)
+    {
+        if (committed is null)
+        {
+            context.Console.WriteLine($"The buffer holds no document, so {describedAs} was left as it was.");
+
+            return true;
+        }
+
+        if (YamlDocumentView.DescribeTheSameDocument(document, committed))
+        {
+            context.Console.WriteLine("The buffer describes the document already held, so nothing was written.");
+
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Opens the session's own directory and writes the document into it, readable by their user alone.</summary>
