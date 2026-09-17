@@ -156,10 +156,11 @@ internal sealed class ReverseProxyOptions
     }
 
     /// <summary>Maps the trusted entries onto the single proxy addresses among them.</summary>
-    /// <returns>The addresses, in configuration order, empty when every entry names a network.</returns>
+    /// <returns>The addresses, in configuration order and in the form a peer is compared against, empty when every entry names a network.</returns>
     /// <exception cref="FormatException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<IPAddress> ToTrustedProxyAddresses() =>
-        [.. this.EffectiveTrustedProxies().Where(static entry => !ConfiguredAddressRanges.NamesNetwork(entry)).Select(IPAddress.Parse)];
+        [.. this.EffectiveTrustedProxies().Where(static entry => !ConfiguredAddressRanges.NamesNetwork(entry))
+            .Select(static entry => ConfiguredAddressRanges.InComparableForm(IPAddress.Parse(entry)))];
 
     /// <summary>Maps the trusted entries onto the proxy networks among them.</summary>
     /// <returns>The networks, in configuration order and in the form a peer is compared against, empty when every entry names a single address.</returns>

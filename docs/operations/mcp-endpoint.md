@@ -1459,9 +1459,9 @@ certificate's names carry.
 ## Behind a TLS-terminating reverse proxy
 
 When nginx, Traefik, or an ingress controller holds your certificate, the request that reaches MailFathom arrives as
-`http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop only in
-`X-Forwarded-Proto` and `X-Forwarded-Host`. MailFathom always reads both; the one thing you configure is which peers it
-believes them from:
+`http` under whichever internal name the proxy dialled. Your deployment's public identity survives the hop in
+`X-Forwarded-Proto` and `X-Forwarded-Host`, and the client's address in `X-Forwarded-For`. The one thing you configure
+is which peers MailFathom believes them from:
 
 ```json
 {
@@ -1473,8 +1473,8 @@ believes them from:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `TrustedProxies` | empty, which trusts every peer | The proxy addresses or CIDR networks a forwarded scheme and host are accepted from |
-| `MaximumForwardedHops` | `1` | How many proxies may have appended a value to either header |
+| `TrustedProxies` | empty, which trusts every peer | The proxy addresses or CIDR networks a forwarded scheme and host are accepted from. It also decides whether the forwarded client address is read: that needs a named proxy, and an entry covering a whole address family (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96`) switches it off |
+| `MaximumForwardedHops` | `1` | How many proxies may have appended a value to `X-Forwarded-Proto`, `X-Forwarded-Host`, or `X-Forwarded-For` |
 
 The forwarded scheme and host are applied to the request before anything reads it, so OAuth discovery, the `401`
 challenge, and every absolute address MailFathom writes carry your public name — see

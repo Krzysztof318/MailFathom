@@ -172,7 +172,6 @@ public sealed class ProtectedResourceMetadataEndpointTests
         Assert.Equal("/.well-known/oauth-protected-resource/api/admin", path);
     }
 
-    /// <summary>Wraps a configured OAuth block in the administrator whose credential carries it, which is the unit the document is composed from.</summary>
     private static OAuthValidationOptions Configured()
     {
         var oauthSettings = new OAuthValidationOptions { Resource = Resource };

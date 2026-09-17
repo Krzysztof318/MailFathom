@@ -283,6 +283,20 @@ public sealed class ReverseProxyOptionsTests
             networks);
     }
 
+    /// <summary>An address written in its IPv4-mapped form is the IPv4 address it maps, so a peer mapped down still matches it.</summary>
+    [Fact]
+    public void ToTrustedProxyAddresses_AMappedAddress_IsTheIPv4AddressItMaps()
+    {
+        // Arrange
+        var settings = ProxiesTrusted("::ffff:10.0.0.5");
+
+        // Act
+        var addresses = settings.ToTrustedProxyAddresses();
+
+        // Assert
+        Assert.Equal([IPAddress.Parse("10.0.0.5")], addresses);
+    }
+
     /// <summary>A network written in its IPv4-mapped form is the IPv4 network it maps, which is the form a peer is compared in.</summary>
     [Fact]
     public void ToTrustedProxyNetworks_AMappedNetwork_IsTheIPv4NetworkItMaps()
