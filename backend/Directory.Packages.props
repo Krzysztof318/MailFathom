@@ -125,6 +125,14 @@
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.1" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.1" />
+    <!-- The agent evaluation suite under backend/tests/Evaluations and nothing else. The family ships a release line of
+         its own beside Microsoft.Extensions.AI, and 10.8.0 is its newest that asks for no Microsoft.Extensions.AI above
+         the 10.8.1 pinned here. NLP publishes previews only. Safety is not taken: it needs the Microsoft Foundry
+         evaluation service, and nothing here runs on Azure. -->
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.NLP" Version="10.8.0-preview.1.26364.2" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="10.8.0" />
     <!-- One client library reaches both supported providers. Azure OpenAI's v1 data plane is OpenAI-compatible, so an
          Azure deployment is this client pointed at `<resource>/openai/v1/`, which is what Microsoft's own current
          guidance shows; Azure.AI.OpenAI would be a second client construction and has published no stable release

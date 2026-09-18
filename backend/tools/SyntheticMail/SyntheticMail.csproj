@@ -32,6 +32,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.SyntheticMail.UnitTests" />
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+    <InternalsVisibleTo Include="MailFathom.Evaluations" />
 
     <!--
       The two projects that measure what a streaming path costs compose their message here for the same reason the

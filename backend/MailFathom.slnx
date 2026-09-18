@@ -20,6 +20,7 @@
     <Project Path="tests/Cli.UnitTests/Cli.UnitTests.csproj" />
     <Project Path="tests/Common.UnitTests/Common.UnitTests.csproj" />
     <Project Path="tests/Domain.UnitTests/Domain.UnitTests.csproj" />
+    <Project Path="tests/Evaluations/Evaluations.csproj" />
     <Project Path="tests/Host.UnitTests/Host.UnitTests.csproj" />
     <Project Path="tests/Infrastructure.UnitTests/Infrastructure.UnitTests.csproj" />
     <Project Path="tests/IntegrationTests/IntegrationTests.csproj" />

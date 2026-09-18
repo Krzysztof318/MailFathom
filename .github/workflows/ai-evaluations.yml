@@ -1,0 +1,132 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: AI evaluations
+
+# Measures what the agents answer, against every model `vars.EVALUATION_MODELS` declares, judged by the
+# one model `vars.JUDGE_PROVIDER_MODEL` pins. Never runs on a pull request: a run calls real providers
+# and spends credit, which is the owner's to spend.
+#
+# What keeps a run cheap is the store `backend/tests/Evaluations` writes: every answer it paid for is
+# cached by prompt, model, and parameters, and every verdict is kept so the report compares this run
+# with the ones before it. The store travels from one run to the next as the `ai-evaluations-store`
+# artefact — restored from the newest one that has not expired, uploaded again at the end — so an
+# unchanged prompt costs nothing however many nights pass. An artefact expires after 90 days, and a
+# scheduled run renews it long before that; a store lost to a gap longer than that costs one full run
+# to rebuild and nothing else.
+#
+# The artefact is readable by anyone who can read this repository's runs, which is why nothing in the
+# store is mail anybody received and why the judge is recorded only as `judge`: its address, model,
+# and key never reach the store, the report, the log, or a failure message.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to evaluate'
+        required: false
+        type: string
+  schedule:
+    - cron: '17 3 * * *'
+
+# One run at a time for the whole workflow rather than per ref, because every run restores and
+# replaces the same store: two at once would each start from the same artefact, and whichever uploaded
+# last would discard what the other paid for.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    name: Evaluate the agents
+    runs-on: ubuntu-latest
+    # The newest store is found and downloaded through the artefacts API, which a job reaches with
+    # `actions: read`. Nothing here writes to the repository.
+    permissions:
+      contents: read
+      actions: read
+    # Every model under test and the judge answer one request per scenario, each with a two-minute
+    # ceiling, and a cached one costs nothing. An hour is far past what a healthy run takes and short
+    # of the six the Actions default would hold a runner for.
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      # The newest store any run of this workflow uploaded, from whichever ref it ran on: a store only
+      # ever gains entries keyed by what was asked, so one from another ref costs nothing here and
+      # saves whatever it already answered. None at all is the first run, not a failure.
+      - name: Restore the evaluation store
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          store=artifacts/ai-evaluations/store
+          mkdir -p "$store"
+
+          artifact=$(gh api "repos/$REPOSITORY/actions/artifacts?name=ai-evaluations-store&per_page=1" \
+            --jq '.artifacts[] | select(.expired == false) | .id')
+
+          if [ -z "$artifact" ]; then
+            echo "No earlier store to restore; this run starts an empty one."
+            exit 0
+          fi
+
+          gh api "repos/$REPOSITORY/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/store.zip"
+          unzip -q "$RUNNER_TEMP/store.zip" -d "$store"
+          echo "Restored the store from artefact $artifact."
+
+      - name: Run the evaluations
+        run: bash scripts/run-ai-evaluations.sh
+        env:
+          MAILFATHOM_AI_EVALUATIONS: 'true'
+          MAILFATHOM_EVALUATION_MODELS: ${{ vars.EVALUATION_MODELS }}
+          MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
+          MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
+          MAILFATHOM_JUDGE_ADDRESS: ${{ vars.JUDGE_PROVIDER_ADDRESS }}
+          MAILFATHOM_JUDGE_MODEL: ${{ vars.JUDGE_PROVIDER_MODEL }}
+          MAILFATHOM_JUDGE_API_KEY: ${{ secrets.JUDGE_PROVIDER_API_KEY }}
+
+      # Uploaded whether the run passed or not, because a failing run still paid for every answer it
+      # received. A run that wrote nothing uploads nothing, which leaves the previous store the newest.
+      - name: Keep the evaluation store
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-evaluations-store
+          path: artifacts/ai-evaluations/store/
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-evaluations-report
+          path: |
+            artifacts/ai-evaluations/report.html
+            artifacts/ai-evaluations/results/**/*.trx
+          if-no-files-found: ignore

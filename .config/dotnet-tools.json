@@ -20,6 +20,12 @@
         "docfx"
       ]
     },
+    "microsoft.extensions.ai.evaluation.console": {
+      "version": "10.8.0",
+      "commands": [
+        "aieval"
+      ]
+    },
     "dotnet-stryker": {
       "version": "4.16.0",
       "commands": [
