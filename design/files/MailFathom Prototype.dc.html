@@ -175,8 +175,12 @@
             <input value="{{ nfName }}" onChange="{{ onNfName }}" placeholder="e.g. Contracts 2027" style="{{ fieldStyle }}" />
           </label>
           <label style="display:flex;flex-direction:column;gap:6px">
-            <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--muted)">REMOTE PATH</span>
-            <input value="{{ nfPath }}" onChange="{{ onNfPath }}" placeholder="{{ nfPathPlaceholder }}" style="{{ nfPathFieldStyle }}" />
+            <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--muted)">INSIDE</span>
+            <select value="{{ nfParent }}" onChange="{{ onNfParent }}" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:9px;padding:9px 10px;outline:none" style-focus="border-color:var(--accent)">
+              <sc-for list="{{ nfLocations }}" as="lo" hint-placeholder-count="3">
+                <option value="{{ lo.v }}">{{ lo.label }}</option>
+              </sc-for>
+            </select>
             <span style="font-size:11.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">{{ nfPathHint }}</span>
           </label>
         </div>
@@ -665,6 +669,12 @@
                     </sc-if>
                   </div>
                 </sc-for>
+                <sc-if value="{{ g.canAdd }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ g.newFolder }}" title="New folder" style="{{ g.newFolderStyle }}" style-hover="cursor:pointer;background:var(--hover)">
+                    <span style="{{ g.newFolderIconStyle }}">create_new_folder</span>
+                    <sc-if value="{{ g.expanded }}" hint-placeholder-val="{{ true }}"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">New folder</span></sc-if>
+                  </div>
+                </sc-if>
               </sc-if>
             </div>
           </sc-for>
@@ -4937,28 +4947,40 @@ class Component extends DCLogic {
     return items;
   };
 
-  /* Creating a folder asks for both the display name and the path on the server — the two are
-     kept in sync until the path is edited by hand. Folders nest three levels deep at most. */
+  /* Creating a folder asks for a name and a place in the account's own folder tree. MailFathom
+     puts it on the mail server itself and never shows or takes a server path — accounts are
+     administrator-managed and the path is not the user's business. Three levels deep at most. */
   MAX_DEPTH = 3;
 
-  nfSlug = (v) => (v || "").trim().replace(/^\/+|\/+$/g, "");
+  STD_LABELS = ["Inbox", "Sent", "Drafts", "Archive", "Spam", "Trash"];
 
-  remoteBase = (parent) => (parent ? parent.replace(/^Inbox/, "INBOX") + "/" : "INBOX/");
+  /* Places a folder may sit in. In edit mode the folder itself, everything under it, and any
+     parent too shallow to hold its subtree drop out of the list. */
+  folderLocations = (key, movePath) => {
+    const extra = ((this.state.extraFolders || {})[key] || []).slice().sort();
+    const all = this.STD_LABELS.concat(extra.filter(p => this.STD_LABELS.indexOf(p) < 0));
+    const own = movePath ? movePath.split("/").length : 0;
+    const subtree = movePath
+      ? [movePath].concat(extra.filter(p => p.indexOf(movePath + "/") === 0))
+          .reduce((mx, p) => Math.max(mx, p.split("/").length - own + 1), 1)
+      : 1;
+    return [{ v: "", label: "Top level of the account" }].concat(all
+      .filter(p => !(movePath && (p === movePath || p.indexOf(movePath + "/") === 0)))
+      .filter(p => p.split("/").length + subtree <= this.MAX_DEPTH)
+      .map(p => ({ v: p, label: p.split("/").join(" / ") })));
+  };
+
+  locLabel = (parent) => (parent ? "inside " + parent.split("/").join(" / ") : "top level");
 
   openNewFolder = (key, label, parent) => this.setState({
-    newFolder: { key: key, label: label, parent: parent || "", base: this.remoteBase(parent), mode: "create" },
-    nfName: "", nfPath: "", nfPathTouched: false, moveFor: null,
+    newFolder: { key: key, label: label, mode: "create" },
+    nfName: "", nfParent: parent || "", moveFor: null,
   });
 
-  openEditFolder = (key, label, path) => {
-    const parent = path.split("/").slice(0, -1).join("/");
-    const name = path.split("/").pop();
-    const remote = (this.state.folderPaths || {})[key + "·" + path] || this.remoteBase(parent) + name;
-    this.setState({
-      newFolder: { key: key, label: label, parent: parent, base: this.remoteBase(parent), mode: "edit", path: path },
-      nfName: name, nfPath: remote, nfPathTouched: true, moveFor: null,
-    });
-  };
+  openEditFolder = (key, label, path) => this.setState({
+    newFolder: { key: key, label: label, mode: "edit", path: path },
+    nfName: path.split("/").pop(), nfParent: path.split("/").slice(0, -1).join("/"), moveFor: null,
+  });
 
   saveFolder = () => (this.state.newFolder && this.state.newFolder.mode === "edit" ? this.applyFolderEdit() : this.createFolder());
 
@@ -4966,9 +4988,13 @@ class Component extends DCLogic {
     const nf = this.state.newFolder;
     const name = (this.state.nfName || "").trim().replace(/\//g, " ");
     if (!nf || !name) return;
-    const remote = this.nfSlug(this.state.nfPath) || (nf.base || "INBOX/") + name;
+    const parent = this.state.nfParent || "";
     const oldPath = nf.path;
-    const newPath = (nf.parent ? nf.parent + "/" : "") + name;
+    const newPath = (parent ? parent + "/" : "") + name;
+    if (newPath !== oldPath && ((this.state.extraFolders || {})[nf.key] || []).indexOf(newPath) >= 0) {
+      this.notify("There is already a folder called “" + name + "” " + this.locLabel(parent) + ".", { kind: "warning", title: "Pick another name" });
+      return;
+    }
     this.setState(s => {
       const ex = Object.assign({}, s.extraFolders || {});
       ex[nf.key] = (ex[nf.key] || []).map(p => (p === oldPath ? newPath : p.indexOf(oldPath + "/") === 0 ? newPath + p.slice(oldPath.length) : p));
@@ -4982,48 +5008,38 @@ class Component extends DCLogic {
         });
         return out;
       };
-      const paths = remap(s.folderPaths || {});
-      paths[nf.key + "·" + newPath] = remote;
       const active = s.folderKey === pref;
-      return { extraFolders: ex, folderPaths: paths, folderOpen: remap(s.folderOpen || {}), newFolder: null,
+      return { extraFolders: ex, folderOpen: remap(s.folderOpen || {}), newFolder: null,
         folderKey: active ? nf.key + "·" + newPath : s.folderKey, folderLabel: active ? name : s.folderLabel };
     });
-    this.notify(remote + " · " + nf.label, { kind: "success", title: "Folder “" + name + "” updated" });
+    this.notify(nf.label + " · " + this.locLabel(parent), { kind: "success", title: "Folder “" + name + "” updated" });
   };
 
   closeNewFolder = () => this.setState({ newFolder: null });
 
-  onNfName = (e) => {
-    const v = e.target.value;
-    this.setState(s => {
-      const base = (s.newFolder && s.newFolder.base) || "INBOX/";
-      return { nfName: v, nfPath: s.nfPathTouched ? s.nfPath : (this.nfSlug(v) ? base + this.nfSlug(v) : "") };
-    });
-  };
+  onNfName = (e) => this.setState({ nfName: e.target.value });
 
-  onNfPath = (e) => this.setState({ nfPath: e.target.value, nfPathTouched: true });
+  onNfParent = (e) => this.setState({ nfParent: e.target.value });
 
   createFolder = () => {
     const nf = this.state.newFolder;
     const name = (this.state.nfName || "").trim().replace(/\//g, " ");
     if (!nf || !name) return;
-    const remote = this.nfSlug(this.state.nfPath) || (nf.base || "INBOX/") + name;
+    const parent = this.state.nfParent || "";
     this.setState(s => {
       const ex = Object.assign({}, s.extraFolders || {});
       const list = (ex[nf.key] || []).slice();
-      const under = nf.parent ? nf.parent + "/" : "";
+      const under = parent ? parent + "/" : "";
       let label = name, n = 1;
       while (list.indexOf(under + label) >= 0) { n++; label = name + " " + n; }
       list.push(under + label);
       ex[nf.key] = list;
-      const paths = Object.assign({}, s.folderPaths || {});
-      paths[nf.key + "·" + under + label] = remote;
       /* Reveal the new folder: open every ancestor on the way down to it. */
       const fo = Object.assign({}, s.folderOpen || {});
-      nf.parent.split("/").forEach((seg, i, arr) => { fo[nf.key + "·" + arr.slice(0, i + 1).join("/")] = true; });
-      return { extraFolders: ex, folderPaths: paths, folderOpen: fo, newFolder: null, accOpen: Object.assign({}, s.accOpen, { [nf.key]: true }) };
+      if (parent) parent.split("/").forEach((seg, i, arr) => { fo[nf.key + "·" + arr.slice(0, i + 1).join("/")] = true; });
+      return { extraFolders: ex, folderOpen: fo, newFolder: null, accOpen: Object.assign({}, s.accOpen, { [nf.key]: true }) };
     });
-    this.notify(remote + " · " + nf.label, { kind: "success", title: "Folder “" + name + "” created" });
+    this.notify(nf.label + " · " + this.locLabel(parent), { kind: "success", title: "Folder “" + name + "” created" });
   };
 
   askDeleteFolder = (key, accLabel, path) => this.setState({ delFolder: { key: key, label: accLabel, path: path } });
@@ -5038,11 +5054,16 @@ class Component extends DCLogic {
       const ex = Object.assign({}, s.extraFolders || {});
       const gone = (ex[df.key] || []).filter(p => p === df.path || p.indexOf(df.path + "/") === 0);
       ex[df.key] = (ex[df.key] || []).filter(p => gone.indexOf(p) < 0);
-      const paths = Object.assign({}, s.folderPaths || {});
       const fo = Object.assign({}, s.folderOpen || {});
-      gone.forEach(p => { delete paths[df.key + "·" + p]; delete fo[df.key + "·" + p]; });
+      gone.forEach(p => { delete fo[df.key + "·" + p]; });
+      /* Mail stored in the folders that go away goes with them. */
+      const names = gone.map(p => p.split("/").pop());
+      const moved = Object.assign({}, s.moved || {});
+      const hit = Object.keys(moved).filter(id => names.indexOf(moved[id]) >= 0);
+      hit.forEach(id => { delete moved[id]; });
       const wasOpen = gone.indexOf((s.folderKey || "").split("·")[1]) >= 0;
-      return { extraFolders: ex, folderPaths: paths, folderOpen: fo, delFolder: null,
+      return { extraFolders: ex, folderOpen: fo, delFolder: null, moved: moved,
+        deleted: (s.deleted || []).concat(hit),
         folderKey: wasOpen ? "acc1·Inbox" : s.folderKey, folderLabel: wasOpen ? "Inbox" : s.folderLabel };
     });
     this.notify("Removed from " + df.label, { kind: "success", title: "Folder “" + name + "” deleted" });
@@ -7066,6 +7087,16 @@ class Component extends DCLogic {
         return {
           label: g.label, title: g.title, open, chevron: open ? "expand_more" : "chevron_right",
           showHeader: !sideCollapsed, showDot: sideCollapsed,
+          /* Creating a folder is drawn, not hidden in a right-click: the unified view has no
+             server of its own, so only real accounts get the row. */
+          canAdd: g.key !== "all",
+          expanded: !sideCollapsed,
+          newFolder: () => this.openNewFolder(g.key, g.label),
+          newFolderStyle: sideCollapsed
+            ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;color:var(--accent-d)"
+            : "display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--accent-d);border-radius:7px;padding:" + (isMobile ? "12px 11px" : "7px 11px") + ";margin-top:1px",
+          newFolderIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" +
+            (sideCollapsed ? "font-size:22px;width:24px;" : "font-size:18px;width:20px;flex:0 0 20px;"),
           ctxOpen: press ? press.ctx : noop, pressDown: press ? press.down : noop, pressUp: press ? press.up : noop,
           toggle: () => this.setState(s2 => ({ accOpen: Object.assign({}, s2.accOpen, { [g.key]: !((s2.accOpen || {})[g.key] !== false) }) })),
           wrapStyle: sideCollapsed ? "display:flex;flex-direction:column;gap:3px;padding-bottom:7px" : "display:flex;flex-direction:column;gap:2px;padding-bottom:9px",
@@ -7873,22 +7904,36 @@ class Component extends DCLogic {
       createFolder: this.saveFolder,
       delFolderOpen: !!st.delFolder,
       delFolderName: st.delFolder ? st.delFolder.path.split("/").pop() : "",
-      delFolderText: st.delFolder
-        ? "The folder" + (((st.extraFolders || {})[st.delFolder.key] || []).some(p => p.indexOf(st.delFolder.path + "/") === 0) ? " and everything nested inside it" : "") +
-          " will be removed from " + st.delFolder.label + ". The mail already stored from it stays here, and the folder stays on your mail server."
-        : "",
+      /* Four outcomes, four sentences: nested folders go too, mail stored in them goes with them,
+         and whether that mail can still be recovered is the account's own delete setting. */
+      delFolderText: (() => {
+        const df = st.delFolder;
+        if (!df) return "";
+        const nested = ((st.extraFolders || {})[df.key] || []).filter(p => p.indexOf(df.path + "/") === 0);
+        const names = [df.path].concat(nested).map(p => p.split("/").pop());
+        const held = Object.keys(st.moved || {}).filter(id => names.indexOf((st.moved || {})[id]) >= 0).length;
+        const acc = (st.accounts || [])[df.key === "acc2" ? 1 : 0];
+        const hard = !acc || acc.hardDelete !== false;
+        const what = nested.length
+          ? "The folder and the " + (nested.length === 1 ? "folder nested" : nested.length + " folders nested") + " inside it"
+          : "The folder";
+        return what + " will be deleted in " + df.label + " and on your mail server. " + (held
+          ? (held === 1 ? "The conversation" : "All " + held + " conversations") + " stored in it " + (hard
+              ? "will be deleted permanently on both servers — there will be nothing left to restore."
+              : "will move to Trash, so you can still bring " + (held === 1 ? "it" : "them") + " back.")
+          : "It holds no mail, and deleting it cannot be undone.");
+      })(),
       closeDeleteFolder: this.closeDeleteFolder,
       confirmDeleteFolder: this.confirmDeleteFolder,
       dangerBtnStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--err);border:1px solid var(--err);border-radius:9px;padding:9px 14px",
-      newFolderAccount: st.newFolder ? (st.newFolder.label + (st.newFolder.parent ? " — inside “" + st.newFolder.parent + "”" : "")) : "",
-      nfPathPlaceholder: (st.newFolder && st.newFolder.base ? st.newFolder.base : "INBOX/") + "Contracts 2027",
+      newFolderAccount: st.newFolder ? st.newFolder.label : "",
       closeNewFolder: this.closeNewFolder,
       nfName: st.nfName || "",
-      nfPath: st.nfPath || "",
+      nfParent: st.nfParent || "",
       onNfName: this.onNfName,
-      onNfPath: this.onNfPath,
-      nfPathFieldStyle: "font-family:'Instrument Sans',ui-monospace,monospace;font-size:13px;letter-spacing:0.01em;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:10px 11px;outline:none",
-      nfPathHint: "Path on the mail server. The parent folder is created if it does not exist yet.",
+      onNfParent: this.onNfParent,
+      nfLocations: st.newFolder ? this.folderLocations(st.newFolder.key, st.newFolder.mode === "edit" ? st.newFolder.path : "") : [],
+      nfPathHint: "MailFathom creates the folder on this account's mail server and picks where it sits there — you only choose where it shows up in your folder list.",
       nfCancelStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px",
       nfCreateStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;border-radius:9px;padding:9px 14px;" +
         ((st.nfName || "").trim()
