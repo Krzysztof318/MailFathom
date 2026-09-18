@@ -36,8 +36,17 @@ export function GrantNotice({ withheld }: { readonly withheld: readonly ClientCa
 
     // A named region rather than a heading, because the frame's one heading belongs to the space below it and a second
     // one written above it would put the document's headings out of the order a reader moves through them in.
+    //
+    // It scrolls past a ceiling rather than growing, because a credential holding one grant is withheld most of them:
+    // at the narrowest width that is several sentences of several lines each, and a region that went on growing would
+    // spill out of the frame it stands in and over the navigation beneath it — a flex item will not shrink below its
+    // own content unless it is a scroller. Being one makes it a stop a keyboard reaches, which is what a scrollable
+    // region owes anybody not using a mouse, and the name above is what that stop is announced by.
     return (
-        <section aria-label={translate('grant.heading')} className="flex flex-col gap-2 text-sm text-muted">
+        <section
+            aria-label={translate('grant.heading')}
+            className="flex max-h-grant-notices flex-col gap-2 overflow-y-auto text-sm text-muted"
+        >
             {withheld.map((capability) => (
                 <p key={capability}>{translate(capabilityNotices[capability])}</p>
             ))}

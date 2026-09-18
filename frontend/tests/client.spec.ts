@@ -742,6 +742,12 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     // order the window was not yet showing.
     await expect(page.getByText('Every account is up to date.')).toBeVisible();
 
+    // Before the space, the strip saying what this credential may not do. It is a scroller, having a ceiling rather
+    // than growing out of the frame, and a scroller with nothing focusable in it is a stop of its own — which is what
+    // lets somebody reach the sentences past the ceiling with a keyboard. It is named, so the stop announces itself.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('region', { name: 'What this credential may not do here' })).toBeFocused();
+
     await page.keyboard.press('Tab');
     await expect(page.getByText('Every account is up to date.')).toBeFocused();
 
@@ -807,15 +813,19 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toBeVisible();
 
-    // Three of the seven stand in the bar itself and the other four behind its overflow, which is what makes five
-    // places enough for seven destinations. Reached rather than dropped is the whole of the claim, so both halves are
-    // counted and the sheet is opened to count the second.
+    // Three stand in the bar itself and the rest behind its overflow, which is what makes five places enough for every
+    // destination. Reached rather than dropped is the whole of the claim, so both halves are counted and the sheet is
+    // opened to count the second.
+    //
+    // Six rather than the seven the design project draws, because this corpus states the two permissions the client
+    // needs to open a frame at all and no more: People is reached under the grant that reads the address book, so a
+    // credential without it meets six destinations at every width. What is being measured here is the width.
     const bar = page.getByRole('navigation', { name: 'Spaces' });
 
     await expect(bar.getByRole('link')).toHaveCount(3);
 
     await page.getByRole('button', { name: 'More' }).click();
-    await expect(bar.getByRole('link')).toHaveCount(7);
+    await expect(bar.getByRole('link')).toHaveCount(6);
     await expect(page.getByRole('button', { name: 'Account and preferences' })).toBeVisible();
 });
 

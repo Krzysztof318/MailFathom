@@ -934,7 +934,7 @@ export function App({
                     may not do: both are statements about the credential rather than about anything it read. */}
                                                                     {notices.length === 0 &&
                                                                     withheld.length === 0 ? null : (
-                                                                        <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                                                                        <div className="flex min-h-0 flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
                                                                             <CredentialNotices notices={notices} />
                                                                             <GrantNotice withheld={withheld} />
                                                                         </div>
