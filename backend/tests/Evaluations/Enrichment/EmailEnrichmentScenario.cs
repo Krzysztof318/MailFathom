@@ -78,8 +78,10 @@ internal static class EmailEnrichmentScenario
             Message.ReceivedAt,
             [.. Message.Passages.Select(static passage => passage.Text)]);
 
-        var answer = await AskAsync(reporting, model, plan, iterationName, turn, cancellationToken);
-        var marks = EmailEnrichmentReading.Read(answer, Message.Passages, EmailEnrichmentAgentComposition.AgentName);
+        using var cachedModel = await CacheOverAsync(reporting, model, plan, iterationName, cancellationToken);
+
+        var response = await AskAsync(cachedModel, plan, turn, cancellationToken);
+        var marks = EmailEnrichmentReading.Read(response, Message.Passages, EmailEnrichmentAgentComposition.AgentName);
 
         var readings = new ChatResponse(new ChatMessage(ChatRole.Assistant, Describe(marks))) { ModelId = modelName };
         var verdict = await scenarioRun.EvaluateAsync(
@@ -93,32 +95,43 @@ internal static class EmailEnrichmentScenario
         return new EmailEnrichmentOutcome(modelName, marks, verdict);
     }
 
-    /// <summary>Asks the model under test, through the run's cache.</summary>
-    private static async Task<string?> AskAsync(
+    /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
+    /// <remarks>
+    /// Opened for the whole run rather than for the one call, because the cache takes ownership of the client it wraps
+    /// and disposing it mid-run would leave the caller's client closed while the run still holds it.
+    /// </remarks>
+    private static async Task<IChatClient> CacheOverAsync(
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
         string iterationName,
-        string turn,
         CancellationToken cancellationToken)
     {
         var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(Name, iterationName, cancellationToken);
 
-        using var cachedModel = new DistributedCachingChatClient(model, cache)
+        return new DistributedCachingChatClient(model, cache)
         {
             CacheKeyAdditionalValues = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty],
         };
+    }
 
+    /// <summary>Asks the model under test the scenario's turn, through the agent's own composition.</summary>
+    private static async Task<string?> AskAsync(
+        IChatClient model,
+        ChatGenerationPlan plan,
+        string turn,
+        CancellationToken cancellationToken)
+    {
         var agent = EmailEnrichmentAgentComposition.Compose(
-            cachedModel,
+            model,
             plan,
             MailAccountLanguage.English,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
-        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+        var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return answer.Text;
     }
 
     /// <summary>Writes the marks as the text the judge grades, one reading per line under its aspect.</summary>
