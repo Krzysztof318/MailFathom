@@ -35,7 +35,8 @@ pass](mail-answering.md#an-optional-second-pass-the-model-decides-what-answers).
 somebody typed into a search field into filters they can see and correct, which
 [Email search § A typed sentence becomes filters](email-search.md#a-typed-sentence-becomes-filters-rather-than-a-search-of-its-own)
 describes and [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
-turns off. Each capability is a separate decision
+turns off. It is also what reads an opened contact's correspondence into the note that heads it, which
+[Where a correspondence with one person stands](contact-relationship.md) describes. Each capability is a separate decision
 over the models declared here, and every call any of them makes carries the parameters, the deadline, and the budget the
 model it runs on declares.
 
@@ -365,14 +366,15 @@ What that means in practice:
   and whether the credential reference still resolves. A refused candidate is logged with the key an operator has to
   fix, the previous declaration goes on answering, and the process stays up — which is what makes correcting a mistake
   in a correction possible at all.
-- **Six things still take a restart**, because each decided which services this deployment registered: whether
+- **Seven things still take a restart**, because each decided which services this deployment registered: whether
   `Chat:Models` declares a model at all, whether the relevance filter runs, whether arriving mail is derived from — the switch
   [message enrichment](message-enrichment.md) is turned on with — whether a correspondence is derived from, the switch
   [a conversation's state](thread-state.md) is turned on with, whether a typed sentence is read into filters, the
   switch [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
-  describes, and whether a reply is drafted, which `Chat:ReplyDrafting:Enabled` decides. Going from no chat section to
-  one is therefore a restart, and so is turning the second pass, either derivation, the sentence reading, or the reply
-  drafting on or off. Each is refused with that message
+  describes, whether a reply is drafted, which `Chat:ReplyDrafting:Enabled` decides, and whether an opened contact is
+  read into a relationship card, which `Chat:ContactRelationship:Enabled` decides. Going from no chat section to
+  one is therefore a restart, and so is turning the second pass, either derivation, the sentence reading, the reply
+  drafting, or the card on or off. Each is refused with that message
   rather than adopted and quietly ignored. Declaring a *further* model, renaming one, and moving which alias a capability
   names are none of them — the credential and the circuit are looked up by whatever the declaration in force calls a
   model.

@@ -73,6 +73,9 @@
 - name: Contacts
   href: contacts.md
   description: What the contact book holds about a person, when two addresses are the same address, who may amend which record, and what erasing somebody removes.
+- name: Where a correspondence with one person stands
+  href: contact-relationship.md
+  description: How an opened contact is read into a short note about the relationship, one suggested next action, and a few observations, each leading back to the conversation or the document behind it.
 - name: The Discover run
   href: discovery-run.md
   description: How a question and its scope become a retrieval plan and a block composition, what the model decides and what the code derives, and what a run does when no plan can be read.

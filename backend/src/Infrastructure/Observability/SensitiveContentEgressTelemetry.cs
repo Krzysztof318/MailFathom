@@ -228,6 +228,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.ClientThreadState => "client_thread_state",
         SensitiveContentEgressPoint.ClientReplyDraft => "client_reply_draft",
         SensitiveContentEgressPoint.ClientContactCorrespondence => "client_contact_correspondence",
+        SensitiveContentEgressPoint.ClientContactRelationship => "client_contact_relationship",
         _ => "unknown",
     };
 

@@ -5,6 +5,7 @@
 using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
+using MailFathom.AI.ContactRelationships;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Discovery;
 using MailFathom.AI.Embeddings;
@@ -20,6 +21,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
+using MailFathom.Application.Contacts.Relationship;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.EmailContent.Cleaning;
@@ -441,6 +443,35 @@ public static class AiServiceCollectionExtensions
             provider.GetRequiredService<AccessAuthorization>(),
             provider.GetRequiredService<IMailAccountLanguages>(),
             derivesStyleFromSentMail));
+
+        return services;
+    }
+
+    /// <summary>Registers the agent that reads an opened contact's correspondence into where the relationship stands, and the use case a contact page reaches it through.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the deployment declared a chat endpoint and turned the card on, so the use case's absence
+    /// <em>is</em> the answer a contact page gets: it draws the record, the conversations, and the documents, which is
+    /// the page every deployment served before this existed. Nothing stands in for it when this is not called, because
+    /// a stand-in answering "no card" would have every opened contact wait on a provider-shaped call that a deployment
+    /// with no provider can never make.
+    /// </para>
+    /// <para>
+    /// Both are scoped, because one opened contact is one derivation: the ledger the call is charged to, the credential
+    /// it resolves, the transport it opens, and the scope its mail is correlated under all belong to that request.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddContactRelationshipAgent(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IContactRelationshipDeriver, ContactRelationshipAgent>();
+        services.AddScoped<ContactRelationshipReader>();
 
         return services;
     }

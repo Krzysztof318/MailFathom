@@ -538,6 +538,84 @@
         ],
         "type": "object"
       },
+      "ClientContactRelationshipObservationResponse": {
+        "properties": {
+          "aspect": {
+            "type": "string"
+          },
+          "statement": {
+            "$ref": "#/components/schemas/ClientContactRelationshipStatementResponse"
+          }
+        },
+        "required": [
+          "aspect",
+          "statement"
+        ],
+        "type": "object"
+      },
+      "ClientContactRelationshipResponse": {
+        "properties": {
+          "contactId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "derived": {
+            "type": "boolean"
+          },
+          "nextAction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientContactRelationshipStatementResponse"
+              }
+            ]
+          },
+          "note": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientContactRelationshipStatementResponse"
+              }
+            ]
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ClientContactRelationshipObservationResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "contactId",
+          "derived",
+          "note",
+          "nextAction",
+          "observations"
+        ],
+        "type": "object"
+      },
+      "ClientContactRelationshipStatementResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCitationRequest"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "sources"
+        ],
+        "type": "object"
+      },
       "ClientContactThreadResponse": {
         "properties": {
           "lastCorrespondedAt": {
@@ -13402,6 +13480,44 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/contacts/{contactId}/relationship": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientContactRelationshipResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

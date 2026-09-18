@@ -79,6 +79,13 @@ namespace MailFathom.Host.Api;
 /// publishes — the book it keys on is read under its own grant before this one is reached.
 /// </para>
 /// <para>
+/// The contact relationship route, which <see cref="ClientContactRelationshipEndpoint" /> describes, reads that same
+/// correlation into the note the contact is headed by. It is published under the asking grant rather than the reading
+/// one, because a correspondence leaves this deployment for a chat provider to derive it and the call is charged to
+/// the allowance a question is — which is also why it is a route of its own rather than a field on the correlation: a
+/// client that draws no card never pays for the derivation.
+/// </para>
+/// <para>
 /// The citation route, which <see cref="ClientCitationEndpoint" /> describes, is where an answer stops being something
 /// to be believed: it follows the citations a presentation plan declared to the mail behind them. It sits among the
 /// mail routes rather than beside a run, because what it does is read the acting user's own mail under the reading
@@ -169,6 +176,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailAttachment();
         api.MapClientMailMutations();
         api.MapClientContactCorrespondence();
+        api.MapClientContactRelationship();
         api.MapClientCitations();
         api.MapClientDiscoveryRuns();
         api.MapClientReplyDrafting();

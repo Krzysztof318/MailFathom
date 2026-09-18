@@ -353,6 +353,28 @@ public sealed class ChatDeclarationRulesTests
     }
 
     /// <summary>
+    /// Whether an opened contact is read into a card is decided while the container is built, and the contact page asks
+    /// the deployment once. A reload that flipped it would report the setting as taken while every opened contact went
+    /// on drawing a card this deployment had stopped deriving, or withholding one it had started deriving.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_TheContactRelationshipCardTurnedOff_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.ContactRelationship.Enabled = false;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:ContactRelationship:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
+    /// <summary>
     /// Whether a sentence is read into filters is decided while the container is built, and the search screen asks the
     /// deployment once. A reload that flipped it would report the setting as taken while every field went on promising
     /// a description this deployment had stopped reading, or refusing one it had started reading.
