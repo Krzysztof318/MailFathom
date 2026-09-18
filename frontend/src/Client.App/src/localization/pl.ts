@@ -1260,6 +1260,7 @@ export const pl: Catalogue = {
         'Kontakt i wszystko, co książka adresowa z niego wyprowadziła, zostaną usunięte. Poczta, którą ta osoba wysłała, pozostaje nietknięta.',
     'people.eraseAct': 'Usuń',
     'people.erased': 'Usunięto.',
+    'people.eraseSomeRefused': 'Nie udało się usunąć: {names}. Pozostałe osoby zostały usunięte.',
     'people.written': 'Dodano kontakt.',
     'people.writeNotFound': 'Tego kontaktu nie ma już w książce adresowej.',
     'people.addressHeld': 'Ten adres należy już do innego kontaktu.',

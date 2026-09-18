@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useEffect, useRef } from 'react';
 import type { Contact } from '@mailfathom/client-backend';
 import { useComposing } from '../composer/useComposing';
 import { Control } from '../controls/Control';
@@ -25,6 +26,12 @@ import type { ContactCorrespondenceInForce } from './useContactCorrespondence';
 // **The way back is part of the page rather than of the frame**, and it is drawn only where the list and the person
 // cannot stand together: at that width the two are one pane the reader moves between, so the control that returns is on
 // the thing they moved to.
+//
+// **Opening somebody is a view change, so focus comes with it.** This page is not remounted between two people — the
+// record and the correlation change underneath it — so nothing would move focus by itself, and at the width where the
+// list is made inert behind this page there is not even a stale element left to hold it. The shape is the one
+// `readingPane/ReadingPane.tsx` uses for the same thing: a ref holding who focus was last placed on, which survives
+// StrictMode's second invocation where a flag would not.
 
 export function PersonPage({
     contact,
@@ -68,12 +75,30 @@ export function PersonPage({
     const composing = useComposing();
     const collected = contact.origin === 'Collected';
 
+    const opened = useRef<HTMLDivElement>(null);
+    // Starting at nobody rather than at whoever this mounted with, unlike the reading pane: that pane is mounted by
+    // landing in the client, and this one is mounted by somebody opening a person out of the list beside it.
+    const focusedOn = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (focusedOn.current !== contact.id) {
+            focusedOn.current = contact.id;
+            opened.current?.focus();
+        }
+    }, [contact.id]);
+
     // When this person was last in touch, which the correlation answers rather than the record: the conversations come
     // back most recent first, so the first of them is the answer and no arithmetic is owed.
     const lastCorrespondedAt = correspondence.correspondence?.threads[0]?.lastCorrespondedAt ?? null;
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+            ref={opened}
+            role="region"
+            tabIndex={-1}
+            aria-label={contact.displayName}
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
             {onBack === null ? null : (
                 <div className="shrink-0 border-b border-line bg-sunken px-3 py-2">
                     <Control label={translate('people.backToList')} icon="arrow_back" shape="named" onPress={onBack} />

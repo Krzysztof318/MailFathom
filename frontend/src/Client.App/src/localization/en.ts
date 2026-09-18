@@ -1249,6 +1249,7 @@ export const en = {
         'The contact and everything the address book derived from them are removed. The mail they sent is untouched.',
     'people.eraseAct': 'Delete',
     'people.erased': 'Deleted.',
+    'people.eraseSomeRefused': 'Could not delete {names}. Everybody else was deleted.',
     'people.written': 'Contact added.',
     'people.writeNotFound': 'That contact is no longer in the address book.',
     'people.addressHeld': 'Another contact already holds that address.',

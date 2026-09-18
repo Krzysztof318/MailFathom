@@ -69,10 +69,14 @@ function deployment({
     own = [personCalled('anna', 'Anna Kowalska')],
     collected = [personCalled('celina', 'Celina Wrona', 'Collected')],
     write = { outcome: 'Written', contact: personCalled('anna', 'Anna Kowalska'), addressHolder: null },
+    refuses = [],
 }: {
     own?: readonly unknown[];
     collected?: readonly unknown[];
     write?: unknown;
+
+    /** Whose erasure this deployment will not perform, which is how a batch is made to half succeed. */
+    refuses?: readonly string[];
 } = {}): { readonly transport: MailFathomTransport; readonly sent: () => readonly ClientRequest[] } {
     const sent: ClientRequest[] = [];
 
@@ -85,7 +89,12 @@ function deployment({
             let answer: ClientResponse;
 
             if (method === 'DELETE') {
-                answer = { ...answered, body: JSON.stringify({ contact: 'anna', wasHeld: true, addressesErased: 1 }) };
+                answer = refuses.some((contact) => path.endsWith(`/contacts/${contact}`))
+                    ? { status: 503, headers: {}, body: '' }
+                    : {
+                          ...answered,
+                          body: JSON.stringify({ contact: 'anna', wasHeld: true, addressesErased: 1 }),
+                      };
             } else if (method === 'POST') {
                 answer = { ...answered, body: JSON.stringify(write) };
             } else if (path.includes('/correspondence')) {
@@ -238,6 +247,51 @@ describe('PeopleSpace', () => {
 
         expect(screen.queryByRole('button', { name: 'New contact' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Delete contact' })).toBeNull();
+    });
+
+    // The two books are two lists rather than one list read twice, and what says so is where a keyboard stands after
+    // the move: a row carried over from the longer book points past the end of the shorter one, which leaves a roving
+    // tabindex with no option to give focus to at all.
+    it('draws the book arrived at as a list of its own rather than continuing the one left', async () => {
+        const { transport } = deployment({
+            own: [
+                personCalled('anna', 'Anna Kowalska'),
+                personCalled('bartek', 'Bartek Nowak'),
+                personCalled('celina', 'Celina Zaremba'),
+            ],
+            collected: [personCalled('dorota', 'Dorota Wrona', 'Collected')],
+        });
+        drawSpace(transport);
+
+        const book = await screen.findByRole('listbox', { name: 'Contacts' });
+
+        fireEvent.keyDown(book, { key: 'ArrowDown' });
+        fireEvent.keyDown(book, { key: 'ArrowDown' });
+
+        expect(screen.getByRole('option', { name: /Celina Zaremba/u }).tabIndex).toBe(0);
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Collected' }));
+
+        expect((await screen.findByRole('option', { name: /Dorota Wrona/u })).tabIndex).toBe(0);
+    });
+
+    // Erasing several is several writes, so one refusal among them is reported as itself: the sentence names who is
+    // still in the book, and they are still picked out so that asking again is one press rather than a search.
+    it('names whoever a batch erasure did not remove, and leaves them picked out', async () => {
+        const { transport } = deployment({
+            own: [personCalled('anna', 'Anna Kowalska'), personCalled('bartek', 'Bartek Nowak')],
+            refuses: ['bartek'],
+        });
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('option', { name: /Anna Kowalska/u }), { ctrlKey: true });
+        fireEvent.click(screen.getByRole('option', { name: /Bartek Nowak/u }), { ctrlKey: true });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete contacts' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+        expect(await screen.findByText('Could not delete Bartek Nowak. Everybody else was deleted.')).toBeDefined();
+        expect(screen.getByRole('toolbar', { name: 'Selected contacts' })).toBeDefined();
     });
 
     // Below the width the mail screens collapse at, the book and the person are one pane the reader moves between, so

@@ -57,6 +57,9 @@ const writeSaid: Readonly<Record<ContactWriteOutcome, MessageKey>> = {
 interface WriteSaid {
     readonly where: 'book' | 'person';
     readonly said: MessageKey;
+
+    /** What that sentence names, where it names anybody: the holes the catalogue entry carries. */
+    readonly names?: Readonly<Record<string, string>>;
 }
 
 export function PeopleSpace({
@@ -84,7 +87,7 @@ export function PeopleSpace({
     /** Opens one file a person sent, named as which file of which message. */
     readonly onOpenDocument: (document: { readonly messageId: string; readonly position: number }) => void;
 }) {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
     const twoPanes = useTwoPanes();
     const wide = useWideWorkspace();
 
@@ -161,18 +164,39 @@ export function PeopleSpace({
         });
     }
 
+    // Erasing several people is several writes rather than one, so the answers are sorted rather than reduced to
+    // whether any of them failed: a batch in which one refusal stood beside four erasures would otherwise say nothing
+    // was changed while the book came back four people shorter, and would drop the refused person out of the selection
+    // with no way left to ask again about them. So what succeeded leaves the selection and what did not stays in it,
+    // and the sentence names whoever is still there.
     function erase(contacts: readonly Contact[]): void {
         if (session === null) {
             return;
         }
 
-        const erased = contacts.map((contact) => contact.id);
+        void Promise.all(
+            contacts.map((contact) =>
+                eraseContact(session, transport, contact.id).then((answer) => ({ contact, answer })),
+            ),
+        ).then((answers) => {
+            const refused = answers.filter(({ answer }) => answer.outcome === 'failed').map(({ contact }) => contact);
+            const erased = answers.filter(({ answer }) => answer.outcome !== 'failed').map(({ contact }) => contact.id);
 
-        void Promise.all(erased.map((contact) => eraseContact(session, transport, contact))).then((answers) => {
-            setSaid({
-                where: 'book',
-                said: answers.some((answer) => answer.outcome === 'failed') ? 'people.writeFailed' : 'people.erased',
-            });
+            setSaid(
+                refused.length === 0
+                    ? { where: 'book', said: 'people.erased' }
+                    : erased.length === 0
+                      ? { where: 'book', said: 'people.writeFailed' }
+                      : {
+                            where: 'book',
+                            said: 'people.eraseSomeRefused',
+                            names: {
+                                names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
+                                    refused.map((contact) => contact.displayName),
+                                ),
+                            },
+                        },
+            );
 
             setSelected((standing) => standing.filter((contact) => !erased.includes(contact)));
             setOpened((standing) => (standing !== null && erased.includes(standing.id) ? null : standing));
@@ -222,7 +246,7 @@ export function PeopleSpace({
 
             {said?.where === 'book' ? (
                 <p role="status" className="shrink-0 border-b border-line bg-sunken px-4 py-2 text-sm text-muted">
-                    {translate(said.said)}
+                    {translate(said.said, said.names)}
                 </p>
             ) : null}
 
@@ -240,6 +264,14 @@ export function PeopleSpace({
                     }`}
                 >
                     <ContactBook
+                        // Keyed by the book, so moving between the two draws a list rather than continuing one. What
+                        // this list holds is where it was scrolled, which row the keyboard is on, and the height it
+                        // measured — every one of them about the book that was being read, and none of them true of
+                        // the one arrived at. `messageList/MessageList.tsx` writes the same reset by hand because a
+                        // folder is read into the same list; here the two books are two lists, and a key is what says
+                        // so. It also puts the scroller back at the top, which state alone cannot: `scrollTop` on the
+                        // element the browser holds is not this component's to write.
+                        key={book}
                         book={book}
                         reading={reading}
                         opened={opened?.id ?? null}
