@@ -158,4 +158,18 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// </remarks>
     ClientReplyDraft = 10,
+
+    /// <summary>What the client API answers an opened contact with: the subject of each conversation naming them, and the name of each document they sent.</summary>
+    /// <remarks>
+    /// <para>
+    /// Apart from <see cref="ClientMailListing" /> although both carry subjects, because what a finding here means is
+    /// different: this answer is assembled about one person rather than about a folder, so a redaction counted here
+    /// says that correlating a named correspondent reached content a scanner withholds. A rate of that is worth
+    /// reading on its own, and merging it into the listing's would hide it among every folder anybody scrolled.
+    /// </para>
+    /// <para>
+    /// It redacts rather than refusing, which is the posture of every client point.
+    /// </para>
+    /// </remarks>
+    ClientContactCorrespondence = 11,
 }

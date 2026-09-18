@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -115,6 +115,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/contacts` | `mailfathom.mail.contacts.read` |
 | `GET /api/client/contacts/collected` | `mailfathom.mail.contacts.read` |
 | `GET /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.read` |
+| `GET /api/client/contacts/{contactId}/correspondence` | `mailfathom.mail.read` with `mailfathom.mail.contacts.read` |
 | `POST /api/client/contacts` | `mailfathom.mail.contacts.write` |
 | `PUT /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
 | `POST /api/client/contacts/{contactId}/promotion` | `mailfathom.mail.contacts.write` |
@@ -2545,6 +2546,77 @@ whoever reads it.
 [the tools over this book](../features/mcp-tools.md#the-contact-book-on-this-surface) publish. The erasure is behind
 the writing grant rather than a narrower one: a grant that may edit the book may take somebody out of it, and no
 smaller grant reaches an act that cannot be undone.
+
+### The contact correlation route
+
+```http
+GET /api/client/contacts/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/correspondence
+```
+
+It answers with what the mail this caller may read already holds about one contact — the conversations their addresses
+appear in, and the documents they sent:
+
+```json
+{
+  "contactId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "threads": [
+    {
+      "threadId": "0198f4c2-7d8e-7b2f-a041-52c637d8e9fa",
+      "latestMessageId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+      "subject": "Renewal terms",
+      "lastCorrespondedAt": "2026-03-04T09:01:12+00:00"
+    }
+  ],
+  "documents": [
+    {
+      "messageId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+      "position": 1,
+      "fileName": "renewal.pdf",
+      "mediaType": "application/pdf",
+      "receivedAt": "2026-03-04T09:01:12+00:00"
+    }
+  ]
+}
+```
+
+**Nothing here is stored.** Both lists are computed from the mail index on the read, so a contact record never carries a
+copy of a correspondence that could fall behind the mailbox. Reading a contact costs the record; reading this costs the
+correlation, which is why it is a route of its own rather than a member of what
+[the contact routes](#the-contact-routes) above answer with.
+
+**`threadId` is what [the conversation route](#the-conversation-route) is asked with**, `latestMessageId` what
+[the message route](#the-message-route) is asked with, and `messageId` with `position` what
+[the attachment route](#the-attachment-route) is asked with. Nothing in either list has to be resolved to be opened.
+
+**A conversation's entry is read off the most recent message in it naming this person**, which is what `subject` and
+`lastCorrespondedAt` describe. An exchange that has run on without them is reported at the point they last took part in
+it rather than at its own latest message, because what an opened contact answers is when this exchange last involved
+*them*.
+
+**A document is one the contact sent**: the message it arrived on was written from one of their own addresses. A file
+somebody else attached to a conversation this person was copied on is that person's document rather than this one's.
+The list is read from the attachment index, so a file no derivation has reached yet is absent and appears as the
+derivation catches up — and a deployment that never switched attachment reading on
+(`Embeddings:AttachmentText:Enabled`, which [attachment text extraction](../features/attachment-text-extraction.md)
+describes) wrote no such index and answers with no documents at all.
+
+**Both lists are bounded and neither is paged**: at most ten conversations and ten documents, out of the messages
+received in the last year. Below that the two are cut differently. The conversations are the distinct ones among the
+most recent two hundred messages naming this person, so an exchange they wrote more than that many messages in is what
+the list reports. The documents carry no scan bound of their own — they are the ten most recent files on mail this
+person sent inside the window, so one they sent stays reachable however many later messages have merely named them. A
+reader who wants the rest of an exchange opens the conversation, and one who wants everything a person ever sent
+searches for their address.
+
+**Only mail this caller may already read takes part.** The correlation runs over the accounts the signed-in user is
+assigned and the folders a mapping admits, with the junk folder left out, so a message withheld from this caller is
+outside the query rather than filtered out of its answer — neither list ever carries an entry marked withheld.
+
+**A contact no book in this caller's scope holds is answered `404`**, which is also the answer for a contact nobody
+ever held: neither discloses the other. A contact the window holds no mail of is answered `200` with two empty lists,
+which is the accurate answer rather than a missing one. A credential whose grant does not carry `mailfathom.mail.read`
+is answered `403`, and so is one missing `mailfathom.mail.contacts.read` — the refusal names which. It is served from
+the local copy, so it contacts no mail server and cannot set the remote `\Seen` flag.
 
 ### The notification routes
 

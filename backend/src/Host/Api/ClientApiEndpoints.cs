@@ -73,6 +73,12 @@ namespace MailFathom.Host.Api;
 /// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
 /// </para>
 /// <para>
+/// The contact correlation route, which <see cref="ClientContactCorrespondenceEndpoint" /> describes, is what an opened
+/// contact is drawn beside: the conversations one person's addresses appear in and the documents they sent, computed
+/// from the mail index on the read rather than held anywhere. It sits among the mail routes because that is what it
+/// publishes — the book it keys on is read under its own grant before this one is reached.
+/// </para>
+/// <para>
 /// The citation route, which <see cref="ClientCitationEndpoint" /> describes, is where an answer stops being something
 /// to be believed: it follows the citations a presentation plan declared to the mail behind them. It sits among the
 /// mail routes rather than beside a run, because what it does is read the acting user's own mail under the reading
@@ -162,6 +168,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailCleanedBody();
         api.MapClientMailAttachment();
         api.MapClientMailMutations();
+        api.MapClientContactCorrespondence();
         api.MapClientCitations();
         api.MapClientDiscoveryRuns();
         api.MapClientReplyDrafting();

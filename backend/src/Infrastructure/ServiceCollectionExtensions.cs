@@ -11,6 +11,7 @@ using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Contacts.Correspondence;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.Discovery.Planning;
@@ -1445,6 +1446,12 @@ public static class ServiceCollectionExtensions
         // and the bounds every request is checked against before the store is reached.
         services.AddScoped<ContactBookReader>();
         services.AddScoped<ContactBookWriter>();
+
+        // The correlation an opened contact is drawn beside, which is a mail read rather than a book one: it stores
+        // nothing, keys on the addresses the book already holds, and narrows by the same scope every other mail read
+        // composes. Registered here beside the book because that is the surface it is reached from.
+        services.AddScoped<IContactCorrespondenceIndex, ContactCorrespondenceIndex>();
+        services.AddScoped<ContactCorrespondenceReader>();
 
         // Collection from arriving mail, registered whatever any account's settings say, for the reason the arrival
         // trigger beside classification is: with collection off it reads one property per stored message and reaches

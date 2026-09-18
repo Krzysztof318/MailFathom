@@ -134,6 +134,7 @@ the list below answerable by reading it.
 | `client_citation_resolution` | The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands |
 | `client_thread_state` | The block the client API answers a conversation's state with: each statement a derivation wrote about where the exchange stands, and the name a commitment is owed by |
 | `client_reply_draft` | The reply the client API drafts: the body somebody is about to edit and send, and each claim it asserts. The addresses it proposes do not cross here, being values this deployment resolved out of its own store rather than text a producer wrote |
+| `client_contact_correspondence` | The mail text the client API answers an opened contact with: the subject of each conversation naming that person, and the name of each document they sent. The identities, the positions, the declared types and the instants beside them do not cross, being values this deployment resolved rather than text a sender wrote |
 | `attachment_download` | The extracted text of one attachment about to be streamed whole, on the signed link route and on the client's own attachment route alike — the one point whose subject is a file's own words rather than a message's |
 
 `client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
@@ -163,6 +164,13 @@ counting it separately worth the tag — a redaction rate mixed into the listing
 message's: what crosses there is text a person is about to send under their own name, so a finding here is a credential
 about to leave the mailbox again rather than one quoted back onto a screen. Its bound is one report per draft rather
 than one per claim, because a draft is what a composer waits for.
+
+`client_contact_correspondence` is apart from `client_mail_listing` although both carry subjects, because what is
+assembled there is chosen by a person rather than by a folder: the answer is everything the mailbox holds about one
+named correspondent, so a finding says a scanner withheld content from a correlation about somebody in particular. A
+rate of that merged into the listing's would be lost among every folder anybody scrolled. It is also the one client
+point that scans a file name without the file's words beside it — the document list names what a sender called each
+file and nothing out of it.
 
 A [conversation](../operations/client-endpoint.md#the-conversation-route) shares the listing's tag rather than taking a
 tag of its own, because it publishes the same three values per message, to the same reader, in the same amounts. What it
