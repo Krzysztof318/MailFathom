@@ -35,6 +35,7 @@ internal static class ChatGenerationPlanMapper
     /// <param name="capability">The work whose reference is read.</param>
     /// <returns>The plan, or <see langword="null" /> when neither the reference nor the section resolves to a model.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the section declares no reference for the capability, which a member added without a key to read it under would be.</exception>
     public static ChatGenerationPlan? Map(ChatModelOptions settings, ChatCapability capability)
     {
         ArgumentNullException.ThrowIfNull(settings);

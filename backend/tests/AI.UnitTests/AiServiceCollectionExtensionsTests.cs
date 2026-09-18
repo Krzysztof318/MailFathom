@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.BodyCleanup;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Enrichment;
@@ -177,6 +178,102 @@ public sealed class AiServiceCollectionExtensionsTests
         // They are read from the plan source, because the factory builds a client on the root provider while the plan
         // itself belongs to an operation's scope.
         Assert.Equal(ChatDeclarations.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+    }
+
+    /// <summary>
+    /// One named transport carries every capability, so its bounds are the widest model any of them may reach rather
+    /// than the main model's: a capability routed to a model with a longer deadline and a larger output budget would
+    /// otherwise be cut off by a transport bounded for a model it never sends to.
+    /// </summary>
+    [Fact]
+    public void AddChatProviderAdapter_WithACapabilityRoutedToAWiderModel_BoundsTheTransportByThatModel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+
+        var main = ChatDeclarations.Plan();
+        var widest = ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(alias: "vision"),
+            maximumOutputTokens: main.MaximumOutputTokens * 4,
+            requestTimeout: main.RequestTimeout + TimeSpan.FromMinutes(2));
+
+        ChatDeclarations.AddPlans(
+            services,
+            main,
+            new Dictionary<ChatCapability, ChatGenerationPlan> { [ChatCapability.ImageDescription] = widest });
+
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddChatProviderAdapter();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var transport = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(ProviderChatModelClient.TransportName);
+
+        Assert.Equal(widest.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+
+        // Against the transport the same declaration bounds with nothing routed, because the figure the main model
+        // alone produces is what this widening replaced and the constants behind it belong to the registration.
+        Assert.True(transport.MaxResponseContentBufferSize > MainModelResponseBuffer(main));
+    }
+
+    /// <summary>
+    /// A Discover run never reaches the mail-answering agent, so the endpoint it publishes to the person who asked is
+    /// the one that composed the answer they are given rather than the one a question would have been answered by.
+    /// </summary>
+    [Fact]
+    public void AddDiscoveryRunAgents_WithCompositionRoutedElsewhere_NamesTheComposingEndpoint()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(
+            services,
+            routed: new Dictionary<ChatCapability, ChatGenerationPlan>
+            {
+                [ChatCapability.DiscoveryComposition] = ChatDeclarations.Plan(
+                    ChatDeclarations.Endpoint(alias: "composing", publishedModelName: "the-composing-model")),
+            });
+
+        // Act
+        services.AddDiscoveryRunAgents();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var identity = scope.ServiceProvider.GetRequiredService<AnsweringEndpointIdentity>();
+
+        Assert.Equal("composing", identity.Alias);
+        Assert.Equal("the-composing-model", identity.PublishedModel);
+    }
+
+    /// <summary>The response buffer a declaration routing no capability elsewhere bounds the shared transport with.</summary>
+    private static long MainModelResponseBuffer(ChatGenerationPlan main)
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(services, main);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddChatProviderAdapter();
+
+        using var provider = services.BuildServiceProvider();
+        using var transport = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(ProviderChatModelClient.TransportName);
+
+        return transport.MaxResponseContentBufferSize;
     }
 
     /// <summary>

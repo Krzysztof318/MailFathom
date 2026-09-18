@@ -393,10 +393,14 @@ public static class AiServiceCollectionExtensions
         // beside the plan because only a deployment declaring a chat endpoint has one to name, and scoped off the plan
         // rather than mapped once so an operator editing the published name is obeyed by the next run rather than by
         // the next restart. Neither the address nor the routed model name crosses this boundary.
+        //
+        // The composing model rather than the answering one, because a Discover run never reaches the mail-answering
+        // agent: it plans with one model and composes the answer a reader is given with another, and it is the second
+        // of those the name is about. The two are the same endpoint until an operator routes one of them elsewhere.
         services.AddScoped(provider =>
         {
             var endpoint = provider
-                .GetRequiredKeyedService<ChatGenerationPlan>(ChatCapability.MailAnswering)
+                .GetRequiredKeyedService<ChatGenerationPlan>(ChatCapability.DiscoveryComposition)
                 .Endpoint;
 
             return new AnsweringEndpointIdentity(endpoint.Alias, endpoint.PublishedModelName);
