@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
 import * as changes from '../../../../tests/fixtures/changes';
+import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
 import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
@@ -67,6 +68,9 @@ const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/notifications/unread-count', notifications.unreadNotificationCount],
     ['/mutations', changes.mutationRecords],
     ['/replies/drafting', drafts.draftsReplies],
+    ['/contacts', contacts.assertedContactPage],
+    ['/contacts/collected', contacts.collectedContactPage],
+    [`/contacts/${contacts.assertedContact.id}/correspondence`, contacts.contactCorrespondence],
 ];
 
 const writtenRoutes: readonly (readonly [string, unknown])[] = [
@@ -81,6 +85,8 @@ const writtenRoutes: readonly (readonly [string, unknown])[] = [
     ['/drafts', drafts.savedDraft],
     [`/drafts/${drafts.draftId}/send`, drafts.queuedSend],
     ['/replies/drafting', drafts.draftedReply],
+    ['/contacts', contacts.contactWritten],
+    [`/contacts/${contacts.collectedContact.id}/promotion`, contacts.contactPromoted],
 ];
 
 afterEach(() => {
@@ -134,6 +140,33 @@ describe('fixtureAnswer', () => {
         const held = fixtureAnswer(asking('/preferences'), fixtureDeploymentDefaults, 1, state);
 
         expect(held === null ? null : stated(held)['theme']).toBe('dark');
+    });
+
+    // The collected book's path has the asserted one's as a prefix, which is the ordering every route table here is
+    // written in and the one thing a contacts route can get wrong without anything else noticing.
+    it('tells the two address books apart rather than answering the collected one with the asserted page', () => {
+        expect(stated(answered('/contacts/collected'))).toStrictEqual(contacts.collectedContactPage);
+    });
+
+    // A person the mailbox has nothing to say about is a state both columns of a person's page have to be looked at
+    // in, and the corpus reaches it through the collected record rather than through an option.
+    it('answers the collected person with a correlation that found nothing', () => {
+        expect(stated(answered(`/contacts/${contacts.collectedContact.id}/correspondence`))).toStrictEqual(
+            contacts.noContactCorrespondence,
+        );
+    });
+
+    it('answers both books empty where the deployment is set to hold nothing', () => {
+        expect(stated(answered('/contacts', { emptyCollections: true }))).toStrictEqual(contacts.emptyContactPage);
+        expect(stated(answered('/contacts/collected', { emptyCollections: true }))).toStrictEqual(
+            contacts.emptyContactPage,
+        );
+    });
+
+    it('answers erasing somebody with what was removed rather than with the record', () => {
+        expect(stated(answered(`/contacts/${contacts.assertedContact.id}`, {}, 1, 'DELETE'))).toStrictEqual(
+            contacts.contactErased,
+        );
     });
 
     it('answers a route the corpus states nothing for as nothing being there', () => {

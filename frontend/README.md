@@ -405,10 +405,12 @@ more.
 
 The client is **Discover**, **Mail**, **Cases**, **Agent**, **Tasks**, **Calendar**, and **People**, and they are one
 application rather than seven: `src/App.tsx` is the frame that holds them, and it is what a person carries their
-question, their scope, and their selection across. Only **Mail** is built — `src/routing/spaces.ts` names that in
-`implementedSpaces` — and the other six are present, named as placeholders, and say in a sentence that there is nothing
-behind them yet. They are drawn rather than hidden because the design project is what the client is measured against
-and it shows all seven; a rail with three destinations would be a different product from the one that was designed.
+question, their scope, and their selection across. **Mail** and **People** are built — `src/routing/spaces.ts` names
+both in `implementedSpaces` — and the other five are present, named as placeholders, and say in a sentence that there
+is nothing behind them yet. They are drawn rather than hidden because the design project is what the client is
+measured against and it shows all seven; a rail with three destinations would be a different product from the one that
+was designed. A built space is also the only kind that is reached under a grant: **People** is offered to a credential
+that may read the address book and to no other, which is why a placeholder is reached by anybody and a screen is not.
 The frame is one tree laid out by the width it is given, and nothing in it reads which head or which platform it is
 running on. Three `@theme` breakpoints decide it, and between them they give the four compositions the design project
 frames: below `workspace` the destinations are a bottom bar under a single pane, and every side panel is a drawer;

@@ -17,6 +17,7 @@
 
 /** Every symbol the client draws, by the name Google's catalogue gives it. */
 export const iconNames = [
+    'add',
     'add_a_photo',
     'all_inbox',
     'archive',
@@ -83,6 +84,7 @@ export const iconNames = [
     'outbox',
     'pending_actions',
     'person',
+    'person_add',
     'progress_activity',
     'refresh',
     'reply',

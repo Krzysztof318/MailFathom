@@ -20,6 +20,7 @@ export function Space({
     list,
     mail,
     tabs,
+    people,
     person,
 }: {
     /** Every space this deployment offers, which is every space that is mounted. */
@@ -39,6 +40,9 @@ export function Space({
 
     /** The strip naming everything the Mail space has open, which only that space has anywhere to put. */
     readonly tabs: ReactNode;
+
+    /** The address book and whoever is open from it, which is the People space and nothing else. */
+    readonly people: ReactNode;
 
     /** Who is signed in, which the Mail space keeps its own division of the width under. */
     readonly person: string | null;
@@ -90,6 +94,11 @@ export function Space({
             {offered.map((name) => {
                 const inFront = name === space;
                 const isMail = name === 'mail';
+                const isPeople = name === 'people';
+
+                // Which spaces compose their own height rather than scrolling a column of prose. Both built spaces do,
+                // and a placeholder does not — what it holds is a title and a sentence.
+                const composed = isMail || isPeople;
 
                 return (
                     <main
@@ -100,13 +109,13 @@ export function Space({
                         aria-hidden={inFront ? undefined : true}
                         inert={!inFront}
                         className={`${
-                            isMail
+                            composed
                                 ? 'flex min-h-0 flex-col overflow-hidden'
                                 : 'overflow-y-auto px-4 py-6 workspace:px-8'
                         } ${inFront ? 'flex-1' : 'invisible absolute inset-0'}`}
                     >
-                        {/* Mail is the one space with anything in it, and the design project draws it without a title:
-                            the columns are what it is, and a heading over them would be a word above the thing the word
+                        {/* Neither built space carries a title, which is how the design project draws both: the columns
+                            are what each of them is, and a heading over them would be a word above the thing the word
                             names. Every region still carries its name, because a landmark a reader moves to is
                             announced by it. */}
                         {isMail ? (
@@ -124,6 +133,15 @@ export function Space({
                                 status={inFront ? status : null}
                                 person={person}
                             />
+                        ) : isPeople ? (
+                            /* The People space draws no title either, for the reason Mail does not: the book and the
+                               person are what it is. The two regions the frame composes for every space stand at its
+                               foot and are handed to the one in front alone, exactly as they are to Mail. */
+                            <div className="flex min-h-0 flex-1 flex-col">
+                                {people}
+                                {inFront ? status : null}
+                                {inFront ? intent : null}
+                            </div>
                         ) : (
                             <div className="flex max-w-3xl flex-col gap-3">
                                 <h1 className="text-4xl font-semibold tracking-tight">

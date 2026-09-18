@@ -338,6 +338,51 @@ describe('Composer, a message of its own', () => {
         expect(screen.getByRole('button', { name: 'Remove ada@example.invalid from To' })).toBeDefined();
     });
 
+    // Writing to somebody from the address book is this opening carrying who it was opened about, and the three tests
+    // below are the whole of what that adds: an empty message already addressed, a half-written one addressed without
+    // losing what was in it, and a repeat that is not written down twice.
+    it('opens addressed to whoever the act that opened it named', () => {
+        drawComposer({ kind: 'new', to: ['ada@example.invalid'] });
+
+        expect(screen.getByRole('button', { name: 'Remove ada@example.invalid from To' })).toBeDefined();
+    });
+
+    it('adds whoever it was opened about to the message this tab was already writing', () => {
+        rememberComposition({
+            answering: null,
+            continuing: null,
+            account: 'work',
+            subject: 'Invoice',
+            to: ['ada@example.invalid'],
+            cc: [],
+            bcc: [],
+            words: [{ text: 'Half a sentence' }],
+        });
+
+        drawComposer({ kind: 'new', to: ['bo@example.invalid'] });
+
+        expect(wordsWritten()).toBe('Half a sentence');
+        expect(screen.getByRole('button', { name: 'Remove ada@example.invalid from To' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Remove bo@example.invalid from To' })).toBeDefined();
+    });
+
+    it('writes somebody the message is already addressed to down once rather than twice', () => {
+        rememberComposition({
+            answering: null,
+            continuing: null,
+            account: 'work',
+            subject: '',
+            to: ['ada@example.invalid'],
+            cc: [],
+            bcc: [],
+            words: [],
+        });
+
+        drawComposer({ kind: 'new', to: ['ada@example.invalid'] });
+
+        expect(screen.getAllByRole('button', { name: 'Remove ada@example.invalid from To' })).toHaveLength(1);
+    });
+
     it('draws every header on one grid, each field named in the column beside what is written in it', () => {
         drawComposer({ kind: 'new' }, {}, [work, home]);
 

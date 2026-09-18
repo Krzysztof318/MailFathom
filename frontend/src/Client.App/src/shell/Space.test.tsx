@@ -15,6 +15,7 @@ import { Space } from './Space';
 const handedToMail = 'The mail this space was handed.';
 const handedTheFolders = 'The folder tree this space was handed.';
 const handedTheTabs = 'The tab strip this space was handed.';
+const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
@@ -47,6 +48,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                             list={<p>{handedTheList}</p>}
                             mail={<p>{handedToMail}</p>}
                             tabs={<p>{handedTheTabs}</p>}
+                            people={<p>{handedToPeople}</p>}
                             person="reader"
                         />
                     </ComposingContext>
@@ -128,6 +130,50 @@ describe('Space', () => {
         render(inStrictMode('mail'));
 
         expect(screen.getByText(handedToMail)).toBeDefined();
+    });
+
+    it('draws People without a heading either, and names its landmark the same way', () => {
+        render(inStrictMode('people'));
+
+        expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+        expect(screen.getByRole('main', { name: 'People' })).toBeDefined();
+    });
+
+    it('shows what the frame composed for People in the People space', () => {
+        render(inStrictMode('people'));
+
+        expect(within(screen.getByRole('main', { name: 'People' })).getByText(handedToPeople)).toBeDefined();
+    });
+
+    // People composes its own height as Mail does rather than scrolling a column of prose as a placeholder does, and
+    // what says so is the class the frame gives the region: a space that scrolled its own column would put the book's
+    // scroller inside a second scroller.
+    it('lays the People space out as a composition rather than as a page of prose', () => {
+        render(inStrictMode('people'));
+
+        const region = screen.getByRole('main', { name: 'People' });
+
+        expect(region.className).toContain('overflow-hidden');
+        expect(region.className).not.toContain('overflow-y-auto');
+    });
+
+    it('hands the question and the connection to People when it is in front, and to nothing when it is not', () => {
+        const { rerender } = render(inStrictMode('people'));
+
+        expect(within(screen.getByRole('main', { name: 'People' })).getByText(handedTheIntent)).toBeDefined();
+
+        rerender(inStrictMode('cases'));
+
+        expect(within(screen.getByLabelText('People')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('People')).getByText(handedToPeople)).toBeDefined();
+    });
+
+    it('does not call the People space unbuilt either', () => {
+        render(inStrictMode('people'));
+
+        expect(
+            within(screen.getByRole('main', { name: 'People' })).queryByText(/This space is not built yet\./),
+        ).toBeNull();
     });
 
     it('shows the scope the Mail space is drawn against beside what it is drawn from', () => {

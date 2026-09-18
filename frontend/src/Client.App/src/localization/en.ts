@@ -806,6 +806,10 @@ export const en = {
         'This credential may not send mail from this deployment, so a message can be written and filed as a draft but not sent. Whoever runs the deployment can grant that.',
     'grant.manageFolders':
         'This credential may not change which folders this deployment reads, so making, renaming and removing a folder are not offered. Whoever runs the deployment can grant that.',
+    'grant.readContacts':
+        'This credential may not read the address book on this deployment, so the People space is not offered. Whoever runs the deployment can grant that.',
+    'grant.writeContacts':
+        'This credential may not change the address book on this deployment, so adding a contact, taking a collected one on, and deleting one are not offered. Whoever runs the deployment can grant that.',
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',
@@ -1193,6 +1197,85 @@ export const en = {
     'toast.stopIsFinal': 'Stopping is not taken back — the operation would have to be started again.',
     'toast.stopped': 'Stopped',
     'toast.stoppedNothingWritten': 'The operation was stopped before anything was written, so nothing changed.',
+    'people.books': 'Which address book',
+    'people.own': 'Own',
+    'people.collected': 'Collected',
+    'people.ownHint': 'address book',
+    'people.collectedHint': 'from received mail headers',
+    'people.ownEmpty': 'You have not written anybody down yet. Add a contact and they appear here.',
+    'people.collectedEmpty': 'Nobody has been picked up from your mail yet.',
+    'people.list': 'Contacts',
+    'people.count.one': '{count} person',
+    'people.count.few': '{count} people',
+    'people.count.many': '{count} people',
+    'people.count.other': '{count} people',
+    'people.reading': 'Reading the address book…',
+    'people.readingMore': 'Reading more…',
+    'people.readAgain': 'Try again',
+    'people.failedUnauthenticated':
+        'Your session is no longer accepted, so the address book could not be read. Sign in again.',
+    'people.failedUnauthorized':
+        'This credential may not read the address book on this deployment. Whoever runs the deployment can grant that.',
+    'people.failedUnavailable': 'The deployment did not answer with the address book. It may be offline or starting.',
+    'people.failedUnreadable':
+        'The deployment answered with an address book this client could not read. This is worth reporting as a defect.',
+
+    'people.newContact': 'New contact',
+    'people.closeNewContact': 'Close',
+    'people.contactName': 'Name',
+    'people.contactAddress': 'Email address',
+    'people.addressNotUsable': 'That does not look like an email address.',
+    'people.newContactHint':
+        'A contact you write down is yours to amend and to remove. This deployment keeps a name and addresses, and nothing else about a person.',
+    'people.saveContact': 'Save contact',
+
+    'people.write': 'Write',
+    'people.writeMessage': 'Write a message',
+    'people.openContact': 'Open contact',
+    'people.selectContacts': 'Select contacts',
+    'people.deleteContact': 'Delete contact',
+    'people.deleteContacts': 'Delete contacts',
+    'people.selectionBar': 'Selected contacts',
+    'people.clearSelection': 'Clear the selection',
+    'people.backToList': 'Back to the address book',
+    'people.nobodyOpen': 'Open somebody to read their page.',
+    'people.collectedReadOnly': 'Read-only — editable once added to your contacts',
+    'people.promote': 'Add to my contacts',
+    'people.promoting': 'Adding…',
+
+    'people.eraseOne': 'Delete this contact?',
+    'people.eraseMany': 'Delete {count} contacts?',
+    'people.erasePermanent':
+        'The contact and everything the address book derived from them are removed. The mail they sent is untouched.',
+    'people.eraseAct': 'Delete',
+    'people.erased': 'Deleted.',
+    'people.eraseSomeRefused': 'Could not delete {names}. Everybody else was deleted.',
+    'people.written': 'Contact added.',
+    'people.writeNotFound': 'That contact is no longer in the address book.',
+    'people.addressHeld': 'Another contact already holds that address.',
+    'people.originRefuses': 'That contact is not yours to change.',
+    'people.alreadyAsserted': 'That contact is already one of your own.',
+    'people.writeFailed': 'The deployment did not answer, so nothing was changed.',
+
+    'person.relationship': 'Relationship state',
+    'person.authored': 'AI',
+    'person.relationshipPending': 'MailFathom does not write a reading of a relationship yet.',
+    'person.lastContact': 'Last contact',
+    'person.neverInTouch': 'No mail exchanged with this person.',
+    'person.sharedThreads': 'Shared threads',
+    'person.documents': 'Documents from this person',
+    'person.noThreads': 'No conversation here names this person.',
+    'person.noDocuments': 'This person has sent no files.',
+    'person.unnamedDocument': 'Unnamed file',
+    'person.correspondenceReading': 'Reading…',
+    'person.correspondenceAgain': 'Try again',
+    'person.correspondenceUnauthenticated':
+        'Your session is no longer accepted, so this could not be read. Sign in again.',
+    'person.correspondenceUnauthorized': 'This credential may not read what this person is named in.',
+    'person.correspondenceUnavailable': 'The deployment did not answer.',
+    'person.correspondenceUnreadable':
+        'The deployment answered with something this client could not read. This is worth reporting as a defect.',
+    'person.correspondenceMissing': 'This person is no longer in the address book.',
 } as const;
 
 /** Every message a screen may ask for. A key absent here does not compile at the call site. */

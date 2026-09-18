@@ -13,6 +13,7 @@ import {
     type ClientResponse,
 } from '@mailfathom/client-backend';
 import * as changes from '../../../../tests/fixtures/changes';
+import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
 import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
@@ -350,9 +351,59 @@ function answerFor(
     return (
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??
+        contactAnswer(route, request, options) ??
         draftAnswer(route, request) ??
         messageAnswer(route, asked) ?? { status: 404, body: '', headers: {} }
     );
+}
+
+/**
+ * What the two address books and one person's own page answer with.
+ *
+ * The collected book is read before the asserted one because its path has the other's as a prefix, which is the same
+ * ordering the routes above are written in. Which book a promotion moves somebody into is not modelled: the answer
+ * states the record as the surface states it, and the screen reads the book again rather than correcting what it holds.
+ */
+function contactAnswer(
+    route: string,
+    request: ClientRequest,
+    options: Readonly<FixtureDeploymentOptions>,
+): ClientResponse | null {
+    if (!route.startsWith('/contacts')) {
+        return null;
+    }
+
+    if (request.method === 'DELETE') {
+        return answering(contacts.contactErased);
+    }
+
+    if (route.endsWith('/promotion')) {
+        return answering(contacts.contactPromoted);
+    }
+
+    if (route.endsWith('/correspondence')) {
+        // The collected record is the person nothing was found about, which is how both columns' empty state is
+        // reached without any option being turned on.
+        return answering(
+            route.includes(contacts.collectedContact.id) || options.emptyCollections
+                ? contacts.noContactCorrespondence
+                : contacts.contactCorrespondence,
+        );
+    }
+
+    if (request.method === 'POST') {
+        return answering(contacts.contactWritten);
+    }
+
+    if (route === '/contacts/collected') {
+        return answering(options.emptyCollections ? contacts.emptyContactPage : contacts.collectedContactPage);
+    }
+
+    if (route === '/contacts') {
+        return answering(options.emptyCollections ? contacts.emptyContactPage : contacts.assertedContactPage);
+    }
+
+    return answering(contacts.assertedContact);
 }
 
 /** What the notification centre and the bell above it answer with. */

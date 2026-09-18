@@ -239,6 +239,25 @@
     --spacing-message-row: 5.6875rem;
     --spacing-message-row-narrow: 6.875rem;
 
+    /* One row of the address book, which is one height at every width — the design project draws the contact row the
+       same at the phone as at the desktop, unlike the message row above it. It is here for the other reason that one
+       is: the book is windowed over this value, measured off a rendered row rather than held a second time in
+       JavaScript. Two lines and the space around them: who they are, and the address to write to. */
+    --spacing-contact-row: 3.875rem;
+
+    /* How wide the address book's column stands where the window has room for it beside the person opened, which is
+       the width the design project draws it at. It is fixed rather than a fraction for the reason the mailbox column
+       is: what the list holds is a name and an address, and a column that grew with the window would leave a person's
+       own page narrower for no reading gained. */
+    --spacing-contact-list: 18.75rem;
+
+    /* How much of the frame the strip saying what this credential may not do may take before it scrolls instead of
+       growing. A credential holding one grant is withheld most of them, so at the narrowest width that strip is
+       several sentences of several lines each — and a strip that went on growing would leave the space under it no
+       height at all and, being a flex item that will not shrink below its own content, would spill over the
+       navigation beneath the frame. This is the ceiling; what does not fit is reached by scrolling the strip. */
+    --spacing-grant-notices: 11.5rem;
+
     /* How wide the rail is in the desktop composition and in the tablet one, where the project draws it narrower with
        the label under the symbol at a smaller size; how wide the column beside it that holds the mailbox tree is once
        it has been folded to a strip; and how wide the drawer the narrow shape holds the mailboxes in is. All four are

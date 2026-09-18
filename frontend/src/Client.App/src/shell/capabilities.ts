@@ -23,6 +23,8 @@ export const clientCapabilities = [
     'composeMail',
     'sendMail',
     'manageFolders',
+    'readContacts',
+    'writeContacts',
 ] as const;
 
 /** Something the client offers a person, where the grant permits it. */
@@ -41,6 +43,8 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     composeMail: 'mailfathom.mail.drafts.write',
     sendMail: 'mailfathom.mail.send',
     manageFolders: 'mailfathom.mail.accounts.write',
+    readContacts: 'mailfathom.mail.contacts.read',
+    writeContacts: 'mailfathom.mail.contacts.write',
 };
 
 // Which capability each space is reached under. Every space that is still a placeholder carries none, because nothing
@@ -48,7 +52,7 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
 // permission here before then would be a guess enforced on a screen that does not exist. `discover` and `agent` are the two
 // exceptions among them: each is a placeholder today and asking is what each will be, so both are already withheld
 // from a credential that may not ask rather than offered as placeholders somebody's grant would never let become a
-// screen.
+// screen. `people` is no longer one of either group: it is a screen, and reading the address book is what it is.
 const spaceCapabilities: Readonly<Record<Space, ClientCapability | null>> = {
     discover: 'askMail',
     mail: 'readMail',
@@ -56,7 +60,7 @@ const spaceCapabilities: Readonly<Record<Space, ClientCapability | null>> = {
     agent: 'askMail',
     tasks: null,
     calendar: null,
-    people: null,
+    people: 'readContacts',
 };
 
 /** Whether this credential may do that here. */

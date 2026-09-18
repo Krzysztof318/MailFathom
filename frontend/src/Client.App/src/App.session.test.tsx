@@ -47,6 +47,20 @@ describe('App session', () => {
             'Cases',
             'Tasks',
             'Calendar',
+        ]);
+    });
+
+    // People is the second space behind a grant of its own, and it is the worked example of a space that became a
+    // screen: a placeholder is reached by anybody, and what reading somebody's address book needs is said here.
+    it('offers the address book to a credential that may read one', async () => {
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read', 'mailfathom.mail.contacts.read'));
+        await framed();
+
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
+            'Mail',
+            'Cases',
+            'Tasks',
+            'Calendar',
             'People',
         ]);
     });

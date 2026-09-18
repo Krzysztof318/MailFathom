@@ -26,7 +26,18 @@ import { htmlOf, plainTextOf, type WrittenNode } from './writtenText';
  * drafts folder being carried on with.
  */
 export type ComposerOpening =
-    | { readonly kind: 'new' }
+    | {
+          readonly kind: 'new';
+
+          /**
+           * Who it opens addressed to, where the act that opened it named somebody.
+           *
+           * Writing to a person from their own page, and to everybody picked out of the address book, are both an empty
+           * message with the recipients already in it rather than a second kind of composition — so this is an opening
+           * the composer fills from and never a rule about who may be written to, which is the deployment's.
+           */
+          readonly to?: readonly string[];
+      }
     | {
           readonly kind: 'answer';
           readonly answers: MailDraftAnswer;
@@ -89,9 +100,14 @@ export type SendCaution = 'noRecipient' | 'noSubject' | 'noWords';
 /** The most addresses the composer takes in one header, which is what the deployment answers a draft with at most. */
 export const mostRecipientsInOneHeader = 256;
 
-/** A message of its own, addressed to nobody and about nothing yet. */
-export function nothingWrittenYet(account: string): Composition {
-    return { answering: null, continuing: null, account, subject: '', to: [], cc: [], bcc: [], words: [] };
+/**
+ * A message of its own, about nothing yet and addressed to whoever the act that opened it named.
+ *
+ * @param account The account it goes out as.
+ * @param to Who it opens addressed to, which is nobody unless the act that opened it named somebody.
+ */
+export function nothingWrittenYet(account: string, to: readonly string[] = []): Composition {
+    return { answering: null, continuing: null, account, subject: '', to, cc: [], bcc: [], words: [] };
 }
 
 /**

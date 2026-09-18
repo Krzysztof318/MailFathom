@@ -155,6 +155,22 @@ describe('answeredSubject', () => {
     });
 });
 
+describe('nothingWrittenYet', () => {
+    it('opens addressed to nobody where the act that opened it named nobody', () => {
+        expect(nothingWrittenYet('work').to).toStrictEqual([]);
+    });
+
+    // Writing to a person from their own page, and to everybody picked out of the address book, are an empty message
+    // with the recipients already in it rather than a second kind of composition.
+    it('opens addressed to whoever the act that opened it named', () => {
+        const written = nothingWrittenYet('work', ['anna@example.invalid', 'bartek@example.invalid']);
+
+        expect(written.to).toStrictEqual(['anna@example.invalid', 'bartek@example.invalid']);
+        expect(written.answering).toBeNull();
+        expect(written.subject).toBe('');
+    });
+});
+
 describe('whatWouldBeMissing', () => {
     it('names nothing where a message is addressed, titled, and written', () => {
         expect(

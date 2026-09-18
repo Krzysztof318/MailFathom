@@ -14,13 +14,19 @@ import { initialsOf } from './initials';
 // The row's circle is drawn at two sizes for the reason the row itself is two heights: the design project enlarges
 // both at the phone, where the list is the whole screen, and draws them at one size everywhere above it. The card's is
 // one size, because a message's head is the same head at every width.
+//
+// The address book draws the same circle at two further sizes — one on a contact's row and a larger one at the head of
+// the person opened — and they are places here rather than a second component, because a person recognised by their
+// letters is the same circle wherever it stands.
 
-/** Where the avatar stands: on a row of the list, or at the head of a message drawn as a card. */
-export type SenderAvatarPlace = 'row' | 'card';
+/** Where the avatar stands: a row of a list, the head of a message drawn as a card, or an opened person's own page. */
+export type SenderAvatarPlace = 'row' | 'card' | 'contact' | 'person';
 
 const places: Readonly<Record<SenderAvatarPlace, string>> = {
     row: 'size-8.5 text-xs workspace:size-5.5 workspace:text-2xs',
     card: 'size-7.5 text-xs',
+    contact: 'size-8 text-xs',
+    person: 'size-13 text-lg',
 };
 
 /** The circle a sender is recognised by, drawn only where there are letters to put in it. */

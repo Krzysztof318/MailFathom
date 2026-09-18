@@ -15,6 +15,35 @@ export {
     type ClientPreferences,
     type ClientThemePreference,
 } from './clientPreferences';
+export {
+    contactCorrespondenceRoute,
+    mostCorrespondenceEntries,
+    readContactCorrespondence,
+    type ContactCorrespondence,
+    type CorrespondingDocument,
+    type CorrespondingThread,
+} from './contactCorrespondence';
+export {
+    collectedContactsRoute,
+    contactPromotionRoute,
+    contactRoute,
+    contactsPerPage,
+    contactsRoute,
+    eraseContact,
+    mostContactsPerPage,
+    promoteContact,
+    readCollectedContacts,
+    readContact,
+    readOwnContacts,
+    recordContact,
+    type Contact,
+    type ContactErasure,
+    type ContactOrigin,
+    type ContactPage,
+    type ContactRecord,
+    type ContactWrite,
+    type ContactWriteOutcome,
+} from './contacts';
 export { resolveDeploymentEntry, type DeploymentEntryRefusal, type DeploymentEntryResult } from './deployment';
 export {
     deploymentSessionRoute,

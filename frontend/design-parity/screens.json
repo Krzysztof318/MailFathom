@@ -253,6 +253,64 @@
       "compositions": ["tablet", "desktop"]
     },
     {
+      "id": "people",
+      "route": "/#/people",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Contacts"
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
+      "id": "people-collected",
+      "route": "/#/people",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "text": "Collected"
+          }
+        },
+        {
+          "expect": {
+            "text": "from received mail headers"
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "person",
+      "route": "/#/people",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Contacts"
+          }
+        },
+        {
+          "click": {
+            "role": "option",
+            "nth": 0
+          }
+        },
+        {
+          "expect": {
+            "role": "region",
+            "name": "Shared threads"
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
       "id": "composer",
       "route": "/#/mail",
       "signIn": true,

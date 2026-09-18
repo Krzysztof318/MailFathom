@@ -55,6 +55,7 @@ import { followTarget } from './notifications/notificationDestination';
 import { NotificationCentre } from './notifications/NotificationCentre';
 import { usePanelSwipe } from './notifications/usePanelSwipe';
 import { useNotificationCentre } from './notifications/useNotificationCentre';
+import { PeopleSpace } from './people/PeopleSpace';
 import { PendingChangesProvider } from './pendingChanges/PendingChanges';
 import { AiFiltersShownContext } from './preferences/aiFilters';
 import { MessageViewContext } from './preferences/messageView';
@@ -330,6 +331,12 @@ export function App({
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
     const writesMail = deploymentSession !== null && offers(deploymentSession, 'composeMail');
+
+    // The address book is read under a grant of its own and changed under a second, which is what draws the People
+    // space at all and what decides whether it is a book somebody may only read. The first is what the space is
+    // reached under, so a credential without it meets no People space rather than an empty one.
+    const readsContacts = deploymentSession !== null && offers(deploymentSession, 'readContacts');
+    const writesContacts = deploymentSession !== null && offers(deploymentSession, 'writeContacts');
 
     // The two grants the acts on a mailbox are reached under, which are separate for the reason
     // `shell/capabilities.ts` gives: a wrong flag misdescribes mail somebody can still find, and a wrong move puts it
@@ -927,7 +934,7 @@ export function App({
                     may not do: both are statements about the credential rather than about anything it read. */}
                                                                     {notices.length === 0 &&
                                                                     withheld.length === 0 ? null : (
-                                                                        <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                                                                        <div className="flex min-h-0 flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
                                                                             <CredentialNotices notices={notices} />
                                                                             <GrantNotice withheld={withheld} />
                                                                         </div>
@@ -1037,6 +1044,58 @@ export function App({
                                                                                             onOpen={openTabs.openMail}
                                                                                         />
                                                                                     </MailSearch>
+                                                                                )
+                                                                            }
+                                                                            people={
+                                                                                session === null ||
+                                                                                !readsContacts ? null : (
+                                                                                    <PeopleSpace
+                                                                                        session={session}
+                                                                                        transport={readMail}
+                                                                                        writable={writesContacts}
+                                                                                        onOpenThread={(thread) => {
+                                                                                            // What a person's page cites
+                                                                                            // is mail, and mail is read
+                                                                                            // in the Mail space: the
+                                                                                            // message is opened and the
+                                                                                            // address follows it, so the
+                                                                                            // reader lands on what they
+                                                                                            // pressed rather than on a
+                                                                                            // space that has quietly
+                                                                                            // changed underneath them.
+                                                                                            openTabs.openMail(
+                                                                                                thread.messageId,
+                                                                                                thread.subject,
+                                                                                                thread.threadId,
+                                                                                            );
+                                                                                            window.location.hash =
+                                                                                                addressOf('mail');
+                                                                                        }}
+                                                                                        onOpenDocument={(document) => {
+                                                                                            // Cited rather than opened,
+                                                                                            // exactly as a search result
+                                                                                            // cites one: the pane that
+                                                                                            // reads the message is what
+                                                                                            // turns a coordinate into an
+                                                                                            // opened file, because the
+                                                                                            // size a download is bounded
+                                                                                            // by is the message's.
+                                                                                            revise({
+                                                                                                citedAttachment: {
+                                                                                                    storedEmailId:
+                                                                                                        document.messageId,
+                                                                                                    position:
+                                                                                                        document.position,
+                                                                                                },
+                                                                                            });
+                                                                                            openTabs.openMail(
+                                                                                                document.messageId,
+                                                                                                null,
+                                                                                            );
+                                                                                            window.location.hash =
+                                                                                                addressOf('mail');
+                                                                                        }}
+                                                                                    />
                                                                                 )
                                                                             }
                                                                             tabs={
@@ -1162,7 +1221,9 @@ export function App({
 function openingKey(opening: ComposerOpening): string {
     switch (opening.kind) {
         case 'new':
-            return 'new';
+            // Who it was opened addressed to is part of the key, so asking to write to a second person reaches the
+            // composer rather than leaving it on the message it was already holding.
+            return `new:${(opening.to ?? []).join(',')}`;
         case 'draft':
             return `draft:${opening.storedEmailId}`;
         case 'answer':
