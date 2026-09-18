@@ -1208,8 +1208,8 @@ is counted.
 Sensitive-content scanning publishes six instruments, all of them tagged with
 `mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`,
 `mcp_email_content`, `outgoing_mail`, `client_mail_listing`, `client_mail_search`, `client_citation_resolution`,
-`client_thread_state`, `client_reply_draft`, `client_contact_correspondence`, or
-`attachment_download`. The
+`client_thread_state`, `client_reply_draft`, `client_contact_correspondence`,
+`client_contact_relationship`, or `attachment_download`. The
 egress point is on every one
 of them because it is
 what an operator acts

@@ -717,12 +717,13 @@ Declaring a further model, renaming one, and moving which alias a capability nam
 a resilience circuit are both looked up by whatever the declaration in force calls a model. A run already in flight
 keeps the declaration it began with, so a reload landing mid-question changes the next question and not that one. A
 candidate that breaks any rule in the tables above is refused whole, logged with the key to fix, and leaves the previous
-declaration answering; the process stays up either way. What stays a restart is the six settings that decide which
+declaration answering; the process stays up either way. What stays a restart is the seven settings that decide which
 services this deployment registered at all: whether `Chat:Models` declares a model at all — the first one, or the
 removal of the last — whether `Chat:RelevanceFilter:Enabled` turns the second pass on, whether
 `Chat:Enrichment:Enabled` turns the arrival derivation on, whether `Chat:ThreadState:Enabled` turns the conversation
-derivation on, whether `Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, and whether
-`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. The third rendering of a message body is not among them
+derivation on, whether `Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, whether
+`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on, and whether `Chat:ContactRelationship:Enabled` turns the
+relationship card on. The third rendering of a message body is not among them
 because it has no switch of its own: a declared model is the whole of what registers it, and which readers want it is
 their own preference rather than a key an operator writes. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for a
 reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
@@ -830,6 +831,34 @@ reaches the provider, and what a drafting that produced nothing answers with.
 | --- | --- | --- | --- | --- |
 | `Chat:ReplyDrafting:Enabled` | bool | `true` | it is read only where `Chat:Models` declares a model, so a deployment without one drafts nothing whatever this says | restart |
 | `Chat:ReplyDrafting:StyleFromSentMail` | bool | `true` | written off, no sent mail is read and the draft is written from the conversation alone. It changes what leaves the deployment rather than only what the draft reads like, which is why it is an operator's decision rather than a constant | restart |
+
+### The relationship card — `Chat:ContactRelationship`
+
+Reading what an opened contact was already answered with — the conversations naming that person and the documents they
+sent — into a short note about where the correspondence stands, one suggested next action, and a few observations, so
+somebody opening a person reads a card instead of two lists. A block inside `Chat` for the reason the blocks above are:
+it derives with that endpoint and has nowhere to send a correspondence without one.
+
+On by default, on the reading that puts the drafting above it on: what decides the default is who spends the money and
+when. A card costs one call per contact somebody deliberately opened, rather than one per message or conversation
+arriving — **nothing sweeps the address book, and a contact nobody opened costs nothing at all.** Turning it off is a
+supported deployment and a spend decision: an opened contact then draws the record, the conversations, and the
+documents, which is the page every deployment drew before this existed.
+
+One switch rather than two, unlike the drafting above. What a derivation reads is settled by the correlation the
+contact page already performs, so there is no second body of mail to decline and no bound here an operator could move
+without moving what an opened contact shows.
+
+**It competes with questions for one allowance**, exactly as the blocks above do: each derivation is admitted against
+and charged to the same `MailAnswering` period ceilings a question is. A deployment that has spent the period withholds
+the card rather than refusing the contact, because nobody pressed a button for it — the page was simply opened.
+
+[Where a correspondence with one person stands](../features/contact-relationship.md) describes what a card carries,
+what backs each statement, what reaches the provider, and what a derivation that produced nothing answers with.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:ContactRelationship:Enabled` | bool | `true` | it is read only where `Chat:Models` declares a model, so a deployment without one derives nothing whatever this says | restart |
 
 ### Reading a typed sentence into filters — `Chat:SearchPhrasing`
 

@@ -996,6 +996,14 @@ internal static class HostComposition
                 builder.Services.AddReplyDraftAgent(declaredChat.ReplyDrafting.StyleFromSentMail);
             }
 
+            // And once more for the card an opened contact is headed by: registered or not registered is the whole of
+            // the switch, so an instance that declined it draws the contact page it always drew rather than a card
+            // that fails. Nothing here sweeps the book — the derivation runs when somebody opens one person.
+            if (declaredChat.ContactRelationship.Enabled)
+            {
+                builder.Services.AddContactRelationshipAgent();
+            }
+
             // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
             // AddInfrastructure below, because it decorates the retrieval that call registers. Scoped for the reason the
             // generation plan is: the two numbers it carries are a lookup's, and whether the pass runs at all is the part

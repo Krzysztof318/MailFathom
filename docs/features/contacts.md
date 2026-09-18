@@ -390,6 +390,13 @@ entry marked withheld. Where a deployment scans for sensitive content, the subje
 before the answer leaves, under the point [sensitive-content scanning](sensitive-content-scanning.md) names
 `client_contact_correspondence`.
 
+**Where a chat endpoint is declared, that correlation is also read into a few sentences.**
+[Where a correspondence with one person stands](contact-relationship.md) is the note an opened contact is headed by —
+what the exchange amounts to, one thing worth doing next, and a handful of observations, each citing the conversation
+or the document behind it. It is a route of its own and a grant of its own, because it costs a provider call on top of
+the correlation, and a deployment that declared no endpoint or declined it draws the contact page described above and
+nothing more.
+
 ## Erasing and exporting a person
 
 A contact book is the most concentrated personal data this system holds: not mail that arrived about somebody, but an

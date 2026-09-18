@@ -78,6 +78,10 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default as the block above it is — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
     public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
 
+    /// <summary>Gets or sets whether an opened contact is read into a note about where the correspondence with them stands.</summary>
+    /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and on is the default for the reason reply drafting is — the block itself says why, and what turning it off leaves is the contact page every deployment drew before this existed.</remarks>
+    public ContactRelationshipOptions ContactRelationship { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the declared models and the main model together: a section declaring models nobody chose between answers no question, and a section declaring none has nothing to choose from.</remarks>
     public bool IsConfigured => this.FindMainModel() is not null;
@@ -138,7 +142,7 @@ internal sealed class ChatModelOptions : IValidatableObject
         {
             // A section carrying capability settings but no model at all is the one shape worth naming: an operator who
             // switched a derivation on and expects it to run has to be told that nothing does. What each member
-            // contributes here is whether writing it was unambiguous intent, so the two blocks that are on by default
+            // contributes here is whether writing it was unambiguous intent, so the three blocks that are on by default
             // are absent from the reading — their `Enabled` reads true on a section nobody wrote, and taking that as
             // intent would refuse every deployment that left the section alone.
             if (this.MainModel.NamesModel

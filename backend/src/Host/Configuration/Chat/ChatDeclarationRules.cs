@@ -167,6 +167,12 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ReplyDrafting)}:{nameof(ReplyDraftingOptions.StyleFromSentMail)} — where a draft's manner comes from is decided while the drafting is registered, so changing which mail one reads needs a restart rather than a configuration reload.");
         }
 
+        if (candidate.ContactRelationship.Enabled != composed.ContactRelationship.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ContactRelationship)}:{nameof(ContactRelationshipOptions.Enabled)} — whether an opened contact is read into a relationship note decides whether the derivation is registered at all, which is what a contact page reads to know whether to draw a card, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
         if (candidate.SearchPhrasing.Enabled != composed.SearchPhrasing.Enabled)
         {
             errors.Add(

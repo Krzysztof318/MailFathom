@@ -172,4 +172,22 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// </remarks>
     ClientContactCorrespondence = 11,
+
+    /// <summary>What the client API answers an opened contact's relationship card with: the note a derivation wrote about that correspondence, what it suggests doing next, and what it observed beside them.</summary>
+    /// <remarks>
+    /// <para>
+    /// Apart from <see cref="ClientContactCorrespondence" /> beside it, although both are drawn on one page and the
+    /// second is derived from the first. What crosses there is text a sender wrote — a subject, a file name — and what
+    /// crosses here is text this deployment composed <em>about</em> that person, so a finding here says a derivation
+    /// restated something sensitive that the subjects beside it may never have shown. It is the same separation
+    /// <see cref="ClientThreadState" /> holds from <see cref="ClientMailListing" />, one person at a time rather than
+    /// one conversation.
+    /// </para>
+    /// <para>
+    /// It is a second scan of material already scanned on its way out: the correlation crossed
+    /// <see cref="ChatPrompt" /> to be derived from, and what came back is scanned again before a reader sees it. It
+    /// redacts rather than refusing, which is the posture of every client point.
+    /// </para>
+    /// </remarks>
+    ClientContactRelationship = 12,
 }

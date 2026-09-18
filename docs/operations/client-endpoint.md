@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -116,6 +116,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/contacts/collected` | `mailfathom.mail.contacts.read` |
 | `GET /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.read` |
 | `GET /api/client/contacts/{contactId}/correspondence` | `mailfathom.mail.read` with `mailfathom.mail.contacts.read` |
+| `GET /api/client/contacts/{contactId}/relationship` | `mailfathom.mail.ask` with `mailfathom.mail.read` and `mailfathom.mail.contacts.read` |
 | `POST /api/client/contacts` | `mailfathom.mail.contacts.write` |
 | `PUT /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
 | `POST /api/client/contacts/{contactId}/promotion` | `mailfathom.mail.contacts.write` |
@@ -2617,6 +2618,72 @@ ever held: neither discloses the other. A contact the window holds no mail of is
 which is the accurate answer rather than a missing one. A credential whose grant does not carry `mailfathom.mail.read`
 is answered `403`, and so is one missing `mailfathom.mail.contacts.read` — the refusal names which. It is served from
 the local copy, so it contacts no mail server and cannot set the remote `\Seen` flag.
+
+### The contact relationship route
+
+```http
+GET /api/client/contacts/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/relationship
+```
+
+It answers with the note an opened contact is headed by: the correlation above read into a few sentences, one
+suggested next action, and a handful of observations, each citing what it rests on.
+
+```json
+{
+  "contactId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "derived": true,
+  "note": {
+    "text": "They lead the renewal on the supplier's side and have been writing weekly since March. The last exchange left the indexation cap open.",
+    "sources": [{ "kind": "email", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91" }]
+  },
+  "nextAction": {
+    "text": "Answer the indexation cap so the renewal can be signed.",
+    "sources": [{ "kind": "email", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91" }]
+  },
+  "observations": [
+    {
+      "aspect": "ActivePeriod",
+      "statement": {
+        "text": "mornings, early in the week",
+        "sources": [{ "kind": "email", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91" }]
+      }
+    },
+    {
+      "aspect": "OpenItem",
+      "statement": {
+        "text": "the indexation cap",
+        "sources": [{ "kind": "attachment", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91", "attachmentPosition": 1 }]
+      }
+    }
+  ]
+}
+```
+
+**One opened contact is one bounded AI run, and nothing else ever starts one.** There is no sweep over the address
+book, no schedule, and no background pass: a contact nobody opened costs nothing.
+[Where a correspondence with one person stands](../features/contact-relationship.md) is what the run reads, what it
+may say, and what it may not.
+
+**`derived` is the whole of what a client branches on.** It is `false` where this deployment derives no card at all —
+no chat endpoint, or the operator turned it off — and equally where the allowance was spent, the provider could not be
+reached, the answer was unreadable, or this person's mail carries nothing to rest on. All of those leave the contact
+page exactly as it was drawn before this route existed, so a client draws no card and reports no failure. The absent
+case is answered without the book or the mail being read at all, which is what makes asking it cheap on a deployment
+that derives nothing.
+
+**Every statement carries at least one source, and one that carried none was dropped before the answer was composed.**
+A card is read instead of the correspondence it came from, so a sentence nothing backs would sit beside the sourced
+ones looking identical. `sources` is spelled the way [the citation route](#the-citation-route) is asked: a conversation
+as the message it was last carried by, a document as that message's own attachment.
+
+**`aspect` is one of `ActivePeriod`, `OpenItem`, or `Case`**, and the set is this deployment's rather than a producer's
+— an aspect the run said nothing about is absent rather than present and empty, and no other value is ever published. A
+card carries at most one observation per aspect.
+
+**A contact no book in this caller's scope holds is answered `404`**, the same answer a contact nobody ever held gets.
+A credential whose grant does not carry `mailfathom.mail.ask` is answered `403`, and so is one missing
+`mailfathom.mail.read` or `mailfathom.mail.contacts.read`, which the correlation and the book ask for themselves — the
+refusal names which. It reaches no mail server and cannot set the remote `\Seen` flag.
 
 ### The notification routes
 

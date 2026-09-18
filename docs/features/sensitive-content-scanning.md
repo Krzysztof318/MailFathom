@@ -135,6 +135,7 @@ the list below answerable by reading it.
 | `client_thread_state` | The block the client API answers a conversation's state with: each statement a derivation wrote about where the exchange stands, and the name a commitment is owed by |
 | `client_reply_draft` | The reply the client API drafts: the body somebody is about to edit and send, and each claim it asserts. The addresses it proposes do not cross here, being values this deployment resolved out of its own store rather than text a producer wrote |
 | `client_contact_correspondence` | The mail text the client API answers an opened contact with: the subject of each conversation naming that person, and the name of each document they sent. The identities, the positions, the declared types and the instants beside them do not cross, being values this deployment resolved rather than text a sender wrote |
+| `client_contact_relationship` | The card the client API heads an opened contact with: the note a derivation wrote about that correspondence, what it suggests doing next, and each observation beside them. The citations under them do not cross, being identifiers and a position this deployment resolved out of its own store |
 | `attachment_download` | The extracted text of one attachment about to be streamed whole, on the signed link route and on the client's own attachment route alike — the one point whose subject is a file's own words rather than a message's |
 
 `client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
@@ -171,6 +172,12 @@ named correspondent, so a finding says a scanner withheld content from a correla
 rate of that merged into the listing's would be lost among every folder anybody scrolled. It is also the one client
 point that scans a file name without the file's words beside it — the document list names what a sender called each
 file and nothing out of it.
+
+`client_contact_relationship` is apart from `client_contact_correspondence` beside it although both are drawn on one
+page and the second is derived from the first. What crosses there is text a sender wrote — a subject, a file name —
+and what crosses here is text this deployment composed *about* that person, so a finding says a derivation restated
+something sensitive that the subjects beside it may never have shown. It is the same separation
+`client_thread_state` holds from `client_mail_listing`, one person at a time rather than one conversation.
 
 A [conversation](../operations/client-endpoint.md#the-conversation-route) shares the listing's tag rather than taking a
 tag of its own, because it publishes the same three values per message, to the same reader, in the same amounts. What it
