@@ -25,6 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\AI.csproj" />
+    <!-- For the quoted-history trimmer alone: a corpus message is cut into passages from the trimmed reading a
+         deployment chunks, rather than from the raw body a reply carries its whole history in. -->
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
@@ -57,6 +58,10 @@ internal static class EmailEnrichmentScenario
     /// <param name="judgeSpend">What reaching the judge has cost, which is the meter the run's judge is opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The marks the agent's answer produced and the judge's verdict on them.</returns>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Disposing the caching wrapper would dispose the caller's model client, which this scenario does not own.")]
     public static async Task<EmailEnrichmentOutcome> RunAsync(
         ReportingConfiguration reporting,
         IChatClient model,
@@ -78,8 +83,7 @@ internal static class EmailEnrichmentScenario
             Message.ReceivedAt,
             [.. Message.Passages.Select(static passage => passage.Text)]);
 
-        using var cachedModel = await CacheOverAsync(reporting, model, plan, iterationName, cancellationToken);
-
+        var cachedModel = await CacheOverAsync(reporting, model, plan, iterationName, cancellationToken);
         var response = await AskAsync(cachedModel, plan, turn, cancellationToken);
         var marks = EmailEnrichmentReading.Read(response, Message.Passages, EmailEnrichmentAgentComposition.AgentName);
 
@@ -97,8 +101,9 @@ internal static class EmailEnrichmentScenario
 
     /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
     /// <remarks>
-    /// Opened for the whole run rather than for the one call, because the cache takes ownership of the client it wraps
-    /// and disposing it mid-run would leave the caller's client closed while the run still holds it.
+    /// The wrapper is not disposed, and owns nothing that would need it: disposing a
+    /// <see cref="DelegatingChatClient" /> disposes the client it wraps, and the model under test belongs to the caller
+    /// that opened it. The cache itself is the run's, and the store closes it.
     /// </remarks>
     private static async Task<IChatClient> CacheOverAsync(
         ReportingConfiguration reporting,

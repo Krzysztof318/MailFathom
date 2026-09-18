@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.SyntheticMail.Corpus;
 
 namespace MailFathom.Evaluations.Corpus;
@@ -45,8 +46,13 @@ internal sealed record CorpusMessage(string Subject, DateTimeOffset ReceivedAt, 
         var message = turn.Compose();
         var body = message.TextBody ?? string.Empty;
 
+        // The same pair a deployment derives: what the message carried, and the reading with the quoted history cut
+        // off it. The rules chunk the trimmed one, so handing the raw body twice would cut passages out of a reply's
+        // whole history — which is exactly the text the corpus's own replies carry.
+        var text = ExtractedEmailText.FromPlainTextBody(body, QuotedHistoryTrimmer.Trim(body));
+
         var chunks = new DeterministicEmailTextChunker()
-            .DeriveChunks(ExtractedEmailText.FromPlainTextBody(body, body), EmailChunkingRules.Current, EmbeddingInputBound.Default)
+            .DeriveChunks(text, EmailChunkingRules.Current, EmbeddingInputBound.Default)
             .Chunks;
 
         // Identifiers a deployment would have assigned in its store. Nothing reaches a model through them — a turn numbers
