@@ -59,6 +59,13 @@ namespace MailFathom.Host.Api;
 /// document and reading a switch should not carry a photograph.
 /// </para>
 /// <para>
+/// The contact routes, which <see cref="ClientContactEndpoints" /> describes, are the person's own address book. They
+/// stand beside the mail routes rather than among them because what they hold is people rather than messages, and they
+/// read it as two — what the user wrote down, and what their own mailboxes picked up — because those are two different
+/// things to somebody looking at a screen. The export and the bulk collected erasure the administrative surface
+/// publishes are deliberately not here, for the reasons that type holds.
+/// </para>
+/// <para>
 /// The notification routes, which <see cref="ClientNotificationEndpoints" /> describes, are the centre a person reads
 /// what happened to them in while nobody was looking. They stand beside the preferences rather than among the mail
 /// routes because what they serve is the deployment's own working state about a person rather than their mailbox, and
@@ -160,6 +167,7 @@ internal static class ClientApiEndpoints
         api.MapClientReplyDrafting();
         api.MapClientDrafts();
         api.MapClientOutbox();
+        api.MapClientContacts();
         api.MapClientNotifications();
         api.MapClientSignalTicket();
         api.MapClientTelemetry();
