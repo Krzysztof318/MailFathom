@@ -18,8 +18,9 @@ name: AI evaluations
 # else.
 #
 # The artefact is readable by anyone who can read this repository's runs, which is why nothing in the
-# store is mail anybody received and why the judge is recorded only as `judge`: its model never reaches
-# the store, the report, the log, or a failure message.
+# store is mail anybody received and why the judge is recorded only as `judge`: its model and the
+# reasoning effort `vars.JUDGE_REASONING_EFFORT` declares for it never reach the store, the report, the
+# log, or a failure message.
 on:
   workflow_dispatch:
     inputs:
@@ -112,6 +113,8 @@ jobs:
           # The judge answers from the same endpoint and the same key as the models under test, so the
           # model is the whole of what makes it the judge.
           MAILFATHOM_JUDGE_MODEL: ${{ vars.JUDGE_PROVIDER_MODEL }}
+          # How hard the judge reasons. Unset sends no reasoning parameter and leaves the provider's default.
+          MAILFATHOM_JUDGE_REASONING_EFFORT: ${{ vars.JUDGE_REASONING_EFFORT }}
 
       # Uploaded whether the run passed or not, because a failing run still paid for every answer it
       # received. A run that wrote nothing uploads nothing, which leaves the previous store the newest.

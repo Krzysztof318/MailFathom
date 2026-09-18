@@ -64,8 +64,16 @@ internal static class ChatGenerationParameterMapping
     /// Everything else on the options is left alone — the abstraction fills the members it owns over whatever this
     /// returns, so the bounds, the sampling parameters, the instruction, and the tools all still reach the request.
     /// </para>
+    /// <para>
+    /// Reachable on its own for a caller whose options are composed by somebody else — the evaluation suite's judge,
+    /// whose requests an evaluator builds — so the effort it declares reaches the request through this mapping rather
+    /// than a second one.
+    /// </para>
     /// </remarks>
-    private static Func<IChatClient, object?>? RequestOptionsFactoryFor(ChatProviderApi api, string? effort)
+    /// <param name="api">The API the request is conducted through.</param>
+    /// <param name="effort">The declared reasoning effort, or <see langword="null" /> to send none.</param>
+    /// <returns>The hook, or <see langword="null" /> where the request needs none.</returns>
+    public static Func<IChatClient, object?>? RequestOptionsFactoryFor(ChatProviderApi api, string? effort)
     {
         if (api is ChatProviderApi.Responses)
         {
