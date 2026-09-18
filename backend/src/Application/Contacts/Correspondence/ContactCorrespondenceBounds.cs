@@ -7,9 +7,10 @@ namespace MailFathom.Application.Contacts.Correspondence;
 /// <summary>Bounds the correlation a contact is read with, so opening one person never costs a walk over a mailbox.</summary>
 /// <remarks>
 /// <para>
-/// Three bounds rather than one, because they stop three different things. The window keeps the query off years of
-/// mail somebody is not looking at; the scan keeps the rows the database returns proportional to a card rather than to
-/// a correspondence; and the two list bounds keep what leaves this deployment proportional to what a screen draws.
+/// Three bounds rather than one, because they stop three different things. The window keeps both queries off years of
+/// mail somebody is not looking at; the scan keeps the conversation walk proportional to a card rather than to a
+/// correspondence, and bounds that walk alone; and the two list bounds keep what leaves this deployment proportional
+/// to what a screen draws — which is the whole of what holds the documents, the window aside.
 /// </para>
 /// <para>
 /// The scan is what makes the conversations a whole answer rather than a sample of one. A message names a
@@ -29,11 +30,13 @@ public static class ContactCorrespondenceBounds
     /// </remarks>
     public const int WindowDays = 365;
 
-    /// <summary>The greatest number of messages one correlation reads before it cuts its lists.</summary>
+    /// <summary>The greatest number of messages the conversations are cut from.</summary>
     /// <remarks>
-    /// The bound the database is actually held to, and the reason neither list needs an aggregate over the window: the
-    /// rows come back in the order the lists are cut in, so the work is a bounded keyset walk of an indexed column
-    /// rather than a grouping over everything the window admits.
+    /// This bounds the conversation walk alone. The documents are read straight off the attachment index in received
+    /// order and held to <see cref="Documents" />, so nothing about them passes through this number — a file somebody
+    /// sent stays reachable however much later mail has merely named them. What the two share is the reason neither
+    /// needs an aggregate over the window: each comes back in the order its own list is cut in, so both are bounded
+    /// keyset walks of an indexed column rather than groupings over everything the window admits.
     /// </remarks>
     public const int ScannedMessages = 200;
 

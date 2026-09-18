@@ -375,10 +375,13 @@ person, and reporting it here would tell a reader the contact sent them somethin
 the attachment index rather than from the messages, so a deployment whose attachment reading is off never wrote that
 index and this list stays empty on it.
 
-**Both are bounded rather than paged**: at most ten of each, drawn from the messages received in the last year, and from
-the most recent two hundred of those naming the person. What an opened contact draws is a card rather than a mailbox,
-so the rest of an exchange is read by opening the conversation and everything a person ever sent by searching for their
-address.
+**Both are bounded rather than paged**: at most ten of each, out of the messages received in the last year. The two
+bounds below that differ, because the two lists are cut differently. The conversations are the distinct ones among the
+most recent two hundred messages naming the person, so somebody who wrote more than that many inside one exchange is
+reported at that exchange. The documents are simply the ten most recent files on mail they sent inside the window, with
+no scan bound of their own — so a file they sent stays reachable however much later mail has named them since. What an
+opened contact draws is a card rather than a mailbox, so the rest of an exchange is read by opening the conversation and
+everything a person ever sent by searching for their address.
 
 **Only mail the caller may already read takes part.** The correlation runs under the same scope every other mail read
 composes — the accounts the signed-in user is assigned, the folders a mapping admits, junk left out — so a message

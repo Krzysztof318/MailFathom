@@ -2600,9 +2600,13 @@ derivation catches up — and a deployment that never switched attachment readin
 (`Embeddings:AttachmentText:Enabled`, which [attachment text extraction](../features/attachment-text-extraction.md)
 describes) wrote no such index and answers with no documents at all.
 
-**Both lists are bounded and neither is paged**: at most ten conversations and ten documents, drawn from the messages
-received in the last year, and from the most recent two hundred of those naming this person. A reader who wants the
-rest of an exchange opens the conversation, and one who wants everything a person ever sent searches for their address.
+**Both lists are bounded and neither is paged**: at most ten conversations and ten documents, out of the messages
+received in the last year. Below that the two are cut differently. The conversations are the distinct ones among the
+most recent two hundred messages naming this person, so an exchange they wrote more than that many messages in is what
+the list reports. The documents carry no scan bound of their own — they are the ten most recent files on mail this
+person sent inside the window, so one they sent stays reachable however many later messages have merely named them. A
+reader who wants the rest of an exchange opens the conversation, and one who wants everything a person ever sent
+searches for their address.
 
 **Only mail this caller may already read takes part.** The correlation runs over the accounts the signed-in user is
 assigned and the folders a mapping admits, with the junk folder left out, so a message withheld from this caller is
