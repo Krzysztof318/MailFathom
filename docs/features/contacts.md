@@ -350,6 +350,43 @@ than whichever collation the database was created with. The index it is served f
 the identity, which is what lets each of a reader's books be reached by a seek rather than the table scanned, and
 what makes the walk over them terminate.
 
+## What mail already holds about a contact
+
+A contact is a name and a set of addresses, and those addresses are already in the mail this deployment stores — as a
+sender, as a recipient, and on the files that arrived. So opening one person answers a second question beside the
+record: which exchanges have they been part of, and what have they sent. That is a read over the mail index rather than
+anything the book holds, and it is served by
+[`GET /api/client/contacts/{contactId}/correspondence`](../operations/client-endpoint.md#the-contact-correlation-route)
+on the client endpoint. No MCP tool publishes it.
+
+**Nothing is stored and nothing is derived durably.** Both lists are computed while the request is served, from the
+mail index and the [attachment index](attachment-text-extraction.md), so the book grows no second copy of a
+correspondence and no row here can fall behind the mailbox it describes. A contact erased takes nothing extra with it,
+because there was nothing extra.
+
+**The conversations are the ones naming one of the person's addresses** — the sender, `To`, or `Cc`, matched on the
+same comparison forms everything else here is matched on. Each is reported at the most recent message in it that names
+them rather than at the conversation's own latest message: an exchange that has run on without somebody is not a recent
+exchange with them.
+
+**The documents are the ones the person sent**, which means the message the file arrived on was written from one of
+their own addresses. A file somebody else attached to a conversation this person was copied on belongs to that other
+person, and reporting it here would tell a reader the contact sent them something they never sent. They are read from
+the attachment index rather than from the messages, so a deployment whose attachment reading is off never wrote that
+index and this list stays empty on it.
+
+**Both are bounded rather than paged**: at most ten of each, drawn from the messages received in the last year, and from
+the most recent two hundred of those naming the person. What an opened contact draws is a card rather than a mailbox,
+so the rest of an exchange is read by opening the conversation and everything a person ever sent by searching for their
+address.
+
+**Only mail the caller may already read takes part.** The correlation runs under the same scope every other mail read
+composes — the accounts the signed-in user is assigned, the folders a mapping admits, junk left out — so a message
+withheld from this caller is outside the query rather than removed from its answer, and neither list ever carries an
+entry marked withheld. Where a deployment scans for sensitive content, the subjects and the file names are scanned
+before the answer leaves, under the point [sensitive-content scanning](sensitive-content-scanning.md) names
+`client_contact_correspondence`.
+
 ## Erasing and exporting a person
 
 A contact book is the most concentrated personal data this system holds: not mail that arrived about somebody, but an

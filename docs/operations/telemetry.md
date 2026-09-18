@@ -445,6 +445,7 @@ entrypoint over the same use case is work of the same kind:
 | `search_mailbox` | One window of a ranking over the stored emails |
 | `read_email_content` | The stored content of the emails one call named |
 | `read_email_thread` | One bounded page of the conversation one call named |
+| `correlate_contact_mail` | The conversations and the documents the local copy holds about one contact's addresses |
 | `answer_mail_question` | One answering run, described in full [below](#what-a-run-records) |
 
 The nesting is what they are for. Each is started inside the protocol span, so it is that span's child, and the database
@@ -1207,7 +1208,7 @@ is counted.
 Sensitive-content scanning publishes six instruments, all of them tagged with
 `mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`,
 `mcp_email_content`, `outgoing_mail`, `client_mail_listing`, `client_mail_search`, `client_citation_resolution`,
-`client_thread_state`, `client_reply_draft`, or
+`client_thread_state`, `client_reply_draft`, `client_contact_correspondence`, or
 `attachment_download`. The
 egress point is on every one
 of them because it is

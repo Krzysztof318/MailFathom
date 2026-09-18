@@ -475,6 +475,98 @@
         ],
         "type": "object"
       },
+      "ClientContactCorrespondenceResponse": {
+        "properties": {
+          "contactId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ClientContactDocumentResponse"
+            },
+            "type": "array"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/ClientContactThreadResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "contactId",
+          "threads",
+          "documents"
+        ],
+        "type": "object"
+      },
+      "ClientContactDocumentResponse": {
+        "properties": {
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "position",
+          "fileName",
+          "mediaType",
+          "receivedAt"
+        ],
+        "type": "object"
+      },
+      "ClientContactThreadResponse": {
+        "properties": {
+          "lastCorrespondedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "latestMessageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "threadId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "latestMessageId",
+          "subject",
+          "lastCorrespondedAt"
+        ],
+        "type": "object"
+      },
       "ClientDeletedNotificationsResponse": {
         "properties": {
           "deleted": {
@@ -13237,6 +13329,44 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/contacts/{contactId}/correspondence": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientContactCorrespondenceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

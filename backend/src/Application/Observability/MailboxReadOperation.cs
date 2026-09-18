@@ -32,4 +32,12 @@ public enum MailboxReadOperation
     /// name would average the two into a duration describing neither.
     /// </remarks>
     ReadEmailThread = 4,
+
+    /// <summary>Correlating one contact's addresses with the conversations and the documents the local copy already holds.</summary>
+    /// <remarks>
+    /// Apart from the search above although both answer a question about mail nobody named: a search ranks the whole
+    /// mailbox against words somebody wrote, and this walks an indexed window for a set of addresses this deployment
+    /// already resolved. Sharing a name would average a ranking's cost into a bounded walk's.
+    /// </remarks>
+    CorrelateContactMail = 5,
 }
