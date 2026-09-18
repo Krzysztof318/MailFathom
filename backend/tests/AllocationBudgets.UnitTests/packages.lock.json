@@ -129,14 +129,6 @@
         "resolved": "10.0.10",
         "contentHash": "2gLDordUCGf3aNOOuqtTbP5mxhiP9nk6TnvGiE3RnqT891O+Zf/qKu1PIREubs1M16A0SImr4vULBfU5BTDs1Q=="
       },
-      "Microsoft.Extensions.AI.Evaluation": {
-        "type": "Transitive",
-        "resolved": "10.6.0",
-        "contentHash": "fHu9H93p7jM2KiXC/6Kd511Gly1rR/VVSIr0FpQ0K381KSHNkSKgp7UAceAPe8wuUMBNXlhcI0q8UocjneuBVg==",
-        "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.6.0"
-        }
-      },
       "Microsoft.Extensions.AmbientMetadata.Application": {
         "type": "Transitive",
         "resolved": "10.6.0",
@@ -870,6 +862,15 @@
         "requested": "[10.8.1, )",
         "resolved": "10.8.1",
         "contentHash": "dgFfXqIdC1up7q0emi58np/iJFZskNKSgs7rT3G94c0K5L18FH0Vjf9JMgCdlxPaNBuG4AJSCYESJd5WenY8Nw=="
+      },
+      "Microsoft.Extensions.AI.Evaluation": {
+        "type": "CentralTransitive",
+        "requested": "[10.8.0, )",
+        "resolved": "10.6.0",
+        "contentHash": "fHu9H93p7jM2KiXC/6Kd511Gly1rR/VVSIr0FpQ0K381KSHNkSKgp7UAceAPe8wuUMBNXlhcI0q8UocjneuBVg==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.6.0"
+        }
       },
       "Microsoft.Extensions.AI.OpenAI": {
         "type": "CentralTransitive",

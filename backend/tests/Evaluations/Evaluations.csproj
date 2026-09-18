@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- What an agent answers, measured against the models a run declares and judged by one pinned model. Nothing
+       discovers it as a test: backend/Directory.Build.props opts it out of discovery, and scripts/run-ai-evaluations.sh
+       is what runs it. Every scenario that calls a provider skips unless MAILFATHOM_AI_EVALUATIONS asks for it. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" />
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="xRetry.v3" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The model-written corpus the development command replays, read here as it was committed. It is the one input a
+         scenario may send a provider: every address in it is under a reserved domain and nobody received any of it. -->
+    <None Include="..\..\tools\SyntheticMail\corpora\office-en.zip" Link="corpora\office-en.zip" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
+    <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AI\AI.csproj" />
+    <!-- For the quoted-history trimmer alone: a corpus message is cut into passages from the trimmed reading a
+         deployment chunks, rather than from the raw body a reply carries its whole history in. -->
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+  </ItemGroup>
+</Project>

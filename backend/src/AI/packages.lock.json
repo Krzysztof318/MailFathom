@@ -155,14 +155,6 @@
         "resolved": "10.0.3",
         "contentHash": "TV62UsrJZPX6gbt3c4WrtXh7bmaDIcMqf9uft1cc4L6gJXOU07hDGEh+bFQh/L2Az0R1WVOkiT66lFqS6G2NmA=="
       },
-      "Microsoft.Extensions.AI.Evaluation": {
-        "type": "Transitive",
-        "resolved": "10.6.0",
-        "contentHash": "fHu9H93p7jM2KiXC/6Kd511Gly1rR/VVSIr0FpQ0K381KSHNkSKgp7UAceAPe8wuUMBNXlhcI0q8UocjneuBVg==",
-        "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.6.0"
-        }
-      },
       "Microsoft.Extensions.AmbientMetadata.Application": {
         "type": "Transitive",
         "resolved": "10.6.0",
@@ -428,6 +420,15 @@
       },
       "MailFathom.Domain": {
         "type": "Project"
+      },
+      "Microsoft.Extensions.AI.Evaluation": {
+        "type": "CentralTransitive",
+        "requested": "[10.8.0, )",
+        "resolved": "10.6.0",
+        "contentHash": "fHu9H93p7jM2KiXC/6Kd511Gly1rR/VVSIr0FpQ0K381KSHNkSKgp7UAceAPe8wuUMBNXlhcI0q8UocjneuBVg==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.6.0"
+        }
       },
       "Microsoft.Extensions.Configuration": {
         "type": "CentralTransitive",

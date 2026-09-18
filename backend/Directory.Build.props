@@ -109,13 +109,14 @@
   <PropertyGroup>
     <IsUnitTestProject Condition="$(MSBuildProjectName.EndsWith('.UnitTests'))">true</IsUnitTestProject>
     <IsIntegrationTestProject Condition="'$(MSBuildProjectName)' == 'IntegrationTests'">true</IsIntegrationTestProject>
+    <IsEvaluationProject Condition="'$(MSBuildProjectName)' == 'Evaluations'">true</IsEvaluationProject>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true'">
+  <ItemGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true' Or '$(IsEvaluationProject)' == 'true'">
     <PackageReference Include="xunit.analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true'">
+  <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true' Or '$(IsEvaluationProject)' == 'true'">
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
@@ -151,6 +152,13 @@
          enforces, which is exactly the mixing the two scopes exist to prevent. The project stays in the solution
          regardless, so it is built, analyzed, and formatted by exactly the same gates as everything else;
          scripts/run-integration-tests.sh is what runs it. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsEvaluationProject)' == 'true'">
+    <!-- Out of discovery for the reason the integration suite is, and a stronger one: a scenario there calls a paid
+         provider, so neither gate may start it even by accident. It takes no collector either, because what it measures
+         is what a model answered rather than which lines ran. scripts/run-ai-evaluations.sh is what runs it. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 </Project>

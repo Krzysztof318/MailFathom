@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts, frontend/vitest.config.ts, frontend/playwright.config.ts, frontend/src-tauri/** -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tests/Evaluations/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts, frontend/vitest.config.ts, frontend/playwright.config.ts, frontend/src-tauri/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -1681,6 +1681,38 @@ A covered class keeps its marker. The marker records where a class's verificatio
 The `Integration tests` workflow runs the same script. It is not a required status check and never runs on a pull request. Start it from the Actions tab when a change is one this suite can speak to; it uploads the TRX results and the coverage report as artifacts, and enforces no threshold on either.
 
 A dispatch takes an optional `ref` to run against and `run_ai_provider_contract_tests`, which turns on [the provider-contract tests](#the-provider-contract-tests) above and defaults to off. The workflow supplies the credentials with it, from the `EMBEDDING_PROVIDER_*` and `CHAT_PROVIDER_*` repository secrets and variables. `Release` reaches this suite through `workflow_call` instead, and that trigger declares no such input at all, which is what keeps a release from ever spending provider credit.
+
+## Agent evaluations
+
+`backend/tests/Evaluations` measures what an agent answers rather than whether its code runs: each scenario puts a message from the committed synthetic corpus, `backend/tools/SyntheticMail/corpora/office-en.zip`, to an agent under every declared model, asserts what the answer's structure can settle, and has one pinned judge model grade what it cannot. It is run by one script, and neither verification script runs it:
+
+```bash
+bash scripts/run-ai-evaluations.sh
+```
+
+A scenario calls real models, so it skips unless `MAILFATHOM_AI_EVALUATIONS` is `true`, and nothing sets it. What runs without it is the free half: tests that drive the worked scenario through scripted providers and prove that the store holds no value of the judge and no address outside a reserved domain, that a repeated run asks neither the model nor the judge again, and that what a run reports spending is what the provider said it charged. A requested run that finds a variable missing fails naming it:
+
+| Role | Variables |
+|---|---|
+| The endpoint both roles reach | `MAILFATHOM_CHAT_API_KEY`, and optionally `MAILFATHOM_CHAT_ADDRESS` |
+| Models under test | `MAILFATHOM_EVALUATION_MODELS`, a list separated by commas or whitespace |
+| Judge | `MAILFATHOM_JUDGE_MODEL` |
+
+The judge is declared apart from the models under test because a model grading its own answers measures nothing, and it is left alone once chosen because a verdict is only comparable with another from the same judge. It answers from the same endpoint and the same key as the models under test, so its model is the whole of what makes it the judge — and that model never reaches the store, the report, or a failure message: the store records it only as `judge`, and files its cached verdicts under a key derived from its credential, so a changed judge is asked afresh rather than served the previous one's verdicts.
+
+Every declared model is measured at the same time rather than one after another, each over clients and a store handle of its own, so a run costs whatever its slowest model takes to answer rather than the sum of them all.
+
+The script keeps everything under `artifacts/ai-evaluations/` — the store, the TRX results, and `report.html`, which `dotnet aieval report` renders from the store with the newest ten runs side by side. The store holds two halves. Its results are what the report compares against, and the script keeps the newest thirty runs of them. Its cache holds every answer the run paid for, keyed by prompt, model, and parameters, so a run that changed neither costs nothing; an entry lives a year before the script prunes it. `MAILFATHOM_AI_EVALUATIONS_STORE` points the script at another store.
+
+Every scenario result also carries a `Cost (USD)` metric, which the report compares across runs beside the scores. The figure is the provider's own: OpenRouter returns `usage.cost` on every answer, and a run reads it off the transport beneath the response cache, so an answer the cache served adds nothing and a run that changed nothing reports having spent nothing. The metric names the calls and tokens that reached a provider whatever it answered; a provider that states no charge leaves the figure unrated rather than having one guessed from a price list committed here.
+
+A new scenario starts from `EmailEnrichmentScenario` and the test beside it, and decides nothing about judges, credentials, or storage: it composes the agent through the agent's own composition, sends the model's call through the run's response cache, and hands its answer to `ScenarioRun.EvaluateAsync`. `Microsoft.Extensions.AI.Evaluation.Quality` supplies the judged evaluators and `Microsoft.Extensions.AI.Evaluation.NLP` the ones that compare an answer with a reference text and need no judge at all.
+
+### Continuous integration
+
+The `AI evaluations` workflow runs the script on dispatch alone — with an optional `ref` and an optional `models` list — and on no schedule and no pull request, because what a run spends is asked for rather than arriving on a timer. It declares the models under test through the dispatch's `models` input, falling back to `vars.EVALUATION_MODELS` where it names none, reaching them through the `vars.CHAT_PROVIDER_ADDRESS` and `secrets.CHAT_PROVIDER_API_KEY` the provider-contract tests already use, and the judge through `vars.JUDGE_PROVIDER_MODEL` alone, reached over that same address and key. A step's log header prints every `env:` value a workflow hands it and masks only the secrets, so the judge's model is visible in that one place.
+
+The store travels between runs as the `ai-evaluations-store` artifact: a run restores the newest one that has not expired and uploads its own at the end, whether it passed or not, because a failed run still paid for what it received. Artifacts expire after ninety days and each run renews the store, so what a longer gap between runs costs is one full run to rebuild it. The report and the TRX results are uploaded beside it as `ai-evaluations-report`.
 
 ## Pull request checks
 
