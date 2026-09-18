@@ -18,8 +18,8 @@ name: AI evaluations
 # else.
 #
 # The artefact is readable by anyone who can read this repository's runs, which is why nothing in the
-# store is mail anybody received and why the judge is recorded only as `judge`: its address, model,
-# and key never reach the store, the report, the log, or a failure message.
+# store is mail anybody received and why the judge is recorded only as `judge`: its model never reaches
+# the store, the report, the log, or a failure message.
 on:
   workflow_dispatch:
     inputs:
@@ -109,9 +109,9 @@ jobs:
           MAILFATHOM_EVALUATION_MODELS: ${{ inputs.models || vars.EVALUATION_MODELS }}
           MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
           MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
-          MAILFATHOM_JUDGE_ADDRESS: ${{ vars.JUDGE_PROVIDER_ADDRESS }}
+          # The judge answers from the same endpoint and the same key as the models under test, so the
+          # model is the whole of what makes it the judge.
           MAILFATHOM_JUDGE_MODEL: ${{ vars.JUDGE_PROVIDER_MODEL }}
-          MAILFATHOM_JUDGE_API_KEY: ${{ secrets.JUDGE_PROVIDER_API_KEY }}
 
       # Uploaded whether the run passed or not, because a failing run still paid for every answer it
       # received. A run that wrote nothing uploads nothing, which leaves the previous store the newest.

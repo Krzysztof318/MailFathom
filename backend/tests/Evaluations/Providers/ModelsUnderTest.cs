@@ -14,17 +14,14 @@ namespace MailFathom.Evaluations.Providers;
 /// dependency injection — so the matrix is a loop over plans and needs no configuration file and no production change.
 /// </para>
 /// <para>
-/// The endpoint's address and key are the ones <c>vars.CHAT_PROVIDER_ADDRESS</c> and
-/// <c>secrets.CHAT_PROVIDER_API_KEY</c> already supply, reached under the names the contract tests read them by.
+/// Every one of them is reached through <see cref="EvaluationEndpoint" />, which is also where the judge is reached:
+/// one address and one key for the whole run.
 /// </para>
 /// </remarks>
 internal static class ModelsUnderTest
 {
     /// <summary>The variable carrying the models, separated by commas, whitespace, or line breaks.</summary>
     public const string ModelsVariable = "MAILFATHOM_EVALUATION_MODELS";
-
-    private const string AddressVariable = "MAILFATHOM_CHAT_ADDRESS";
-    private const string ApiKeyVariable = "MAILFATHOM_CHAT_API_KEY";
 
     /// <summary>The output budget one answer may occupy.</summary>
     /// <remarks>Room for the structured answer an agent writes and the reasoning a reasoning model spends before it.</remarks>
@@ -43,26 +40,21 @@ internal static class ModelsUnderTest
             throw new InvalidOperationException($"{ModelsVariable} names no model to measure.");
         }
 
-        var address = AiEvaluationRun.Optional(AddressVariable);
+        var address = EvaluationEndpoint.Address();
 
         return [.. models.Distinct(StringComparer.Ordinal).Select(model => PlanFor(model, address))];
     }
-
-    /// <summary>Reads the key every model under test is reached with.</summary>
-    /// <returns>The key.</returns>
-    /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run was asked for without one.</exception>
-    public static string ApiKey() => AiEvaluationRun.Required(ApiKeyVariable);
 
     /// <summary>Builds the plan one model is measured with.</summary>
     /// <remarks>
     /// Neither sampling parameter nor a reasoning effort is sent, for the reason the contract tests give: several current
     /// models refuse one outright, and what is measured is the request a deployment makes with nothing declared.
     /// </remarks>
-    private static ChatGenerationPlan PlanFor(string model, string? address)
+    private static ChatGenerationPlan PlanFor(string model, Uri? address)
     {
         var endpoint = new ChatEndpoint(
             "evaluation",
-            address is null ? null : new Uri(address, UriKind.Absolute),
+            address,
             model,
             ChatProviderApi.ChatCompletions,
             PublishedModelName: string.Empty);

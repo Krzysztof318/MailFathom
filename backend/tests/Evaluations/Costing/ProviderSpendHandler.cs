@@ -40,19 +40,32 @@ internal sealed class ProviderSpendHandler(SpendMeter meter, HttpMessageHandler 
         return response;
     }
 
+    /// <summary>Reads what one answer cost, where the answer says.</summary>
+    /// <remarks>
+    /// A body that claims to be JSON and is not — a connection cut mid-answer, a proxy mislabelling a truncated one —
+    /// leaves the charge unstated rather than failing the call. This handler observes a request it does not own, and the
+    /// caller reading the same body is the one entitled to report it as broken.
+    /// </remarks>
     private void Record(string answer)
     {
-        using var document = JsonDocument.Parse(answer);
-
-        if (!document.RootElement.TryGetProperty("usage", out var usage) || usage.ValueKind is not JsonValueKind.Object)
+        try
         {
-            return;
-        }
+            using var document = JsonDocument.Parse(answer);
 
-        meter.Record(
-            Count(usage, "prompt_tokens"),
-            Count(usage, "completion_tokens"),
-            usage.TryGetProperty("cost", out var cost) && cost.TryGetDecimal(out var charge) ? charge : null);
+            if (!document.RootElement.TryGetProperty("usage", out var usage) || usage.ValueKind is not JsonValueKind.Object)
+            {
+                return;
+            }
+
+            meter.Record(
+                Count(usage, "prompt_tokens"),
+                Count(usage, "completion_tokens"),
+                usage.TryGetProperty("cost", out var cost) && cost.TryGetDecimal(out var charge) ? charge : null);
+        }
+        catch (JsonException)
+        {
+            // Nothing is recorded, which is what an answer carrying no usage already reports.
+        }
     }
 
     private static long Count(JsonElement usage, string property) =>

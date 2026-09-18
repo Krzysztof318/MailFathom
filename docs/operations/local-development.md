@@ -1694,10 +1694,11 @@ A scenario calls real models, so it skips unless `MAILFATHOM_AI_EVALUATIONS` is 
 
 | Role | Variables |
 |---|---|
-| Models under test | `MAILFATHOM_EVALUATION_MODELS`, a list separated by commas or whitespace; `MAILFATHOM_CHAT_API_KEY`; optionally `MAILFATHOM_CHAT_ADDRESS` |
-| Judge | `MAILFATHOM_JUDGE_MODEL`, `MAILFATHOM_JUDGE_API_KEY`, and optionally `MAILFATHOM_JUDGE_ADDRESS` |
+| The endpoint both roles reach | `MAILFATHOM_CHAT_API_KEY`, and optionally `MAILFATHOM_CHAT_ADDRESS` |
+| Models under test | `MAILFATHOM_EVALUATION_MODELS`, a list separated by commas or whitespace |
+| Judge | `MAILFATHOM_JUDGE_MODEL` |
 
-The judge is declared apart from the models under test because a model grading its own answers measures nothing, and it is left alone once chosen because a verdict is only comparable with another from the same judge. Its address, model, and key never reach the store, the report, or a failure message: the store records it only as `judge`, and files its cached verdicts under a key derived from its credential, so a changed judge is asked afresh rather than served the previous one's verdicts.
+The judge is declared apart from the models under test because a model grading its own answers measures nothing, and it is left alone once chosen because a verdict is only comparable with another from the same judge. It answers from the same endpoint and the same key as the models under test, so its model is the whole of what makes it the judge — and that model never reaches the store, the report, or a failure message: the store records it only as `judge`, and files its cached verdicts under a key derived from its credential, so a changed judge is asked afresh rather than served the previous one's verdicts.
 
 Every declared model is measured at the same time rather than one after another, each over clients and a store handle of its own, so a run costs whatever its slowest model takes to answer rather than the sum of them all.
 
@@ -1709,7 +1710,7 @@ A new scenario starts from `EmailEnrichmentScenario` and the test beside it, and
 
 ### Continuous integration
 
-The `AI evaluations` workflow runs the script on dispatch alone — with an optional `ref` and an optional `models` list — and on no schedule and no pull request, because what a run spends is asked for rather than arriving on a timer. It declares the models under test through the dispatch's `models` input, falling back to `vars.EVALUATION_MODELS` where it names none, reaching them through the `vars.CHAT_PROVIDER_ADDRESS` and `secrets.CHAT_PROVIDER_API_KEY` the provider-contract tests already use, and the judge through `vars.JUDGE_PROVIDER_ADDRESS`, `vars.JUDGE_PROVIDER_MODEL`, and `secrets.JUDGE_PROVIDER_API_KEY`. A step's log header prints every `env:` value a workflow hands it and masks only the secrets, so the judge's address and model are visible in that one place.
+The `AI evaluations` workflow runs the script on dispatch alone — with an optional `ref` and an optional `models` list — and on no schedule and no pull request, because what a run spends is asked for rather than arriving on a timer. It declares the models under test through the dispatch's `models` input, falling back to `vars.EVALUATION_MODELS` where it names none, reaching them through the `vars.CHAT_PROVIDER_ADDRESS` and `secrets.CHAT_PROVIDER_API_KEY` the provider-contract tests already use, and the judge through `vars.JUDGE_PROVIDER_MODEL` alone, reached over that same address and key. A step's log header prints every `env:` value a workflow hands it and masks only the secrets, so the judge's model is visible in that one place.
 
 The store travels between runs as the `ai-evaluations-store` artifact: a run restores the newest one that has not expired and uploads its own at the end, whether it passed or not, because a failed run still paid for what it received. Artifacts expire after ninety days and each run renews the store, so what a longer gap between runs costs is one full run to rebuild it. The report and the TRX results are uploaded beside it as `ai-evaluations-report`.
 

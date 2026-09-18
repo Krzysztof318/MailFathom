@@ -59,7 +59,7 @@ public sealed class EmailEnrichmentEvaluations
     {
         // Arrange
         var judge = JudgeDeclaration.Read();
-        var apiKey = ModelsUnderTest.ApiKey();
+        var apiKey = EvaluationEndpoint.ApiKey();
 
         // Act
         var outcomes = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);

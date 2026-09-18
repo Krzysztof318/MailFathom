@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -18,6 +19,9 @@ namespace MailFathom.Evaluations.Costing;
 public sealed class ProviderSpendHandlerTests
 {
     private static readonly Uri Completions = new("https://provider.invalid/v1/chat/completions");
+
+    /// <summary>An answer a cut connection leaves behind: the content type says JSON and the body stops mid-property.</summary>
+    private const string TruncatedAnswer = """{"usage": {"prompt_toke""";
 
     [Fact]
     public async Task SendAsync_AnAnswerCarryingACharge_RecordsWhatTheProviderCharged()
@@ -66,6 +70,26 @@ public sealed class ProviderSpendHandlerTests
 
         // Assert
         Assert.Equal(new PaidUsage(1, 7, 3, null), meter.Take());
+    }
+
+    [Fact]
+    public async Task SendAsync_AnAnswerThatClaimsToBeJsonAndIsNot_RecordsNothingAndAnswersTheCallerAnyway()
+    {
+        // Arrange
+        var meter = new SpendMeter();
+        using var provider = new FakeHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(TruncatedAnswer, Encoding.UTF8, "application/json"),
+        }));
+
+        using var metering = new ProviderSpendHandler(meter, provider);
+        using var client = new HttpClient(metering, disposeHandler: false);
+
+        // Act
+        using var answer = await AskAsync(client);
+
+        // Assert
+        Assert.Equal((HttpStatusCode.OK, new PaidUsage(0, 0, 0, null)), (answer.StatusCode, meter.Take()));
     }
 
     [Fact]

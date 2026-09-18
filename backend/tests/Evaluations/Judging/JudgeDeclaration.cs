@@ -16,20 +16,18 @@ namespace MailFathom.Evaluations.Judging;
 /// <para>
 /// Apart, because a model grading its own answers measures nothing. Pinned, because a verdict is only comparable with
 /// another from the same judge: changing it invalidates every earlier result, so it is declared once, through
-/// <c>vars.JUDGE_PROVIDER_ADDRESS</c>, <c>vars.JUDGE_PROVIDER_MODEL</c>, and <c>secrets.JUDGE_PROVIDER_API_KEY</c>,
-/// and left alone.
+/// <c>vars.JUDGE_PROVIDER_MODEL</c>, and left alone. That model is the whole of the declaration — the endpoint and the
+/// key are the run's own, read from <see cref="EvaluationEndpoint" /> exactly as the models under test read them.
 /// </para>
 /// <para>
-/// None of the three may appear in the store, the report, a log line, or a failure message. The client this opens is
+/// The model may not appear in the store, the report, a log line, or a failure message. The client this opens is
 /// therefore wrapped in <see cref="AnonymousJudgeChatClient" />, and the key its cached verdicts are filed under is
 /// <see cref="CachingKey" /> rather than the model's name.
 /// </para>
 /// </remarks>
 internal sealed class JudgeDeclaration
 {
-    private const string AddressVariable = "MAILFATHOM_JUDGE_ADDRESS";
     private const string ModelVariable = "MAILFATHOM_JUDGE_MODEL";
-    private const string ApiKeyVariable = "MAILFATHOM_JUDGE_API_KEY";
 
     private readonly ChatEndpoint endpoint;
     private readonly string apiKey;
@@ -53,14 +51,8 @@ internal sealed class JudgeDeclaration
     /// <summary>Reads the declaration a requested run was given.</summary>
     /// <returns>The declaration.</returns>
     /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run was asked for without the model or the key.</exception>
-    public static JudgeDeclaration Read()
-    {
-        var model = AiEvaluationRun.Required(ModelVariable);
-        var apiKey = AiEvaluationRun.Required(ApiKeyVariable);
-        var address = AiEvaluationRun.Optional(AddressVariable);
-
-        return Of(address is null ? null : new Uri(address, UriKind.Absolute), model, apiKey);
-    }
+    public static JudgeDeclaration Read() =>
+        Of(EvaluationEndpoint.Address(), AiEvaluationRun.Required(ModelVariable), EvaluationEndpoint.ApiKey());
 
     /// <summary>Declares a judge from its three values.</summary>
     /// <param name="address">Where the judge is reached, or <see langword="null" /> for the provider's own address.</param>
