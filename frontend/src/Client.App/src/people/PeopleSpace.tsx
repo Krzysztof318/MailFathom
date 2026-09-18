@@ -101,6 +101,17 @@ export function PeopleSpace({
     const asked = useRef<HTMLDialogElement | null>(null);
     const asking = useRef<HTMLDialogElement | null>(null);
 
+    // Who is open *now*, as against who was open when a write was asked for. A write answers after a wait, and the
+    // reader is free to open somebody else inside it — so state read in that answer is the state the press closed
+    // over, and acting on it would pull the screen back to whoever they had left. The ref is written wherever the
+    // opened person changes and read only in an answer, so nothing here touches it while rendering.
+    const openedNow = useRef<string | null>(null);
+
+    function open(contact: Contact | null): void {
+        openedNow.current = contact?.id ?? null;
+        setOpened(contact);
+    }
+
     const reading = useContactBook(session, transport, book);
     const correspondence = useContactCorrespondence(session, transport, opened?.id ?? null);
 
@@ -141,10 +152,12 @@ export function PeopleSpace({
             return;
         }
 
+        const promoted = opened.id;
+
         setPromoting(true);
         setSaid(null);
 
-        void promoteContact(session, transport, opened.id).then((answer) => {
+        void promoteContact(session, transport, promoted).then((answer) => {
             setPromoting(false);
 
             if (answer.outcome === 'failed') {
@@ -155,8 +168,12 @@ export function PeopleSpace({
 
             setSaid({ where: 'person', said: writeSaid[answer.value.outcome] });
 
-            if (answer.value.contact !== null) {
-                setOpened(answer.value.contact);
+            // Taking somebody on writes them into the asserted book, which is the book this then shows and the record
+            // it then opens — but only where they are still the person being read. Somebody who opened a second
+            // person while this was in flight is reading that one, and neither the row nor the tab is ours to move
+            // out from under them.
+            if (answer.value.contact !== null && openedNow.current === promoted) {
+                open(answer.value.contact);
                 setBook('own');
             }
 
@@ -199,7 +216,10 @@ export function PeopleSpace({
             );
 
             setSelected((standing) => standing.filter((contact) => !erased.includes(contact)));
-            setOpened((standing) => (standing !== null && erased.includes(standing.id) ? null : standing));
+
+            if (openedNow.current !== null && erased.includes(openedNow.current)) {
+                open(null);
+            }
             reading.readAgain();
         });
     }
@@ -283,7 +303,7 @@ export function PeopleSpace({
                         }}
                         onOpen={(contact) => {
                             setSaid(null);
-                            setOpened(contact);
+                            open(contact);
                         }}
                         onSelected={setSelected}
                         onAskErasure={askErasure}
@@ -309,7 +329,7 @@ export function PeopleSpace({
                             twoPanes
                                 ? null
                                 : () => {
-                                      setOpened(null);
+                                      open(null);
                                   }
                         }
                         onPromote={promote}

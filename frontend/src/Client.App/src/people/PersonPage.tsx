@@ -31,7 +31,9 @@ import type { ContactCorrespondenceInForce } from './useContactCorrespondence';
 // record and the correlation change underneath it — so nothing would move focus by itself, and at the width where the
 // list is made inert behind this page there is not even a stale element left to hold it. The shape is the one
 // `readingPane/ReadingPane.tsx` uses for the same thing: a ref holding who focus was last placed on, which survives
-// StrictMode's second invocation where a flag would not.
+// StrictMode's second invocation where a flag would not. The element it is put on is this screen's own rather than
+// that one's — a person's page is a region of the People screen where a message is a document in its own right, so
+// this is a `section` where the reading pane is an `article`.
 
 export function PersonPage({
     contact,
@@ -92,9 +94,8 @@ export function PersonPage({
     const lastCorrespondedAt = correspondence.correspondence?.threads[0]?.lastCorrespondedAt ?? null;
 
     return (
-        <div
+        <section
             ref={opened}
-            role="region"
             tabIndex={-1}
             aria-label={contact.displayName}
             className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -175,6 +176,6 @@ export function PersonPage({
                     onOpenDocument={onOpenDocument}
                 />
             </div>
-        </div>
+        </section>
     );
 }

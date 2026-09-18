@@ -70,6 +70,7 @@ function deployment({
     collected = [personCalled('celina', 'Celina Wrona', 'Collected')],
     write = { outcome: 'Written', contact: personCalled('anna', 'Anna Kowalska'), addressHolder: null },
     refuses = [],
+    holdsWrites = false,
 }: {
     own?: readonly unknown[];
     collected?: readonly unknown[];
@@ -77,11 +78,26 @@ function deployment({
 
     /** Whose erasure this deployment will not perform, which is how a batch is made to half succeed. */
     refuses?: readonly string[];
-} = {}): { readonly transport: MailFathomTransport; readonly sent: () => readonly ClientRequest[] } {
+
+    /** Whether a write waits to be released, which is what gives a test the time inside one to navigate elsewhere. */
+    holdsWrites?: boolean;
+} = {}): {
+    readonly transport: MailFathomTransport;
+    readonly sent: () => readonly ClientRequest[];
+    readonly release: () => void;
+} {
     const sent: ClientRequest[] = [];
+    const held: (() => void)[] = [];
 
     return {
         sent: () => sent,
+        release: () => {
+            const answering = held.splice(0, held.length);
+
+            for (const answer of answering) {
+                answer();
+            }
+        },
         transport: (request) => {
             sent.push(request);
 
@@ -97,6 +113,16 @@ function deployment({
                       };
             } else if (method === 'POST') {
                 answer = { ...answered, body: JSON.stringify(write) };
+
+                if (holdsWrites) {
+                    const waiting = answer;
+
+                    return new Promise<ClientResponse>((resolve) => {
+                        held.push(() => {
+                            resolve(waiting);
+                        });
+                    });
+                }
             } else if (path.includes('/correspondence')) {
                 answer = { ...answered, body: JSON.stringify({ contactId: 'anna', threads: [], documents: [] }) };
             } else if (path.includes('/contacts/collected')) {
@@ -219,6 +245,34 @@ describe('PeopleSpace', () => {
             expect(sent().some((request) => request.path.includes('/promotion'))).toBe(true);
         });
         expect(await screen.findByRole('radio', { name: 'Own', checked: true })).toBeDefined();
+    });
+
+    // The other half of that: the answer names the person it was asked about, and a reader is free to open somebody
+    // else while it is in flight. Applying it regardless would take the screen back off whoever they moved to — so
+    // the row and the tab move only where the person taken on is still the person being read.
+    it('leaves whoever was opened during a promotion where they are when the answer lands', async () => {
+        const { transport, release } = deployment({
+            collected: [
+                personCalled('celina', 'Celina Wrona', 'Collected'),
+                personCalled('dorota', 'Dorota Zaremba', 'Collected'),
+            ],
+            write: { outcome: 'Written', contact: personCalled('celina', 'Celina Wrona'), addressHolder: null },
+            holdsWrites: true,
+        });
+        drawSpace(transport);
+
+        expect(await screen.findByRole('option', { name: /Anna Kowalska/u })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Collected' }));
+        fireEvent.click(await screen.findByRole('option', { name: /Celina Wrona/u }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add to my contacts' }));
+
+        fireEvent.click(screen.getByRole('option', { name: /Dorota Zaremba/u }));
+        release();
+
+        expect(await screen.findByText('Contact added.')).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'Dorota Zaremba' })).toBeDefined();
+        expect(screen.getByRole('radio', { name: 'Collected', checked: true })).toBeDefined();
     });
 
     // Deleting mail's counterpart here: the question names who it is about before anything is removed.
