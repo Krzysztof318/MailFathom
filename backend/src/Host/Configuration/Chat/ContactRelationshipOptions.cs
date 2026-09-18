@@ -34,4 +34,8 @@ internal sealed class ContactRelationshipOptions
 {
     /// <summary>Gets or sets whether an opened contact is read into a relationship note and a suggested next action.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Gets or sets which declared model this derivation runs on, and empty to run it on <c>Chat:MainModel</c>.</summary>
+    /// <remarks>A reference like every other: an alias out of <c>Chat:Models</c>, a <c>Fallback</c> of its own, and the main model behind both.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

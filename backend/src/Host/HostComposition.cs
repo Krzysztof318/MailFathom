@@ -974,6 +974,19 @@ internal static class HostComposition
             // plan it began with while the next one picks up an edited model.
             builder.Services.AddSingleton<IChatGenerationPlanSource, ChatGenerationPlanSource>();
             builder.Services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+
+            // One registration per capability rather than one shared plan, because which model a capability runs on is
+            // the operator's routing decision and an agent asks for its own by key. A capability the deployment routed
+            // nowhere resolves to the main model here, so a declaration writing none of those keys registers the same
+            // plan eleven times over and behaves exactly as it did before they existed.
+            foreach (var capability in Enum.GetValues<ChatCapability>())
+            {
+                builder.Services.AddKeyedScoped(
+                    capability,
+                    (provider, key) => provider.GetRequiredService<IChatGenerationPlanSource>()
+                        .PlanFor((ChatCapability)key!));
+            }
+
             builder.Services.AddChatProviderAdapter();
             builder.Services.AddMailAnsweringAgent();
             builder.Services.AddDiscoveryRunAgents();
@@ -1045,21 +1058,9 @@ internal static class HostComposition
             declaredChat?.IsConfigured is true && declaredChat.ThreadState.Enabled);
 
         // And again for the cleaned rendering a reading pane offers as its third, where what turns it on is the chat
-        // endpoint alone: which readers want it is their own preference rather than a key an operator writes. The plan is
-        // registered beside the pass rather than resolved from the shared one, because this is the one pass that may route
-        // to a model of its own — scoped so an operator editing that model is obeyed by the next open rather than by the
-        // next restart.
-        var cleansBodies = declaredChat?.IsConfigured is true;
-
-        if (cleansBodies)
-        {
-            builder.Services.AddScoped(provider => MailBodyCleanupPlanMapper.Map(
-                provider.GetRequiredService<ISettingsSnapshot<ChatModelOptions>>().Current)
-                ?? throw new InvalidOperationException(
-                    "A chat endpoint was declared at registration and is absent from the configuration in force."));
-        }
-
-        builder.Services.AddMailBodyCleanupAgent(cleansBodies);
+        // endpoint alone: which readers want it is their own preference rather than a key an operator writes. The model
+        // it runs on is its own capability's, resolved from the keyed plans above like every other.
+        builder.Services.AddMailBodyCleanupAgent(declaredChat?.IsConfigured is true);
 
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()

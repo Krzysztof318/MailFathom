@@ -13,6 +13,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Discovery;
@@ -67,7 +68,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     /// <param name="loggerFactory">The factory the composed agent and the resilience decorator log through.</param>
     /// <param name="logger">The log this derivation reports to.</param>
     public DiscoveryPlanningAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.DiscoveryPlanning)] ChatGenerationPlan plan,
         EmailKnowledgeBounds retrievalBounds,
         MailAnsweringRunLedger runLedger,
         IMailAnsweringSpendLedger spendLedger,

@@ -270,17 +270,55 @@ public sealed class ChatGenerationPlanTests
         Assert.Throws<ArgumentException>(() => plan.WithFallback(ChatDeclarations.Plan()));
     }
 
-    /// <summary>A chain is two models and never three, so a fallback carrying one of its own is refused where it is assembled rather than followed at runtime.</summary>
+    /// <summary>
+    /// Three models is what a capability's reference names — the model it was routed to, the fallback beside it, and the
+    /// model the deployment answers questions with — so a fallback carrying one of its own is a chain rather than a
+    /// contradiction.
+    /// </summary>
     [Fact]
-    public void WithFallback_AFallbackCarryingOneOfItsOwn_IsRefused()
+    public void WithFallback_AFallbackCarryingOneOfItsOwn_CarriesBothBehindTheModel()
     {
         // Arrange
         var standby = ChatDeclarations
             .Plan(ChatDeclarations.Endpoint("standby"))
             .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("the-third-one")));
 
+        // Act
+        var chained = ChatDeclarations.Plan().WithFallback(standby);
+
+        // Assert
+        Assert.Equal(
+            ["answering", "standby", "the-third-one"],
+            chained.Chain.Select(model => model.Endpoint.Alias));
+    }
+
+    /// <summary>A fourth model is one nobody named, so it is refused where the chain is assembled rather than followed at runtime.</summary>
+    [Fact]
+    public void WithFallback_AChainAlreadyAsLongAsAReferenceNames_IsRefused()
+    {
+        // Arrange
+        var behind = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations
+                .Plan(ChatDeclarations.Endpoint("standby"))
+                .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("the-third-one"))));
+
         // Act, Assert
-        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan().WithFallback(standby));
+        Assert.Throws<ArgumentException>(
+            () => ChatDeclarations.Plan(ChatDeclarations.Endpoint("the-fourth-one")).WithFallback(behind));
+    }
+
+    /// <summary>An endpoint already further down the chain would be asked twice for one call, which is a second payment for the same answer.</summary>
+    [Fact]
+    public void WithFallback_AChainAlreadyNamingThisModel_IsRefused()
+    {
+        // Arrange
+        var behind = ChatDeclarations
+            .Plan(ChatDeclarations.Endpoint("standby"))
+            .WithFallback(ChatDeclarations.Plan());
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan().WithFallback(behind));
     }
 
     [Fact]

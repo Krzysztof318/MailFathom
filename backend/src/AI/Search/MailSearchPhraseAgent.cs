@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Search;
@@ -63,7 +64,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
     /// <param name="loggerFactory">The factory the composed agent and the resilience decorator log through.</param>
     /// <param name="logger">The log this reading reports to.</param>
     public MailSearchPhraseAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.SearchPhrasing)] ChatGenerationPlan plan,
         MailAnsweringRunLedger runLedger,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,

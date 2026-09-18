@@ -412,7 +412,7 @@ public sealed class MailBodyCleanupAgentTests
                 });
 
             return new MailBodyCleanupAgent(
-                new MailBodyCleanupPlan(plan ?? ChatDeclarations.Plan()),
+                plan ?? ChatDeclarations.Plan(),
                 runBounds ?? MailAnsweringRunBounds.Default,
                 spendLedger ?? AdmittingSpendLedger(),
                 credentialSource,

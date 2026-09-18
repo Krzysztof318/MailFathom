@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.AI.UnitTests.TestDoubles;
 
@@ -49,11 +50,44 @@ internal static class ChatDeclarations
             requestTimeout ?? RequestTimeout);
 
     /// <summary>Publishes one fixed plan, standing in for the composition root's reading of the declaration in force.</summary>
-    public static IChatGenerationPlanSource PlanSource(ChatGenerationPlan? plan = null) =>
-        new FixedPlanSource(plan ?? Plan());
+    /// <param name="plan">The plan every capability the routing does not name resolves to.</param>
+    /// <param name="routed">The capabilities an operator sent to a model of their own, standing in for a declaration that wrote those keys.</param>
+    public static IChatGenerationPlanSource PlanSource(
+        ChatGenerationPlan? plan = null,
+        IReadOnlyDictionary<ChatCapability, ChatGenerationPlan>? routed = null) =>
+        new FixedPlanSource(plan ?? Plan(), routed);
 
-    private sealed class FixedPlanSource(ChatGenerationPlan plan) : IChatGenerationPlanSource
+    /// <summary>Registers the plans a composition root publishes: the main model, and the one each capability is routed to.</summary>
+    /// <param name="services">The collection under test.</param>
+    /// <param name="plan">The plan every capability resolves to, standing in for a declaration routing none of them elsewhere.</param>
+    /// <param name="routed">The capabilities sent to a model of their own instead.</param>
+    /// <remarks>Both shapes, because an agent asks for its capability's plan by key while the chat client takes the main one.</remarks>
+    public static void AddPlans(
+        IServiceCollection services,
+        ChatGenerationPlan? plan = null,
+        IReadOnlyDictionary<ChatCapability, ChatGenerationPlan>? routed = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(PlanSource(plan, routed));
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+
+        foreach (var capability in Enum.GetValues<ChatCapability>())
+        {
+            services.AddKeyedScoped(
+                capability,
+                (provider, key) => provider.GetRequiredService<IChatGenerationPlanSource>()
+                    .PlanFor((ChatCapability)key!));
+        }
+    }
+
+    private sealed class FixedPlanSource(
+        ChatGenerationPlan plan,
+        IReadOnlyDictionary<ChatCapability, ChatGenerationPlan>? routed) : IChatGenerationPlanSource
     {
         public ChatGenerationPlan Current => plan;
+
+        public ChatGenerationPlan PlanFor(ChatCapability capability) =>
+            routed is not null && routed.TryGetValue(capability, out var own) ? own : plan;
     }
 }

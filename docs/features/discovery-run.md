@@ -251,14 +251,16 @@ so what one person is told about a shared ceiling is never a reading of what ano
 ### Which model answered
 
 A person comparing two answers reads a fast cheap one differently from a careful one, so the run says which model
-produced it — on the `started` event, before anything has been composed. That timing is also its one limit: a
-deployment that declared a fallback behind its main model publishes the model the run *begins* against, and a run the
-fallback ended up answering is named as the fallback in the run's own record rather than in this event.
+produced it — on the `started` event, before anything has been composed. The model named is the one
+`Chat:DiscoveryComposition:Model` resolves to, because composing is what produces the answer a reader is given; a
+deployment that routed planning to a model of its own plans on that one and still publishes the composing endpoint.
+The timing is the one limit: what goes out is the model the composition *begins* against, so a run its fallback ended up
+answering is named as the fallback in the run's own record rather than in this event.
 
 Two names go out, and they answer different questions. **The endpoint alias is always published**: it is the operator's
 own name for a configured endpoint, it names nothing outside this deployment, and it is what an operator matches an
 answer against their own configuration by. **The published model name is whatever the operator chose to publish**, and
-it is a setting of its own — `PublishedModel` on the model the run begins against, described under
+it is a setting of its own — `PublishedModel` on the composing model, described under
 [the AI configuration](../operations/configuration-ai.md) — rather than the routed model name the deployment sends to
 the provider. Those are separate because a routed name can carry a deployment identifier, a tenant, or an internal
 routing label that is nobody's business outside the deployment, and publishing it by default would leak the

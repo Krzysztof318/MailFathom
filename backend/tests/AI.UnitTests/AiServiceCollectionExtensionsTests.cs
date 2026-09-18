@@ -155,8 +155,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
@@ -182,6 +181,102 @@ public sealed class AiServiceCollectionExtensionsTests
     }
 
     /// <summary>
+    /// One named transport carries every capability, so its bounds are the widest model any of them may reach rather
+    /// than the main model's: a capability routed to a model with a longer deadline and a larger output budget would
+    /// otherwise be cut off by a transport bounded for a model it never sends to.
+    /// </summary>
+    [Fact]
+    public void AddChatProviderAdapter_WithACapabilityRoutedToAWiderModel_BoundsTheTransportByThatModel()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+
+        var main = ChatDeclarations.Plan();
+        var widest = ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(alias: "vision"),
+            maximumOutputTokens: main.MaximumOutputTokens * 4,
+            requestTimeout: main.RequestTimeout + TimeSpan.FromMinutes(2));
+
+        ChatDeclarations.AddPlans(
+            services,
+            main,
+            new Dictionary<ChatCapability, ChatGenerationPlan> { [ChatCapability.ImageDescription] = widest });
+
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddChatProviderAdapter();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var transport = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(ProviderChatModelClient.TransportName);
+
+        Assert.Equal(widest.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+
+        // Against the transport the same declaration bounds with nothing routed, because the figure the main model
+        // alone produces is what this widening replaced and the constants behind it belong to the registration.
+        Assert.True(transport.MaxResponseContentBufferSize > MainModelResponseBuffer(main));
+    }
+
+    /// <summary>
+    /// A Discover run never reaches the mail-answering agent, so the endpoint it publishes to the person who asked is
+    /// the one that composed the answer they are given rather than the one a question would have been answered by.
+    /// </summary>
+    [Fact]
+    public void AddDiscoveryRunAgents_WithCompositionRoutedElsewhere_NamesTheComposingEndpoint()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(
+            services,
+            routed: new Dictionary<ChatCapability, ChatGenerationPlan>
+            {
+                [ChatCapability.DiscoveryComposition] = ChatDeclarations.Plan(
+                    ChatDeclarations.Endpoint(alias: "composing", publishedModelName: "the-composing-model")),
+            });
+
+        // Act
+        services.AddDiscoveryRunAgents();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var identity = scope.ServiceProvider.GetRequiredService<AnsweringEndpointIdentity>();
+
+        Assert.Equal("composing", identity.Alias);
+        Assert.Equal("the-composing-model", identity.PublishedModel);
+    }
+
+    /// <summary>The response buffer a declaration routing no capability elsewhere bounds the shared transport with.</summary>
+    private static long MainModelResponseBuffer(ChatGenerationPlan main)
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(services, main);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddChatProviderAdapter();
+
+        using var provider = services.BuildServiceProvider();
+        using var transport = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(ProviderChatModelClient.TransportName);
+
+        return transport.MaxResponseContentBufferSize;
+    }
+
+    /// <summary>
     /// The port is registered whichever decision a deployment took, because a caller needs a reason it can record
     /// against the attachment rather than an absence it has to interpret. An instance that has not activated
     /// description resolves the describer that reads nothing.
@@ -202,15 +297,20 @@ public sealed class AiServiceCollectionExtensionsTests
             provider.GetRequiredService<IEmailAttachmentImageDescriber>());
     }
 
-    /// <summary>Scoped where it is active, because it sends over the scoped chat client that a run's own scope resolves.</summary>
+    /// <summary>Scoped where it is active, because it sends over a chat client opened for the model this capability was routed to and for that run's scope.</summary>
     [Fact]
     public void AddImageAttachmentDescription_WithAGridCeiling_ResolvesTheDescriberOncePerScope()
     {
         // Arrange
         var services = new ServiceCollection();
+        services.AddHttpClient();
         services.AddLogging();
-        services.AddScoped(_ => ChatDeclarations.Plan());
-        services.AddScoped(_ => Substitute.For<IChatModelClient>());
+        ChatDeclarations.AddPlans(services);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton<OpenAiCompatibleClientFactory>();
 
         // Act
         services.AddImageAttachmentDescription(maximumPixelCount: 40_000_000);
@@ -255,7 +355,7 @@ public sealed class AiServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped(_ => ChatDeclarations.Plan());
+        ChatDeclarations.AddPlans(services);
         services.AddScoped(_ => MailAnsweringRunBounds.Default);
         services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
         services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
@@ -315,7 +415,7 @@ public sealed class AiServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped(_ => ChatDeclarations.Plan());
+        ChatDeclarations.AddPlans(services);
         services.AddScoped(_ => MailAnsweringRunBounds.Default);
         services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
         services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
@@ -374,7 +474,7 @@ public sealed class AiServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped(_ => new MailBodyCleanupPlan(ChatDeclarations.Plan()));
+        ChatDeclarations.AddPlans(services);
         services.AddScoped(_ => MailAnsweringRunBounds.Default);
         services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
         services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
@@ -435,8 +535,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
@@ -467,8 +566,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddHttpClient();
         services.AddLogging();
         services.AddSingleton(EmbeddingDeclarations.Plan());
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
@@ -505,8 +603,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(MailAnsweringRunBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
@@ -570,8 +667,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(EmailKnowledgeBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
@@ -604,8 +700,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(EmailKnowledgeBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
@@ -645,8 +740,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource(ChatDeclarations.Plan(declared)));
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services, ChatDeclarations.Plan(declared));
         services.AddSingleton(EmailKnowledgeBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
@@ -705,8 +799,7 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
-        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        ChatDeclarations.AddPlans(services);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());

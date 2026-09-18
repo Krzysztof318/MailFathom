@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.AI.Chat;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
@@ -197,19 +198,40 @@ public sealed class ChatModelOptionsTests
         Assert.Contains(errors, error => error.Contains("without naming the model", StringComparison.Ordinal));
     }
 
-    /// <summary>A capability's own reference is judged against the declared models exactly as the main one is.</summary>
-    [Fact]
-    public void Validate_ABodyCleanupModelNamingNoDeclaredModel_IsRefused()
+    /// <summary>Every capability's reference is judged against the declared models exactly as the main one is, and the refusal names the key an operator edits rather than a property.</summary>
+    [Theory]
+    [MemberData(nameof(EveryCapability))]
+    public void Validate_ACapabilityNamingNoDeclaredModel_IsRefusedAgainstItsOwnKey(ChatCapability capability)
     {
         // Arrange
         var settings = DeclaredChatModels.Section();
-        settings.BodyCleanup.Model.Alias = "a-model-nobody-declared";
+        settings.ReferenceFor(capability).Alias = "a-model-nobody-declared";
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("BodyCleanup", StringComparison.Ordinal));
+        Assert.Contains(
+            errors,
+            error => error.Contains(ChatModelOptions.DescribeReference(capability), StringComparison.Ordinal));
+    }
+
+    /// <summary>A capability naming a fallback equal to its own model would reach the endpoint that had just failed.</summary>
+    [Fact]
+    public void Validate_ACapabilityNamingItsModelAsItsOwnFallback_IsRefused()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("cheap", model: "a-small-fast-model"));
+        settings.Enrichment.Model.Alias = "cheap";
+        settings.Enrichment.Model.Fallback = "Cheap";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("its own fallback", StringComparison.Ordinal));
     }
 
     /// <summary>A block of the array is validated by the section, because the options framework never descends into the elements of a collection.</summary>
@@ -258,6 +280,9 @@ public sealed class ChatModelOptionsTests
         // Assert
         Assert.Equal("answering", resolved?.Alias);
     }
+
+    /// <summary>Every capability the section declares a reference for, so one added without its key fails here rather than going unvalidated.</summary>
+    public static TheoryData<ChatCapability> EveryCapability() => [.. Enum.GetValues<ChatCapability>()];
 
     private static ChatModelOptions WrittenWithoutAModel(string writtenSetting)
     {

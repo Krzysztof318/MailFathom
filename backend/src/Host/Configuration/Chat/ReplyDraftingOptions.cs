@@ -41,4 +41,8 @@ internal sealed class ReplyDraftingOptions
     /// <summary>Gets or sets whether the draft's manner is derived from the answering account's own recent sent mail.</summary>
     /// <remarks>On where drafting is on, because a reply that does not sound like its sender is one somebody rewrites rather than edits, and the mail it reads is their own.</remarks>
     public bool StyleFromSentMail { get; set; } = true;
+
+    /// <summary>Gets or sets which declared model a draft is written by, and empty to write it with <c>Chat:MainModel</c>.</summary>
+    /// <remarks>Writing in somebody's own manner is the work worth the best model a deployment pays for, which is the other half of what a per-capability reference is for.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.AI.Chat;
 
 namespace MailFathom.Host.Configuration.Chat;
 
@@ -53,6 +54,25 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// deployment that declared two models and said nothing has not stated which one answers.
     /// </remarks>
     public ChatModelReferenceOptions MainModel { get; set; } = new();
+
+    /// <summary>Gets or sets which declared model answers a question about the mailbox.</summary>
+    /// <remarks>A block carrying the reference and nothing else: whether questions are answered at all follows from a declared model, and what a run may spend is declared once in <c>MailAnswering</c>.</remarks>
+    public ChatCapabilityModelOptions MailAnswering { get; set; } = new();
+
+    /// <summary>Gets or sets which declared model reads a discovery request into the searches that would answer it.</summary>
+    public ChatCapabilityModelOptions DiscoveryPlanning { get; set; } = new();
+
+    /// <summary>Gets or sets which declared model composes what a discovery run found into the answer a reader is given.</summary>
+    public ChatCapabilityModelOptions DiscoveryComposition { get; set; } = new();
+
+    /// <summary>Gets or sets which declared model describes an image attachment.</summary>
+    /// <remarks>
+    /// The reference sits here rather than beside <c>Embeddings:ImageDescription</c>, because <c>Chat</c> is where models
+    /// are declared and referenced; that block keeps the switch that decides whether a picture leaves at all and the
+    /// bounds it leaves under. Routing this alone is what lets a deployment describe pictures with a vision model while
+    /// everything else runs on a cheaper text-only one.
+    /// </remarks>
+    public ChatCapabilityModelOptions ImageDescription { get; set; } = new();
 
     /// <summary>Gets or sets whether retrieval puts its candidates to a model before handing them over, and what that pass may spend.</summary>
     /// <remarks>Present rather than nullable, because every member of it has a usable default and the block's own <c>Enabled</c> is what says whether the pass runs. Off is the default and is a supported deployment.</remarks>
@@ -124,6 +144,36 @@ internal sealed class ChatModelOptions : IValidatableObject
             : null;
     }
 
+    /// <summary>Gets the reference naming which model a capability runs on.</summary>
+    /// <param name="capability">The work whose model is wanted.</param>
+    /// <returns>That capability's own reference, which names no model where the deployment wrote none.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the capability is not one this section declares a reference for.</exception>
+    /// <remarks>
+    /// The one place the capabilities and the keys they are declared under are paired, which is what keeps the mapping,
+    /// the validation, and the registration reading one list rather than three copies of it.
+    /// </remarks>
+    public ChatModelReferenceOptions ReferenceFor(ChatCapability capability) => capability switch
+    {
+        ChatCapability.MailAnswering => this.MailAnswering.Model,
+        ChatCapability.DiscoveryPlanning => this.DiscoveryPlanning.Model,
+        ChatCapability.DiscoveryComposition => this.DiscoveryComposition.Model,
+        ChatCapability.Enrichment => this.Enrichment.Model,
+        ChatCapability.ThreadState => this.ThreadState.Model,
+        ChatCapability.ReplyDrafting => this.ReplyDrafting.Model,
+        ChatCapability.ContactRelationship => this.ContactRelationship.Model,
+        ChatCapability.SearchPhrasing => this.SearchPhrasing.Model,
+        ChatCapability.RelevanceFilter => this.RelevanceFilter.Model,
+        ChatCapability.ImageDescription => this.ImageDescription.Model,
+        ChatCapability.BodyCleanup => this.BodyCleanup.Model,
+        _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, "The section declares no model reference for this capability."),
+    };
+
+    /// <summary>Names the configuration key a capability's reference is written under.</summary>
+    /// <param name="capability">The work whose key is wanted.</param>
+    /// <returns>The key an operator edits, so a refusal names it rather than a property.</returns>
+    public static string DescribeReference(ChatCapability capability) =>
+        $"{SectionName}:{capability}:{nameof(ChatCapabilityModelOptions.Model)}";
+
     /// <summary>Finds the model a reference names, falling back to the main model where it names none.</summary>
     /// <param name="reference">The capability's own reference.</param>
     /// <returns>The declaration, or <see langword="null" /> when neither the reference nor the section resolves to one.</returns>
@@ -149,7 +199,7 @@ internal sealed class ChatModelOptions : IValidatableObject
                 || this.RelevanceFilter.Enabled
                 || this.Enrichment.Enabled
                 || this.ThreadState.Enabled
-                || this.BodyCleanup.Model.NamesModel)
+                || Enum.GetValues<ChatCapability>().Any(capability => this.ReferenceFor(capability).NamesModel))
             {
                 yield return new ValidationResult(
                     $"The {SectionName} section declares settings but no model under {SectionName}:{nameof(this.Models)}, so no chat provider is configured and nothing in it is read. Declare a model, or remove the section.",
@@ -174,11 +224,13 @@ internal sealed class ChatModelOptions : IValidatableObject
             yield return error;
         }
 
-        if (this.FindMainModel() is { } mainModel)
+        // The model the filter actually resolves to rather than the main one, because a pass routed to a model of its
+        // own is judged against that model's turn count — the main model's says nothing about what the filter sends.
+        if (this.FindModelFor(this.RelevanceFilter.Model) is { } judgingModel)
         {
             foreach (var error in this.RelevanceFilter.FindConfigurationErrors(
-                mainModel.Alias.Trim(),
-                mainModel.MaxMessagesPerRequest))
+                judgingModel.Alias.Trim(),
+                judgingModel.MaxMessagesPerRequest))
             {
                 yield return error;
             }
@@ -213,9 +265,8 @@ internal sealed class ChatModelOptions : IValidatableObject
             yield return error;
         }
 
-        foreach (var error in this.BodyCleanup.Model.FindConfigurationErrors(
-            $"{SectionName}:{nameof(this.BodyCleanup)}:{nameof(BodyCleanupOptions.Model)}",
-            declared))
+        foreach (var error in Enum.GetValues<ChatCapability>().SelectMany(capability =>
+            this.ReferenceFor(capability).FindConfigurationErrors(DescribeReference(capability), declared)))
         {
             yield return error;
         }

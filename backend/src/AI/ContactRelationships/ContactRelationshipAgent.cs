@@ -15,6 +15,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.ContactRelationships;
@@ -79,7 +80,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     /// <param name="logger">Records the outcome without recording the card or the correspondence.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ContactRelationshipAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.ContactRelationship)] ChatGenerationPlan plan,
         MailAnsweringRunLedger runLedger,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,

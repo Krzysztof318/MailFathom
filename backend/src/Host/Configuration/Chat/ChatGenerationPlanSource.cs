@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Chat;
 
@@ -29,35 +30,48 @@ namespace MailFathom.Host.Configuration.Chat;
 internal sealed class ChatGenerationPlanSource(ISettingsSnapshot<ChatModelOptions> publishedSettings)
     : IChatGenerationPlanSource
 {
-    private MappedPlan? mapped;
+    private MappedPlans? mapped;
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the published declaration carries no chat endpoint, which composition registers this only against.</exception>
-    public ChatGenerationPlan Current
+    public ChatGenerationPlan Current => this.PlansFor(publishedSettings.Current).Main;
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">Thrown when the published declaration carries no chat endpoint, which composition registers this only against.</exception>
+    public ChatGenerationPlan PlanFor(ChatCapability capability) =>
+        this.PlansFor(publishedSettings.Current).ByCapability[capability];
+
+    private MappedPlans PlansFor(ChatModelOptions settings)
     {
-        get
+        if (Volatile.Read(ref this.mapped) is { } existing && ReferenceEquals(existing.Settings, settings))
         {
-            var settings = publishedSettings.Current;
-
-            if (Volatile.Read(ref this.mapped) is { } existing && ReferenceEquals(existing.Settings, settings))
-            {
-                return existing.Plan;
-            }
-
-            // Reached only where the endpoint was declared at registration, and a reload that would remove it is
-            // refused before it is published, so the absence is a contradiction rather than a configuration state.
-            var plan = ChatGenerationPlanMapper.Map(settings)
-                ?? throw new InvalidOperationException(
-                    "The chat endpoint was declared at registration and is absent from the configuration in force.");
-
-            Volatile.Write(ref this.mapped, new MappedPlan(settings, plan));
-
-            return plan;
+            return existing;
         }
+
+        // Reached only where the endpoint was declared at registration, and a reload that would remove it is
+        // refused before it is published, so the absence is a contradiction rather than a configuration state.
+        var plans = new MappedPlans(
+            settings,
+            Mapped(ChatGenerationPlanMapper.Map(settings)),
+            Enum.GetValues<ChatCapability>().ToFrozenDictionary(
+                capability => capability,
+                capability => Mapped(ChatGenerationPlanMapper.Map(settings, capability))));
+
+        Volatile.Write(ref this.mapped, plans);
+
+        return plans;
     }
 
-    /// <summary>The plan a published declaration maps to, kept beside the declaration it came from.</summary>
+    private static ChatGenerationPlan Mapped(ChatGenerationPlan? plan) =>
+        plan ?? throw new InvalidOperationException(
+            "The chat endpoint was declared at registration and is absent from the configuration in force.");
+
+    /// <summary>The plans a published declaration maps to, kept beside the declaration they came from.</summary>
     /// <param name="Settings">The published declaration, held to recognize the next one by reference.</param>
-    /// <param name="Plan">What that declaration maps to.</param>
-    private sealed record MappedPlan(ChatModelOptions Settings, ChatGenerationPlan Plan);
+    /// <param name="Main">The model this deployment answers questions with.</param>
+    /// <param name="ByCapability">The model each capability runs on, mapped once per declaration rather than per operation.</param>
+    private sealed record MappedPlans(
+        ChatModelOptions Settings,
+        ChatGenerationPlan Main,
+        FrozenDictionary<ChatCapability, ChatGenerationPlan> ByCapability);
 }
