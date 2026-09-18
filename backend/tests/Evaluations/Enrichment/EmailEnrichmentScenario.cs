@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
+using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Quality;
@@ -71,7 +72,7 @@ internal static class EmailEnrichmentScenario
         CancellationToken cancellationToken)
     {
         var modelName = plan.Endpoint.RoutedModelName;
-        var iterationName = IterationNameFor(modelName);
+        var iterationName = EvaluationStore.IterationNameFor(modelName);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
             Name,
@@ -83,7 +84,7 @@ internal static class EmailEnrichmentScenario
             Message.ReceivedAt,
             [.. Message.Passages.Select(static passage => passage.Text)]);
 
-        var cachedModel = await CacheOverAsync(reporting, model, plan, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, Name, iterationName, cancellationToken);
         var response = await AskAsync(cachedModel, plan, turn, cancellationToken);
         var marks = EmailEnrichmentReading.Read(response, Message.Passages, EmailEnrichmentAgentComposition.AgentName);
 
@@ -97,27 +98,6 @@ internal static class EmailEnrichmentScenario
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend.Take());
 
         return new EmailEnrichmentOutcome(modelName, marks, verdict);
-    }
-
-    /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
-    /// <remarks>
-    /// The wrapper is not disposed, and owns nothing that would need it: disposing a
-    /// <see cref="DelegatingChatClient" /> disposes the client it wraps, and the model under test belongs to the caller
-    /// that opened it. The cache itself is the run's, and the store closes it.
-    /// </remarks>
-    private static async Task<IChatClient> CacheOverAsync(
-        ReportingConfiguration reporting,
-        IChatClient model,
-        ChatGenerationPlan plan,
-        string iterationName,
-        CancellationToken cancellationToken)
-    {
-        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(Name, iterationName, cancellationToken);
-
-        return new DistributedCachingChatClient(model, cache)
-        {
-            CacheKeyAdditionalValues = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty],
-        };
     }
 
     /// <summary>Asks the model under test the scenario's turn, through the agent's own composition.</summary>
@@ -142,13 +122,4 @@ internal static class EmailEnrichmentScenario
     /// <summary>Writes the marks as the text the judge grades, one reading per line under its aspect.</summary>
     private static string Describe(IReadOnlyList<EmailEnrichmentMark> marks) =>
         string.Join('\n', marks.Select(static mark => $"{mark.Aspect}: {mark.Text}"));
-
-    /// <summary>Turns a model's name into a name the store can file a result under.</summary>
-    /// <remarks>
-    /// The store files an iteration as a directory, and a routed name such as one naming its vendor carries a separator;
-    /// the name stays readable as the model's with that character replaced.
-    /// </remarks>
-    private static string IterationNameFor(string modelName) =>
-        string.Concat(modelName.Select(static character =>
-            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
 }
