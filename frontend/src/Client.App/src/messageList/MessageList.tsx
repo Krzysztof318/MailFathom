@@ -67,7 +67,7 @@ import {
 } from './heldTimeline';
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
-import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
+import { extendedTo, inReadingOrder, withToggled } from '../contextMenu/rowSelection';
 import { noRows, rowSettled, rowWentOut, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';

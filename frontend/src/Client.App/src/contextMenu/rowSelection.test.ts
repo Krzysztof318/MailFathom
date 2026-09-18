@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { extendedTo, inReadingOrder, onlySelected, rangeBetween, withToggled } from './messageSelection';
+import { extendedTo, inReadingOrder, onlySelected, rangeBetween, withToggled } from './rowSelection';
 
 const drawn = ['one', 'two', 'three', 'four', 'five'];
 

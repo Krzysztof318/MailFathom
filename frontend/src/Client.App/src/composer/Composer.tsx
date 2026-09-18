@@ -740,11 +740,16 @@ export function Composer({
 function opened(opening: ComposerOpening, accounts: readonly MailAccount[]): Composition | null {
     const kept = rememberedComposition();
 
+    const addressed = opening.kind === 'new' ? (opening.to ?? []) : [];
+
     if (kept !== null && sameOpening(kept, opening)) {
-        return kept;
+        // What was being written is kept and whoever the opening named is added to it: somebody who asks to write to a
+        // person while half a message of their own is open is addressing that message rather than starting a second
+        // one, and a repeat is not written down twice.
+        return { ...kept, to: [...kept.to, ...addressed.filter((address) => !kept.to.includes(address))] };
     }
 
-    return opening.kind === 'new' ? nothingWrittenYet(accounts[0]?.id ?? '') : null;
+    return opening.kind === 'new' ? nothingWrittenYet(accounts[0]?.id ?? '', addressed) : null;
 }
 
 function sameOpening(kept: Composition, opening: ComposerOpening): boolean {

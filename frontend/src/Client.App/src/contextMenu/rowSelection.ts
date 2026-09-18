@@ -2,15 +2,16 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// What several messages at once means, as an operation on identities rather than as something the list draws. The
-// selection itself is the workspace's, because *select and ask* is the client's most-used gesture and the question is
-// asked somewhere the list is not — a selection only the list knew about would be a visual state that the rest of the
-// client could not read as scope.
+// What several rows at once means, as an operation on identities rather than as something a list draws. It sits beside
+// `rowPress.ts` for that module's own reason: the design project puts one selection gesture on seven of its lists, and
+// the menu a press opens is where a selection with no modifier key to hold is started from. What differs between the
+// seven is where the selection is *kept* — the mail list's is the workspace's, because *select and ask* asks its
+// question somewhere the list is not, and a directory's is its own — and none of that is decided here.
 //
-// Order matters and is the list's rather than the click's: a selection read back as a question about four messages
-// should name them in the order the reader sees them, whichever one they happened to point at first.
+// Order matters and is the list's rather than the click's: a selection read back as a question about four rows should
+// name them in the order the reader sees them, whichever one they happened to point at first.
 
-/** The one message a plain click selects. */
+/** The one row a plain click selects. */
 export function onlySelected(id: string): readonly string[] {
     return [id];
 }
