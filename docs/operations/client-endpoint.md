@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -112,6 +112,13 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
+| `GET /api/client/contacts` | `mailfathom.mail.contacts.read` |
+| `GET /api/client/contacts/collected` | `mailfathom.mail.contacts.read` |
+| `GET /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.read` |
+| `POST /api/client/contacts` | `mailfathom.mail.contacts.write` |
+| `PUT /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
+| `POST /api/client/contacts/{contactId}/promotion` | `mailfathom.mail.contacts.write` |
+| `DELETE /api/client/contacts/{contactId}` | `mailfathom.mail.contacts.write` |
 | `GET /api/client/notifications` | `mailfathom.mail.read` |
 | `GET /api/client/notifications/unread-count` | `mailfathom.mail.read` |
 | `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.mail.read` |
@@ -2487,6 +2494,57 @@ an unknown number of duplicates asked for in one request.
 **Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this user is
 sending, so a credential granted to read a mailbox learns nothing here, and withdrawing a send is part of sending
 rather than a power beside it.
+
+### The contact routes
+
+These are the signed-in person's own address book: the people they wrote down, the people their own mailboxes picked
+up from mail that arrived, and the four things they do about either.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/contacts` | Reads one page of the people this user wrote down |
+| `GET /api/client/contacts/collected` | Reads one page of the people this user's own mailboxes picked up |
+| `GET /api/client/contacts/{contactId}` | Reads one of them |
+| `POST /api/client/contacts` | Records somebody this user's own book does not yet hold |
+| `PUT /api/client/contacts/{contactId}` | Amends one to the record the request states |
+| `POST /api/client/contacts/{contactId}/promotion` | Takes on a collected record, so it becomes one this user asserted |
+| `DELETE /api/client/contacts/{contactId}` | Erases one person and everything the book derived from them |
+
+**The book is read as two, because it is two.** What somebody wrote down and what their mailboxes picked up are
+different things to a person looking at a screen — one is an address book, the other is everybody they have ever been
+written to by — so each is its own paginated route rather than one listing with a filter a client has to know to send.
+Both walk the same order, so a cursor either returns continues in the other. Neither is unbounded: a request naming no
+page size is served fifty and one asking for more than two hundred is refused rather than quietly served two hundred,
+which is what stops a request deciding how much of a person's correspondents leaves the database at once.
+
+**No request names a user.** The books reached are this user's own and the collected book of each mail account they are
+assigned, resolved from the session rather than from the request, so a contact somebody else holds answers exactly as
+one nobody holds. That is the whole difference from [the administrative contact routes](admin-endpoint.md), which name
+the user they act for and are read under the administrative grants.
+
+**Every write records somebody the user wrote down.** What a person types into their own client is a person they wrote
+down, so a write here is asserted rather than collected — which is why amending a record one of their mailboxes
+collected is answered `OriginRefusesWriter` rather than performed. Promotion is the act that resolves it: it writes
+this user's own copy of the collected record, which they then amend like any other. Erasing is not gated that way,
+because somebody asking to be taken out of a contact book is not answered with which book they happen to be in — so an
+erasure reaches a collected record too, and takes it out of that mailbox's book for every user assigned the mailbox.
+
+**A write reports an outcome rather than refusing.** A person the books do not hold, an address another contact already
+holds, a record whose origin refuses the writer, and a promotion of somebody already asserted are all named in the
+answer, because each is something a screen reports and continues from. Only a request that is not a request — no body,
+or the all-zero identifier no contact carries — is refused, and a refusal names the rule rather than the value: a
+malformed address is reported as an address that is not usable and never echoed, because a problem document is the one
+part of an answer a proxy log keeps.
+
+**Two of the administrative routes are deliberately absent.** There is no export, because that is what a data-subject
+request is answered from and it belongs on the surface an operator answers one from; and there is no bulk erase of a
+whole collected book, because emptying what one mailbox picked up is an act about the mailbox rather than about
+whoever reads it.
+
+**Reading is `mailfathom.mail.contacts.read` and every write is `mailfathom.mail.contacts.write`**, the same split
+[the tools over this book](../features/mcp-tools.md#the-contact-book-on-this-surface) publish. The erasure is behind
+the writing grant rather than a narrower one: a grant that may edit the book may take somebody out of it, and no
+smaller grant reaches an act that cannot be undone.
 
 ### The notification routes
 

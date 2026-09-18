@@ -131,6 +131,13 @@ public sealed class ClientApiEndpointsTests
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.CollectedContactsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactPromotionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunEventsRoute}",
@@ -240,11 +247,15 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.Equal(
             [
+                $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"DELETE {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
+                $"GET {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsRead.Name}",
                 $"GET {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunEventsRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -271,6 +282,8 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
+                $"POST {prefix}{ClientContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"POST {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -309,6 +322,7 @@ public sealed class ClientApiEndpointsTests
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
+                $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
@@ -341,7 +355,8 @@ public sealed class ClientApiEndpointsTests
     /// could not tell apart: the caller's own client preferences, the caller's own portrait, and the client handing
     /// over its own telemetry.
     /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
-    /// changing a flag, moving a message, and deleting one are separately provisioned powers, so a route that changes anything under
+    /// changing a flag, moving a message, deleting one, and writing the caller's own address book are separately
+    /// provisioned powers, so a route that changes anything under
     /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
     /// to read a mailbox would then send from it.
     /// </summary>
@@ -393,7 +408,8 @@ public sealed class ClientApiEndpointsTests
                 || published.Permission == MailFathomPermission.MailFlagsWrite
                 || published.Permission == MailFathomPermission.MailMove
                 || published.Permission == MailFathomPermission.MailDelete
-                || published.Permission == MailFathomPermission.MailFoldersWrite);
+                || published.Permission == MailFathomPermission.MailFoldersWrite
+                || published.Permission == MailFathomPermission.MailContactsWrite);
 
     /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
     /// <remarks>

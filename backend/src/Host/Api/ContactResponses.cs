@@ -98,9 +98,11 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 /// write.
 /// </para>
 /// <para>
-/// What decides whether a record comes back is whether the caller stated one. The routes that write are published under
-/// <c>mailfathom.admin.operate</c> and reading the book is <c>mailfathom.admin.audit.read</c>, so a body carrying a
-/// record the caller never sent is a read served to a grant that does not admit one. Recording and amending state the
+/// What decides whether a record comes back is whether the caller stated one. Writing the book and reading it are
+/// separate grants on both surfaces this shape is answered from — <c>mailfathom.admin.operate</c> beside
+/// <c>mailfathom.admin.audit.read</c> for an operator, and <c>mailfathom.mail.contacts.write</c> beside
+/// <c>mailfathom.mail.contacts.read</c> for the signed-in user — so a body carrying a record the caller never sent is a
+/// read served to a grant that does not admit one. Recording and amending state the
 /// whole record, so <see cref="For" /> hands the written form of it back; a promotion states an identity and nothing
 /// else, so <see cref="OutcomeOf" /> is what answers it. A refusal carries no record on either path, including the two
 /// the book could only reach by reading one — a write the contact's origin refuses, and a promotion of somebody already
@@ -130,9 +132,9 @@ internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Con
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A promotion names one person and changes their origin, so a record in the answer would be the book's own
-    /// contents rather than the caller's request — the whole of what <c>mailfathom.admin.audit.read</c> publishes,
-    /// obtained under the operating grant from an identity alone. The caller learns that the promotion happened and
-    /// reads the person through the route that is published for reading them.
+    /// contents rather than the caller's request — the whole of what the reading grant publishes, obtained under the
+    /// writing one from an identity alone. The caller learns that the promotion happened and reads the person through
+    /// the route that is published for reading them.
     /// </remarks>
     internal static ContactWriteResponse OutcomeOf(ContactWriteResult result)
     {

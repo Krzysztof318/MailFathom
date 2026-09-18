@@ -1,16 +1,19 @@
 # Contacts
 
-<!-- describes: backend/src/Domain/Contacts/**, backend/src/Application/Contacts/**, backend/src/Infrastructure/Persistence/Contacts/**, backend/src/Infrastructure/Persistence/Entities/ContactEntity.cs, backend/src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, backend/src/Host/Api/Contact*.cs, backend/src/Cli/Commands/Contacts/**, backend/src/Cli/Administration/Contacts/**, backend/src/Mcp/Tools/Contacts/**, backend/src/Host/Configuration/Mail/ContactCollection*.cs, backend/src/Host/Configuration/Mail/Readers/ConfiguredContactCollectionSettingsReader.cs, backend/src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
+<!-- describes: backend/src/Domain/Contacts/**, backend/src/Application/Contacts/**, backend/src/Infrastructure/Persistence/Contacts/**, backend/src/Infrastructure/Persistence/Entities/ContactEntity.cs, backend/src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Cli/Commands/Contacts/**, backend/src/Cli/Administration/Contacts/**, backend/src/Mcp/Tools/Contacts/**, backend/src/Host/Configuration/Mail/ContactCollection*.cs, backend/src/Host/Configuration/Mail/Readers/ConfiguredContactCollectionSettingsReader.cs, backend/src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
 
 MailFathom holds a contact book of its own: people, the addresses they use, and what a user recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
 what identifies a person, when two addresses are the same address, who may change what, and what erasing somebody
 removes.
 
-**Two surfaces reach the book.** `mfctl contact` maintains it over the deployment's administrative endpoint;
+**Three surfaces reach the book.** `mfctl contact` maintains it over the deployment's administrative endpoint;
 [administering a deployment](../operations/admin-endpoint.md#administering-the-contact-book) holds the command group in
 full. An agent reads and writes it over the MCP endpoint, under two grants of its own; [MCP tools §
-`list_contacts`](mcp-tools.md#list_contacts) holds those six tools and what each of them answers. A third writer is the
+`list_contacts`](mcp-tools.md#list_contacts) holds those six tools and what each of them answers. A person reads and
+writes their own over the client endpoint, under the same two grants the agent holds; [the client endpoint § The contact
+routes](../operations/client-endpoint.md#the-contact-routes) holds those seven routes and the two the administrative
+surface keeps to itself. A fourth writer is the
 deployment itself: [§ Collecting contacts from arriving mail](#collecting-contacts-from-arriving-mail) describes what an
 account records on its own, and it is off until a user switches it on, so an instance nobody has written to and nobody
 switched collection on for holds no contacts at all.
@@ -163,12 +166,13 @@ knowing which half they are in. What the difference decides is who may change th
   down. Promoting a contact the caller has already asserted is answered as such rather than written again.
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
-Both surfaces a caller reaches the book through write as **asserted**, into the caller's own book, because both are
-somebody writing a person down: `mfctl` is the user at a terminal, and an agent over MCP is acting for them. What
-follows is that neither amends a collected record — an agent's call is refused by that record's origin — and what
-either does instead is promote it. Both reach that act: `mfctl contact promote` and the
-`promote_contact` tool, under the same writing grant each surface already holds. A promotion reachable from only one of
-the two would leave an amendment permanently refused on the other for every record collection produced.
+Every surface a caller reaches the book through writes as **asserted**, into the caller's own book, because each is
+somebody writing a person down: `mfctl` is the user at a terminal, an agent over MCP is acting for them, and the client
+is the person themselves. What follows is that none of them amends a collected record — the call is refused by that
+record's origin — and what each does instead is promote it. All three reach that act: `mfctl contact promote`, the
+`promote_contact` tool, and `POST /api/client/contacts/{contactId}/promotion`, under the same writing grant each
+surface already holds. A promotion reachable from only one of them would leave an amendment permanently refused on the
+others for every record collection produced.
 
 Erasure is deliberately outside that rule. It is the data-subject path, and somebody asking to be removed from a contact
 book is not answered with which half of the book they happen to be in.
@@ -380,11 +384,11 @@ Both are commands rather than seams something else is expected to reach: `mfctl 
 day somebody asks for it. The erasure asks before it runs and answers with what went — the identity and how many
 addresses — and never with the person.
 
-Erasure is also a tool, `delete_contact`, and it answers the same counts. Export is not: the document is the answer to a
-request a person made of whoever holds the book, and the surface that produces it is the one that names the user it is
-reaching the book of.
-An agent that needs what an export holds reads the contact, which is the same record without the framing of a
-data-subject reply.
+Erasure is also a tool, `delete_contact`, and a route on the client endpoint, `DELETE /api/client/contacts/{contactId}`;
+both answer the same counts. Export is neither: the document is the answer to a request a person made of whoever holds
+the book, and the surface that produces it is the one that names the user it is reaching the book of.
+An agent or a client that needs what an export holds reads the contact, which is the same record without the framing of
+a data-subject reply.
 
 ## What the book is held under
 
