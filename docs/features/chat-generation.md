@@ -47,6 +47,14 @@ alias of its own, and a capability names that alias rather than restating any of
 model therefore share one declaration instead of two copies of it that can drift, and a deployment that wants the pass a
 reader waits in front of on a small fast model writes a second block rather than an override.
 
+**Every capability may name a model of its own**, through a `Model` block shaped exactly alike wherever it appears:
+`Chat:MailAnswering`, `Chat:DiscoveryPlanning`, `Chat:DiscoveryComposition`, `Chat:Enrichment`, `Chat:ThreadState`,
+`Chat:ReplyDrafting`, `Chat:ContactRelationship`, `Chat:SearchPhrasing`, `Chat:RelevanceFilter`,
+`Chat:ImageDescription`, and `Chat:BodyCleanup`. That is what lets one deployment run the per-message derivations and
+the per-candidate judgement on a cheap fast model while answering and drafting keep the best one it pays for, and
+describe a picture with a vision model while everything else runs on a cheaper text-only one. A capability that names
+none runs on `Chat:MainModel`, which is what every deployment did before these keys existed.
+
 **A deployment with one model writes one block and nothing else.** `Chat:MainModel` may be left unwritten where exactly
 one is declared, because there is nothing for it to choose between; where several are, it has to be written, since a
 section declaring two models and saying nothing has not stated which one answers.
@@ -60,8 +68,17 @@ anyway: a question answered by a second model in a second voice is better than a
 makes it honest is that the run says which model answered.
 
 So a *reference* may carry a `Fallback` naming a second declared alias — never the model declaration itself, which is
-what bounds a chain at two links and makes a cycle unwritable. A model named as its own fallback is refused, and so is
-one that carries a fallback of its own.
+what bounds the chain and makes a cycle unwritable. A model named as its own fallback is refused.
+
+**A capability routed to a model of its own has three links, and every one of them is named by the operator**: the model
+the capability names, the `Fallback` beside it, and `Chat:MainModel` behind both. That last step is what keeps a cheap
+endpoint failing from turning a capability off — the work degrades to the model the deployment answers questions with
+rather than stopping — and it is also where the chain ends: the main model's *own* `Fallback` is not attempted after it,
+so one call reaches at most three models. A capability that names no model of its own takes the main model and the main
+model's fallback, which is two links and is what every deployment writing none of these keys has.
+
+A model already in the chain is attempted once rather than twice, so a capability routed to the main model, or naming it
+as its own fallback, stops there.
 
 **Two failures are never worth a second model.** A request the provider *refused* is refused the same way by a second
 endpoint, for a second payment; an answer that came back empty is a call that succeeded and a model that had nothing to
@@ -493,6 +510,13 @@ Health is recorded per role rather than per alias, so a deployment whose main mo
 fallback answered records `Serving`: the deployment *can* answer questions, which is what withholds or offers
 `ask_mail`. What the state does not show is that the first model is failing, and the warning written on every
 fall-through — naming both aliases and the failure that caused it — is what does.
+
+**Every other capability records the role's health against whichever model answered it.** A deployment that routed
+enrichment, a thread state, a reply draft, a relationship card, a search reading, a Discover step, a judged candidate or
+an image description to a model of its own therefore has that endpoint's outcomes deciding the chat role — so a failing
+cheap endpoint reports the role degraded, and withholds `ask_mail`, although the model questions are answered with is
+working. Routing a capability elsewhere is worth knowing for that reason as much as for the bill, and the warning each
+fall-through writes is what names the endpoint that actually failed.
 
 **The body-cleanup pass records nothing, because the state it would write is not about it.** `Chat:BodyCleanup:Model`
 may name a model of its own, at its own address and under its own credential, and the chat role's state is what decides

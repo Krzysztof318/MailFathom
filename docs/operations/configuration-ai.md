@@ -391,7 +391,7 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
 is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
 another is judged on what it carries. Everything else is refused with a reason recorded against the attachment: a
-format outside the list, a file larger than the main model's `MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
+format outside the list, a file larger than the describing model's `MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
 does not hold the format it claims, and a provider that timed out, was unavailable, or refused.
 
 **A chat endpoint has to be able to carry a description, and three of its own bounds decide that.** Each is a supported
@@ -399,8 +399,9 @@ declaration on its own and a mistake only beside this switch, so writing one her
 than faulting the background run on every picture: `MaxRequestImageOctets: 0` declares a model sent no image at
 all, which is right for one that cannot read it; `MaxMessagesPerRequest` below two cannot carry the two turns
 a description sends, the instruction and the picture; and `MaxRequestCharacters` below what the fixed instruction
-occupies refuses the conversation before the picture is even weighed. Each is read off the main model, which is the one
-a description is sent to.
+occupies refuses the conversation before the picture is even weighed. Each is read off the model `Chat:ImageDescription:Model` resolves to, which is the one a description is sent to —
+so a deployment routing pictures to a vision model of its own is judged against that model rather than against the one
+questions run on.
 
 **SVG is excluded by name rather than left unsupported.** It is XML a renderer executes as a document, with script and
 external references available to whoever composed it, and nothing here is a renderer with a security team behind it. A
@@ -463,7 +464,7 @@ parser was actually handed, which is narrower than what a walk stepped over: a p
 not parse, and an attachment the declared size already puts past `MaxInputOctets` are each decided from the
 declaration and are charged nothing, so a mailbox of pictures cannot spend the ceiling a mailbox of documents is
 bounded by. Description is charged one call per picture a provider answered, and a picture refused before the call —
-a format outside the list, a grid past `MaxPixels`, a file past the main model's `MaxRequestImageOctets` — is charged nothing,
+a format outside the list, a grid past `MaxPixels`, a file past the describing model's `MaxRequestImageOctets` — is charged nothing,
 because nothing was sent. What a picture still costs is the per-message and per-run octet budgets above, which bound
 what a walk reads whichever port ends up with it. Chunking and the lexical index are charged neither: they reach no provider, and what they
 cost is disk, reported as the characters the index grew by rather than bounded by a ceiling.
@@ -537,7 +538,7 @@ file. All three are read again on the next account run, so a provider outage or 
 costs the readings it interrupted a second time rather than losing them — which is what the deadline is worth budgeting
 processor time against, since a document that never parses inside it is re-fetched and re-parsed on every run. Every other refusal settles the message, including the ones a configuration
 change lifts — an image larger than `Embeddings:AttachmentText:MaxInputOctets` or larger than
-the main model's `MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
+the describing model's `MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
 description was off. The first of those three is this section's own key: it bounds what any attachment costs to read
 before a picture is offered to a provider at all, so a photograph past it is refused here rather than by the chat
 ceiling. Raising any of the three or turning that switch on therefore changes what arrives next rather than what is
@@ -649,8 +650,13 @@ declared alias, and a call the first model could not answer is attempted against
 and asking, so the second model is a second address under a second credential — which is the whole reason it is worth
 asking. Two failures are not worth a second model and never fall through: a request the provider *refused*, which a
 second endpoint refuses the same way for a second payment, and an answer that came back empty, which is a call that
-succeeded. A fallback carries no fallback of its own, so a chain is two models and never three, and a model named as its
-own fallback is refused.
+succeeded. A model named as its own fallback is refused.
+
+A capability's own reference resolves in three steps — the model it names, the `Fallback` beside it, then
+`Chat:MainModel` — so a failing cheap endpoint degrades to the model the deployment answers questions with instead of
+turning the capability off. The main model's own `Fallback` is not attempted after that, so one call reaches at most
+three models, and a model already in the chain is attempted once: a capability routed to the main model, or naming it as
+its own fallback, stops there. A capability naming no model takes the main model and its fallback, which is two.
 
 **What a run reports is the model that answered.** A question the fallback served is attributed to the fallback — its
 alias, and the `PublishedModel` of its own block — because the alternative is a cost record naming a model the
@@ -702,13 +708,37 @@ embedding chain is read once while the host composes itself.
 ### Which model a capability runs on — `Chat:MainModel` and the references beside it
 
 `Chat:MainModel` names the model questions are answered with, and every capability runs on it unless it names one of
-its own. Today one capability does: [`Chat:BodyCleanup:Model`](#cleaning-a-message-body--chatbodycleanup). Both take
-the same two keys.
+its own. Every one of them may, and each takes the same two keys as `Chat:MainModel`:
+
+| Reference | The work it routes |
+| --- | --- |
+| `Chat:MailAnswering:Model` | Answering a question about the mailbox |
+| `Chat:DiscoveryPlanning:Model` | Reading a Discover request into the searches that would answer it |
+| `Chat:DiscoveryComposition:Model` | Composing what a Discover run found into its answer |
+| `Chat:Enrichment:Model` | [Deriving an arriving message into a list row's marks](#message-enrichment--chatenrichment) |
+| `Chat:ThreadState:Model` | [Reading a conversation into the state drawn beside it](#a-conversations-state--chatthreadstate) |
+| `Chat:ReplyDrafting:Model` | [Drafting a reply](#drafting-a-reply--chatreplydrafting) |
+| `Chat:ContactRelationship:Model` | [Heading an opened contact with a relationship note](#the-relationship-card--chatcontactrelationship) |
+| `Chat:SearchPhrasing:Model` | [Reading a typed sentence into filters](#reading-a-typed-sentence-into-filters--chatsearchphrasing) |
+| `Chat:RelevanceFilter:Model` | [Judging a retrieval's candidates](#relevance-filter--chatrelevancefilter) |
+| `Chat:ImageDescription:Model` | Describing an image attachment, which `Embeddings:ImageDescription:Enabled` turns on |
+| `Chat:BodyCleanup:Model` | [Cleaning a message body](#cleaning-a-message-body--chatbodycleanup) |
+
+Routing them separately is the point of the keys: the per-message derivations and the per-candidate judgement are
+cheap judgements a small fast model makes well, answering and drafting are rare and worth the best model an operator
+pays for, and describing a picture needs a model that can be shown one — which a text-only main model need not be. A
+reference nobody wrote resolves to `Chat:MainModel`, so a deployment writing none of these behaves exactly as it did
+before they existed.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Alias` | string | *(empty)* | an alias `Chat:Models` declares. May be left unwritten on `Chat:MainModel` where exactly one model is declared, and must be written where more than one is — a deployment that declared two models and said nothing has not stated which one answers. On a capability's own reference, unwritten means the main model | reload |
 | `…:Fallback` | string | *(empty)* | an alias `Chat:Models` declares, attempted where the model above could not answer. Refused where it names the same model, where it names one nothing declares, and where no `…:Alias` stands in front of it | reload |
+
+A capability's chain is the model it names, that `Fallback`, and `Chat:MainModel` behind both — at most three models,
+because the main model's own `Fallback` is not attempted after it. `Chat:ImageDescription:Model` is also the model the
+image-description rules at startup are judged against: the turn count, the request width, and `MaxRequestImageOctets`
+are read from the model that capability resolves to rather than from the main one.
 
 **What a reload changes here, and what it does not.** Everything a declared model says is read again per question, so
 correcting a model the provider refused — the ordinary case, because a wrong model is only discovered from a refusal —
@@ -746,7 +776,8 @@ describes what it drops, what it keeps, and what it does when the provider canno
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared model, and a `MaxMessagesPerRequest` of at least 2 on the main model, because a judgement is an instruction and a candidate | restart |
+| `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared model, and a `MaxMessagesPerRequest` of at least 2 on the model this pass runs on, because a judgement is an instruction and a candidate | restart |
+| `Chat:RelevanceFilter:Model` | block | *(empty)* | which declared model judges a candidate, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten judges with `Chat:MainModel` | reload |
 | `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying a number of its own after the retrieval it follows was narrowed or widened. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | reload |
 | `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | reload |
 
@@ -775,6 +806,7 @@ what withholds a derivation, and what reaches the provider.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:Enrichment:Enabled` | bool | `false` | turning it on requires a declared model | restart |
+| `Chat:Enrichment:Model` | block | *(empty)* | which declared model derives an arriving message, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten derives with `Chat:MainModel`; a call per arriving message is the case a cheap model is declared for | reload |
 
 ### A conversation's state — `Chat:ThreadState`
 
@@ -801,6 +833,7 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared model | restart |
+| `Chat:ThreadState:Model` | block | *(empty)* | which declared model reads a conversation into a state, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten reads it with `Chat:MainModel` | reload |
 
 ### Drafting a reply — `Chat:ReplyDrafting`
 
@@ -830,6 +863,7 @@ reaches the provider, and what a drafting that produced nothing answers with.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:ReplyDrafting:Enabled` | bool | `true` | it is read only where `Chat:Models` declares a model, so a deployment without one drafts nothing whatever this says | restart |
+| `Chat:ReplyDrafting:Model` | block | *(empty)* | which declared model writes a draft, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten drafts with `Chat:MainModel`; writing in somebody's own manner is the case the best model a deployment pays for is declared for | reload |
 | `Chat:ReplyDrafting:StyleFromSentMail` | bool | `true` | written off, no sent mail is read and the draft is written from the conversation alone. It changes what leaves the deployment rather than only what the draft reads like, which is why it is an operator's decision rather than a constant | restart |
 
 ### The relationship card — `Chat:ContactRelationship`
@@ -859,6 +893,7 @@ what backs each statement, what reaches the provider, and what a derivation that
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:ContactRelationship:Enabled` | bool | `true` | it is read only where `Chat:Models` declares a model, so a deployment without one derives nothing whatever this says | restart |
+| `Chat:ContactRelationship:Model` | block | *(empty)* | which declared model reads an opened contact, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten reads it with `Chat:MainModel` | reload |
 
 ### Reading a typed sentence into filters — `Chat:SearchPhrasing`
 
@@ -885,6 +920,7 @@ the reader's own calendar day, with no tool and no mail, so a search costs the s
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:SearchPhrasing:Enabled` | bool | `true` | reading a sentence requires a declared model; written off, or with none declared, the client is told this deployment reads none | restart |
+| `Chat:SearchPhrasing:Model` | block | *(empty)* | which declared model reads a typed sentence, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten reads it with `Chat:MainModel`; somebody is waiting in front of this one | reload |
 
 ### Cleaning a message body — `Chat:BodyCleanup`
 

@@ -13,8 +13,9 @@ namespace MailFathom.AI.Chat;
 /// revalidates and holds no defaulting logic of its own.
 /// </para>
 /// <para>
-/// At most two models rather than a chain of any length, and the second one only where the deployment named it. The
-/// difference from the embedding chain is what a fall-through can change: every embedding endpoint of a chain declares
+/// At most three models rather than a chain of any length, and every one of them named by the deployment: the model a
+/// capability was routed to, the fallback that reference names, and the model the deployment answers questions with.
+/// The difference from the embedding chain is what a fall-through can change: every embedding endpoint of a chain declares
 /// the same geometry, so a fallback cannot change what a vector means, while two chat models answer in different voices
 /// with different capabilities and different refusals. That is why the second model is named by the operator in the
 /// reference that selects the first, and why the run reports which one answered — the substitution is declared and
@@ -29,6 +30,13 @@ namespace MailFathom.AI.Chat;
 /// </remarks>
 public sealed partial class ChatGenerationPlan
 {
+    /// <summary>The greatest number of models one call may be attempted against.</summary>
+    /// <remarks>
+    /// Three, because a reference names at most that many: the model the capability was routed to, the fallback beside
+    /// it, and the model the deployment answers questions with. A fourth would be a model nobody named.
+    /// </remarks>
+    public const int GreatestChainLength = 3;
+
     /// <summary>The longest a reasoning effort may be, past which it is plainly not a level.</summary>
     /// <remarks>Generous against every level any provider publishes, because the bound exists to catch a value that is not a level at all rather than to predict the next one.</remarks>
     private const int MaximumReasoningEffortLength = 32;
@@ -70,20 +78,20 @@ public sealed partial class ChatGenerationPlan
     /// </remarks>
     public ChatGenerationPlan? Fallback { get; }
 
-    /// <summary>Gets this plan and the fallback behind it, in the order a call tries them.</summary>
+    /// <summary>Gets this plan and the models behind it, in the order a call tries them.</summary>
     /// <remarks>
-    /// One or two elements and never more: a fallback is named by the reference that selects a model, and a model
-    /// declaration carries no reference of its own, so the chain cannot grow a third link or close into a cycle.
+    /// One, two, or three elements and never more: every link is named by the reference that selects a model — the
+    /// model itself, the fallback beside it, and the model the deployment answers questions with — and a model
+    /// declaration carries no reference of its own, so the chain cannot grow a fourth link, and no alias appears twice
+    /// in one, so it cannot close into a cycle.
     /// </remarks>
     public IEnumerable<ChatGenerationPlan> Chain
     {
         get
         {
-            yield return this;
-
-            if (this.Fallback is { } fallback)
+            for (var model = this; model is not null; model = model.Fallback)
             {
-                yield return fallback;
+                yield return model;
             }
         }
     }
@@ -222,11 +230,11 @@ public sealed partial class ChatGenerationPlan
             fallback: null);
     }
 
-    /// <summary>Builds the same plan with a second model behind it.</summary>
-    /// <param name="fallback">The model a call this one could not have answered is attempted against.</param>
+    /// <summary>Builds the same plan with a further model behind it.</summary>
+    /// <param name="fallback">The model a call this one could not have answered is attempted against, carrying whatever stands behind it in turn.</param>
     /// <returns>The plan carrying the fallback.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="fallback" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the fallback is this plan's own endpoint, or already carries a fallback of its own.</exception>
+    /// <exception cref="ArgumentException">Thrown when the fallback names an endpoint already in this chain, or would make the chain longer than <see cref="GreatestChainLength" />.</exception>
     /// <remarks>
     /// Separate from <see cref="Create" /> rather than a tenth parameter on it, because a fallback is chosen by the
     /// reference that names the model rather than declared by the model, and every caller that builds a plan from one
@@ -236,17 +244,17 @@ public sealed partial class ChatGenerationPlan
     {
         ArgumentNullException.ThrowIfNull(fallback);
 
-        if (string.Equals(fallback.Endpoint.Alias, this.Endpoint.Alias, StringComparison.OrdinalIgnoreCase))
+        if (fallback.Chain.Any(model => string.Equals(model.Endpoint.Alias, this.Endpoint.Alias, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException(
-                "A model cannot be its own fallback: the second attempt would reach the endpoint that had just failed.",
+                "A model cannot stand behind itself: the further attempt would reach the endpoint that had just failed.",
                 nameof(fallback));
         }
 
-        if (fallback.Fallback is not null)
+        if (fallback.Chain.Count() >= GreatestChainLength)
         {
             throw new ArgumentException(
-                "A fallback carries no fallback of its own, so a chain is two models and never three.",
+                $"A reference names at most {GreatestChainLength} models, so a chain is never longer than that.",
                 nameof(fallback));
         }
 

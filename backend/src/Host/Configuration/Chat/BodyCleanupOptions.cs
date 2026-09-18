@@ -21,11 +21,10 @@ namespace MailFathom.Host.Configuration.Chat;
 /// sentence saying this deployment does not clean a body.
 /// </para>
 /// <para>
-/// <b>It is the first block under <c>Chat</c> that routes one feature to a model of its own.</b> Every other one runs on
-/// <c>Chat:MainModel</c>, because what each of them does is the same kind of work a question is. This is not: deciding
-/// which blocks of an outline to keep is a judgement a small fast model makes well and quickly, and a reader is waiting
-/// for it in front of a message — so an operator can put this pass on a cheaper model without moving the one that
-/// answers questions. Left empty it routes to <c>Chat:MainModel</c> like everything else.
+/// <b>It was the first block under <c>Chat</c> to route one feature to a model of its own, and every capability now may.</b>
+/// Deciding which blocks of an outline to keep is a judgement a small fast model makes well and quickly, and a reader is
+/// waiting for it in front of a message — so an operator can put this pass on a cheaper model without moving the one that
+/// answers questions. Left empty it routes to <c>Chat:MainModel</c> like every other capability that names none.
 /// </para>
 /// <para>
 /// There are no numbers here. What a deployment may spend on provider calls in total is declared once, in

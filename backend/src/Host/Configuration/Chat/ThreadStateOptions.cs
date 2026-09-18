@@ -25,4 +25,8 @@ internal sealed class ThreadStateOptions
 {
     /// <summary>Gets or sets whether a conversation is read into a state as its messages arrive.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>Gets or sets which declared model this derivation runs on, and empty to run it on <c>Chat:MainModel</c>.</summary>
+    /// <remarks>A reference like every other: an alias out of <c>Chat:Models</c>, a <c>Fallback</c> of its own, and the main model behind both.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

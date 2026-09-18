@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
@@ -92,6 +93,46 @@ public sealed class ChatGenerationPlanSourceTests
 
         // Assert
         Assert.Contains("declared at registration", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A capability routed to a model of its own is answered with that model, while everything beside it goes on running on the main one.</summary>
+    [Fact]
+    public void PlanFor_ACapabilityRoutedToItsOwnModel_AnswersWithThatModelAlone()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("cheap", model: "a-small-fast-model"));
+        settings.Enrichment.Model.Alias = "cheap";
+
+        var source = new ChatGenerationPlanSource(new StubSettingsSnapshot<ChatModelOptions>(settings));
+
+        // Act
+        var enrichment = source.PlanFor(ChatCapability.Enrichment);
+        var drafting = source.PlanFor(ChatCapability.ReplyDrafting);
+
+        // Assert
+        Assert.Equal("a-small-fast-model", enrichment.Endpoint.RoutedModelName);
+        Assert.Equal("a-chat-model", drafting.Endpoint.RoutedModelName);
+    }
+
+    /// <summary>A reload reaches a routed capability exactly as it reaches the main model, because one declaration maps to one set of plans.</summary>
+    [Fact]
+    public void PlanFor_AfterTheDeclarationIsRepublished_AnswersWithTheModelTheNewOneNames()
+    {
+        // Arrange
+        var published = new StubSettingsSnapshot<ChatModelOptions>(Declaring("a-refused-model"));
+        var source = new ChatGenerationPlanSource(published);
+
+        _ = source.PlanFor(ChatCapability.BodyCleanup);
+
+        // Act
+        published.Current = Declaring("a-corrected-model");
+
+        // Assert
+        Assert.Equal(
+            "a-corrected-model",
+            source.PlanFor(ChatCapability.BodyCleanup).Endpoint.RoutedModelName);
     }
 
     private static ChatModelOptions Declaring(string model) =>

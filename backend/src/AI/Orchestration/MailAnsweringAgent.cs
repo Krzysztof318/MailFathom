@@ -13,6 +13,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Answering.Audit;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Orchestration;
@@ -76,7 +77,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     /// <param name="logger">Records the outcome without recording any question, answer, or passage.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailAnsweringAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.MailAnswering)] ChatGenerationPlan plan,
         MailAnsweringRunBounds runBounds,
         IProviderEndpointCredentialSource credentialSource,
         OpenAiCompatibleClientFactory clientFactory,

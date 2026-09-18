@@ -67,7 +67,11 @@ internal static class ChatDeclarationRules
         // is fixed and known. Refused here rather than left to the describer, because what an operator would otherwise
         // meet is a start that succeeds and a background run that faults, or ImageTooLarge stamped on every picture in
         // the mailbox — both of which read as properties of the mail rather than as the declaration they are.
-        if (embeddings?.ImageDescription.Enabled is true && candidate.FindMainModel() is { } describingModel)
+        // Against the model image description actually resolves to rather than the main one, because a deployment
+        // routing pictures to a vision model of its own is exactly what those keys are for — and judging the main model
+        // there would refuse a text-only main model a deployment never sends a picture to.
+        if (embeddings?.ImageDescription.Enabled is true
+            && candidate.FindModelFor(candidate.ImageDescription.Model) is { } describingModel)
         {
             errors.AddRange(FindImageDescriptionErrors(describingModel));
         }

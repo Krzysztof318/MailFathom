@@ -33,6 +33,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Emails.ThreadStates;
+using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -245,8 +246,8 @@ public static class AiServiceCollectionExtensions
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ceiling);
 
         services.AddScoped<IEmailAttachmentImageDescriber>(provider => new ImageAttachmentDescriber(
-            provider.GetRequiredService<IChatModelClient>(),
-            provider.GetRequiredService<ChatGenerationPlan>(),
+            ChatModelClientFor(provider, ChatCapability.ImageDescription),
+            provider.GetRequiredKeyedService<ChatGenerationPlan>(ChatCapability.ImageDescription),
             ceiling,
             provider.GetRequiredService<ILogger<ImageAttachmentDescriber>>()));
 
@@ -394,7 +395,9 @@ public static class AiServiceCollectionExtensions
         // the next restart. Neither the address nor the routed model name crosses this boundary.
         services.AddScoped(provider =>
         {
-            var endpoint = provider.GetRequiredService<ChatGenerationPlan>().Endpoint;
+            var endpoint = provider
+                .GetRequiredKeyedService<ChatGenerationPlan>(ChatCapability.MailAnswering)
+                .Endpoint;
 
             return new AnsweringEndpointIdentity(endpoint.Alias, endpoint.PublishedModelName);
         });
@@ -527,7 +530,7 @@ public static class AiServiceCollectionExtensions
 
         services.AddScoped<IEmailKnowledgeSearch>(provider => new ModelJudgedKnowledgeSearch(
             provider.GetRequiredService<MailboxKnowledgeSearch>(),
-            provider.GetRequiredService<IChatModelClient>(),
+            ChatModelClientFor(provider, ChatCapability.RelevanceFilter),
             provider.GetRequiredService<IAiProviderHealthReader>(),
             provider.GetRequiredService<PassageRelevanceFilterPlan>(),
             provider.GetRequiredService<ILogger<ModelJudgedKnowledgeSearch>>()));
@@ -605,11 +608,19 @@ public static class AiServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
             .ConfigureHttpClient(static (provider, client) =>
             {
-                var plan = provider.GetRequiredService<IChatGenerationPlanSource>().Current;
+                // The widest of every model any capability may reach, because one named transport carries all of them:
+                // bounding it by the main model alone would cut off an answer from a capability routed to a model with
+                // a larger output budget, and refuse a call to one declared with a longer timeout.
+                var source = provider.GetRequiredService<IChatGenerationPlanSource>();
+                var models = Enum.GetValues<ChatCapability>()
+                    .Select(source.PlanFor)
+                    .SelectMany(plan => plan.Chain)
+                    .ToArray();
 
-                client.Timeout = plan.RequestTimeout + TimeSpan.FromSeconds(30);
+                client.Timeout = models.Max(model => model.RequestTimeout) + TimeSpan.FromSeconds(30);
                 client.MaxResponseContentBufferSize =
-                    ((long)plan.MaximumOutputTokens * ResponseBytesPerOutputToken) + ResponseEnvelopeBytes;
+                    (models.Max(model => (long)model.MaximumOutputTokens) * ResponseBytesPerOutputToken)
+                    + ResponseEnvelopeBytes;
             });
 
         // The third client in this process to opt out, for the reason the embedding one does.
@@ -617,4 +628,22 @@ public static class AiServiceCollectionExtensions
         client.RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001
     }
+
+    /// <summary>Opens the single-request chat client over the model one capability was routed to.</summary>
+    /// <remarks>
+    /// Composed here rather than resolved, because the registered client carries the main model and the two capabilities
+    /// that send through it — judging a candidate and describing a picture — are exactly the ones an operator routes
+    /// elsewhere: a cheap model for the per-candidate judgement, a vision model for the picture. Everything else about
+    /// the client is the deployment's and comes from the container.
+    /// </remarks>
+    private static ProviderChatModelClient ChatModelClientFor(IServiceProvider provider, ChatCapability capability) =>
+        new(
+            provider.GetRequiredKeyedService<ChatGenerationPlan>(capability),
+            provider.GetRequiredService<IProviderEndpointCredentialSource>(),
+            provider.GetRequiredService<OpenAiCompatibleClientFactory>(),
+            provider.GetRequiredService<IHttpClientFactory>(),
+            provider.GetRequiredService<IOutboundOperationRunner>(),
+            provider.GetRequiredService<IAiProviderHealthRecorder>(),
+            provider.GetRequiredService<SensitiveContentEgressGuard>(),
+            provider.GetRequiredService<ILogger<ProviderChatModelClient>>());
 }

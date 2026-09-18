@@ -14,6 +14,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Enrichment;
@@ -78,7 +79,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// <param name="logger">Records the outcome without recording the message or what was derived from it.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public EmailEnrichmentAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.Enrichment)] ChatGenerationPlan plan,
         MailAnsweringRunBounds runBounds,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,

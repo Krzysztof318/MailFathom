@@ -30,4 +30,8 @@ internal sealed class EmailEnrichmentOptions
 {
     /// <summary>Gets or sets whether arriving mail is read into marks as it is stored.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>Gets or sets which declared model this derivation runs on, and empty to run it on <c>Chat:MainModel</c>.</summary>
+    /// <remarks>A derivation on every arriving message is the work a cheap fast model is worth declaring for, which is the whole reason a capability may name one.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

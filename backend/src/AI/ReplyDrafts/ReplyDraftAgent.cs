@@ -14,6 +14,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.ReplyDrafts;
@@ -79,7 +80,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// <param name="logger">Records the outcome without recording the reply or the correspondence.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ReplyDraftAgent(
-        ChatGenerationPlan plan,
+        [FromKeyedServices(ChatCapability.ReplyDrafting)] ChatGenerationPlan plan,
         MailAnsweringRunLedger runLedger,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,

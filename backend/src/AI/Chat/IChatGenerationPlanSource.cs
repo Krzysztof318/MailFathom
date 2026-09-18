@@ -25,6 +25,15 @@ namespace MailFathom.AI.Chat;
 /// </remarks>
 public interface IChatGenerationPlanSource
 {
-    /// <summary>Gets the plan built from the most recent declaration proven usable.</summary>
+    /// <summary>Gets the plan built from the most recent declaration proven usable, for the model this deployment answers questions with.</summary>
     ChatGenerationPlan Current { get; }
+
+    /// <summary>Gets the plan one capability runs on, from that same declaration.</summary>
+    /// <param name="capability">The work whose model is wanted.</param>
+    /// <returns>The plan: the model the capability was routed to, or the main model where the deployment routed it nowhere.</returns>
+    /// <remarks>
+    /// One capability at a time rather than a set, because an operation runs one kind of work and reading only its own
+    /// plan is what keeps a routed model a lookup rather than a branch inside an agent.
+    /// </remarks>
+    ChatGenerationPlan PlanFor(ChatCapability capability);
 }

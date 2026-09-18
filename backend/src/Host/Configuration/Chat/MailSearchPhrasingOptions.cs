@@ -29,4 +29,8 @@ internal sealed class MailSearchPhrasingOptions
 {
     /// <summary>Gets or sets whether a typed sentence is read into filters and criteria before the search runs.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Gets or sets which declared model this reading runs on, and empty to run it on <c>Chat:MainModel</c>.</summary>
+    /// <remarks>A reading somebody is waiting in front of, which is the case worth routing to a fast model of its own.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

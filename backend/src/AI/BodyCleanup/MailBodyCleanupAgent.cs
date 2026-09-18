@@ -12,6 +12,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Emails;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.BodyCleanup;
@@ -36,8 +37,8 @@ namespace MailFathom.AI.BodyCleanup;
 /// read: the reader is shown the message, uncleaned, and told so.
 /// </para>
 /// <para>
-/// The plan is this pass's own rather than the deployment's shared one, because <c>Chat:BodyCleanup:Model</c> may name a
-/// model other than the one questions run on. Everything else in it is the endpoint's.
+/// The plan is this capability's own rather than the deployment's main one, because <c>Chat:BodyCleanup:Model</c> may name
+/// a model other than the one questions run on. Everything else in it is the endpoint's.
 /// </para>
 /// <para>
 /// That is also why a proposal writes no provider health. The chat role's state answers whether this deployment can
@@ -79,7 +80,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// <param name="logger">Records the outcome without recording the message or which of its blocks were dropped.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailBodyCleanupAgent(
-        MailBodyCleanupPlan plan,
+        [FromKeyedServices(ChatCapability.BodyCleanup)] ChatGenerationPlan plan,
         MailAnsweringRunBounds runBounds,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,
@@ -103,7 +104,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
-        this.plan = plan.Plan;
+        this.plan = plan;
         this.runBounds = runBounds;
         this.spendLedger = spendLedger;
         this.credentialSource = credentialSource;

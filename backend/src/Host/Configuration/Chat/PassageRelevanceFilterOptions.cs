@@ -47,6 +47,10 @@ internal sealed class PassageRelevanceFilterOptions
     /// <remarks>Stated on the scale the model answers on. Half of it is a starting point rather than a recommendation: how much of an answer an extract has to hold depends on the mail an instance actually carries.</remarks>
     public int MinimumRelevance { get; set; } = 50;
 
+    /// <summary>Gets or sets which declared model judges a candidate, and empty to judge it with <c>Chat:MainModel</c>.</summary>
+    /// <remarks>One call per candidate on every lookup is the heaviest per-message work a deployment does, which is the case a cheap model is declared for.</remarks>
+    public ChatModelReferenceOptions Model { get; set; } = new();
+
     /// <summary>Reports every reason this pass could not run, by reading the declaration alone.</summary>
     /// <param name="endpointAlias">The chat endpoint the pass judges with, so a report names it.</param>
     /// <param name="maximumMessagesPerRequest">What the endpoint's own declaration allows one request to carry.</param>
