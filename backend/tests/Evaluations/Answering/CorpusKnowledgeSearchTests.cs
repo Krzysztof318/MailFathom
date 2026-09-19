@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Evaluations.Corpus;
 using Xunit;
@@ -102,6 +103,37 @@ public sealed class CorpusKnowledgeSearchTests
 
         // Assert
         Assert.Empty(found);
+    }
+
+    [Fact]
+    public async Task FindPassagesAsync_AnAnswerFarIntoAMessage_ExtractsTheWordsAroundIt()
+    {
+        // Arrange
+        var query = EmailKnowledgeQuery.ForText("Atlas Importer");
+
+        // Act
+        var lookup = await this.search.FindPassagesAsync(CorpusKnowledgeSearch.Scope, query, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(lookup.Passages, static passage => passage.Text.Contains("Atlas Importer 2.8.4", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FindPassagesAsync_AWordManyMessagesCarry_ExtractsNoMoreOfEachThanADeploymentsSnippets()
+    {
+        // Arrange
+        var query = EmailKnowledgeQuery.ForText("INV-4827");
+        var snippets = EmailSearchSnippetBounds.Default;
+
+        // Act
+        var lookup = await this.search.FindPassagesAsync(CorpusKnowledgeSearch.Scope, query, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotEmpty(lookup.Passages);
+        Assert.All(lookup.Passages, passage => Assert.InRange(
+            passage.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length,
+            1,
+            snippets.SnippetsPerEmail * snippets.WordsPerSnippet));
     }
 
     private async Task<IReadOnlyList<CorpusMessage>> FindAsync(EmailKnowledgeQuery query)

@@ -23,8 +23,9 @@ namespace MailFathom.Evaluations.Answering;
 /// <c>OR</c> offers an alternative. That last part is what keeps a lookup from flooding the run: admitting any message
 /// carrying any word fills a whole window with mail that barely matches and spends the run's retrieval allowance on
 /// the first lookup. It answers through the same
-/// <see cref="EmailKnowledgeLookup" /> a deployment's search returns, one passage per message, bounded the way
-/// <see cref="EmailKnowledgeBounds.Default" /> bounds one.
+/// <see cref="EmailKnowledgeLookup" /> a deployment's search returns, one passage per message, cut into the extracts
+/// <see cref="EmailSearchSnippetBounds.Default" /> allows and bounded the way <see cref="EmailKnowledgeBounds.Default" />
+/// bounds one.
 /// </para>
 /// <para>
 /// The corpus carries no server state, so every message reads as unread, unflagged, and carrying no keyword.
@@ -137,15 +138,29 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
         }
     }
 
-    /// <summary>Cuts the message down to the passages that carry a wanted word, the way a deployment's extract does.</summary>
+    /// <summary>Cuts the message down to the extracts a deployment's <c>ts_headline</c> returns: a few short windows around the wanted words, those carrying the most of them first.</summary>
+    /// <remarks>
+    /// The size is what matters here rather than the exact words: a whole passage per message is several times what a
+    /// deployment sends, so twenty of them spend a run's whole retrieval allowance on one lookup, and an extract cut from
+    /// the start of a message rather than around the match misses the sentence that carries the answer.
+    /// </remarks>
     private static EmailKnowledgePassage PassageOf(CorpusMessage message, IReadOnlyList<string> wanted)
     {
-        var matching = message.Passages
-            .Where(passage => wanted.Any(term => passage.Text.Contains(term, StringComparison.OrdinalIgnoreCase)))
-            .Select(static passage => passage.Text)
-            .DefaultIfEmpty(message.Passages.Count is 0 ? string.Empty : message.Passages[0].Text);
+        var snippets = EmailSearchSnippetBounds.Default;
 
-        var text = string.Join('\n', matching);
+        // ponytail: one window per wanted word's first occurrence in a passage, scored by the words it carries — not
+        // ts_headline's cover density; measure the ranking over the real search if an extract's exact words matter.
+        var fragments = message.Passages
+            .SelectMany(passage => wanted
+                .Select(term => passage.Text.IndexOf(term, StringComparison.OrdinalIgnoreCase))
+                .Where(static position => position >= 0)
+                .Select(position => WindowAround(passage.Text, position, snippets.WordsPerSnippet)))
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(fragment => wanted.Count(term => fragment.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .Take(snippets.SnippetsPerEmail)
+            .DefaultIfEmpty(message.Passages.Count is 0 ? string.Empty : WindowAround(message.Passages[0].Text, 0, snippets.WordsPerSnippet));
+
+        var text = string.Join('\n', fragments);
         var limit = EmailKnowledgeBounds.Default.MaximumCharactersPerPassage;
 
         return new EmailKnowledgePassage
@@ -159,6 +174,15 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
             MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
             Text = text.Length > limit ? text[..limit] : text,
         };
+    }
+
+    /// <summary>Takes the words around a position, half before it and half from it.</summary>
+    private static string WindowAround(string text, int position, int words)
+    {
+        var before = text[..position].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).TakeLast(words / 2);
+        var after = text[position..].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Take(words - (words / 2));
+
+        return string.Join(' ', before.Concat(after));
     }
 
     [GeneratedRegex("-?\"[^\"]+\"|\\S+")]

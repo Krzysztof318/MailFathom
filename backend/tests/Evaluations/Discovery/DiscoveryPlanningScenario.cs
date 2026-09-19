@@ -43,12 +43,14 @@ internal static class DiscoveryPlanningScenario
 
     /// <summary>The lowest <c>Intent Resolution</c> score, out of five, an ambiguous question's plan passes at.</summary>
     /// <remarks>
-    /// Four is the score the evaluator's own rubric gives a response that resolves the intent with minor gaps, and three a
-    /// response that resolves it only partly. A plan for an ambiguous question commits to one reading, so a judge
-    /// weighing the other reading will rarely give five — and a plan it grades at three is one it thinks missed the
-    /// question rather than chose between two.
+    /// Three is the score the evaluator's rubric gives a response that resolves the intent only partly, and a plan for an
+    /// ambiguous question commits to one reading, which a judge that does not know both readings are acceptable reads as
+    /// resolving it only partly. It sits at the boundary between three and four: the same plan, word for word, was graded
+    /// four on one run and three on the next, each time for choosing the reading the judge did not prefer. So four
+    /// measured the judge's coin rather than the plan, while two is what a plan that misread or mangled the question
+    /// scores — a plan the judge could not read as JSON scored two before the judge was shown the answer itself.
     /// </remarks>
-    public const double IntentResolutionThreshold = 4;
+    public const double IntentResolutionThreshold = 3;
 
     /// <summary>The scope every question is asked within: the whole of one mail account.</summary>
     /// <remarks>It reaches the model only as a count, so which account it names does not matter.</remarks>
