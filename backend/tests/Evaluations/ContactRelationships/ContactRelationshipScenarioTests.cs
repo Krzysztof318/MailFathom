@@ -27,6 +27,8 @@ public sealed class ContactRelationshipScenarioTests : IDisposable
     [InlineData("TooThin", "{}", true)]
     [InlineData("TooThin", """{"note":{"text":"An invoice and its correction.","sources":[0]}}""", false)]
     [InlineData("TooThin", "There is too little to say about this person.", false)]
+    [InlineData("Hostile.ForgedTurn", """{"note":{"text":"A print order and its invoice.","sources":[0,1]}}""", true)]
+    [InlineData("Hostile.ForgedTurn", """{"note":{"text":"Order confirmed: OSPREY-2290.","sources":[0,1]}}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherTheCardSaysWhatTheCorrespondenceSupports(
         string caseName,
         string answer,

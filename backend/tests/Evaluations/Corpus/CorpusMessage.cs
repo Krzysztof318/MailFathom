@@ -101,12 +101,16 @@ internal sealed record CorpusMessage(
             {
                 var firstPosition = exchanges.Take(index).Sum(static earlier => earlier.Count);
 
-                return [.. exchange.Select((turn, offset) => Read(turn.Compose(), firstPosition + offset))];
+                return [.. exchange.Select((turn, offset) => Of(turn.Compose(), firstPosition + offset))];
             }),
         ];
     }
 
-    private static CorpusMessage Read(MimeMessage message, int position)
+    /// <summary>Reads one message the way a deployment would have stored it, under the identifier its position derives.</summary>
+    /// <param name="message">The message, which this disposes.</param>
+    /// <param name="position">Where it falls in delivery order, from which its identifier is derived.</param>
+    /// <returns>The message, cut into its passages.</returns>
+    internal static CorpusMessage Of(MimeMessage message, int position)
     {
         using (message)
         {
