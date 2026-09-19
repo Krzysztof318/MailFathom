@@ -177,6 +177,7 @@ public sealed partial class DiscoveryEndToEndScenarioTests : IDisposable
             EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", DiscoveryEndToEndScenario.Evaluators),
             model,
             PlanFor("model-under-test"),
+            repetition: 1,
             new SpendMeter(),
             TestContext.Current.CancellationToken);
 }

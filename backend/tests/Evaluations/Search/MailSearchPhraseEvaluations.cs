@@ -37,11 +37,11 @@ public sealed class MailSearchPhraseEvaluations
         var request = MailSearchPhraseScenario.RequestFor(MailSearchPhraseCase.Named(caseName));
 
         // Act
-        var answers = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
+        var shortfalls = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
             request,
             TestContext.Current.CancellationToken);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(answers.SelectMany(StructuredAnswerScenario.ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls);
     }
 }

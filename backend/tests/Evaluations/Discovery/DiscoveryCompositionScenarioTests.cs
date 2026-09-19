@@ -248,6 +248,7 @@ public sealed class DiscoveryCompositionScenarioTests : IDisposable
             reporting,
             model,
             PlanFor(ModelUnderTest),
+            repetition: 1,
             new SpendMeter(),
             new SpendMeter(),
             TestContext.Current.CancellationToken);

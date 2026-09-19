@@ -45,11 +45,10 @@ internal static class EvaluationMetrics
     }
 
     /// <summary>Names every check and rating the verdict falls short on.</summary>
-    /// <param name="scenarioName">The scenario the verdict is for.</param>
     /// <param name="verdict">The verdict one model's run of the scenario produced.</param>
-    /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
-    public static IEnumerable<string> ShortfallsOf(string scenarioName, EvaluationResult verdict) =>
+    /// <returns>One line per shortfall, naming the metric; the caller's header names the scenario and the model.</returns>
+    public static IEnumerable<string> ShortfallsOf(EvaluationResult verdict) =>
         verdict.Metrics.Values
             .Where(static metric => metric.Interpretation is { Failed: true })
-            .Select(metric => $"{scenarioName}: {metric.Name} — {metric.Interpretation!.Reason ?? metric.Reason}");
+            .Select(static metric => $"{metric.Name} — {metric.Interpretation!.Reason ?? metric.Reason}");
 }

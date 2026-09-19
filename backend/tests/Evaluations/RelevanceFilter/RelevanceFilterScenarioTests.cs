@@ -153,6 +153,7 @@ public sealed class RelevanceFilterScenarioTests : IDisposable
             reporting,
             model,
             PlanFor(ModelUnderTest),
+            repetition: 1,
             new SpendMeter(),
             TestContext.Current.CancellationToken);
     }
