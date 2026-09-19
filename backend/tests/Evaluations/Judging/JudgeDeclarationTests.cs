@@ -13,10 +13,13 @@ public sealed class JudgeDeclarationTests
 {
     private const string JudgeModel = "planted-judge-model-4c1e";
     private const string JudgeApiKey = "planted-judge-key-9b27";
+    /// <summary>What every quality evaluator asks a verdict to fit in.</summary>
+    private const int EvaluatorOutputTokens = 800;
+
     private static readonly Uri JudgeAddress = new("https://planted-judge-host.invalid/v1/");
 
     [Fact]
-    public async Task Present_WithNoDeclaredEffort_LeavesTheRequestWithoutAReasoningParameter()
+    public async Task Present_WithNoDeclaredEffort_LeavesTheRequestAsTheEvaluatorComposedIt()
     {
         // Arrange
         var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey, reasoningEffort: null);
@@ -24,10 +27,15 @@ public sealed class JudgeDeclarationTests
         using var judge = declaration.Present(provider);
 
         // Act
-        await judge.GetResponseAsync("Grade this.", new ChatOptions(), TestContext.Current.CancellationToken);
+        await judge.GetResponseAsync(
+            "Grade this.",
+            new ChatOptions { MaxOutputTokens = EvaluatorOutputTokens },
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(Assert.Single(provider.ReceivedOptions)?.RawRepresentationFactory);
+        var received = Assert.Single(provider.ReceivedOptions);
+        Assert.Null(received?.RawRepresentationFactory);
+        Assert.Equal(EvaluatorOutputTokens, received?.MaxOutputTokens);
     }
 
     [Fact]
@@ -44,6 +52,24 @@ public sealed class JudgeDeclarationTests
 
         // Assert
         Assert.Equal(["low", "low"], provider.ReceivedOptions.Select(StatedEffort));
+    }
+
+    [Fact]
+    public async Task Present_WithADeclaredEffort_LeavesTheVerdictRoomBesideTheReasoning()
+    {
+        // Arrange
+        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey, reasoningEffort: "xhigh");
+        using var provider = JudgeProvider();
+        using var judge = declaration.Present(provider);
+
+        // Act
+        await judge.GetResponseAsync(
+            "Grade this.",
+            new ChatOptions { MaxOutputTokens = EvaluatorOutputTokens },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(Assert.Single(provider.ReceivedOptions)?.MaxOutputTokens >= EvaluatorOutputTokens / (1 - 0.95));
     }
 
     [Fact]

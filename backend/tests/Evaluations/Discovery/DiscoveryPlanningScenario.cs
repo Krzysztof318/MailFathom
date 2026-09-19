@@ -3,12 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Text;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Discovery;
 using MailFathom.AI.Orchestration;
-using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
@@ -130,10 +127,11 @@ internal static class DiscoveryPlanningScenario
             : "the answer could not be read as a plan, so the run fell back to the question's own words.";
 
         // The instruction travels as the system turn so the judge grades a plan against the job of planning, rather
-        // than faulting it for not answering the question it was told not to answer.
+        // than faulting it for not answering the question it was told not to answer. The answer goes as the model wrote
+        // it, because that instruction asks for one JSON object and a judge shown anything else grades the format.
         var verdict = await scenarioRun.EvaluateAsync(
             [new ChatMessage(ChatRole.System, DiscoveryPlanningInstructions.Text), new ChatMessage(ChatRole.User, turn)],
-            new ChatResponse(new ChatMessage(ChatRole.Assistant, Describe(reading.Plan))) { ModelId = modelName },
+            new ChatResponse(new ChatMessage(ChatRole.Assistant, answer.Text)) { ModelId = modelName },
             cancellationToken: cancellationToken);
 
         RecordExpectation(verdict, shortfall);
@@ -157,38 +155,5 @@ internal static class DiscoveryPlanningScenario
         };
 
         verdict.Metrics[metric.Name] = metric;
-    }
-
-    /// <summary>Writes a plan as the text the judge grades and the report shows: the intent, the stopping point, and every lookup.</summary>
-    private static string Describe(DiscoveryRunPlan plan)
-    {
-        var text = new StringBuilder()
-            .Append(CultureInfo.InvariantCulture, $"intent: {plan.Intent.Identity}\n")
-            .Append(CultureInfo.InvariantCulture, $"sufficientPassages: {plan.Retrieval.SufficientPassages}\n");
-
-        foreach (var lookup in plan.Retrieval.Lookups)
-        {
-            text.Append(CultureInfo.InvariantCulture, $"lookup: \"{lookup.QueryText}\"");
-            AppendFilter(text, "senderAddress", lookup.SenderAddress);
-            AppendFilter(text, "recipientAddress", lookup.RecipientAddress);
-            AppendFilter(text, "subjectFragment", lookup.SubjectFragment);
-            AppendFilter(text, "receivedOnOrAfter", lookup.ReceivedOnOrAfter?.ToString("O", CultureInfo.InvariantCulture));
-            AppendFilter(text, "receivedBefore", lookup.ReceivedBefore?.ToString("O", CultureInfo.InvariantCulture));
-            AppendFilter(text, "isRemotelySeen", lookup.IsRemotelySeen?.ToString());
-            AppendFilter(text, "isRemotelyFlagged", lookup.IsRemotelyFlagged?.ToString());
-            AppendFilter(text, "keyword", lookup.Keyword);
-            AppendFilter(text, "hasAttachments", lookup.HasAttachments?.ToString());
-            text.Append('\n');
-        }
-
-        return text.ToString().TrimEnd();
-    }
-
-    private static void AppendFilter(StringBuilder text, string name, string? value)
-    {
-        if (value is not null)
-        {
-            text.Append(CultureInfo.InvariantCulture, $", {name}: {value}");
-        }
     }
 }

@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using Xunit;
+
 namespace MailFathom.Evaluations;
 
 /// <summary>The one switch every evaluation scenario is gated on, and what a requested run cannot proceed without.</summary>
@@ -43,6 +45,19 @@ internal static class AiEvaluationRun
         ?? throw new InvalidOperationException(
             $"The evaluations were turned on through {EnablingVariable} and {variableName} is not set, so this fails "
             + "rather than skipping.");
+
+    /// <summary>Fails the test naming every shortfall in full, one to a line.</summary>
+    /// <param name="shortfalls">What each model fell short on, already prefixed with the model.</param>
+    /// <remarks>Rather than <c>Assert.Empty</c>, which cuts every item it prints to a few dozen characters and so names the model and nothing of why.</remarks>
+    public static void AssertNoShortfalls(IEnumerable<string> shortfalls)
+    {
+        var named = shortfalls.ToList();
+
+        if (named.Count > 0)
+        {
+            Assert.Fail($"{named.Count} shortfall(s):\n{string.Join('\n', named)}");
+        }
+    }
 
     /// <summary>Reads a variable a run may leave unset.</summary>
     /// <param name="variableName">The variable to read.</param>

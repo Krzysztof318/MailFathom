@@ -59,7 +59,7 @@ public sealed class DiscoveryPlanningEvaluations
             [.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, scenario))]);
 
         // Assert
-        Assert.Empty(outcomes.SelectMany(ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(outcomes.SelectMany(ShortfallsOf));
     }
 
     /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
