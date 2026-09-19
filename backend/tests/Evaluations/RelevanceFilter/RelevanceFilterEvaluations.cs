@@ -16,7 +16,7 @@ namespace MailFathom.Evaluations.RelevanceFilter;
 /// <summary>Measures the model-judged relevance filter under every declared model, against the labelled candidates.</summary>
 /// <remarks>
 /// <para>
-/// Shaped like <see cref="Enrichment.EmailEnrichmentEvaluations" /> — one test over the whole model list, the models
+/// Shaped like <see cref="Answering.MailAnsweringEvaluations" /> — one test over the whole model list, the models
 /// measured at the same time, every shortfall collected before the test fails — with the one difference the filter's
 /// shape makes: no judge is declared, read, or opened, so the run's only provider calls are the filter's own.
 /// </para>

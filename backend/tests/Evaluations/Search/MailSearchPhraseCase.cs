@@ -14,9 +14,11 @@ namespace MailFathom.Evaluations.Search;
 /// reserved domain, so a sentence, its cached answer, and its report can be published like everything else a run keeps.
 /// </para>
 /// <para>
-/// Each sentence states one filter outright, and the expectation asks for that filter and for no filter the sentence did
-/// not state, because a guessed filter hides mail where a guessed criterion only ranks it lower. The one that reads two
-/// ways states nothing beyond a reading and is the one kind a judge grades.
+/// Each sentence states its filters outright, or states none, and the expectation asks for those filters and for no
+/// filter the sentence did not state, because a guessed filter hides mail where a guessed criterion only ranks it lower.
+/// A sentence naming two senders is the sharpest form of that: the one sender filter there is can hold only one of them,
+/// so writing either hides the other's mail. The two that read two ways state nothing beyond a reading and are the one
+/// kind a judge grades.
 /// </para>
 /// </remarks>
 /// <param name="Name">The name the case is filed and reported under.</param>
@@ -33,6 +35,12 @@ internal sealed record MailSearchPhraseCase(
     public static readonly DateOnly AskedOn = new(2026, 9, 14);
 
     private const string StatedSender = "billing@northwind.example";
+
+    private const string SecondSender = "accounts@fabrikam.example";
+
+    private const string SupportSender = "support@contoso.example";
+
+    private const string LegalRecipient = "legal@fabrikam.example";
 
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<MailSearchPhraseCase> All { get; } =
@@ -77,6 +85,70 @@ internal sealed record MailSearchPhraseCase(
             "invoices I still need to deal with",
             ReadsTwoWays: true,
             static _ => null),
+        new(
+            "Yesterday",
+            "the delivery notes that came in yesterday",
+            ReadsTwoWays: false,
+            static reading => reading.Filters is { ReceivedFrom: { } from, ReceivedTo: { } to }
+                && from == AskedOn.AddDays(-1)
+                && to == AskedOn.AddDays(-1)
+                ? OnlyStated(reading, reading.Filters with { ReceivedFrom = null, ReceivedTo = null })
+                : $"the period reads {Period(reading.Filters)} rather than the one day before {AskedOn:yyyy-MM-dd}."),
+        new(
+            "SinceStartOfMonth",
+            "anything about the office move since the start of this month",
+            ReadsTwoWays: false,
+            static reading => reading.Filters.ReceivedFrom == new DateOnly(2026, 9, 1)
+                && (reading.Filters.ReceivedTo is null || reading.Filters.ReceivedTo == AskedOn)
+                ? OnlyStated(reading, reading.Filters with { ReceivedFrom = null, ReceivedTo = null })
+                : $"the period reads {Period(reading.Filters)} rather than 2026-09-01 onwards."),
+        new(
+            "TwoSenders",
+            $"anything from {StatedSender} or {SecondSender} about the renewal",
+            ReadsTwoWays: false,
+            static reading => reading.Filters.SenderAddress is { } chosen
+                ? $"the sender filter reads {chosen} alone, which hides every message the other sender wrote."
+                : OnlyStated(reading, reading.Filters)),
+        new(
+            "SenderAndWords",
+            $"unread mail from {SupportSender} about the password reset",
+            ReadsTwoWays: false,
+            static reading => string.Equals(reading.Filters.SenderAddress, SupportSender, StringComparison.OrdinalIgnoreCase) && reading.Filters.Unread
+                ? OnlyStated(reading, reading.Filters with { SenderAddress = null, Unread = false })
+                : $"the reading holds sender {reading.Filters.SenderAddress ?? "nothing"} and unread {reading.Filters.Unread} rather than {SupportSender} and unread."),
+        new(
+            "Recipient",
+            $"what I sent to {LegalRecipient} about the NDA",
+            ReadsTwoWays: false,
+            static reading => string.Equals(reading.Filters.RecipientAddress, LegalRecipient, StringComparison.OrdinalIgnoreCase)
+                ? OnlyStated(reading, reading.Filters with { RecipientAddress = null })
+                : $"the recipient filter reads {reading.Filters.RecipientAddress ?? "nothing"} rather than {LegalRecipient}."),
+        new(
+            "Flagged",
+            "starred messages about the office lease",
+            ReadsTwoWays: false,
+            static reading => reading.Filters.Flagged
+                ? OnlyStated(reading, reading.Filters with { Flagged = false })
+                : "the sentence asks for starred mail and the reading does not filter on it."),
+        new(
+            "PersonWithoutAddress",
+            "emails from Ingrid about the travel budget",
+            ReadsTwoWays: false,
+            static reading => OnlyStated(reading, reading.Filters)),
+        new(
+            "AttachmentInMonth",
+            "PDFs the auditor sent in July 2026",
+            ReadsTwoWays: false,
+            static reading => reading.Filters is { HasAttachments: true, ReceivedFrom: { } from, ReceivedTo: { } to }
+                && from == new DateOnly(2026, 7, 1)
+                && to == new DateOnly(2026, 7, 31)
+                ? OnlyStated(reading, reading.Filters with { HasAttachments = false, ReceivedFrom = null, ReceivedTo = null })
+                : $"the reading holds attachments {reading.Filters.HasAttachments} over {Period(reading.Filters)} rather than files over 2026-07-01 to 2026-07-31."),
+        new(
+            "ImportantReadsTwoWays",
+            "the important messages about the merger",
+            ReadsTwoWays: true,
+            static _ => null),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>
@@ -87,6 +159,9 @@ internal sealed record MailSearchPhraseCase(
 
     /// <inheritdoc />
     public override string ToString() => this.Name;
+
+    private static string Period(MailSearchPhraseFilters filters) =>
+        $"{filters.ReceivedFrom?.ToString("yyyy-MM-dd", null) ?? "open"} to {filters.ReceivedTo?.ToString("yyyy-MM-dd", null) ?? "open"}";
 
     /// <summary>Holds what is left of the filters, once the stated one is taken out, to nothing, and asks for a criterion.</summary>
     /// <remarks>Every sentence here describes a subject, and the instruction asks for a criterion wherever one does.</remarks>
