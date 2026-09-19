@@ -22,7 +22,8 @@ namespace MailFathom.Evaluations.Corpus;
 /// nobody received any of it, which is what lets a scenario, its cached answers, and its report be published.
 /// <see cref="WrittenCorpus" /> adds the few kinds of message a structured agent's case needs and neither archive carries,
 /// written by hand under the same rules and read through the same path, and keeps them out of <see cref="All" /> so no
-/// scenario searching the corpus meets them.
+/// scenario searching the corpus meets them. <see cref="PolishCorpus" /> reads the Polish archive through the same path,
+/// and keeps it out of <see cref="All" /> for the same reason.
 /// </para>
 /// <para>
 /// The passages come from the chunker a deployment runs, under the rules it runs with, so an agent is measured on the
@@ -54,14 +55,8 @@ internal sealed record CorpusMessage(
     /// <summary>The bound a deployment extracts a body under by default.</summary>
     private const int MaximumBodyCharacters = 100_000;
 
-    /// <summary>The committed corpora, read in this order: the model-written one first, so every position it numbers stays where it was.</summary>
-    private static readonly string[] ArchivePaths =
-    [
-        Path.Combine(AppContext.BaseDirectory, "corpora", "office-en.zip"),
-        Path.Combine(AppContext.BaseDirectory, "corpora", "hard-shapes-en.zip"),
-    ];
-
-    private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Delivered = new(ReadArchive);
+    private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Delivered = new(static () =>
+        ReadArchives(["office-en.zip", "hard-shapes-en.zip"], firstPosition: 0));
 
     private static readonly Lazy<IReadOnlyList<CorpusMessage>> Flattened =
         new(static () => [.. Delivered.Value.SelectMany(static exchange => exchange)]);
@@ -95,11 +90,15 @@ internal sealed record CorpusMessage(
         return [.. exchange.TakeWhile(message => message != closing), closing];
     }
 
-    private static IReadOnlyList<IReadOnlyList<CorpusMessage>> ReadArchive()
+    /// <summary>Reads committed corpora as one run of conversations, numbering their messages from a first position.</summary>
+    /// <param name="fileNames">The archives, in the order they are read: an archive read first keeps every position it numbers where it was.</param>
+    /// <param name="firstPosition">The position the first message takes, from which every identifier is derived.</param>
+    /// <returns>Every conversation, in delivery order, each in the order its messages were written.</returns>
+    internal static IReadOnlyList<IReadOnlyList<CorpusMessage>> ReadArchives(IEnumerable<string> fileNames, int firstPosition)
     {
-        var exchanges = ArchivePaths.SelectMany(static path =>
+        var exchanges = fileNames.SelectMany(static fileName =>
         {
-            using var archive = File.OpenRead(path);
+            using var archive = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "corpora", fileName));
 
             return CorpusArchive.Read(archive).Exchanges;
         }).ToList();
@@ -110,9 +109,9 @@ internal sealed record CorpusMessage(
         [
             .. exchanges.Select(IReadOnlyList<CorpusMessage> (exchange, index) =>
             {
-                var firstPosition = exchanges.Take(index).Sum(static earlier => earlier.Count);
+                var exchangePosition = firstPosition + exchanges.Take(index).Sum(static earlier => earlier.Count);
 
-                return [.. exchange.Select((turn, offset) => Of(turn.Compose(), firstPosition + offset))];
+                return [.. exchange.Select((turn, offset) => Of(turn.Compose(), exchangePosition + offset))];
             }),
         ];
     }

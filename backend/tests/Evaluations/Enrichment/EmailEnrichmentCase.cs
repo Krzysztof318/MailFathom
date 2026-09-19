@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Enrichment;
+using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 
 namespace MailFathom.Evaluations.Enrichment;
@@ -24,10 +25,15 @@ namespace MailFathom.Evaluations.Enrichment;
 /// <param name="Name">The name the case is filed and reported under.</param>
 /// <param name="Message">Reads the message.</param>
 /// <param name="Expectation">Names what the marks get wrong, or answers <see langword="null" /> when they get nothing wrong.</param>
+/// <param name="Language">
+/// The mailbox language the case is composed under, which every mark it writes must be written in; <see langword="null" />
+/// for the corpus's own English, whose cases are held only to what the marks say.
+/// </param>
 internal sealed record EmailEnrichmentCase(
     string Name,
     Func<CorpusMessage> Message,
-    Func<IReadOnlyList<EmailEnrichmentMark>, string?> Expectation)
+    Func<IReadOnlyList<EmailEnrichmentMark>, string?> Expectation,
+    MailAccountLanguage? Language = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<EmailEnrichmentCase> All { get; } =
@@ -105,6 +111,24 @@ internal sealed record EmailEnrichmentCase(
         new("Hostile.DirectInstruction", static () => HostileMail.DirectInstruction[^1], SaysWhatItIsAbout),
         new("Hostile.QuotedHistory", static () => HostileMail.QuotedHistory[^1], SaysWhatItIsAbout),
         new("Hostile.OwnerImpersonation", static () => HostileMail.OwnerImpersonation[^1], SaysWhatItIsAbout),
+
+        // The rest read Polish mail, or read mail in one language for a mailbox kept in the other, and every mark has to
+        // be written in the mailbox's language whatever the message was written in.
+
+        // The owner undertakes to pay invoice FV/2026/08/117 "do piątku, 4 września 2026".
+        new("Polish.DatedPaymentPromise", static () => PolishCorpus.At(1), DueOn(new DateOnly(2026, 9, 4)), MailAccountLanguage.Polish),
+
+        // A customer confirming a fix and asking for ticket #4821 to be closed, with no day anything is owed by.
+        new("Polish.ResolvedTicket", static () => PolishCorpus.At(6), Every(SaysWhatItIsAbout, NothingFallsDue), MailAccountLanguage.Polish),
+
+        // A product newsletter in Polish, which informs its reader and asks nothing of them.
+        new("Polish.Newsletter", static () => PolishCorpus.At(21), Every(SaysWhatItIsAbout, NotSignificant, NoCommitment), MailAccountLanguage.Polish),
+
+        // English mail read for a Polish mailbox: the undertaking to pay invoice 7842 by 10 September, marked in Polish.
+        new("Mixed.EnglishMailUnderPolishAccount", static () => CorpusMessage.At(82), DueOn(new DateOnly(2026, 9, 10)), MailAccountLanguage.Polish),
+
+        // Polish mail read for an English mailbox: the undertaking to pay by 4 September, marked in English.
+        new("Mixed.PolishMailUnderEnglishAccount", static () => PolishCorpus.At(1), DueOn(new DateOnly(2026, 9, 4)), MailAccountLanguage.English),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>

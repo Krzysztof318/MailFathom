@@ -149,6 +149,41 @@ internal sealed record MailSearchPhraseCase(
             "the important messages about the merger",
             ReadsTwoWays: true,
             static _ => null),
+
+        // The rest state the same filters in Polish, and every criterion has to keep the words the sentence was written
+        // in: a criterion is the words the mail itself would use, and mail described in Polish is written in Polish.
+        InPolish(
+            "Sender",
+            $"faktury od {StatedSender}",
+            static reading => string.Equals(reading.Filters.SenderAddress, StatedSender, StringComparison.OrdinalIgnoreCase)
+                ? OnlyStated(reading, reading.Filters with { SenderAddress = null })
+                : $"the sender filter reads {reading.Filters.SenderAddress ?? "nothing"} rather than {StatedSender}."),
+        InPolish(
+            "Period",
+            "projekty umów, które dostałam w sierpniu 2026",
+            static reading => reading.Filters is { ReceivedFrom: { } from, ReceivedTo: { } to }
+                && from == new DateOnly(2026, 8, 1)
+                && to == new DateOnly(2026, 8, 31)
+                ? OnlyStated(reading, reading.Filters with { ReceivedFrom = null, ReceivedTo = null })
+                : $"the period reads {Period(reading.Filters)} rather than 2026-08-01 to 2026-08-31."),
+        InPolish(
+            "Unread",
+            "nieprzeczytane wiadomości o awarii serwera",
+            static reading => reading.Filters.Unread
+                ? OnlyStated(reading, reading.Filters with { Unread = false })
+                : "the sentence asks for unread mail and the reading does not filter on it."),
+        InPolish(
+            "Yesterday",
+            "dokumenty dostawy, które przyszły wczoraj",
+            static reading => reading.Filters is { ReceivedFrom: { } from, ReceivedTo: { } to }
+                && from == AskedOn.AddDays(-1)
+                && to == AskedOn.AddDays(-1)
+                ? OnlyStated(reading, reading.Filters with { ReceivedFrom = null, ReceivedTo = null })
+                : $"the period reads {Period(reading.Filters)} rather than the one day before {AskedOn:yyyy-MM-dd}."),
+        InPolish(
+            "WordsOnly",
+            "notatki o wycenie remontu kuchni",
+            static reading => OnlyStated(reading, reading.Filters)),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>
@@ -159,6 +194,33 @@ internal sealed record MailSearchPhraseCase(
 
     /// <inheritdoc />
     public override string ToString() => this.Name;
+
+    /// <summary>Describes a Polish sentence, whose reading is also held to criteria drawn from the sentence's own words.</summary>
+    private static MailSearchPhraseCase InPolish(string name, string sentence, Func<MailSearchPhraseReading, string?> expectation) =>
+        new($"Polish.{name}", sentence, ReadsTwoWays: false, reading => expectation(reading) ?? KeepsTheSentencesWords(reading, sentence));
+
+    /// <summary>Refuses a criterion sharing no word with the sentence, which is a criterion translated rather than read.</summary>
+    /// <remarks>
+    /// A word is matched on its first four letters, because Polish inflects: <c>faktury</c> in the sentence and
+    /// <c>faktura</c> in a criterion are the same word, while <c>invoice</c> is a different language.
+    /// </remarks>
+    private static string? KeepsTheSentencesWords(MailSearchPhraseReading reading, string sentence)
+    {
+        var stems = StemsOf(sentence);
+
+        return reading.Criteria.FirstOrDefault(criterion => !StemsOf(criterion).Overlaps(stems)) is { } translated
+            ? $"the criterion \"{translated}\" shares no word with the sentence, so it searches in words the mail was not written in."
+            : null;
+    }
+
+    private static HashSet<string> StemsOf(string text) =>
+    [
+        .. text
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static word => word.Trim(',', '.', '"').ToUpperInvariant())
+            .Where(static word => word.Length >= 4)
+            .Select(static word => word[..4]),
+    ];
 
     private static string Period(MailSearchPhraseFilters filters) =>
         $"{filters.ReceivedFrom?.ToString("yyyy-MM-dd", null) ?? "open"} to {filters.ReceivedTo?.ToString("yyyy-MM-dd", null) ?? "open"}";

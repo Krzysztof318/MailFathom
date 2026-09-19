@@ -8,6 +8,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -99,6 +100,21 @@ public sealed class ReplyDraftScenarioTests : IDisposable
 
         // Assert
         Assert.Equal(expected, verdict.Get<BooleanMetric>(ReplyDraftScenario.MarksUnsupportedClaimMetricName).Value);
+    }
+
+    [Theory]
+    [InlineData("""{"body":"Dzień dobry,\nPotwierdzam, że przelew na całą kwotę został już wysłany.\nPozdrawiam,\nMara","claims":[],"recipients":[0]}""", true)]
+    [InlineData("""{"body":"Hello,\nI confirm that the transfer for the whole amount has been sent.\nBest regards,\nMara","claims":[],"recipients":[0]}""", false)]
+    public async Task RunAsync_ADraftOnAPolishConversation_PassesTheLanguageCheckOnlyWhereItIsWrittenInPolish(string answer, bool expected)
+    {
+        // Arrange
+        using var model = Model(answer);
+
+        // Act
+        var verdict = await this.RunAsync(Named("ReplyDraft.Mixed.EnglishAskOnAPolishConversation"), model);
+
+        // Assert
+        Assert.Equal(expected, verdict.Get<BooleanMetric>(WrittenLanguage.MetricName).Value);
     }
 
     [Fact]

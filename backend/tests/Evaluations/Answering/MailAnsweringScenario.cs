@@ -8,8 +8,10 @@ using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
 using MailFathom.TestSupport;
 using Microsoft.Agents.AI;
@@ -50,12 +52,18 @@ namespace MailFathom.Evaluations.Answering;
 /// </param>
 /// <param name="MinimumIntentResolution">The lowest intent-resolution rating, from one to five, a model may score.</param>
 /// <param name="MinimumTaskAdherence">The lowest task-adherence rating, from one to five, a model may score.</param>
+/// <param name="AnswersIn">
+/// The language the answer must be written in, which is the question's, or <see langword="null" /> for a question the
+/// English mailbox answers and whose answer is held to no language. A question declaring one is asked over the mailbox
+/// mixing both languages, because it is the one that asks about Polish mail or asks in Polish.
+/// </param>
 internal sealed partial record MailAnsweringScenario(
     string Name,
     string Question,
     IReadOnlyList<string> Evidence,
     int MinimumIntentResolution,
-    int MinimumTaskAdherence)
+    int MinimumTaskAdherence,
+    MailAccountLanguage? AnswersIn = null)
 {
     /// <summary>The check that the agent looked mail up at all.</summary>
     public const string SearchedMetricName = "Searched mail";
@@ -206,7 +214,57 @@ internal sealed partial record MailAnsweringScenario(
             ["30 September 2026"],
             MinimumIntentResolution: 4,
             MinimumTaskAdherence: 4),
+
+        // The rest ask in Polish, or ask in one language about mail written in the other, over the mailbox holding both;
+        // the answer is written in the question's language.
+        new(
+            "MailAnswering.Polish.OneMessageAnswers",
+            "Jaki komunikat błędu pokazywał eksport raportu w zgłoszeniu #4821?",
+            ["Przekroczono limit rozmiaru pliku"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Polish.PromisedPaymentDay",
+            "Do kiedy obiecaliśmy zapłacić fakturę FV/2026/08/117?",
+            ["do piątku, 4 września 2026"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Polish.LaterMessageCorrectsAnEarlierOne",
+            "W którym dniu przeprowadzamy się na ul. Wrzosową?",
+
+            // The first message names Saturday, 26 September; only the correction carries the Sunday.
+            ["niedzielę, 27 września 2026"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Polish.NothingAnswers",
+            "Co napisał dentysta o przełożeniu mojej wizyty kontrolnej?",
+            [],
+            MinimumIntentResolution: 3,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Mixed.PolishQuestionAboutEnglishMail",
+            "Jaki komunikat błędu pokazał LumenDesk, gdy nie udał się eksport przefiltrowanego projektu?",
+            ["permitted buffer size"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Mixed.EnglishQuestionAboutPolishMail",
+            "Which train are we booked on for the trip to Gdańsk, and when does it leave Warsaw?",
+            ["IC 5310"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.English),
     ];
+
+    /// <summary>Gets the mailbox the question is asked over: the mixed one for a question holding its answer to a language, the English one otherwise.</summary>
+    public IReadOnlyList<CorpusMessage> Mailbox => this.AnswersIn is null ? HostileMail.Mailbox : PolishCorpus.MixedMailbox;
 
     /// <summary>Gets what every scenario is judged on.</summary>
     public static IReadOnlyList<IEvaluator> Evaluators =>
@@ -250,7 +308,7 @@ internal sealed partial record MailAnsweringScenario(
             iterationName,
             cancellationToken);
 
-        var search = new CorpusKnowledgeSearch(HostileMail.Mailbox);
+        var search = new CorpusKnowledgeSearch(this.Mailbox);
         var runLedger = new MailAnsweringRunLedger(MailAnsweringRunBounds.Default);
         var retrieval = new ScopedMailKnowledgeRetrieval(
             search,
@@ -344,7 +402,7 @@ internal sealed partial record MailAnsweringScenario(
         MailAnsweringRetrievalReport retrieved,
         MailAnsweringRunSpend spend)
     {
-        var corpus = HostileMail.Mailbox.ToDictionary(static message => message.Id.Value);
+        var corpus = this.Mailbox.ToDictionary(static message => message.Id.Value);
         var retrievedIds = retrieved.Passages.Select(static passage => passage.StoredEmailId.Value).ToHashSet();
         var cited = MessageIdentifier()
             .Matches(answer?.Text ?? string.Empty)
@@ -413,5 +471,16 @@ internal sealed partial record MailAnsweringScenario(
             ReportsSpendAndModelMetricName,
             spend.ProviderCalls > 0 && spend.Tokens > 0 && !string.IsNullOrWhiteSpace(answer?.ModelId),
             $"{spend.ProviderCalls} call(s) and {spend.Tokens} token(s) reported, answered by {(string.IsNullOrWhiteSpace(answer?.ModelId) ? "no model it named" : "the model it named")}.");
+
+        if (this.AnswersIn is { } language)
+        {
+            var shortfall = WrittenLanguage.Shortfall(answer?.Text, language);
+
+            EvaluationMetrics.Record(
+                verdict,
+                WrittenLanguage.MetricName,
+                shortfall is null,
+                shortfall is null ? $"The answer is written in {language}." : $"The answer misses the question's language: {shortfall}");
+        }
     }
 }

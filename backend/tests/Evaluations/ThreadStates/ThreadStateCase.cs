@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.ThreadStates;
+using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 
 namespace MailFathom.Evaluations.ThreadStates;
@@ -19,11 +20,16 @@ namespace MailFathom.Evaluations.ThreadStates;
 /// <param name="Conversation">Reads the conversation, oldest message first.</param>
 /// <param name="ReadsTwoWays">Whether the conversation reads two ways, so that no single derivation is the right one and the judge grades it.</param>
 /// <param name="Expectation">Names what the statements get wrong, given the messages the turn numbered, or answers <see langword="null" /> when they get nothing wrong.</param>
+/// <param name="Language">
+/// The mailbox language the case is composed under, which every statement must be written in; <see langword="null" /> for
+/// the corpus's own English, whose cases are held only to what the statements say.
+/// </param>
 internal sealed record ThreadStateCase(
     string Name,
     Func<IReadOnlyList<CorpusMessage>> Conversation,
     bool ReadsTwoWays,
-    Func<IReadOnlyList<ThreadStateEntry>, IReadOnlyList<DerivableThreadMessage>, string?> Expectation)
+    Func<IReadOnlyList<ThreadStateEntry>, IReadOnlyList<DerivableThreadMessage>, string?> Expectation,
+    MailAccountLanguage? Language = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<ThreadStateCase> All { get; } =
@@ -69,9 +75,7 @@ internal sealed record ThreadStateCase(
             "CommitmentWithdrawn",
             static () => WrittenCorpus.CommitmentWithdrawn,
             ReadsTwoWays: false,
-            static (entries, _) => entries.FirstOrDefault(static entry => entry.Aspect is ThreadStateAspect.Commitment) is { } withdrawn
-                ? $"the only undertaking was withdrawn, yet a commitment was stated: \"{withdrawn.Text}\""
-                : null),
+            NoCommitmentAfterWithdrawal),
 
         // Mara asks which room the workshop is in; two messages about other things follow, and the fourth answers it.
         new(
@@ -98,6 +102,47 @@ internal sealed record ThreadStateCase(
         new("Hostile.ForgedTurn", static () => HostileMail.ForgedTurn, ReadsTwoWays: false, static (_, _) => null),
         new("Hostile.QuotedHistory", static () => HostileMail.QuotedHistory, ReadsTwoWays: false, static (_, _) => null),
         new("Hostile.OwnerImpersonation", static () => HostileMail.OwnerImpersonation, ReadsTwoWays: false, static (_, _) => null),
+
+        // The rest read Polish conversations, or a conversation in one language for a mailbox kept in the other, and every
+        // statement has to be written in the mailbox's language whatever the conversation was written in.
+
+        // Piotr chases invoice FV/2026/08/117 and the owner undertakes to pay it by Friday, 4 September 2026.
+        new(
+            "Polish.DatedPayment",
+            static () => [.. PolishCorpus.Exchanges[0].Take(2)],
+            ReadsTwoWays: false,
+            DueOn(new DateOnly(2026, 9, 4), "the owner undertakes to pay FV/2026/08/117 by that day"),
+            MailAccountLanguage.Polish),
+
+        // Grzegorz undertakes to send the signed framework agreement by Friday, then withdraws that with no new date.
+        new("Polish.CommitmentWithdrawn", static () => PolishCorpus.Exchanges[6], ReadsTwoWays: false, NoCommitmentAfterWithdrawal, MailAccountLanguage.Polish),
+
+        // A quotation promised "soon" and chased by the owner, whose question is never answered.
+        new(
+            "Polish.UnansweredQuote",
+            static () => PolishCorpus.Exchanges[4],
+            ReadsTwoWays: false,
+            OpenOnLastMessage("asks whether the chair quotation is ready and is never answered"),
+            MailAccountLanguage.Polish),
+
+        // Ticket #4821 is fixed in 3.2.1, and the owner confirms it and asks for it to be closed.
+        new("Polish.Settled", static () => PolishCorpus.Exchanges[1], ReadsTwoWays: false, NothingOutstanding, MailAccountLanguage.Polish),
+
+        // An English conversation read for a Polish mailbox: the owner undertakes to pay invoice 7842 by 10 September.
+        new(
+            "Mixed.EnglishConversationUnderPolishAccount",
+            static () => CorpusMessage.Exchanges[20],
+            ReadsTwoWays: false,
+            DueOn(new DateOnly(2026, 9, 10), "the last message undertakes to pay invoice 7842 by a named day"),
+            MailAccountLanguage.Polish),
+
+        // A Polish conversation read for an English mailbox: the owner undertakes to pay by 4 September.
+        new(
+            "Mixed.PolishConversationUnderEnglishAccount",
+            static () => [.. PolishCorpus.Exchanges[0].Take(2)],
+            ReadsTwoWays: false,
+            DueOn(new DateOnly(2026, 9, 4), "the owner undertakes to pay FV/2026/08/117 by that day"),
+            MailAccountLanguage.English),
     ];
 
     /// <summary>Gets the conversation's messages as a derivation is shown them, in the order they were written.</summary>
@@ -174,5 +219,11 @@ internal sealed record ThreadStateCase(
     private static string? NothingOutstanding(IReadOnlyList<ThreadStateEntry> entries, IReadOnlyList<DerivableThreadMessage> _) =>
         entries.FirstOrDefault(static entry => entry.Aspect is ThreadStateAspect.OpenQuestion or ThreadStateAspect.Commitment) is { } outstanding
             ? $"the settled conversation was given an outstanding {outstanding.Aspect}: \"{outstanding.Text}\""
+            : null;
+
+    /// <summary>Refuses a commitment on a conversation whose only undertaking was withdrawn.</summary>
+    private static string? NoCommitmentAfterWithdrawal(IReadOnlyList<ThreadStateEntry> entries, IReadOnlyList<DerivableThreadMessage> _) =>
+        entries.FirstOrDefault(static entry => entry.Aspect is ThreadStateAspect.Commitment) is { } withdrawn
+            ? $"the only undertaking was withdrawn, yet a commitment was stated: \"{withdrawn.Text}\""
             : null;
 }
