@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
+using MailFathom.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Reporting;
@@ -73,4 +75,48 @@ internal static class EvaluationStore
             AnswerLifetime,
             [judgeCachingKey],
             executionName);
+
+    /// <summary>Turns a model's name into a name the store can file a result under.</summary>
+    /// <param name="modelName">The routed name of the model under test.</param>
+    /// <returns>The name, readable as the model's.</returns>
+    /// <remarks>
+    /// The store files an iteration as a directory, and a routed name such as one naming its vendor carries a separator;
+    /// the name stays readable as the model's with that character replaced.
+    /// </remarks>
+    public static string IterationNameFor(string modelName) =>
+        string.Concat(modelName.Select(static character =>
+            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+
+    /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
+    /// <param name="reporting">The run's store.</param>
+    /// <param name="model">The model under test's client, which stays the caller's.</param>
+    /// <param name="plan">The plan the model is measured with.</param>
+    /// <param name="scenarioName">The scenario the answers are filed under.</param>
+    /// <param name="iterationName">The iteration the answers are filed under.</param>
+    /// <param name="cancellationToken">Withdraws the run.</param>
+    /// <returns>The cached client.</returns>
+    /// <remarks>
+    /// The wrapper is not disposed, and owns nothing that would need it: disposing a
+    /// <see cref="DelegatingChatClient" /> disposes the client it wraps, and the model under test belongs to the caller
+    /// that opened it. The cache itself is the run's, and the store closes it.
+    /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Disposing the caching wrapper would dispose the caller's model client, which the scenario does not own.")]
+    public static async Task<IChatClient> CacheOverAsync(
+        ReportingConfiguration reporting,
+        IChatClient model,
+        ChatGenerationPlan plan,
+        string scenarioName,
+        string iterationName,
+        CancellationToken cancellationToken)
+    {
+        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
+
+        return new DistributedCachingChatClient(model, cache)
+        {
+            CacheKeyAdditionalValues = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty],
+        };
+    }
 }

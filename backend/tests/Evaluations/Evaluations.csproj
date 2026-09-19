@@ -2,6 +2,13 @@
   <!-- What an agent answers, measured against the models a run declares and judged by one pinned model. Nothing
        discovers it as a test: backend/Directory.Build.props opts it out of discovery, and scripts/run-ai-evaluations.sh
        is what runs it. Every scenario that calls a provider skips unless MAILFATHOM_AI_EVALUATIONS asks for it. -->
+  <PropertyGroup>
+    <!-- AIEVAL001 marks the agent-quality evaluators — intent resolution, task adherence, tool-call accuracy — as open to
+         change. Measuring an agent is the only thing this project does, so a change there is one it has to absorb anyway,
+         and a suppression at each use would say the same thing a dozen times. -->
+    <NoWarn>$(NoWarn);AIEVAL001</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" />
@@ -21,12 +28,22 @@
   <ItemGroup>
     <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
     <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
+    <!-- The inactive egress guard the answering agent's retrieval is composed with, linked as the set every suite holding
+         a guarded egress point links it: every input is synthetic mail, so a scan has nothing to find that the corpus does
+         not already publish. -->
+    <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
+    <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\FixedSensitiveContentPostures.cs" Link="FixedSensitiveContentPostures.cs" />
+    <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
+    <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
+    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AI\AI.csproj" />
-    <!-- For the quoted-history trimmer alone: a corpus message is cut into passages from the trimmed reading a
-         deployment chunks, rather than from the raw body a reply carries its whole history in. -->
+    <!-- For how a deployment reads a body: a corpus message is cut into passages from the trimmed reading a deployment
+         chunks, rather than from the raw body a reply carries its whole history in, and a body carried as markup alone
+         is read from the text it displays. -->
     <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
