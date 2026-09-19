@@ -19,8 +19,9 @@ name: AI evaluations
 #
 # The artefact is readable by anyone who can read this repository's runs, which is why nothing in the
 # store is mail anybody received and why the judge is recorded only as `judge`: its model and the
-# reasoning effort `vars.JUDGE_REASONING_EFFORT` declares for it never reach the store, the report, the
-# log, or a failure message.
+# reasoning effort `vars.JUDGE_REASONING_EFFORT` declares for it never reach the store, the report, or
+# a failure message. The one place both appear is the evaluation step's log header, which prints every
+# `env:` value it is handed and masks only the secrets.
 on:
   workflow_dispatch:
     inputs:
