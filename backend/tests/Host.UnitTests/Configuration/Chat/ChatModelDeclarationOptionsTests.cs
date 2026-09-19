@@ -4,6 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -477,13 +478,63 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.AdditionalProperties["top_k"] = "40";
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(("top_k", "40"));
 
         // Act
         var errors = Validate(model);
 
         // Assert
         Assert.Empty(errors);
+    }
+
+    /// <summary>A gateway's routing block is an object inside an object, which is the shape this declaration exists to carry.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnAdditionalPropertyNestingAnObjectAndAnArray_IsAccepted()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(
+            ("provider:order:0", "anthropic"),
+            ("provider:allow_fallbacks", "false"),
+            ("provider:max_price:prompt", "1"),
+            ("transforms:0", "middle-out"));
+
+        // Act
+        var errors = Validate(model);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AnAdditionalPropertyNestedDeeperThanAMemberMayCarry_IsRefused()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        var tooDeep = string.Join(':', Enumerable.Repeat("level", ConfiguredJson.GreatestNestingDepth + 1));
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(($"provider:{tooDeep}", "1"));
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Equal(["Models:0:AdditionalProperties:provider"], keys);
+    }
+
+    /// <summary>The bound is on the JSON the member goes out as, so a nested member that renders past it is refused exactly as a long scalar is.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnAdditionalPropertyWhoseNestedJsonIsBeyondItsBound_IsRefused()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(
+            [.. Enumerable.Range(0, 200).Select(position => ($"logit_bias:token_{position}", (string?)new string('9', 20)))]);
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Equal(["Models:0:AdditionalProperties:logit_bias"], keys);
     }
 
     /// <summary>A member the deployment writes is a bound, a privacy decision, or a key of its own, so naming it here is refused against the key an operator edits.</summary>
@@ -496,7 +547,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.AdditionalProperties[name] = "1";
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties((name, "1"));
 
         // Act
         var keys = ValidateKeys(model);
@@ -512,7 +563,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.AdditionalProperties[name] = "1";
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties((name, "1"));
 
         // Act
         var errors = Validate(model);
@@ -526,7 +577,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.AdditionalProperties["logit_bias"] = new string('9', 4097);
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(("logit_bias", new string('9', 4097)));
 
         // Act
         var errors = Validate(model);
@@ -540,11 +591,9 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-
-        foreach (var index in Enumerable.Range(0, ChatGenerationPlan.GreatestAdditionalPropertyCount + 1))
-        {
-            model.AdditionalProperties[$"member_{index}"] = "1";
-        }
+        model.AdditionalProperties = DeclaredChatModels.AdditionalProperties(
+            [.. Enumerable.Range(0, ChatGenerationPlan.GreatestAdditionalPropertyCount + 1)
+                .Select(index => ($"member_{index}", (string?)"1"))]);
 
         // Act
         var keys = ValidateKeys(model);

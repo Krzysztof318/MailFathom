@@ -329,7 +329,7 @@ reading of what a header may be governs both.
 
 `AdditionalProperties` is a JSON object whose members a model sends on every request, beside the ones this deployment
 writes. It is how a parameter this build has no key for reaches the model — `top_k`, `min_p`, `repetition_penalty`, a
-seed, or a gateway's own routing switch — without waiting for a release that names it, and it is declared per model
+seed, or a gateway's own routing block — without waiting for a release that names it, and it is declared per model
 because the parameters one model documents are not the ones another accepts. Each member goes out as a top-level member
 of the request body under the name it was declared with, on both APIs:
 
@@ -338,15 +338,20 @@ of the request body under the name it was declared with, on both APIs:
   "Chat": {
     "Models": [
       {
-        "Alias": "local-chat",
-        "Model": "example-chat-2",
-        "Address": "http://chat.internal.test:8000/v1",
-        "Unauthenticated": true,
+        "Alias": "gateway-chat",
+        "Model": "example/chat-2",
+        "Address": "https://gateway.example.test/api/v1/",
+        "ApiKey": { "SecretReference": "file:/etc/mailfathom/secrets/gateway-chat-key" },
         "Temperature": 0.6,
         "AdditionalProperties": {
           "top_k": 20,
           "min_p": 0,
-          "stop": "[\"<|im_end|>\"]"
+          "stop": ["<|im_end|>"],
+          "provider": {
+            "order": ["anthropic", "openai"],
+            "allow_fallbacks": false,
+            "max_price": { "prompt": 1 }
+          }
         }
       }
     ]
@@ -354,22 +359,36 @@ of the request body under the name it was declared with, on both APIs:
 }
 ```
 
-**A value keeps its JSON type as far as configuration allows.** Configuration hands every value over as text, so the type
-is read back from it: a number, `true`, `false`, or `null` goes out as that literal, and anything else as a string. An
-array or an object cannot be written as one — configuration flattens it into keys this object cannot hold, and startup
-refuses it — so it is written as its JSON text instead, as `stop` is above, and goes out as the JSON that text states.
-A string that reads as a number or a boolean is written the same way, as its JSON text: `"seed": "40"` goes out as the
-number `40`, while `"route": "\"40\""` goes out as the string `"40"`.
+**A member may be a whole document rather than a value**, which is the shape a gateway asks for: OpenRouter takes its
+provider routing, its transforms, and its price ceiling in the request body and in no header, and nests one inside
+another. Write it as ordinary JSON, as `provider` is above, and the structure reaches the request unchanged.
+
+**A value keeps its JSON type as far as configuration allows.** Configuration carries a document as a tree of text
+leaves, so both the structure and the type of each value are read back from it. A number, `true`, `false`, or `null`
+goes out as that literal, and anything else as a string. A value written as its JSON text is read as the JSON that text
+states, which is how a whole member is declared in one environment variable and the only way to send a string that
+would otherwise read as something else: `"seed": "40"` goes out as the number `40`, while `"route": "\"40\""` goes out
+as the string `"40"`.
+
+**Two things a configuration tree cannot state, which are decided rather than guessed.** Nothing in it says whether a
+node is an object or an array, because an array's member names are its indices — so a node whose child names are
+exactly the integers below their own count goes out as an array in index order, and any other node as an object. An
+object whose own members happen to be called `0` and `1` therefore goes out as a two-element array, and nothing could
+tell the two apart. And an object or an array with nothing inside it carries neither a value nor a child, which is what
+a `null` carries too, so it goes out as `null`. A deployment provisioned through environment variables writes the same
+tree under `__` — `Chat__Models__0__AdditionalProperties__provider__order__0` — and reaches the same request member.
 
 **What a member may be called is bounded.** It is a top-level member name — letters, digits, and underscores, not
 starting with a digit — because the name becomes a path into the request body, and a dot or a bracket would address a
-member somewhere else. It may not be a member this deployment writes itself or already has a key for: the routed model,
-the turns, the instruction, the tools and the answer format, streaming, storage and what the responses API is asked to
-include, the number of answers, the output budget, the sampling parameters, and the reasoning effort. Each of those is a
-bound this deployment enforces, a privacy decision it states on every call — the responses API is told not to store the
-request whatever else is declared — or a parameter with a key of its own, which is `MaxOutputTokens`, `Temperature`,
-`TopP`, or `ReasoningEffort`. One model carries at most 32 members, each value at most 4096 characters. All of it is
-checked at startup.
+member somewhere else; whatever the member holds is nested underneath it rather than written into its name. It may not
+be a member this deployment writes itself or already has a key for: the routed model, the turns, the instruction, the
+tools and the answer format, streaming, storage and what the responses API is asked to include, the number of answers,
+the output budget, the sampling parameters, and the reasoning effort. Each of those is a bound this deployment
+enforces, a privacy decision it states on every call — the responses API is told not to store the request whatever else
+is declared — or a parameter with a key of its own, which is `MaxOutputTokens`, `Temperature`, `TopP`, or
+`ReasoningEffort`. The refusal is on the top-level name alone, so a nested member called `store` or `temperature`
+inside a gateway's own block is an ordinary value and goes out as one. One model carries at most 32 members, each at
+most 4096 characters of JSON and nested at most 16 levels deep. All of it is checked at startup.
 
 **A value is not a secret.** It is written into the configuration file and into every request body, so a credential or a
 routing token belongs in [a header](#a-model-may-declare-headers-of-its-own), whose value is a secret reference.

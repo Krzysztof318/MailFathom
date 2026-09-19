@@ -700,15 +700,36 @@ reload here and take a restart there, for the reason the Microsoft Entra block a
 ### Additional request members — `Chat:Models:<n>:AdditionalProperties`
 
 A JSON object whose members every request to this model carries in its body, beside the members the deployment writes —
-`top_k`, `min_p`, a seed, or anything else the model documents that has no key above. Empty by default, which sends
-nothing extra. Changes on reload.
+`top_k`, `min_p`, a seed, a gateway's routing block, or anything else the model documents that has no key above. Empty
+by default, which sends nothing extra. Changes on reload.
+
+A member may be a scalar or a whole object or array, written as ordinary nested JSON, which is the shape a gateway asks
+for: OpenRouter takes its provider routing, its transforms, and its price ceiling in the request body and in no header,
+and nests one inside another.
+
+```json
+"AdditionalProperties": {
+  "top_k": 20,
+  "provider": {
+    "order": ["anthropic", "openai"],
+    "allow_fallbacks": false,
+    "max_price": { "prompt": 1 }
+  },
+  "transforms": ["middle-out"]
+}
+```
 
 | Rule | |
 | --- | --- |
-| Name | letters, digits, and underscores, not starting with a digit; at most 64 characters |
-| Refused names | any member the deployment writes or has a key for — `model`, `messages`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `response_format`, `text`, `stream`, `stream_options`, `store`, `include`, `previous_response_id`, `conversation`, `background`, `n`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning`, `reasoning_effort`. Use `MaxOutputTokens`, `Temperature`, `TopP`, or `ReasoningEffort` for the ones that have a key |
-| Value | a number, `true`, `false`, or `null` is sent as that literal and anything else as a string; an array or object is written as its JSON text, because configuration cannot carry one as a value, and so is a string that would otherwise read as a number or boolean — `"\"40\""` sends the string `"40"`. At most 4096 characters |
+| Name | letters, digits, and underscores, not starting with a digit; at most 64 characters. It names a top-level member of the request body, and whatever that member holds is nested underneath it rather than written into the name |
+| Refused names | any member the deployment writes or has a key for — `model`, `messages`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `response_format`, `text`, `stream`, `stream_options`, `store`, `include`, `previous_response_id`, `conversation`, `background`, `n`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning`, `reasoning_effort`. Use `MaxOutputTokens`, `Temperature`, `TopP`, or `ReasoningEffort` for the ones that have a key. The refusal is on the top-level name alone, so a nested member of the same name is an ordinary value |
+| Value | a number, `true`, `false`, or `null` is sent as that literal and anything else as a string. A value written as JSON text is read as that JSON, which is how a whole member is declared in one environment variable and the only way to send a string that would otherwise read as a number or a boolean — `"\"40\""` sends the string `"40"` |
+| Nesting | at most 16 levels, counting the member itself. A node whose child names are exactly the integers below their own count is sent as an array in index order and any other node as an object — so an object whose own members happen to be named `0` and `1` is sent as a two-element array, and an object or array with nothing inside it cannot be told from `null` and is sent as `null` |
+| Size | at most 4096 characters of JSON per member |
 | Count | at most 32 members per model |
+
+Environment variables carry the same tree under `__`, so
+`Chat__Models__0__AdditionalProperties__provider__order__0=anthropic` declares what the file above declares.
 
 A value is written in the configuration file and sent in the clear in every request body, so it is never a secret; a
 credential or routing token goes in an [extra header](#an-extra-header--chatmodelsnextraheadersn). [Chat generation §

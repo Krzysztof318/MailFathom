@@ -26,8 +26,9 @@ namespace MailFathom.Host.Configuration.Chat;
 /// </remarks>
 internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclaration
 {
-    /// <summary>The longest one additional property's value may be, which bounds what a declaration adds to every request.</summary>
-    private const int MaximumAdditionalPropertyValueLength = 4096;
+    /// <summary>The longest one additional property's JSON may be, which bounds what a declaration adds to every request.</summary>
+    /// <remarks>Measured on the JSON the member goes out as rather than on the text it was written in, because a nested member is written as a tree of values and carried as one document.</remarks>
+    private const int MaximumAdditionalPropertyJsonLength = 4096;
 
     /// <summary>Gets or sets the deployment's own name for this model, which every reference to it is written with.</summary>
     /// <remarks>
@@ -168,20 +169,33 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     /// </remarks>
     public IList<ProviderEndpointHeaderOptions> ExtraHeaders { get; } = [];
 
-    /// <summary>Gets the request members every call to this model carries beside the ones this deployment writes, keyed by their wire name.</summary>
+    /// <summary>Gets or sets the subtree whose members every call to this model carries in its request body beside the ones this deployment writes.</summary>
     /// <remarks>
     /// <para>
-    /// Empty for the ordinary deployment. What fills it is a parameter this build has no key for — <c>top_k</c>,
-    /// <c>min_p</c>, a seed, a gateway's routing switch — sent as a top-level member of the request body on both APIs.
+    /// Absent for the ordinary deployment. What fills it is a parameter this build has no key for — <c>top_k</c>,
+    /// <c>min_p</c>, a seed, a gateway's routing block — sent as a top-level member of the request body on both APIs.
+    /// A member may be a whole object or array rather than a scalar, which is the shape a gateway asks for: provider
+    /// routing, transforms, and a price ceiling are declared in the body and nowhere else, and nesting one inside
+    /// another is how they are written.
     /// </para>
     /// <para>
-    /// Configuration hands every value over as text, so the type is read back from it: a value that parses as JSON — a
-    /// number, <c>true</c> or <c>false</c> in any casing, <c>null</c>, or an array or object written as JSON text — goes out as that
-    /// value, and anything else goes out as a string. A member this deployment writes itself, or has a key of its own
-    /// for, is refused rather than overridden.
+    /// The subtree itself rather than a bound value, because what an operator writes here is arbitrary JSON and no
+    /// binder target can be that. <see cref="ConfiguredJson" /> reads it back, holds the rule that decides an array
+    /// from an object, and states what configuration cannot carry; a member this deployment writes itself, or has a
+    /// key of its own for, is refused here rather than overridden.
     /// </para>
     /// </remarks>
-    public IDictionary<string, string?> AdditionalProperties { get; } = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    public IConfigurationSection? AdditionalProperties { get; set; }
+
+    /// <summary>Gets the declared request members, read out of the subtree once and held.</summary>
+    /// <remarks>
+    /// Read once so that what a start proved is what its requests carry. The subtree is the live configuration rather
+    /// than a copy taken at binding, so a second reload landing between this declaration being published and a plan
+    /// being mapped from it would otherwise let values nothing validated reach a request. Two threads reaching it
+    /// unread both read it and one wins the write, which decides nothing: they read the same subtree.
+    /// </remarks>
+    private Dictionary<string, JsonElement> DeclaredMembers =>
+        field ??= ConfiguredJson.ReadMembers(this.AdditionalProperties);
 
     /// <summary>Reports everything an operator must fix before this model could be called.</summary>
     /// <param name="position">Where in the declared array this block sits, which is how a message names a block whose alias is missing.</param>
@@ -291,63 +305,58 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
 
     private IEnumerable<ValidationResult> FindAdditionalPropertyErrors(string description)
     {
-        if (this.AdditionalProperties.Count > ChatGenerationPlan.GreatestAdditionalPropertyCount)
+        var members = this.AdditionalProperties?.GetChildren().ToArray() ?? [];
+        var tooDeep = false;
+
+        if (members.Length > ChatGenerationPlan.GreatestAdditionalPropertyCount)
         {
             yield return new ValidationResult(
-                $"{description} declares {this.AdditionalProperties.Count} AdditionalProperties, more than the {ChatGenerationPlan.GreatestAdditionalPropertyCount} one model may carry.",
+                $"{description} declares {members.Length} AdditionalProperties, more than the {ChatGenerationPlan.GreatestAdditionalPropertyCount} one model may carry.",
                 [nameof(this.AdditionalProperties)]);
         }
 
-        foreach (var (name, value) in this.AdditionalProperties)
+        foreach (var member in members)
         {
-            string[] key = [$"{nameof(this.AdditionalProperties)}:{name}"];
+            string[] key = [$"{nameof(this.AdditionalProperties)}:{member.Key}"];
 
-            if (!ChatGenerationPlan.IsUsableAdditionalPropertyName(name))
+            if (!ChatGenerationPlan.IsUsableAdditionalPropertyName(member.Key))
             {
                 yield return new ValidationResult(
-                    $"{description} declares an additional property '{name}' that is not a top-level request member name. Write the member as the provider documents it, in letters, digits, and underscores.",
+                    $"{description} declares an additional property '{member.Key}' that is not a top-level request member name. Write the member as the provider documents it, in letters, digits, and underscores, and nest whatever it holds underneath it.",
                     key);
             }
-            else if (ChatGenerationPlan.IsOwnedRequestMember(name))
+            else if (ChatGenerationPlan.IsOwnedRequestMember(member.Key))
             {
                 yield return new ValidationResult(
-                    $"{description} declares an additional property '{name}', which is a request member this deployment writes itself. Use the model's own key where one exists — MaxOutputTokens, Temperature, TopP, or ReasoningEffort — and leave the rest to the deployment.",
+                    $"{description} declares an additional property '{member.Key}', which is a request member this deployment writes itself. Use the model's own key where one exists — MaxOutputTokens, Temperature, TopP, or ReasoningEffort — and leave the rest to the deployment.",
                     key);
             }
 
-            if (value?.Length > MaximumAdditionalPropertyValueLength)
+            // Every member's depth is proved before any of them is rendered, because rendering descends the tree and
+            // this is the bound that says descending it is safe at all.
+            if (ConfiguredJson.DepthOf(member) > ConfiguredJson.GreatestNestingDepth)
             {
                 yield return new ValidationResult(
-                    $"{description} declares an additional property '{name}' longer than {MaximumAdditionalPropertyValueLength} characters.",
+                    $"{description} declares an additional property '{member.Key}' nested deeper than the {ConfiguredJson.GreatestNestingDepth} levels one request member may carry.",
                     key);
+
+                tooDeep = true;
             }
         }
-    }
 
-    /// <summary>Reads each declared value back into the JSON it stands for, since configuration carries every value as text.</summary>
-    private Dictionary<string, JsonElement> ToAdditionalProperties() =>
-        this.AdditionalProperties.ToDictionary(entry => entry.Key, entry => ToJsonValue(entry.Value), StringComparer.Ordinal);
-
-    private static JsonElement ToJsonValue(string? value)
-    {
-        if (value is null)
+        if (tooDeep)
         {
-            return JsonSerializer.SerializeToElement<string?>(null);
+            yield break;
         }
 
-        // The JSON configuration provider hands a boolean over as .NET writes one, capitalized, which JSON does not read.
-        if (bool.TryParse(value, out var flag))
+        foreach (var (name, value) in this.DeclaredMembers)
         {
-            return JsonSerializer.SerializeToElement(flag);
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<JsonElement>(value);
-        }
-        catch (JsonException)
-        {
-            return JsonSerializer.SerializeToElement(value);
+            if (value.GetRawText().Length > MaximumAdditionalPropertyJsonLength)
+            {
+                yield return new ValidationResult(
+                    $"{description} declares an additional property '{name}' whose JSON is longer than {MaximumAdditionalPropertyJsonLength} characters.",
+                    [$"{nameof(this.AdditionalProperties)}:{name}"]);
+            }
         }
     }
 
@@ -364,7 +373,7 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         this.MaxRequestCharacters,
         this.MaxRequestImageOctets,
         this.RequestTimeout,
-        this.ToAdditionalProperties());
+        this.DeclaredMembers);
 
     private List<ValidationResult> FindBoundErrors()
     {

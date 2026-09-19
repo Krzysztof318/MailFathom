@@ -4,6 +4,7 @@
 
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using Microsoft.Extensions.Configuration;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
@@ -29,6 +30,20 @@ internal static class DeclaredChatModels
             ApiKey = authenticated ? new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } : null,
             Unauthenticated = !authenticated,
         };
+
+    /// <summary>Builds the configuration subtree a model's additional request members are declared as.</summary>
+    /// <param name="members">Each member, by the configuration key it sits under — <c>provider:order:0</c> for a nested one — and the text configuration carries it as.</param>
+    /// <returns>The subtree, ready to be assigned to a declaration.</returns>
+    /// <remarks>
+    /// The property is the subtree itself rather than a bound value, so a test that varies one member states it the
+    /// way a configuration provider would rather than reaching past the binding it is exercising.
+    /// </remarks>
+    public static IConfigurationSection AdditionalProperties(params (string Key, string? Value)[] members) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(members.Select(member =>
+                new KeyValuePair<string, string?>($"{nameof(AdditionalProperties)}:{member.Key}", member.Value)))
+            .Build()
+            .GetSection(nameof(AdditionalProperties));
 
     /// <summary>Builds a section declaring the models given, with the first of them answering.</summary>
     /// <remarks>The main model is left unwritten where exactly one is declared, which is the shape the section resolves for itself and therefore the one worth exercising by default.</remarks>
