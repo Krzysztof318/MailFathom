@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.AI.Chat;
 using MailFathom.Application.Emails.Enrichment;
+using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Judging;
 using MailFathom.Evaluations.Providers;
@@ -16,7 +17,7 @@ using Xunit;
 
 namespace MailFathom.Evaluations.Enrichment;
 
-/// <summary>Measures the enrichment agent under every declared model, and is the worked example a new scenario starts from.</summary>
+/// <summary>Measures the enrichment agent under every declared model over every message in <see cref="EmailEnrichmentScenario.All" />, and is the worked example a new scenario starts from.</summary>
 /// <remarks>
 /// <para>
 /// One test over the whole model list rather than a theory per model, because the list is read from the run's
@@ -55,21 +56,24 @@ public sealed class EmailEnrichmentEvaluations
         DelayBetweenAttemptsMs,
         Skip = AiEvaluationRun.SkipReason,
         SkipUnless = nameof(EvaluationsRequested))]
-    public async Task Derive_AnInvoiceFollowUp_EveryDeclaredModelWritesReadingsTheMessageSupports()
+    public async Task Derive_EveryScenario_EveryDeclaredModelWritesReadingsTheMessageSupports()
     {
         // Arrange
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
 
         // Act
-        var outcomes = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(outcomes.SelectMany(ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
-    /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<EmailEnrichmentOutcome> MeasureAsync(
+    /// <summary>
+    /// Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once,
+    /// and its scenarios one after another, because each one's cost is read off that model's meters.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ChatGenerationPlan plan,
         string apiKey)
@@ -81,36 +85,51 @@ public sealed class EmailEnrichmentEvaluations
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, EmailEnrichmentScenario.Evaluators);
+        List<string> shortfalls = [];
 
-        var outcome = await EmailEnrichmentScenario.RunAsync(
-            reporting,
-            model,
-            plan,
-            modelSpend,
-            judgeSpend,
-            TestContext.Current.CancellationToken);
-
-        if (ShortfallsOf(outcome).Any())
+        foreach (var scenario in EmailEnrichmentScenario.All)
         {
-            await EvaluationStore.ForgetAsync(reporting, EmailEnrichmentScenario.Name, outcome.Model, TestContext.Current.CancellationToken);
+            var outcome = await scenario.RunAsync(
+                reporting,
+                model,
+                plan,
+                modelSpend,
+                judgeSpend,
+                TestContext.Current.CancellationToken);
+
+            var scenarioShortfalls = ShortfallsOf(scenario, outcome).ToList();
+
+            if (scenarioShortfalls.Count > 0)
+            {
+                await EvaluationStore.ForgetAsync(reporting, scenario.Name, outcome.Model, TestContext.Current.CancellationToken);
+            }
+
+            shortfalls.AddRange(scenarioShortfalls);
         }
 
-        return outcome;
+        return shortfalls;
     }
 
     /// <summary>Names what one model's outcome falls short on, in words a failed run can be read by.</summary>
-    private static IEnumerable<string> ShortfallsOf(EmailEnrichmentOutcome outcome)
+    private static IEnumerable<string> ShortfallsOf(EmailEnrichmentScenario scenario, EmailEnrichmentOutcome outcome)
     {
         if (!outcome.Marks.Any(static mark => mark.Aspect is EmailEnrichmentAspect.Sense))
         {
-            yield return $"{outcome.Model}: no reading of what the message is about survived.";
+            yield return $"{outcome.Model}: {scenario.Name}: no reading of what the message is about survived.";
         }
 
         var groundedness = outcome.Verdict.Get<NumericMetric>(GroundednessEvaluator.GroundednessMetricName);
 
         if (groundedness.Interpretation is not { Failed: false })
         {
-            yield return $"{outcome.Model}: groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
+            yield return $"{outcome.Model}: {scenario.Name}: groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
+        }
+
+        var obeyed = outcome.Verdict.Get<BooleanMetric>(HostileMail.ObeysNoMailMetricName);
+
+        if (obeyed.Interpretation is { Failed: true })
+        {
+            yield return $"{outcome.Model}: {scenario.Name}: {obeyed.Reason}";
         }
     }
 }

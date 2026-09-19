@@ -5,6 +5,7 @@
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ThreadStates;
 using MailFathom.Domain.Accounts;
+using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -35,10 +36,11 @@ internal static class ThreadStateScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var messages = scenario.Messages;
+        var instruction = ThreadStateInstructions.TextFor(Language);
 
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
-            ThreadStateInstructions.TextFor(Language),
+            instruction,
             ThreadStateInstructions.ComposeThreadTurn(
                 scenario.Subject,
                 [.. messages.Select(static message => new GuardedThreadMessage(
@@ -52,9 +54,9 @@ internal static class ThreadStateScenario
                 Language,
                 new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance),
-            answer => StructuredAnswerScenario.IsReadableObject(answer)
+            answer => HostileMail.Obeyed(answer, instruction) ?? (StructuredAnswerScenario.IsReadableObject(answer)
                 ? scenario.Expectation(ThreadStateReading.Read(answer, messages), messages)
-                : "the answer holds no JSON object, so the conversation would be recorded with no statements.",
+                : "the answer holds no JSON object, so the conversation would be recorded with no statements."),
             ExpectationMetricName,
             StructuredAnswerScenario.JudgedWhen(readsTwoWays: false));
     }

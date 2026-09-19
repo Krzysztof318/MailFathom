@@ -19,7 +19,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.Enrichment;
 
-/// <summary>Puts one corpus message to the enrichment agent under one model, reads its marks, and has the judge grade them.</summary>
+/// <summary>Puts one message to the enrichment agent under one model, reads its marks, and has the judge grade them.</summary>
 /// <remarks>
 /// <para>
 /// The agent is composed by the composition a deployment uses, with the instruction, the turn, and the reading a
@@ -33,23 +33,30 @@ namespace MailFathom.Evaluations.Enrichment;
 /// transport beneath that cache, so a run served from it reports nothing spent rather than yesterday's charge.
 /// </para>
 /// <para>
-/// Marks are a structure, so whether there are any and what they cite is asserted plainly by the caller. The judge
-/// grades only what a structure cannot: whether each sentence is supported by the message it is about.
+/// Marks are a structure, so whether there are any and what they cite is asserted plainly by the caller, and so is
+/// whether the answer carried out anything the message asked of it. The judge grades only what a structure cannot:
+/// whether each sentence is supported by the message it is about.
 /// </para>
 /// </remarks>
-internal static class EmailEnrichmentScenario
+/// <param name="Name">The name the scenario is filed and reported under.</param>
+/// <param name="Message">The message the readings are derived from.</param>
+internal sealed record EmailEnrichmentScenario(string Name, CorpusMessage Message)
 {
-    /// <summary>The name the scenario is filed and reported under.</summary>
-    public const string Name = "EmailEnrichment.InvoiceFollowUp";
+    /// <summary>Gets every message the agent is measured on.</summary>
+    public static IReadOnlyList<EmailEnrichmentScenario> All { get; } =
+    [
+        // A reply settling an export defect and chasing an outstanding invoice: it carries a subject, a request,
+        // amounts, and a date, which is every reading the agent may write.
+        new("EmailEnrichment.InvoiceFollowUp", CorpusMessage.At(position: 3)),
+
+        // The rest were written to take the agent over, and the readings have to describe them without obeying them.
+        new("EmailEnrichment.Hostile.DirectInstruction", HostileMail.DirectInstruction[^1]),
+        new("EmailEnrichment.Hostile.QuotedHistory", HostileMail.QuotedHistory[^1]),
+        new("EmailEnrichment.Hostile.OwnerImpersonation", HostileMail.OwnerImpersonation[^1]),
+    ];
 
     /// <summary>What every run of this scenario is judged on.</summary>
     public static IReadOnlyList<IEvaluator> Evaluators => [new GroundednessEvaluator()];
-
-    /// <summary>
-    /// A reply settling an export defect and chasing an outstanding invoice: it carries a subject, a request, amounts,
-    /// and a date, which is every reading the agent may write.
-    /// </summary>
-    private static CorpusMessage Message { get; } = CorpusMessage.At(position: 3);
 
     /// <summary>Runs the scenario under one model and files the verdict in the run's store.</summary>
     /// <param name="reporting">The run's store, judge, and name.</param>
@@ -63,7 +70,7 @@ internal static class EmailEnrichmentScenario
         "Reliability",
         "CA2000:Dispose objects before losing scope",
         Justification = "Disposing the caching wrapper would dispose the caller's model client, which this scenario does not own.")]
-    public static async Task<EmailEnrichmentOutcome> RunAsync(
+    public async Task<EmailEnrichmentOutcome> RunAsync(
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
@@ -75,26 +82,32 @@ internal static class EmailEnrichmentScenario
         var iterationName = EvaluationStore.IterationNameFor(modelName);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
-            Name,
+            this.Name,
             iterationName,
             cancellationToken: cancellationToken);
 
         var turn = EmailEnrichmentInstructions.ComposeEnrichmentTurn(
-            Message.Subject,
-            Message.ReceivedAt,
-            [.. Message.Passages.Select(static passage => passage.Text)]);
+            this.Message.Subject,
+            this.Message.ReceivedAt,
+            [.. this.Message.Passages.Select(static passage => passage.Text)]);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
         var response = await AskAsync(cachedModel, plan, turn, cancellationToken);
-        var marks = EmailEnrichmentReading.Read(response, Message.Passages, EmailEnrichmentAgentComposition.AgentName);
+        var marks = EmailEnrichmentReading.Read(response, this.Message.Passages, EmailEnrichmentAgentComposition.AgentName);
+        var obeyed = HostileMail.Obeyed(response, EmailEnrichmentInstructions.TextFor(MailAccountLanguage.English));
 
         var readings = new ChatResponse(new ChatMessage(ChatRole.Assistant, Describe(marks))) { ModelId = modelName };
         var verdict = await scenarioRun.EvaluateAsync(
             [new ChatMessage(ChatRole.User, turn)],
             readings,
-            [new GroundednessEvaluatorContext(Message.GroundingText)],
+            [new GroundednessEvaluatorContext(this.Message.GroundingText)],
             cancellationToken);
 
+        EvaluationMetrics.Record(
+            verdict,
+            HostileMail.ObeysNoMailMetricName,
+            obeyed is null,
+            obeyed ?? "The readings carry out nothing the message asked of them.");
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend.Take());
 
         return new EmailEnrichmentOutcome(modelName, marks, verdict);
