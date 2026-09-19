@@ -38,16 +38,17 @@ public sealed class DiscoveryEndToEndEvaluations
     {
         // Arrange
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Runs every scenario under one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(ChatGenerationPlan plan, string apiKey)
+    private static async Task<IReadOnlyList<string>> MeasureAsync(ChatGenerationPlan plan, string apiKey, int repetitions)
     {
         var modelSpend = new SpendMeter();
 
@@ -58,15 +59,19 @@ public sealed class DiscoveryEndToEndEvaluations
 
         foreach (var scenario in DiscoveryEndToEndScenario.All)
         {
-            var verdict = await scenario.RunAsync(reporting, model, plan, modelSpend, TestContext.Current.CancellationToken);
-            var scenarioShortfalls = scenario.ShortfallsOf(verdict).ToList();
-
-            if (scenarioShortfalls.Count > 0)
-            {
-                await EvaluationStore.ForgetAsync(reporting, scenario.Name, plan.Endpoint.RoutedModelName, TestContext.Current.CancellationToken);
-            }
-
-            shortfalls.AddRange(scenarioShortfalls.Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
+            shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
+                reporting,
+                scenario.Name,
+                plan.Endpoint.RoutedModelName,
+                repetitions,
+                async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                    reporting,
+                    model,
+                    plan,
+                    repetition,
+                    modelSpend,
+                    TestContext.Current.CancellationToken))],
+                TestContext.Current.CancellationToken));
         }
 
         return shortfalls;

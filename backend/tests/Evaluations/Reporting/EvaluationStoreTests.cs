@@ -70,7 +70,11 @@ public sealed class EvaluationStoreTests : IDisposable
 
         if (forget is not null)
         {
-            await EvaluationStore.ForgetAsync(reporting, forget, ScriptedStructuredAnswerRun.ModelUnderTest, TestContext.Current.CancellationToken);
+            await EvaluationStore.ForgetAsync(
+                reporting,
+                forget,
+                EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1),
+                TestContext.Current.CancellationToken);
         }
 
         return reached;
@@ -89,7 +93,7 @@ public sealed class EvaluationStoreTests : IDisposable
             model,
             ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest),
             scenarioName,
-            EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest),
+            EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1),
             TestContext.Current.CancellationToken);
 
         await cached.GetResponseAsync(

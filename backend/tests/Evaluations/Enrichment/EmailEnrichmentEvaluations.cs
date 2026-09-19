@@ -61,9 +61,10 @@ public sealed class EmailEnrichmentEvaluations
         // Arrange
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
@@ -76,7 +77,8 @@ public sealed class EmailEnrichmentEvaluations
     private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ChatGenerationPlan plan,
-        string apiKey)
+        string apiKey,
+        int repetitions)
     {
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
@@ -89,47 +91,45 @@ public sealed class EmailEnrichmentEvaluations
 
         foreach (var scenario in EmailEnrichmentScenario.All)
         {
-            var outcome = await scenario.RunAsync(
+            shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
                 reporting,
-                model,
-                plan,
-                modelSpend,
-                judgeSpend,
-                TestContext.Current.CancellationToken);
-
-            var scenarioShortfalls = ShortfallsOf(scenario, outcome).ToList();
-
-            if (scenarioShortfalls.Count > 0)
-            {
-                await EvaluationStore.ForgetAsync(reporting, scenario.Name, outcome.Model, TestContext.Current.CancellationToken);
-            }
-
-            shortfalls.AddRange(scenarioShortfalls);
+                scenario.Name,
+                plan.Endpoint.RoutedModelName,
+                repetitions,
+                async repetition => [.. ShortfallsOf(await scenario.RunAsync(
+                    reporting,
+                    model,
+                    plan,
+                    repetition,
+                    modelSpend,
+                    judgeSpend,
+                    TestContext.Current.CancellationToken))],
+                TestContext.Current.CancellationToken));
         }
 
         return shortfalls;
     }
 
     /// <summary>Names what one model's outcome falls short on, in words a failed run can be read by.</summary>
-    private static IEnumerable<string> ShortfallsOf(EmailEnrichmentScenario scenario, EmailEnrichmentOutcome outcome)
+    private static IEnumerable<string> ShortfallsOf(EmailEnrichmentOutcome outcome)
     {
         if (!outcome.Marks.Any(static mark => mark.Aspect is EmailEnrichmentAspect.Sense))
         {
-            yield return $"{outcome.Model}: {scenario.Name}: no reading of what the message is about survived.";
+            yield return "no reading of what the message is about survived.";
         }
 
         var groundedness = outcome.Verdict.Get<NumericMetric>(GroundednessEvaluator.GroundednessMetricName);
 
         if (groundedness.Interpretation is not { Failed: false })
         {
-            yield return $"{outcome.Model}: {scenario.Name}: groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
+            yield return $"groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
         }
 
         var obeyed = outcome.Verdict.Get<BooleanMetric>(HostileMail.ObeysNoMailMetricName);
 
         if (obeyed.Interpretation is { Failed: true })
         {
-            yield return $"{outcome.Model}: {scenario.Name}: {obeyed.Reason}";
+            yield return $"{obeyed.Reason}";
         }
     }
 }

@@ -47,47 +47,45 @@ public sealed class RelevanceFilterEvaluations
     {
         // Arrange
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var outcomes = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey, repetitions))]);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(outcomes.SelectMany(static outcome => ShortfallsOf(outcome.Model, outcome.Verdict)));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Measures one model over a client, a meter, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<(string Model, EvaluationResult Verdict)> MeasureAsync(ChatGenerationPlan plan, string apiKey)
+    private static async Task<IReadOnlyList<string>> MeasureAsync(ChatGenerationPlan plan, string apiKey, int repetitions)
     {
         var modelSpend = new SpendMeter();
 
         using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
 
         var reporting = EvaluationStore.OpenUnjudged(RelevanceFilterScenario.Evaluators);
-        var verdict = await RelevanceFilterScenario.RunAsync(
+
+        return await EvaluationRepetitions.MeasureAsync(
             reporting,
-            model,
-            plan,
-            modelSpend,
-            TestContext.Current.CancellationToken);
-
-        if (ShortfallsOf(plan.Endpoint.RoutedModelName, verdict).Any())
-        {
-            await EvaluationStore.ForgetAsync(
+            RelevanceFilterScenario.Name,
+            plan.Endpoint.RoutedModelName,
+            repetitions,
+            async repetition => [.. ShortfallsOf(await RelevanceFilterScenario.RunAsync(
                 reporting,
-                RelevanceFilterScenario.Name,
-                plan.Endpoint.RoutedModelName,
-                TestContext.Current.CancellationToken);
-        }
-
-        return (plan.Endpoint.RoutedModelName, verdict);
+                model,
+                plan,
+                repetition,
+                modelSpend,
+                TestContext.Current.CancellationToken))],
+            TestContext.Current.CancellationToken);
     }
 
-    /// <summary>Names every metric one model's measurement failed on, in words a failed run can be read by.</summary>
-    private static IEnumerable<string> ShortfallsOf(string model, EvaluationResult verdict) =>
+    /// <summary>Names every metric one measurement failed on, in words a failed run can be read by.</summary>
+    private static IEnumerable<string> ShortfallsOf(EvaluationResult verdict) =>
         verdict.Metrics.Values
             .OfType<NumericMetric>()
             .Where(static metric => metric.Interpretation is { Failed: true })
             .Select(metric => string.Create(
                 CultureInfo.InvariantCulture,
-                $"{model}: {metric.Name} was {metric.Value} — {metric.Interpretation!.Reason}"));
+                $"{metric.Name} was {metric.Value} — {metric.Interpretation!.Reason}"));
 }

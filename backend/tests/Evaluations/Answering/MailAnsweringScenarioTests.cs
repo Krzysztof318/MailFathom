@@ -244,6 +244,7 @@ public sealed class MailAnsweringScenarioTests : IDisposable
             reporting,
             model,
             PlanFor(model),
+            repetition: 1,
             new SpendMeter(),
             new SpendMeter(),
             TestContext.Current.CancellationToken);
