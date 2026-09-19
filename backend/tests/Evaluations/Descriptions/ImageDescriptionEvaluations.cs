@@ -69,7 +69,14 @@ public sealed class ImageDescriptionEvaluations
                 judgeSpend,
                 TestContext.Current.CancellationToken);
 
-            shortfalls.AddRange(scenario.ShortfallsOf(verdict).Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
+            var scenarioShortfalls = scenario.ShortfallsOf(verdict).ToList();
+
+            if (scenarioShortfalls.Count > 0)
+            {
+                await EvaluationStore.ForgetAsync(reporting, scenario.Name, plan.Endpoint.RoutedModelName, TestContext.Current.CancellationToken);
+            }
+
+            shortfalls.AddRange(scenarioShortfalls.Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
         }
 
         return shortfalls;

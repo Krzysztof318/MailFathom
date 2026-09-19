@@ -70,6 +70,15 @@ public sealed class RelevanceFilterEvaluations
             modelSpend,
             TestContext.Current.CancellationToken);
 
+        if (ShortfallsOf(plan.Endpoint.RoutedModelName, verdict).Any())
+        {
+            await EvaluationStore.ForgetAsync(
+                reporting,
+                RelevanceFilterScenario.Name,
+                plan.Endpoint.RoutedModelName,
+                TestContext.Current.CancellationToken);
+        }
+
         return (plan.Endpoint.RoutedModelName, verdict);
     }
 

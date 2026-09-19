@@ -81,12 +81,11 @@ internal static class EvaluationStore
         IChatClient judge,
         string judgeCachingKey,
         IEnumerable<IEvaluator> evaluators) =>
-        DiskBasedReportingConfiguration.Create(
-            root,
+        new(
             evaluators,
+            new DiskBasedResultStore(root),
             new ChatConfiguration(judge),
-            enableResponseCaching: true,
-            AnswerLifetime,
+            ResponseCacheAt(root),
             [judgeCachingKey],
             executionName);
 
@@ -96,8 +95,8 @@ internal static class EvaluationStore
     /// <param name="evaluators">What every scenario in the run is measured on, none of which asks a model.</param>
     /// <returns>The configuration each scenario opens its run from.</returns>
     /// <remarks>
-    /// Composed from its two halves rather than through <see cref="DiskBasedReportingConfiguration" />, which opens the
-    /// response cache only beside a judge: the model under test's answers are what this store caches.
+    /// No judge means no judge's verdicts to cache, but the model under test's answers are what this store caches all the
+    /// same.
     /// </remarks>
     public static ReportingConfiguration OpenUnjudgedAt(
         string root,
@@ -107,8 +106,29 @@ internal static class EvaluationStore
             evaluators,
             new DiskBasedResultStore(root),
             chatConfiguration: null,
-            new DiskBasedResponseCacheProvider(root, AnswerLifetime),
+            ResponseCacheAt(root),
             executionName: executionName);
+
+    /// <summary>Removes every answer and every verdict a scenario cached under a model, so the next attempt asks again.</summary>
+    /// <param name="reporting">The store the scenario ran in, opened here.</param>
+    /// <param name="scenarioName">The scenario the answers are filed under.</param>
+    /// <param name="modelName">The routed name of the model under test.</param>
+    /// <param name="cancellationToken">Withdraws the removal.</param>
+    /// <returns>A task that completes once the entries are gone.</returns>
+    /// <remarks>
+    /// Called where a model fell short. Left cached, the answer would be what every retry and every later run reads back,
+    /// so one miss would fail them all however the model answers when asked again. The verdict already filed stays in
+    /// the result store, so the report still shows the attempt that fell short.
+    /// </remarks>
+    public static Task ForgetAsync(
+        ReportingConfiguration reporting,
+        string scenarioName,
+        string modelName,
+        CancellationToken cancellationToken) =>
+        ((RecallingResponseCacheProvider)reporting.ResponseCacheProvider!).ForgetAsync(
+            scenarioName,
+            IterationNameFor(modelName),
+            cancellationToken);
 
     /// <summary>Turns a model's name into a name the store can file a result under.</summary>
     /// <param name="modelName">The routed name of the model under test.</param>
@@ -153,4 +173,7 @@ internal static class EvaluationStore
             CacheKeyAdditionalValues = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty],
         };
     }
+
+    private static RecallingResponseCacheProvider ResponseCacheAt(string root) =>
+        new(new DiskBasedResponseCacheProvider(root, AnswerLifetime));
 }
