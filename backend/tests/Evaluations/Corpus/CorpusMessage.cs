@@ -17,9 +17,11 @@ namespace MailFathom.Evaluations.Corpus;
 /// <summary>One message of the committed synthetic corpus, cut into the passages a deployment would have stored for it.</summary>
 /// <remarks>
 /// <para>
-/// The corpus is the only input a scenario sends a provider. Every message in it was written by a model for this
+/// The corpus is the only mail a scenario sends a provider. Every message in it was written by a model for this
 /// repository, every address sits under a reserved domain, and nobody received any of it — which is what lets a
-/// scenario, its cached answers, and its report be published.
+/// scenario, its cached answers, and its report be published. <see cref="WrittenCorpus" /> adds the few kinds of message
+/// the corpus carries no example of, written by hand under the same rules and read through the same path, and keeps
+/// them out of <see cref="All" /> so no scenario searching the corpus meets them.
 /// </para>
 /// <para>
 /// The passages come from the chunker a deployment runs, under the rules it runs with, so an agent is measured on the
@@ -106,7 +108,11 @@ internal sealed record CorpusMessage(
         ];
     }
 
-    private static CorpusMessage Read(MimeMessage message, int position)
+    /// <summary>Reads one message the way a deployment would have stored it.</summary>
+    /// <param name="message">The message, which this disposes.</param>
+    /// <param name="position">Where the message falls among everything a scenario is shown, which is what its identifier is derived from.</param>
+    /// <returns>The message.</returns>
+    internal static CorpusMessage Read(MimeMessage message, int position)
     {
         using (message)
         {

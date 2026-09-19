@@ -65,6 +65,33 @@ internal static class LabelledCandidates
                 NotAnswering(16, "Harbor Quay Hotel reservation"),
                 NotAnswering(10, "A project containing 642 tasks"),
             ]),
+        new(
+            "When is the €1,150.00 payment for INV-4798 scheduled to settle?",
+            [
+                Answering(38, "scheduled for settlement on 10 September 2026"),
+                Answering(39, "Invoice INV-4798 remains scheduled for settlement on 10 September 2026"),
+                NotAnswering(68, "Payment for the outstanding balance on INV-4798 is scheduled for 10 September 2026"),
+                NotAnswering(77, "remittance reference is KHL-0306-92"),
+                NotAnswering(98, "scheduled payment of EUR 2,140.00 for September 11, 2026"),
+            ]),
+        new(
+            "Which hotel is booked for the Norvale trip?",
+            [
+                Answering(87, "Harbor Lantern Hotel has been confirmed for four nights"),
+                Answering(88, "four-night Harbor Lantern Hotel reservation"),
+                NotAnswering(85, "Four nights at Juniper Quay Hotel"),
+                NotAnswering(95, "The Lantern House, Lydmere"),
+                NotAnswering(72, "Hotel: Harbor Glass Hotel"),
+            ]),
+        new(
+            "How was the billing portal fixed after it dropped Suite 310 from INV-4827?",
+            [
+                Answering(21, "corrected the postal-code validation rule"),
+                Answering(22, "The manual workaround and the corrected postal-code validation rule resolve the issue"),
+                NotAnswering(62, "Billing entity validation failed"),
+                NotAnswering(66, "clear that value, save the invoice"),
+                NotAnswering(34, "regenerated the PDF and synchronized the billing record"),
+            ]),
     ];
 
     private static LabelledCandidate Answering(int messagePosition, string evidence) =>

@@ -10,11 +10,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.ThreadStates;
 
-/// <summary>Puts one corpus conversation to the thread-state agent and holds its statements to what the conversation says.</summary>
+/// <summary>Puts one conversation to the thread-state agent and holds its statements to what the conversation says.</summary>
 /// <remarks>
 /// The turn is the one a derivation composes and the answer is read through <see cref="ThreadStateReading" />, so a
 /// statement the reading drops — one citing no message the turn numbered — is absent here exactly as it would be on a
-/// screen. No case reads two ways, so none is judged.
+/// screen. Only a case that reads two ways is judged.
 /// </remarks>
 internal static class ThreadStateScenario
 {
@@ -56,6 +56,6 @@ internal static class ThreadStateScenario
                 ? scenario.Expectation(ThreadStateReading.Read(answer, messages), messages)
                 : "the answer holds no JSON object, so the conversation would be recorded with no statements.",
             ExpectationMetricName,
-            StructuredAnswerScenario.JudgedWhen(readsTwoWays: false));
+            StructuredAnswerScenario.JudgedWhen(scenario.ReadsTwoWays));
     }
 }
