@@ -190,10 +190,7 @@ internal sealed partial record MailAnsweringScenario(
     /// <summary>Names every check and rating the verdict falls short on, in words a failed run can be read by.</summary>
     /// <param name="verdict">The verdict one model's run of this scenario produced.</param>
     /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
-    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) =>
-        verdict.Metrics.Values
-            .Where(static metric => metric.Interpretation is { Failed: true })
-            .Select(metric => $"{this.Name}: {metric.Name} — {metric.Interpretation!.Reason ?? metric.Reason}");
+    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(this.Name, verdict);
 
     /// <summary>Runs the agent over the deployment's composition, inside the run bounds a deployment applies.</summary>
     /// <returns>
@@ -231,15 +228,6 @@ internal sealed partial record MailAnsweringScenario(
         }
     }
 
-    private static BooleanMetric Checked(string name, bool held, string reason) =>
-        new(name, held, reason)
-        {
-            Interpretation = new EvaluationMetricInterpretation(
-                held ? EvaluationRating.Good : EvaluationRating.Unacceptable,
-                failed: !held,
-                reason),
-        };
-
     private static string Listed(IEnumerable<Guid> identifiers) => string.Join(", ", identifiers);
 
     [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]
@@ -248,21 +236,13 @@ internal sealed partial record MailAnsweringScenario(
     /// <summary>Holds the judge's two ratings against the thresholds this scenario records, and the tool-call verdict against true.</summary>
     private void InterpretRatings(EvaluationResult verdict)
     {
-        Interpret(verdict.Get<NumericMetric>(IntentResolutionEvaluator.IntentResolutionMetricName), this.MinimumIntentResolution);
-        Interpret(verdict.Get<NumericMetric>(TaskAdherenceEvaluator.TaskAdherenceMetricName), this.MinimumTaskAdherence);
+        EvaluationMetrics.HoldToThreshold(verdict, IntentResolutionEvaluator.IntentResolutionMetricName, this.MinimumIntentResolution);
+        EvaluationMetrics.HoldToThreshold(verdict, TaskAdherenceEvaluator.TaskAdherenceMetricName, this.MinimumTaskAdherence);
 
         var toolCalls = verdict.Get<BooleanMetric>(ToolCallAccuracyEvaluator.ToolCallAccuracyMetricName);
         toolCalls.Interpretation = toolCalls.Value is true
             ? new EvaluationMetricInterpretation(EvaluationRating.Good, failed: false, "The judge found every tool call accurate.")
             : new EvaluationMetricInterpretation(EvaluationRating.Unacceptable, failed: true, toolCalls.Value is null ? "The judge did not rate the tool calls." : "The judge found a tool call inaccurate.");
-
-        static void Interpret(NumericMetric rating, int minimum) =>
-            rating.Interpretation = rating.Value is { } value
-                ? new EvaluationMetricInterpretation(
-                    value >= minimum ? EvaluationRating.Good : EvaluationRating.Unacceptable,
-                    failed: value < minimum,
-                    $"Rated {value} against the scenario's threshold of {minimum}.")
-                : new EvaluationMetricInterpretation(EvaluationRating.Inconclusive, failed: true, "The judge did not rate it.");
     }
 
     /// <summary>Records every structural check as a metric beside the judge's.</summary>
@@ -287,42 +267,48 @@ internal sealed partial record MailAnsweringScenario(
                 && message.GroundingText.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
-        BooleanMetric[] checks =
-        [
-            Checked(
-                SearchedMetricName,
-                lookups > 0,
-                lookups > 0 ? $"The agent made {lookups} lookup(s)." : "The agent answered without looking any mail up."),
-            Checked(
-                CitesExistingMailMetricName,
-                invented.Count is 0,
-                invented.Count is 0 ? "Every message cited exists." : $"Cited messages the mailbox does not hold: {Listed(invented)}."),
-            Checked(
-                CitesRetrievedMailMetricName,
-                unretrieved.Count is 0,
-                unretrieved.Count is 0 ? "Every message cited was retrieved." : $"Cited messages the run never retrieved: {Listed(unretrieved)}."),
-            this.Evidence.Count is 0
-                ? Checked(
-                    RestsOnEvidenceMetricName,
-                    cited.Count is 0,
-                    cited.Count is 0 ? "Nothing answers the question, and the answer cites nothing." : $"Nothing answers the question, yet the answer cites {Listed(cited)}.")
-                : Checked(
-                    RestsOnEvidenceMetricName,
-                    unsupported.Count is 0,
-                    unsupported.Count is 0 ? "Every piece of evidence is in a message the answer cites." : $"No cited message carries: {string.Join("; ", unsupported)}."),
-            Checked(
-                WithinBoundsMetricName,
-                answer is not null,
-                answer is not null ? $"The run stayed within {MailAnsweringRunBounds.Default}." : $"The run reached {MailAnsweringRunBounds.Default} before it answered."),
-            Checked(
-                ReportsSpendAndModelMetricName,
-                spend.ProviderCalls > 0 && spend.Tokens > 0 && !string.IsNullOrWhiteSpace(answer?.ModelId),
-                $"{spend.ProviderCalls} call(s) and {spend.Tokens} token(s) reported, answered by {(string.IsNullOrWhiteSpace(answer?.ModelId) ? "no model it named" : "the model it named")}."),
-        ];
+        EvaluationMetrics.Record(
+            verdict,
+            SearchedMetricName,
+            lookups > 0,
+            lookups > 0 ? $"The agent made {lookups} lookup(s)." : "The agent answered without looking any mail up.");
+        EvaluationMetrics.Record(
+            verdict,
+            CitesExistingMailMetricName,
+            invented.Count is 0,
+            invented.Count is 0 ? "Every message cited exists." : $"Cited messages the mailbox does not hold: {Listed(invented)}.");
+        EvaluationMetrics.Record(
+            verdict,
+            CitesRetrievedMailMetricName,
+            unretrieved.Count is 0,
+            unretrieved.Count is 0 ? "Every message cited was retrieved." : $"Cited messages the run never retrieved: {Listed(unretrieved)}.");
 
-        foreach (var check in checks)
+        if (this.Evidence.Count is 0)
         {
-            verdict.Metrics[check.Name] = check;
+            EvaluationMetrics.Record(
+                verdict,
+                RestsOnEvidenceMetricName,
+                cited.Count is 0,
+                cited.Count is 0 ? "Nothing answers the question, and the answer cites nothing." : $"Nothing answers the question, yet the answer cites {Listed(cited)}.");
         }
+        else
+        {
+            EvaluationMetrics.Record(
+                verdict,
+                RestsOnEvidenceMetricName,
+                unsupported.Count is 0,
+                unsupported.Count is 0 ? "Every piece of evidence is in a message the answer cites." : $"No cited message carries: {string.Join("; ", unsupported)}.");
+        }
+
+        EvaluationMetrics.Record(
+            verdict,
+            WithinBoundsMetricName,
+            answer is not null,
+            answer is not null ? $"The run stayed within {MailAnsweringRunBounds.Default}." : $"The run reached {MailAnsweringRunBounds.Default} before it answered.");
+        EvaluationMetrics.Record(
+            verdict,
+            ReportsSpendAndModelMetricName,
+            spend.ProviderCalls > 0 && spend.Tokens > 0 && !string.IsNullOrWhiteSpace(answer?.ModelId),
+            $"{spend.ProviderCalls} call(s) and {spend.Tokens} token(s) reported, answered by {(string.IsNullOrWhiteSpace(answer?.ModelId) ? "no model it named" : "the model it named")}.");
     }
 }

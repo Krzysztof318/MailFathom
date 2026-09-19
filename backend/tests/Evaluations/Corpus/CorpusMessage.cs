@@ -76,6 +76,17 @@ internal sealed record CorpusMessage(
     /// <returns>The message.</returns>
     public static CorpusMessage At(int position) => All[position];
 
+    /// <summary>Reads the conversation one message closes: its exchange up to and including it, oldest first.</summary>
+    /// <param name="position">Where the closing message falls in delivery order.</param>
+    /// <returns>The conversation as it stood when that message arrived.</returns>
+    public static IReadOnlyList<CorpusMessage> ConversationUpTo(int position)
+    {
+        var closing = All[position];
+        var exchange = Exchanges.Single(conversation => conversation.Contains(closing));
+
+        return [.. exchange.TakeWhile(message => message != closing), closing];
+    }
+
     private static IReadOnlyList<IReadOnlyList<CorpusMessage>> ReadArchive()
     {
         using var archive = File.OpenRead(ArchivePath);
