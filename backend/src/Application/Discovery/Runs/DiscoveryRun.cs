@@ -139,13 +139,46 @@ public sealed class DiscoveryRun
         // whose question would then leave under the deployment's floor instead of under this user's posture.
         using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireUser());
 
-        var plan = await derivation.DerivePlanAsync(question, cancellationToken);
-        var evidence = await this.retrieval.RetrieveAsync(question, plan.Retrieval, progress, cancellationToken);
-        var coverage = await this.coverageReader.ReadAsync(question.Scope, evidence.Passages, cancellationToken);
+        return await AnswerAsync(
+            question,
+            derivation,
+            this.retrieval,
+            this.coverageReader,
+            composition,
+            progress,
+            cancellationToken);
+    }
+
+    /// <summary>Joins the three stages of a run that has already been admitted: the plan, the retrieval it asks for, and the composition of what it found.</summary>
+    /// <param name="question">The question and the scope bounding what may be read to answer it.</param>
+    /// <param name="planner">The derivation the question is read into a plan through.</param>
+    /// <param name="retrieval">The retrieval the plan is run through.</param>
+    /// <param name="coverageReader">Reads which accounts the run drew on and how current each one's local copy was.</param>
+    /// <param name="composer">The composition the result is written through.</param>
+    /// <param name="progress">Told how far the retrieval has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
+    /// <param name="cancellationToken">Cancels the derivation, the retrieval, and the composition.</param>
+    /// <returns>What the run decided, what it found, and what it composed out of it.</returns>
+    /// <remarks>
+    /// Apart from <see cref="RunAsync" /> so the agent evaluations join the stages through this code rather than a copy of
+    /// it, while leaving out what decides whether a run happens at all — the grant, the capability, the period's
+    /// allowance, and the posture the egress guard acts for — which is <see cref="RunAsync" />'s alone.
+    /// </remarks>
+    internal static async Task<DiscoveryRunResult> AnswerAsync(
+        MailQuestion question,
+        IDiscoveryRunPlanner planner,
+        PlannedMailRetrieval retrieval,
+        DiscoveryCoverageReader coverageReader,
+        IDiscoveryResultComposer composer,
+        Action<DiscoveryRetrievalProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var plan = await planner.DerivePlanAsync(question, cancellationToken);
+        var evidence = await retrieval.RetrieveAsync(question, plan.Retrieval, progress, cancellationToken);
+        var coverage = await coverageReader.ReadAsync(question.Scope, evidence.Passages, cancellationToken);
 
         return new DiscoveryRunResult(
             plan,
             evidence,
-            await composition.ComposeAsync(question, plan, evidence, coverage, cancellationToken));
+            await composer.ComposeAsync(question, plan, evidence, coverage, cancellationToken));
     }
 }
