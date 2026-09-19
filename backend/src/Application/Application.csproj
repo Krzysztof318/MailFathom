@@ -5,5 +5,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.Application.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.Evaluations" />
   </ItemGroup>
 </Project>
