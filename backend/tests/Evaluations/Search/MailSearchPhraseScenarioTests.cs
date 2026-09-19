@@ -47,6 +47,16 @@ public sealed class MailSearchPhraseScenarioTests : IDisposable
     [InlineData("PersonWithoutAddress", """{"filters":{"senderAddress":"ingrid@example.test"},"criteria":["travel budget"]}""", false)]
     [InlineData("AttachmentInMonth", """{"filters":{"hasAttachments":true,"receivedFrom":"2026-07-01","receivedTo":"2026-07-31"},"criteria":["audit"]}""", true)]
     [InlineData("AttachmentInMonth", """{"filters":{"receivedFrom":"2026-07-01","receivedTo":"2026-07-31"},"criteria":["audit PDF"]}""", false)]
+    [InlineData("Polish.Sender", """{"filters":{"senderAddress":"Billing@Northwind.example"},"criteria":["faktura"]}""", true)]
+    [InlineData("Polish.Sender", """{"filters":{"senderAddress":"Billing@Northwind.example"},"criteria":["invoice"]}""", false)]
+    [InlineData("Polish.Period", """{"filters":{"receivedFrom":"2026-08-01","receivedTo":"2026-08-31"},"criteria":["umowa"]}""", true)]
+    [InlineData("Polish.Period", """{"filters":{"receivedFrom":"2026-08-01","receivedTo":"2026-08-31"},"criteria":["contract draft"]}""", false)]
+    [InlineData("Polish.Unread", """{"filters":{"unread":true},"criteria":["awaria serwera"]}""", true)]
+    [InlineData("Polish.Unread", """{"filters":{"unread":true},"criteria":["server outage"]}""", false)]
+    [InlineData("Polish.Yesterday", """{"filters":{"receivedFrom":"2026-09-13","receivedTo":"2026-09-13"},"criteria":["dokumenty dostawy"]}""", true)]
+    [InlineData("Polish.Yesterday", """{"filters":{"receivedFrom":"2026-09-13","receivedTo":"2026-09-14"},"criteria":["dokumenty dostawy"]}""", false)]
+    [InlineData("Polish.WordsOnly", """{"criteria":["wycena remontu kuchni"]}""", true)]
+    [InlineData("Polish.WordsOnly", """{"criteria":["kitchen renovation quote"]}""", false)]
     public async Task RunAsync_AReadingForACase_RecordsWhetherItHoldsTheFiltersTheSentenceStated(
         string caseName,
         string answer,

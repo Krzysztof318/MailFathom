@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using System.Text;
 using MailFathom.Application.Emails.Search.Phrasing;
 
 namespace MailFathom.Evaluations.Search;
@@ -201,8 +203,9 @@ internal sealed record MailSearchPhraseCase(
 
     /// <summary>Refuses a criterion sharing no word with the sentence, which is a criterion translated rather than read.</summary>
     /// <remarks>
-    /// A word is matched on its first four letters, because Polish inflects: <c>faktury</c> in the sentence and
-    /// <c>faktura</c> in a criterion are the same word, while <c>invoice</c> is a different language.
+    /// A word is matched on its first four letters without its diacritics, because Polish inflects and alternates a root
+    /// vowel while doing it: <c>faktury</c> in the sentence and <c>faktura</c> in a criterion are the same word, and so
+    /// are <c>umów</c> and <c>umowa</c>, while <c>invoice</c> is a different language.
     /// </remarks>
     private static string? KeepsTheSentencesWords(MailSearchPhraseReading reading, string sentence)
     {
@@ -217,10 +220,18 @@ internal sealed record MailSearchPhraseCase(
     [
         .. text
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(static word => word.Trim(',', '.', '"').ToUpperInvariant())
+            .Select(static word => Folded(word.Trim(',', '.', '"')))
             .Where(static word => word.Length >= 4)
             .Select(static word => word[..4]),
     ];
+
+    /// <summary>Writes a word in upper case with its diacritics dropped, so an alternating root vowel does not hide a shared word.</summary>
+    private static string Folded(string word) =>
+        string.Concat(word
+            .ToUpperInvariant()
+            .Normalize(NormalizationForm.FormD)
+            .Where(static character => CharUnicodeInfo.GetUnicodeCategory(character) is not UnicodeCategory.NonSpacingMark))
+            .Replace('\u0141', 'L');
 
     private static string Period(MailSearchPhraseFilters filters) =>
         $"{filters.ReceivedFrom?.ToString("yyyy-MM-dd", null) ?? "open"} to {filters.ReceivedTo?.ToString("yyyy-MM-dd", null) ?? "open"}";

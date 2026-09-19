@@ -47,6 +47,20 @@ public sealed class DiscoveryPlanningScenarioTests : IDisposable
     [InlineData("AsksForFlagAndReadState", """{"intent":"findFact","sufficientPassages":5,"lookups":[{"queryText":"movers","isRemotelyFlagged":true,"isRemotelySeen":false}]}""", true)]
     [InlineData("AsksForFlagAndReadState", """{"intent":"findFact","sufficientPassages":5,"lookups":[{"queryText":"movers starred unread"}]}""", false)]
     [InlineData("NoScope", "I would look for the venue confirmation.", false)]
+    [InlineData("Polish.ExplicitScope", """{"intent":"findFact","sufficientPassages":5,"lookups":[{"queryText":"nieopłacone faktury","senderAddress":"Billing@Northwind.example"}]}""", true)]
+    [InlineData("Polish.ExplicitScope", """{"intent":"findFact","sufficientPassages":5,"lookups":[{"queryText":"nieopłacone faktury Northwind"}]}""", false)]
+    [InlineData("Polish.NoScope", """{"intent":"findFact","sufficientPassages":3,"lookups":[{"queryText":"miejsce wyjazdu integracyjnego"}]}""", true)]
+    [InlineData("Polish.NoScope", """{"intent":"findFact","sufficientPassages":3,"lookups":[{"queryText":"miejsce wyjazdu","receivedOnOrAfter":"2026-01-01T00:00:00Z"}]}""", false)]
+    [InlineData("Polish.NamesPerson", """{"intent":"findFact","sufficientPassages":4,"lookups":[{"queryText":"Agnieszka Dąbrowska błąd eksportu"}]}""", true)]
+    [InlineData("Polish.NamesPerson", """{"intent":"findFact","sufficientPassages":4,"lookups":[{"queryText":"błąd eksportu","senderAddress":"agnieszka.dabrowska@serwisownia.test"}]}""", false)]
+    [InlineData("Polish.NamesPeriod", """{"intent":"findFact","sufficientPassages":4,"lookups":[{"queryText":"podwyżka czynszu","receivedOnOrAfter":"2026-03-01T00:00:00+01:00","receivedBefore":"2026-04-01T00:00:00+02:00"}]}""", true)]
+    [InlineData("Polish.NamesPeriod", """{"intent":"findFact","sufficientPassages":4,"lookups":[{"queryText":"podwyżka czynszu marzec 2026"}]}""", false)]
+    [InlineData("Polish.OutsideWhatARunCanDo", """{"intent":"unclassified","sufficientPassages":3,"lookups":[{"queryText":"oferta Tomasz"}]}""", true)]
+    [InlineData("Polish.OutsideWhatARunCanDo", """{"intent":"findFact","sufficientPassages":3,"lookups":[{"queryText":"oferta Tomasz"}]}""", false)]
+    [InlineData("Polish.TracksAChange", """{"intent":"trackChange","sufficientPassages":6,"lookups":[{"queryText":"termin przeprowadzki biura"}]}""", true)]
+    [InlineData("Polish.TracksAChange", """{"intent":"findFact","sufficientPassages":6,"lookups":[{"queryText":"termin przeprowadzki biura"}]}""", false)]
+    [InlineData("Polish.LooksForFiles", """{"intent":"findDocuments","sufficientPassages":3,"lookups":[{"queryText":"plan piętra","hasAttachments":true}]}""", true)]
+    [InlineData("Polish.LooksForFiles", """{"intent":"findFact","sufficientPassages":3,"lookups":[{"queryText":"plan piętra"}]}""", false)]
     public async Task RunAsync_APlanForACase_RecordsWhetherItSaysWhatTheQuestionStated(
         string caseName,
         string answer,
