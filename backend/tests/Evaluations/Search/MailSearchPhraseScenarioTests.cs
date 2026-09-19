@@ -35,6 +35,7 @@ public sealed class MailSearchPhraseScenarioTests : IDisposable
     [InlineData("SinceStartOfMonth", """{"filters":{"receivedFrom":"2026-09-01","receivedTo":"2026-09-14"},"criteria":["office move"]}""", true)]
     [InlineData("SinceStartOfMonth", """{"filters":{"receivedFrom":"2026-08-14"},"criteria":["office move"]}""", false)]
     [InlineData("TwoSenders", """{"criteria":["renewal","northwind","fabrikam"]}""", true)]
+    [InlineData("TwoSenders", """{"filters":{"senderAddress":["billing@northwind.example","accounts@fabrikam.example"]},"criteria":["renewal"]}""", true)]
     [InlineData("TwoSenders", """{"filters":{"senderAddress":"billing@northwind.example"},"criteria":["renewal"]}""", false)]
     [InlineData("SenderAndWords", """{"filters":{"senderAddress":"support@contoso.example","unread":true},"criteria":["password reset"]}""", true)]
     [InlineData("SenderAndWords", """{"filters":{"senderAddress":"support@contoso.example"},"criteria":["password reset"]}""", false)]

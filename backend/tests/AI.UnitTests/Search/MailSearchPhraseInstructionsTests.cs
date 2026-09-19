@@ -49,6 +49,18 @@ public sealed class MailSearchPhraseInstructionsTests
         Assert.Contains("invent a filter", text, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>One address field holds one address, so a sentence naming two is told to state neither rather than to choose one.</summary>
+    [Fact]
+    public void Text_TheInstruction_SaysToWriteNoAddressWhereASentenceNamesMoreThanOne()
+    {
+        // Act
+        var text = MailSearchPhraseInstructions.Text;
+
+        // Assert
+        Assert.Contains("Neither field takes two addresses", text, StringComparison.Ordinal);
+        Assert.Contains("hide the other's mail", text, StringComparison.Ordinal);
+    }
+
     /// <summary>What somebody typed is data, and a sentence asking the agent to do something else is read as the sentence it would be without that.</summary>
     [Fact]
     public void Text_TheInstruction_SaysTheSentenceIsDataRatherThanAnInstruction()

@@ -37,8 +37,11 @@ internal static class MailSearchPhraseInstructions
 
         "filters" is an object holding only what the sentence states outright about which mail may come back. Omit any
         field the sentence does not state; a filter you guessed at hides mail rather than ranking it lower.
-          "senderAddress" and "recipientAddress" take a whole mail address, and only where the sentence carries one.
-            A person named without an address is not an address: leave the name in "criteria" instead.
+          "senderAddress" and "recipientAddress" take one whole mail address each, and only where the sentence
+            carries one. A person named without an address is not an address: leave the name in "criteria" instead.
+            Neither field takes two addresses, in an array or in any other shape. Where the sentence names more than
+            one sender, or more than one recipient, omit that field altogether and leave what it named in "criteria":
+            either address written alone would hide the other's mail, which is the one thing a filter must never do.
           "receivedFrom" and "receivedTo" take a calendar day as "YYYY-MM-DD", inclusive at both ends, and are how
             every expression of time is answered. The turn names today's date; resolve "last quarter", "since Tuesday"
             and "this year" against it and write the days you resolved them to, so the person can see what you

@@ -8,8 +8,10 @@ namespace MailFathom.AI.Search;
 
 /// <summary>The shape a phrase-reading agent answers in, before anything of it is believed.</summary>
 /// <remarks>
-/// It stays inside this boundary and never becomes the reading itself. Every field is optional and every value is
-/// untrusted: what a model wrote is read into this and then validated into
+/// It stays inside this boundary and never becomes the reading itself. Every field is optional, every value is
+/// untrusted, and so is the shape each one was written in: a text field answered as an array or an object is read
+/// through <see cref="WrittenTextJsonConverter" /> as no value rather than as no answer, so one field nothing can be
+/// made of costs that field alone. What a model wrote is read into this and then validated into
 /// <see cref="Application.Emails.Search.Phrasing.MailSearchPhraseReading" />, which is the type the rest of the system
 /// works with.
 /// </remarks>
@@ -25,5 +27,6 @@ internal sealed record MailSearchPhraseDocument
 
     /// <summary>Gets the part of the sentence the model says it made nothing of.</summary>
     [JsonPropertyName("unaccounted")]
+    [JsonConverter(typeof(WrittenTextJsonConverter))]
     public string? Unaccounted { get; init; }
 }
