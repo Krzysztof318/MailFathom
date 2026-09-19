@@ -138,6 +138,7 @@ internal sealed partial record ReplyDraftScenario(
     /// <param name="reporting">The run's store, judge, and name.</param>
     /// <param name="model">The model under test's client.</param>
     /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
     /// <param name="judgeSpend">What reaching the judge has cost, which is the meter the run's judge is opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
@@ -150,12 +151,13 @@ internal sealed partial record ReplyDraftScenario(
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
+        int repetition,
         SpendMeter modelSpend,
         SpendMeter judgeSpend,
         CancellationToken cancellationToken)
     {
         var modelName = plan.Endpoint.RoutedModelName;
-        var iterationName = EvaluationStore.IterationNameFor(modelName);
+        var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
             this.Name,

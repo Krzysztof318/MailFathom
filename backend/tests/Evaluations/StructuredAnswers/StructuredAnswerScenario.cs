@@ -85,16 +85,19 @@ internal static class StructuredAnswerScenario
     /// <summary>Measures one case under every declared model at once, each over clients, meters, and a store handle of its own.</summary>
     /// <param name="request">The case.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
-    /// <returns>What each model answered, in the order the models were declared.</returns>
-    public static async Task<StructuredAnswer[]> MeasureEveryDeclaredModelAsync(
+    /// <returns>What each model fell short on, in the order the models were declared.</returns>
+    public static async Task<IReadOnlyList<string>> MeasureEveryDeclaredModelAsync(
         StructuredAnswerRequest request,
         CancellationToken cancellationToken)
     {
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
-        return await Task.WhenAll(
-            [.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, request, cancellationToken))]);
+        var shortfalls = await Task.WhenAll(
+            [.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions, request, cancellationToken))]);
+
+        return [.. shortfalls.SelectMany(static modelShortfalls => modelShortfalls)];
     }
 
     /// <summary>Names what one model's answer falls short on, in words a failed run can be read by.</summary>
@@ -127,6 +130,7 @@ internal static class StructuredAnswerScenario
     /// <param name="reporting">The run's store, judge, and name, opened with the request's evaluators.</param>
     /// <param name="model">The model under test's client.</param>
     /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
     /// <param name="request">The case.</param>
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
     /// <param name="judgeSpend">What reaching the judge has cost, which is the meter the run's judge is opened over.</param>
@@ -140,6 +144,7 @@ internal static class StructuredAnswerScenario
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
+        int repetition,
         StructuredAnswerRequest request,
         SpendMeter modelSpend,
         SpendMeter judgeSpend,
@@ -150,7 +155,7 @@ internal static class StructuredAnswerScenario
         ArgumentNullException.ThrowIfNull(request);
 
         var modelName = plan.Endpoint.RoutedModelName;
-        var iterationName = EvaluationStore.IterationNameFor(modelName);
+        var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
             request.ScenarioName,
@@ -184,10 +189,11 @@ internal static class StructuredAnswerScenario
     }
 
     /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<StructuredAnswer> MeasureAsync(
+    private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ChatGenerationPlan plan,
         string apiKey,
+        int repetitions,
         StructuredAnswerRequest request,
         CancellationToken cancellationToken)
     {
@@ -198,14 +204,14 @@ internal static class StructuredAnswerScenario
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, request.Evaluators);
-        var answer = await RunAsync(reporting, model, plan, request, modelSpend, judgeSpend, cancellationToken);
 
-        if (ShortfallsOf(answer).Any())
-        {
-            await EvaluationStore.ForgetAsync(reporting, request.ScenarioName, answer.Model, cancellationToken);
-        }
-
-        return answer;
+        return await EvaluationRepetitions.MeasureAsync(
+            reporting,
+            request.ScenarioName,
+            plan.Endpoint.RoutedModelName,
+            repetitions,
+            async repetition => [.. ShortfallsOf(await RunAsync(reporting, model, plan, repetition, request, modelSpend, judgeSpend, cancellationToken))],
+            cancellationToken);
     }
 
     /// <summary>Adds the deterministic verdict to the result, before the run is written to the store.</summary>

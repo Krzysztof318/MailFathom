@@ -41,11 +41,11 @@ public sealed class DiscoveryPlanningEvaluations
         var request = DiscoveryPlanningScenario.RequestFor(DiscoveryPlanningCase.Named(caseName));
 
         // Act
-        var answers = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
+        var shortfalls = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
             request,
             TestContext.Current.CancellationToken);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(answers.SelectMany(StructuredAnswerScenario.ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls);
     }
 }

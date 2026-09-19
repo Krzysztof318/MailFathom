@@ -60,6 +60,7 @@ internal sealed class ScriptedStructuredAnswerRun : IDisposable
             reporting,
             model,
             PlanFor(ModelUnderTest),
+            repetition: 1,
             request,
             new SpendMeter(),
             new SpendMeter(),

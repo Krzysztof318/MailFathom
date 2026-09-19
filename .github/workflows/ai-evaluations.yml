@@ -22,6 +22,13 @@ name: AI evaluations
 # reasoning effort `vars.JUDGE_REASONING_EFFORT` declares for it never reach the store, the report, or
 # a failure message. The one place both appear is the evaluation step's log header, which prints every
 # `env:` value it is handed and masks only the secrets.
+#
+# Each case is asked of each model as many times as a dispatch's `repetitions` input — or
+# `vars.EVALUATION_REPETITIONS` where it names none — declares, and once where neither does. A model's
+# answer varies between calls, so a model is held to the share of those repetitions that passed rather
+# than to one answer, and the report shows that share per case and per model beside what the
+# repetitions cost together. Each repetition is its own cached answer, so a repeated run over an
+# unchanged prompt still costs nothing.
 on:
   workflow_dispatch:
     inputs:
@@ -31,6 +38,10 @@ on:
         type: string
       models:
         description: 'Models under test, separated by commas; defaults to the EVALUATION_MODELS variable'
+        required: false
+        type: string
+      repetitions:
+        description: 'How many times each case is asked of each model, from 1 to 20; defaults to the EVALUATION_REPETITIONS variable, or 1'
         required: false
         type: string
 
@@ -109,6 +120,7 @@ jobs:
         env:
           MAILFATHOM_AI_EVALUATIONS: 'true'
           MAILFATHOM_EVALUATION_MODELS: ${{ inputs.models || vars.EVALUATION_MODELS }}
+          MAILFATHOM_EVALUATION_REPETITIONS: ${{ inputs.repetitions || vars.EVALUATION_REPETITIONS }}
           MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
           MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
           # The judge answers from the same endpoint and the same key as the models under test, so the
