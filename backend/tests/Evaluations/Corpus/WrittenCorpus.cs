@@ -58,36 +58,36 @@ internal static class WrittenCorpus
     /// <summary>Gets a question about a workshop's room, which two unrelated messages follow and the fourth answers.</summary>
     public static IReadOnlyList<CorpusMessage> QuestionAnsweredLater { get; } = Exchange(
         1010,
-        Mail(Owner, "Mara", ["ines.carvalho@lindenrow.test"], [], At(9, 2, 8, 40), "Partner workshop on 22 September", """
-            Hi Ines,
+        Mail(Owner, "Mara", ["irene.carvalho@lindenrow.test"], [], At(9, 2, 8, 40), "Partner workshop on 22 September", """
+            Hi Irene,
 
             Looking forward to the partner workshop on 22 September. Which room will it be held in?
 
             Best,
             Mara
             """),
-        Mail("ines.carvalho@lindenrow.test", "Ines Carvalho", [Owner], [], At(9, 2, 11, 5), "Re: Partner workshop on 22 September", """
+        Mail("irene.carvalho@lindenrow.test", "Irene Carvalho", [Owner], [], At(9, 2, 11, 5), "Re: Partner workshop on 22 September", """
             Hi Mara,
 
             Glad you can join. The agenda is final: three sessions, starting at 09:30 and closing with lunch at 13:00.
 
             Best,
-            Ines
+            Irene
             """),
-        Mail(Owner, "Mara", ["ines.carvalho@lindenrow.test"], [], At(9, 2, 15, 20), "Re: Partner workshop on 22 September", """
-            Thanks, Ines. The timing suits us well, and two of us will attend.
+        Mail(Owner, "Mara", ["irene.carvalho@lindenrow.test"], [], At(9, 2, 15, 20), "Re: Partner workshop on 22 September", """
+            Thanks, Irene. The timing suits us well, and two of us will attend.
 
             Best,
             Mara
             """),
-        Mail("ines.carvalho@lindenrow.test", "Ines Carvalho", [Owner], [], At(9, 4, 9, 50), "Re: Partner workshop on 22 September", """
+        Mail("irene.carvalho@lindenrow.test", "Irene Carvalho", [Owner], [], At(9, 4, 9, 50), "Re: Partner workshop on 22 September", """
             Hi Mara,
 
             Noted, two places are reserved for you. And to answer your earlier question: the workshop is in the Birch Room on
             the second floor.
 
             Best,
-            Ines
+            Irene
             """));
 
     /// <summary>Gets a proposed go-live date that the other side accepts only on a condition of its own.</summary>
@@ -180,9 +180,9 @@ internal static class WrittenCorpus
         Exchange(1104, Mail("oskar.brandt@fernwick.test", "Oskar Brandt", [Owner], [], At(9, 9, 8, 30), "Final notice: FW-2207 unpaid — account on hold from 30 September", "Unless FW-2207 is paid, the account is on hold from 30 September.")),
 
         // A colleague who is only ever copied, on conversations that each inform rather than ask.
-        Exchange(1200, Mail("ines.carvalho@lindenrow.test", "Ines Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(8, 6, 16, 10), "Minutes: Lindenrow quarterly review", "The minutes of Tuesday's quarterly review are below.")),
-        Exchange(1201, Mail("ines.carvalho@lindenrow.test", "Ines Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(8, 20, 11, 45), "FYI: new office address from 1 October", "From 1 October our office is at 9 Canal Row.")),
-        Exchange(1202, Mail("ines.carvalho@lindenrow.test", "Ines Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(9, 3, 10, 5), "For your records: signed framework agreement", "The countersigned framework agreement is filed for both sides.")),
+        Exchange(1200, Mail("irene.carvalho@lindenrow.test", "Irene Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(8, 6, 16, 10), "Minutes: Lindenrow quarterly review", "The minutes of Tuesday's quarterly review are below.")),
+        Exchange(1201, Mail("irene.carvalho@lindenrow.test", "Irene Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(8, 20, 11, 45), "FYI: new office address from 1 October", "From 1 October our office is at 9 Canal Row.")),
+        Exchange(1202, Mail("irene.carvalho@lindenrow.test", "Irene Carvalho", [Owner], ["greta.holm@lindenrow.test"], At(9, 3, 10, 5), "For your records: signed framework agreement", "The countersigned framework agreement is filed for both sides.")),
 
         // A weekly report that always arrives on a Monday morning.
         Exchange(1300, Mail("priya.nair@quaymark.test", "Priya Nair", [Owner], [], At(8, 17, 8, 5), "Weekly status report — week 34", "This week's report is attached.", ["status-week-34.pdf"])),
