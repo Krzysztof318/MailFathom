@@ -232,7 +232,6 @@ public sealed class ChatGenerationPlanTests
             requestTimeout: TimeSpan.Zero));
     }
 
-    /// <summary>A plan declaring no fallback is a chain of one, which is what every deployment that named a single model holds.</summary>
     /// <summary>A parameter this build has no key for is carried under the name the provider documents, whatever its JSON type.</summary>
     [Fact]
     public void Create_DeclaredAdditionalProperties_AreCarried()
@@ -326,6 +325,7 @@ public sealed class ChatGenerationPlanTests
         Assert.Equal(40, withFallback.AdditionalProperties["top_k"].GetInt32());
     }
 
+    /// <summary>A plan declaring no fallback is a chain of one, which is what every deployment that named a single model holds.</summary>
     [Fact]
     public void Chain_APlanWithNoFallback_IsTheModelItself()
     {

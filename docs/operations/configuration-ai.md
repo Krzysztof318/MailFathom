@@ -707,7 +707,7 @@ nothing extra. Changes on reload.
 | --- | --- |
 | Name | letters, digits, and underscores, not starting with a digit; at most 64 characters |
 | Refused names | any member the deployment writes or has a key for — `model`, `messages`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `response_format`, `text`, `stream`, `stream_options`, `store`, `include`, `previous_response_id`, `conversation`, `background`, `n`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning`, `reasoning_effort`. Use `MaxOutputTokens`, `Temperature`, `TopP`, or `ReasoningEffort` for the ones that have a key |
-| Value | a number, `true`, `false`, or `null` is sent as that literal and anything else as a string; an array or object is written as its JSON text, because configuration cannot carry one as a value. At most 4096 characters |
+| Value | a number, `true`, `false`, or `null` is sent as that literal and anything else as a string; an array or object is written as its JSON text, because configuration cannot carry one as a value, and so is a string that would otherwise read as a number or boolean — `"\"40\""` sends the string `"40"`. At most 4096 characters |
 | Count | at most 32 members per model |
 
 A value is written in the configuration file and sent in the clear in every request body, so it is never a secret; a

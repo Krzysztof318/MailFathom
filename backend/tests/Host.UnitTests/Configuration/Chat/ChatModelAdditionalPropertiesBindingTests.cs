@@ -36,12 +36,12 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
         Assert.Equal(JsonValueKind.Null, properties["seed"].ValueKind);
     }
 
-    /// <summary>An array or an object cannot survive configuration's flattening into one key, so it is written as its JSON text and read back as that JSON.</summary>
+    /// <summary>An array, an object, or a string that would otherwise read as a number is written as its JSON text and read back as that JSON.</summary>
     [Fact]
     public void ToPlan_AnArrayOrObjectWrittenAsJsonText_ReachesThePlanAsThatJson()
     {
         // Arrange
-        var model = BindModel("""{ "stop": "[\"###\", \"END\"]", "provider": "{ \"order\": [\"first\"] }" }""");
+        var model = BindModel("""{ "stop": "[\"###\", \"END\"]", "provider": "{ \"order\": [\"first\"] }", "route": "\"40\"" }""");
 
         // Act
         var properties = model.ToPlan().AdditionalProperties;
@@ -49,6 +49,7 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
         // Assert
         Assert.Equal(["###", "END"], properties["stop"].EnumerateArray().Select(element => element.GetString()));
         Assert.Equal("first", properties["provider"].GetProperty("order")[0].GetString());
+        Assert.Equal("40", properties["route"].GetString());
     }
 
     [Fact]

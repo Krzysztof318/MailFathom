@@ -358,7 +358,8 @@ of the request body under the name it was declared with, on both APIs:
 is read back from it: a number, `true`, `false`, or `null` goes out as that literal, and anything else as a string. An
 array or an object cannot be written as one — configuration flattens it into keys this object cannot hold, and startup
 refuses it — so it is written as its JSON text instead, as `stop` is above, and goes out as the JSON that text states.
-The one thing this cannot express is a string that reads as a number or a boolean: `"40"` goes out as `40`.
+A string that reads as a number or a boolean is written the same way, as its JSON text: `"seed": "40"` goes out as the
+number `40`, while `"route": "\"40\""` goes out as the string `"40"`.
 
 **What a member may be called is bounded.** It is a top-level member name — letters, digits, and underscores, not
 starting with a digit — because the name becomes a path into the request body, and a dot or a bracket would address a
