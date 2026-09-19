@@ -472,6 +472,87 @@ public sealed class ChatModelDeclarationOptionsTests
         Assert.Contains("Models:0:ExtraHeaders", keys);
     }
 
+    [Fact]
+    public void FindConfigurationErrors_ADeclaredAdditionalProperty_IsAccepted()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties["top_k"] = "40";
+
+        // Act
+        var errors = Validate(model);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A member the deployment writes is a bound, a privacy decision, or a key of its own, so naming it here is refused against the key an operator edits.</summary>
+    [Theory]
+    [InlineData("temperature")]
+    [InlineData("max_completion_tokens")]
+    [InlineData("store")]
+    [InlineData("model")]
+    public void FindConfigurationErrors_AnAdditionalPropertyNamingAMemberTheDeploymentWrites_IsRefused(string name)
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties[name] = "1";
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Equal([$"Models:0:AdditionalProperties:{name}"], keys);
+    }
+
+    [Theory]
+    [InlineData("top k")]
+    [InlineData("provider.order")]
+    public void FindConfigurationErrors_AnAdditionalPropertyNameThatIsNotAMemberName_IsRefused(string name)
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties[name] = "1";
+
+        // Act
+        var errors = Validate(model);
+
+        // Assert
+        Assert.Single(errors);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AnAdditionalPropertyValueBeyondItsBound_IsRefused()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.AdditionalProperties["logit_bias"] = new string('9', 4097);
+
+        // Act
+        var errors = Validate(model);
+
+        // Assert
+        Assert.Single(errors);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_MoreAdditionalPropertiesThanOneModelMayCarry_IsRefused()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+
+        foreach (var index in Enumerable.Range(0, ChatGenerationPlan.GreatestAdditionalPropertyCount + 1))
+        {
+            model.AdditionalProperties[$"member_{index}"] = "1";
+        }
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Equal(["Models:0:AdditionalProperties"], keys);
+    }
+
     private static ChatModelDeclarationOptions WithHeader(string name, string secretReference)
     {
         var model = DeclaredChatModels.Model();

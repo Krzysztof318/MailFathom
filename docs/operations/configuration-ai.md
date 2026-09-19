@@ -697,6 +697,24 @@ The same block, with the same keys, defaults, and rules as
 [`Embeddings:Endpoints:<n>:ExtraHeaders:<n>`](#an-extra-header--embeddingsendpointsnextraheadersn) above. Its keys
 reload here and take a restart there, for the reason the Microsoft Entra block above gives.
 
+### Additional request members — `Chat:Models:<n>:AdditionalProperties`
+
+A JSON object whose members every request to this model carries in its body, beside the members the deployment writes —
+`top_k`, `min_p`, a seed, or anything else the model documents that has no key above. Empty by default, which sends
+nothing extra. Changes on reload.
+
+| Rule | |
+| --- | --- |
+| Name | letters, digits, and underscores, not starting with a digit; at most 64 characters |
+| Refused names | any member the deployment writes or has a key for — `model`, `messages`, `input`, `instructions`, `tools`, `tool_choice`, `parallel_tool_calls`, `functions`, `function_call`, `response_format`, `text`, `stream`, `stream_options`, `store`, `include`, `previous_response_id`, `conversation`, `background`, `n`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning`, `reasoning_effort`. Use `MaxOutputTokens`, `Temperature`, `TopP`, or `ReasoningEffort` for the ones that have a key |
+| Value | a number, `true`, `false`, or `null` is sent as that literal and anything else as a string; an array or object is written as its JSON text, because configuration cannot carry one as a value. At most 4096 characters |
+| Count | at most 32 members per model |
+
+A value is written in the configuration file and sent in the clear in every request body, so it is never a secret; a
+credential or routing token goes in an [extra header](#an-extra-header--chatmodelsnextraheadersn). [Chat generation §
+A model may declare request members of its own](../features/chat-generation.md#a-model-may-declare-request-members-of-its-own)
+holds the reasoning and a worked example.
+
 ### Microsoft Entra credential — `Chat:Models:<n>:EntraCredential`
 
 The same block, with the same keys, defaults, and rules as

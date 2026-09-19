@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -591,6 +592,44 @@ public sealed class ProviderChatModelClientTests
 
         // Assert
         Assert.Contains($"\"reasoning\":{{\"effort\":\"{effort}\"}}", provider.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A parameter this build has no key for reaches the body as a top-level member of the name it was declared under,
+    /// keeping its JSON type, over both APIs — and alongside the members this deployment writes rather than instead of
+    /// them, so the storage refusal still goes out on the responses API.
+    /// </summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public async Task AnswerAsync_DeclaredAdditionalProperties_ReachTheRequestBody(ChatProviderApi api)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(
+            api is ChatProviderApi.Responses ? Response("an answer") : Completion("an answer", "stop"));
+
+        var client = provider.ClientOver(ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(api: api),
+            additionalProperties: new Dictionary<string, JsonElement>
+            {
+                ["top_k"] = JsonSerializer.SerializeToElement(40),
+                ["provider"] = JsonSerializer.Deserialize<JsonElement>("""{ "order": ["first"] }"""),
+            }));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var sent = JsonDocument.Parse(provider.LastRequestBody);
+
+        Assert.Equal(40, sent.RootElement.GetProperty("top_k").GetInt32());
+        Assert.Equal("first", sent.RootElement.GetProperty("provider").GetProperty("order")[0].GetString());
+        Assert.Equal("a-chat-model", sent.RootElement.GetProperty("model").GetString());
+
+        if (api is ChatProviderApi.Responses)
+        {
+            Assert.False(sent.RootElement.GetProperty("store").GetBoolean());
+        }
     }
 
     /// <summary>

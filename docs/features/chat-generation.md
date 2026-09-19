@@ -325,6 +325,54 @@ The same declaration, with the same rules, is what an embedding endpoint carries
 may declare headers of its own](embedding-generation.md#an-endpoint-may-declare-headers-of-its-own) describes. One
 reading of what a header may be governs both.
 
+## A model may declare request members of its own
+
+`AdditionalProperties` is a JSON object whose members a model sends on every request, beside the ones this deployment
+writes. It is how a parameter this build has no key for reaches the model — `top_k`, `min_p`, `repetition_penalty`, a
+seed, or a gateway's own routing switch — without waiting for a release that names it, and it is declared per model
+because the parameters one model documents are not the ones another accepts. Each member goes out as a top-level member
+of the request body under the name it was declared with, on both APIs:
+
+```json
+{
+  "Chat": {
+    "Models": [
+      {
+        "Alias": "local-chat",
+        "Model": "example-chat-2",
+        "Address": "http://chat.internal.test:8000/v1",
+        "Unauthenticated": true,
+        "Temperature": 0.6,
+        "AdditionalProperties": {
+          "top_k": 20,
+          "min_p": 0,
+          "stop": "[\"<|im_end|>\"]"
+        }
+      }
+    ]
+  }
+}
+```
+
+**A value keeps its JSON type as far as configuration allows.** Configuration hands every value over as text, so the type
+is read back from it: a number, `true`, `false`, or `null` goes out as that literal, and anything else as a string. An
+array or an object cannot be written as one — configuration flattens it into keys this object cannot hold, and startup
+refuses it — so it is written as its JSON text instead, as `stop` is above, and goes out as the JSON that text states.
+The one thing this cannot express is a string that reads as a number or a boolean: `"40"` goes out as `40`.
+
+**What a member may be called is bounded.** It is a top-level member name — letters, digits, and underscores, not
+starting with a digit — because the name becomes a path into the request body, and a dot or a bracket would address a
+member somewhere else. It may not be a member this deployment writes itself or already has a key for: the routed model,
+the turns, the instruction, the tools and the answer format, streaming, storage and what the responses API is asked to
+include, the number of answers, the output budget, the sampling parameters, and the reasoning effort. Each of those is a
+bound this deployment enforces, a privacy decision it states on every call — the responses API is told not to store the
+request whatever else is declared — or a parameter with a key of its own, which is `MaxOutputTokens`, `Temperature`,
+`TopP`, or `ReasoningEffort`. One model carries at most 32 members, each value at most 4096 characters. All of it is
+checked at startup.
+
+**A value is not a secret.** It is written into the configuration file and into every request body, so a credential or a
+routing token belongs in [a header](#a-model-may-declare-headers-of-its-own), whose value is a secret reference.
+
 ## The model and its parameters come from configuration
 
 None of them is a compile-time constant, so changing model is an edit rather than a rebuild and a model released after

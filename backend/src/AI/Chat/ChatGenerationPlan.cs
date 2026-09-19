@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace MailFathom.AI.Chat;
@@ -41,6 +43,51 @@ public sealed partial class ChatGenerationPlan
     /// <remarks>Generous against every level any provider publishes, because the bound exists to catch a value that is not a level at all rather than to predict the next one.</remarks>
     private const int MaximumReasoningEffortLength = 32;
 
+    /// <summary>The greatest number of additional request members one model may declare.</summary>
+    public const int GreatestAdditionalPropertyCount = 32;
+
+    /// <summary>The longest an additional request member's name may be.</summary>
+    private const int MaximumAdditionalPropertyNameLength = 64;
+
+    /// <summary>
+    /// The request members this deployment writes itself or declares a key for, across both APIs, which an additional
+    /// property may therefore not name.
+    /// </summary>
+    /// <remarks>
+    /// Each one is either a bound this deployment enforces — the routed model, the turns, the tools, the output budget, the
+    /// number of answers — a privacy decision it states on every call, such as the refusal to let the provider store the
+    /// request, or a parameter the declaration already has a key of its own for. An additional property naming one would
+    /// undo the first two from a configuration file and give the third two sources, so it is refused rather than ordered.
+    /// </remarks>
+    private static readonly FrozenSet<string> OwnedRequestMembers = FrozenSet.Create(
+        StringComparer.OrdinalIgnoreCase,
+        "model",
+        "messages",
+        "input",
+        "instructions",
+        "tools",
+        "tool_choice",
+        "parallel_tool_calls",
+        "functions",
+        "function_call",
+        "response_format",
+        "text",
+        "stream",
+        "stream_options",
+        "store",
+        "include",
+        "previous_response_id",
+        "conversation",
+        "background",
+        "n",
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+        "temperature",
+        "top_p",
+        "reasoning",
+        "reasoning_effort");
+
     private ChatGenerationPlan(
         ChatEndpoint endpoint,
         int maximumOutputTokens,
@@ -51,6 +98,7 @@ public sealed partial class ChatGenerationPlan
         int maximumRequestCharacters,
         int maximumRequestImageOctets,
         TimeSpan requestTimeout,
+        IReadOnlyDictionary<string, JsonElement> additionalProperties,
         ChatGenerationPlan? fallback)
     {
         this.Endpoint = endpoint;
@@ -63,6 +111,7 @@ public sealed partial class ChatGenerationPlan
         this.MaximumRequestCharacters = maximumRequestCharacters;
         this.MaximumRequestImageOctets = maximumRequestImageOctets;
         this.RequestTimeout = requestTimeout;
+        this.AdditionalProperties = additionalProperties;
     }
 
     /// <summary>Gets the endpoint every request is sent to.</summary>
@@ -130,6 +179,15 @@ public sealed partial class ChatGenerationPlan
     /// </remarks>
     public string? ReasoningEffort { get; }
 
+    /// <summary>Gets the request members every call carries beside the ones this deployment writes, keyed by their wire name.</summary>
+    /// <remarks>
+    /// Empty for the ordinary deployment. What fills it is a parameter this build has no key for — <c>top_k</c>,
+    /// <c>min_p</c>, a seed, a gateway's own routing switch — written into the request body as a top-level member of
+    /// the same name, which is what lets a model released after this version be tuned without one. No member this
+    /// deployment owns can appear here, which <see cref="IsOwnedRequestMember" /> decides.
+    /// </remarks>
+    public IReadOnlyDictionary<string, JsonElement> AdditionalProperties { get; }
+
     /// <summary>Gets the greatest number of turns one request carries.</summary>
     public int MaximumMessagesPerRequest { get; }
 
@@ -171,9 +229,10 @@ public sealed partial class ChatGenerationPlan
     /// <param name="maximumRequestCharacters">The greatest number of characters those turns may add up to.</param>
     /// <param name="maximumRequestImageOctets">The greatest number of octets the images of those turns may add up to, which zero states as an endpoint sent no image at all.</param>
     /// <param name="requestTimeout">The time one request may take.</param>
+    /// <param name="additionalProperties">The request members every call carries beside the ones this deployment writes, or <see langword="null" /> for none.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the endpoint declares a blank alias or a blank routed model name.</exception>
+    /// <exception cref="ArgumentException">Thrown when the endpoint declares a blank alias or a blank routed model name, or when an additional property is misnamed, names a member this deployment owns, or exceeds <see cref="GreatestAdditionalPropertyCount" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound other than <paramref name="maximumRequestImageOctets" /> is not positive, when that one is negative, when a sampling parameter is outside the range every provider accepts, or when the endpoint's API or the reasoning effort names no declared value.</exception>
     public static ChatGenerationPlan Create(
         ChatEndpoint endpoint,
@@ -184,7 +243,8 @@ public sealed partial class ChatGenerationPlan
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
         int maximumRequestImageOctets,
-        TimeSpan requestTimeout)
+        TimeSpan requestTimeout,
+        IReadOnlyDictionary<string, JsonElement>? additionalProperties = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(endpoint.Alias, nameof(endpoint));
@@ -217,6 +277,25 @@ public sealed partial class ChatGenerationPlan
                 "The reasoning effort is not a single word a provider could read as a level.");
         }
 
+        var declaredProperties = additionalProperties?.ToFrozenDictionary() ?? FrozenDictionary<string, JsonElement>.Empty;
+
+        if (declaredProperties.Count > GreatestAdditionalPropertyCount)
+        {
+            throw new ArgumentException(
+                $"A model declares at most {GreatestAdditionalPropertyCount} additional request members.",
+                nameof(additionalProperties));
+        }
+
+        foreach (var name in declaredProperties.Keys)
+        {
+            if (!IsUsableAdditionalPropertyName(name) || IsOwnedRequestMember(name))
+            {
+                throw new ArgumentException(
+                    $"'{name}' is not a request member an additional property may write.",
+                    nameof(additionalProperties));
+            }
+        }
+
         return new ChatGenerationPlan(
             endpoint,
             maximumOutputTokens,
@@ -227,6 +306,7 @@ public sealed partial class ChatGenerationPlan
             maximumRequestCharacters,
             maximumRequestImageOctets,
             requestTimeout,
+            declaredProperties,
             fallback: null);
     }
 
@@ -268,6 +348,7 @@ public sealed partial class ChatGenerationPlan
             this.MaximumRequestCharacters,
             this.MaximumRequestImageOctets,
             this.RequestTimeout,
+            this.AdditionalProperties,
             fallback);
     }
 
@@ -303,6 +384,22 @@ public sealed partial class ChatGenerationPlan
     public static bool IsUsableReasoningEffort(string effort) =>
         effort.Length is > 0 and <= MaximumReasoningEffortLength && ReasoningEffortShape.IsMatch(effort);
 
+    /// <summary>Reports whether a name is shaped like a top-level request member an additional property could write.</summary>
+    /// <param name="name">The declared member name.</param>
+    /// <returns><see langword="true" /> when the name is an identifier of the shape every provider's members take.</returns>
+    /// <remarks>
+    /// Published so the configuration layer refuses the same names this does. The shape is narrower than JSON allows,
+    /// because the name becomes a path into the request body, and a dot or a bracket in it would address a member
+    /// somewhere else than the top level it was declared at.
+    /// </remarks>
+    public static bool IsUsableAdditionalPropertyName(string name) =>
+        name.Length is > 0 and <= MaximumAdditionalPropertyNameLength && AdditionalPropertyNameShape.IsMatch(name);
+
+    /// <summary>Reports whether a request member is one this deployment writes itself or declares a key for.</summary>
+    /// <param name="name">The declared member name.</param>
+    /// <returns><see langword="true" /> when an additional property may not name it.</returns>
+    public static bool IsOwnedRequestMember(string name) => OwnedRequestMembers.Contains(name);
+
     /// <remarks>
     /// Anchored with <c>\A</c> and <c>\z</c> rather than <c>^</c> and <c>$</c>, because <c>$</c> also matches before a
     /// trailing newline: a value provisioned from a file ends in one, and <c>high\n</c> would otherwise pass the shape
@@ -311,4 +408,7 @@ public sealed partial class ChatGenerationPlan
     /// </remarks>
     [GeneratedRegex(@"\A[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*\z", RegexOptions.NonBacktracking)]
     private static partial Regex ReasoningEffortShape { get; }
+
+    [GeneratedRegex(@"\A[a-zA-Z_][a-zA-Z0-9_]*\z", RegexOptions.NonBacktracking)]
+    private static partial Regex AdditionalPropertyNameShape { get; }
 }
