@@ -16,7 +16,7 @@ public sealed class WrittenCorpusTests
         var written = WrittenCorpus.Exchanges.SelectMany(static exchange => exchange).ToArray();
 
         // Act
-        var identifiers = written.Concat(CorpusMessage.All).Select(static message => message.Id).ToArray();
+        var identifiers = written.Concat(CorpusMessage.All).Concat(HostileMail.All).Select(static message => message.Id).ToArray();
 
         // Assert
         Assert.Equal(identifiers.Length, identifiers.Distinct().Count());
