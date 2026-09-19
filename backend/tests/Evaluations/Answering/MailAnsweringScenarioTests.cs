@@ -115,7 +115,7 @@ public sealed class MailAnsweringScenarioTests : IDisposable
     public async Task RunAsync_AQuestionNothingAnswersAnsweredWithACitation_FailsTheEvidenceCheck()
     {
         // Arrange
-        var unanswerable = MailAnsweringScenario.All.Single(static scenario => scenario.Evidence.Count is 0);
+        var unanswerable = MailAnsweringScenario.All.Single(static scenario => scenario.Name == "MailAnswering.NothingAnswers");
         using var model = new ScriptedAnsweringChatClient("check-up", $"Your dentist moved it [{LumenfieldInvoice.Id}].");
 
         // Act
