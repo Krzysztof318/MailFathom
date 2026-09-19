@@ -23,6 +23,10 @@
     <!-- The model-written corpus the development command replays, read here as it was committed. It is the one input a
          scenario may send a provider: every address in it is under a reserved domain and nobody received any of it. -->
     <None Include="..\..\tools\SyntheticMail\corpora\office-en.zip" Link="corpora\office-en.zip" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The hand-written conversations read after it, carrying the shapes of real mail the model-written one has none of:
+         a long thread with several correspondents, a later message correcting an earlier one, quoted speakers, a
+         relative date, and two people with nearly the same name. -->
+    <None Include="..\..\tools\SyntheticMail\corpora\hard-shapes-en.zip" Link="corpora\hard-shapes-en.zip" CopyToOutputDirectory="PreserveNewest" />
     <!-- The images the describer is shown, which the corpus has none of: drawn for this suite from shapes and text alone,
          so they show nobody real and no real document. -->
     <None Include="Descriptions\Images\*.png" CopyToOutputDirectory="PreserveNewest" />

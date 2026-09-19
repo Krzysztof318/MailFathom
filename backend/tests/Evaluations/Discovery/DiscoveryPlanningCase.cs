@@ -33,6 +33,15 @@ internal sealed record DiscoveryPlanningCase(
     /// <summary>The sender a question stating its own scope names.</summary>
     private const string StatedSender = "billing@northwind.example";
 
+    /// <summary>The recipient a question stating whom it wrote to names.</summary>
+    private const string StatedRecipient = "it-desk@tidewater.example";
+
+    /// <summary>The person a question asks about, whose name differs from <see cref="OtherSimilarlyNamedPerson" /> by one syllable.</summary>
+    private const string SimilarlyNamedPerson = "Ingrid Solheim";
+
+    /// <summary>The person the same question rules out.</summary>
+    private const string OtherSimilarlyNamedPerson = "Ingrid Solberg";
+
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<DiscoveryPlanningCase> All { get; } =
     [
@@ -84,6 +93,82 @@ internal sealed record DiscoveryPlanningCase(
                 ? null
                 : $"a request to send mail, which no run can do, was read as {plan.Intent.Identity}."),
         new(
+            "TracksAChange",
+            "How did the date of our office move change over the summer?",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.TrackChange
+                ? null
+                : $"a question about how something changed over time was read as {plan.Intent.Identity}."),
+        new(
+            "ComparesOffers",
+            "Compare the three removal quotes we got for the office move.",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.CompareTerms
+                ? null
+                : $"a question setting three quotes against each other was read as {plan.Intent.Identity}."),
+        new(
+            "LooksForFiles",
+            "Find the floor plan PDF the facilities team sent me.",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.FindDocuments
+                ? null
+                : $"a question looking for a file was read as {plan.Intent.Identity}."),
+        new(
+            "NamesOneOfTwoSimilarPeople",
+            $"What did {SimilarlyNamedPerson} say about the archive boxes? I do not mean {OtherSimilarlyNamedPerson}.",
+            IsAmbiguous: false,
+            static plan =>
+            {
+                if (plan.Retrieval.Lookups.FirstOrDefault(SearchesForTheOtherPerson) is { } confused)
+                {
+                    return $"a lookup for \"{confused.QueryText}\" searches for {OtherSimilarlyNamedPerson}, whom the question ruled out.";
+                }
+
+                return plan.Retrieval.Lookups.Any(static lookup => lookup.QueryText.Contains("Solheim", StringComparison.OrdinalIgnoreCase))
+                    ? null
+                    : $"no lookup searches for {SimilarlyNamedPerson} by the surname that tells the two apart.";
+            }),
+        new(
+            "NamesAQuotedSpeaker",
+            "What did Pál Horváth write about the goods lift in the message Ingrid forwarded to me?",
+            IsAmbiguous: false,
+            static plan =>
+            {
+                if (plan.Retrieval.Lookups.FirstOrDefault(static lookup =>
+                        lookup.SenderAddress is not null || lookup.RecipientAddress is not null) is { } invented)
+                {
+                    return $"a lookup for \"{invented.QueryText}\" is narrowed to an address the question never gave.";
+                }
+
+                return plan.Retrieval.Lookups.Any(static lookup =>
+                    lookup.QueryText.Contains("Horv", StringComparison.OrdinalIgnoreCase)
+                    || lookup.QueryText.Contains("goods lift", StringComparison.OrdinalIgnoreCase))
+                    ? null
+                    : "no lookup searches for the person quoted or for what they wrote about.";
+            }),
+        new(
+            "StatesARecipient",
+            $"What did I send to {StatedRecipient} about the VPN certificate?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.Any(static lookup =>
+                string.Equals(lookup.RecipientAddress?.Trim(), StatedRecipient, StringComparison.OrdinalIgnoreCase))
+                ? null
+                : $"no lookup is narrowed to the recipient the question named, {StatedRecipient}."),
+        new(
+            "NamesADateRange",
+            "Which invoices from Brightwater arrived between 1 and 15 August 2026?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.Any(CoversFirstHalfOfAugust2026)
+                ? null
+                : "no lookup is bounded to the days the question named, 1 to 15 August 2026."),
+        new(
+            "AsksForFlagAndReadState",
+            "Which of my starred messages from the movers have I still not read?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.Any(static lookup => lookup is { IsRemotelyFlagged: true, IsRemotelySeen: false })
+                ? null
+                : "no lookup is narrowed to starred mail that is still unread."),
+        new(
             "AmbiguousDocumentOrFact",
             "Where are the Q3 numbers?",
             IsAmbiguous: true,
@@ -117,4 +202,18 @@ internal sealed record DiscoveryPlanningCase(
         && from <= new DateTimeOffset(2026, 3, 2, 0, 0, 0, TimeSpan.Zero)
         && before >= new DateTimeOffset(2026, 3, 31, 0, 0, 0, TimeSpan.Zero)
         && before <= new DateTimeOffset(2026, 4, 2, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>Whether a lookup is bounded to 1–15 August 2026, allowing a day either side for whichever offset a model wrote.</summary>
+    private static bool CoversFirstHalfOfAugust2026(EmailKnowledgeQuery lookup) =>
+        lookup is { ReceivedOnOrAfter: { } from, ReceivedBefore: { } before }
+        && from >= new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero)
+        && from <= new DateTimeOffset(2026, 8, 2, 0, 0, 0, TimeSpan.Zero)
+        && before >= new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero)
+        && before <= new DateTimeOffset(2026, 8, 17, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>Whether a lookup searches for the person the question ruled out, rather than excluding them with a leading minus.</summary>
+    private static bool SearchesForTheOtherPerson(EmailKnowledgeQuery lookup) =>
+        lookup.QueryText
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Any(static word => !word.StartsWith('-') && word.Contains("Solberg", StringComparison.OrdinalIgnoreCase));
 }

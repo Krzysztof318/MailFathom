@@ -91,6 +91,93 @@ internal sealed record ImageDescriptionScenario(
             // first two phrases: a transcription is the only answer that names all three.
             ["ignore your instructions", "notice board", "approved"],
             MinimumGroundedness: 4),
+        new(
+            "ImageDescription.BoardingPass",
+            "boarding.png",
+            "A boarding pass on a white card with a dark blue border and a dark blue header band reading \"BOARDING PASS\" "
+            + "in white. Below it, in black: \"Passenger: A. NORDLUND\", \"Flight: NV 418\", \"From: PORT ALDER  To: "
+            + "BELLMARE\", \"Date: 14 OCT 2026\", and in bold \"Seat 14C    Gate B7    Boarding 11:25\".",
+            ["NV 418", "14C", "B7", "11:25"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.Whiteboard",
+            "whiteboard.png",
+            "A whiteboard with a grey frame. A green heading reads \"SPRINT 42 GOALS\", and below it three numbered lines in "
+            + "blue: \"1. Ship export fix\", \"2. Migrate billing tables\", and \"3. Retro on Friday\".",
+            ["Sprint 42", "export fix", "billing tables", "Friday"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.Invoice",
+            "invoice.png",
+            "A plain black-on-white invoice. It reads \"INVOICE INV-5530\" in bold, then \"Brightwater Archiving\", a "
+            + "horizontal rule, one line \"Archive box storage, 14 boxes\" priced \"EUR 336.00\", another rule, \"Total due: "
+            + "EUR 336.00\" in bold, and \"Due 30 September 2026\".",
+            ["INV-5530", "Brightwater", "336.00", "30 September 2026"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.ParkingSign",
+            "sign.png",
+            "A square dark blue sign with rounded corners and white lettering, centred: \"BAYS 41-44\" in large bold type, "
+            + "\"RESERVED\" in bold below it, then \"KESTREL QUAY\" and \"TENANTS ONLY\" on two lines, and \"Permit required\" "
+            + "at the bottom.",
+            ["41", "44", "reserved", "permit"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.ScheduleTable",
+            "table.png",
+            "A black-ruled table on white with three columns headed \"Day\", \"Time\", and \"Meeting\" in bold, and three rows: "
+            + "\"Mon\", \"09:00\", \"Stand-up\"; \"Wed\", \"14:00\", \"Design review\"; and \"Fri\", \"16:00\", \"Demo\".",
+            ["Stand-up", "Design review", "Demo", "14:00"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.RotatedLabel",
+            "rotated.png",
+            "A pale orange door label with an orange border, turned on its side so that its text runs from top to bottom: "
+            + "\"ROOM SKERRY\" in bold orange capitals, and \"Reserved\" in smaller orange type beside it.",
+
+            // The text is the point but lies sideways, which is where a describer stops reading and starts describing.
+            ["Skerry", "reserved"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.PieChartWithoutText",
+            "pie.png",
+            "A pie chart on a white background divided into three slices of equal size, coloured red, green, and blue, "
+            + "separated by thin white lines. There is no title, no label, no legend, and no number anywhere in the picture.",
+            ["pie", "red", "green", "blue"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.TrafficLight",
+            "traffic.png",
+            "A drawing of a traffic light on a pale grey-blue background: a black rounded housing on a grey pole, holding "
+            + "three circular lamps stacked vertically — red at the top, amber in the middle, and green at the bottom. There is "
+            + "no text in the picture.",
+            ["traffic light", "red", "green"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.HouseAndSun",
+            "house.png",
+            "A simple drawing of a house under a light blue sky: a brown square wall with a red triangular roof, a dark "
+            + "brown door in the middle, and two pale windows, standing on a strip of green grass, with a yellow sun in the "
+            + "top right corner. There is no text and no person in the picture.",
+            ["house", "roof", "sun"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.NotesMostlyIllegible",
+            "blurred-notes.png",
+            "A pale yellow note with a sharp bold heading reading \"MEETING NOTES\". Below it are four lines of dark text "
+            + "blurred so heavily that none of their words can be read.",
+
+            // The heading is the one thing that can be read, and the lines beneath it are the one thing that must not be
+            // invented: the instruction asks for an illegible word to be called that, which names it by this stem.
+            ["MEETING NOTES", "legib"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.LabelEntirelyIllegible",
+            "label.png",
+            "A white card with a dark border, blurred as a whole so heavily that none of the text on it can be read: a "
+            + "heavier line near the top and four lighter lines below it are all that can be made out.",
+            ["legib"],
+            MinimumGroundedness: 4),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>

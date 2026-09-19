@@ -101,16 +101,24 @@ public sealed class ReplyDraftScenarioTests : IDisposable
     }
 
     [Fact]
-    public void Sources_EveryScenario_AnswersACorrespondentAndNumbersNobodyButThem()
+    public void Sources_EveryScenario_AnswersACorrespondentAndNumbersEveryoneWhoWroteButTheMailbox()
     {
         // Act
         var readings = ReplyDraftScenario.All.Select(static scenario =>
         {
             var sources = scenario.Sources();
+            var wrote = CorpusMessage.ConversationUpTo(scenario.AnsweredPosition)
+                .Select(static message => message.Sender)
+                .Where(static sender => sender != ReplyDraftScenario.MailboxAddress)
+                .Select(static sender => sender.ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
 
             return (
                 AnswersCorrespondent: CorpusMessage.At(scenario.AnsweredPosition).Sender != ReplyDraftScenario.MailboxAddress,
-                Numbered: sources.Participants.Select(static person => person.Address.NormalizedAddress).ToArray(),
+                Wrote: wrote,
+                Numbered: sources.Participants.Select(static person => person.Address.NormalizedAddress).Order(StringComparer.Ordinal).ToArray(),
                 Answered: sources.Messages[^1].StoredEmailId == CorpusMessage.At(scenario.AnsweredPosition).Id);
         });
 
@@ -119,9 +127,18 @@ public sealed class ReplyDraftScenarioTests : IDisposable
         {
             Assert.True(reading.AnswersCorrespondent);
             Assert.True(reading.Answered);
-            Assert.Single(reading.Numbered);
-            Assert.DoesNotContain(ReplyDraftScenario.MailboxAddress, reading.Numbered);
+            Assert.Equal(reading.Wrote, reading.Numbered);
         });
+    }
+
+    [Fact]
+    public void Sources_AThreadWithSeveralParticipants_NumbersEachOfThem()
+    {
+        // Act
+        var sources = ReplyDraftScenario.All.Single(static scenario => scenario.Name == "ReplyDraft.ToAThreadWithSeveralParticipants").Sources();
+
+        // Assert
+        Assert.True(sources.Participants.Count > 1, $"{sources.Participants.Count} participant(s) numbered.");
     }
 
     public void Dispose() => this.store.Delete(recursive: true);
