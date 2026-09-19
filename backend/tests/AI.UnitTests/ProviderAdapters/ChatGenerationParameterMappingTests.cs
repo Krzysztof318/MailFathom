@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.UnitTests.TestDoubles;
@@ -56,6 +57,23 @@ public sealed class ChatGenerationParameterMappingTests
         Assert.Null(options.RawRepresentationFactory);
         Assert.Null(options.Temperature);
         Assert.Null(options.TopP);
+    }
+
+    /// <summary>An additional property is carried through the client library's own request options, so on chat completions it needs the hook an effort would.</summary>
+    [Fact]
+    public void ToChatOptions_AChatCompletionsDeclarationWithOnlyAdditionalProperties_CarriesTheRequestHook()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan(additionalProperties: new Dictionary<string, JsonElement>
+        {
+            ["top_k"] = JsonSerializer.SerializeToElement(40),
+        });
+
+        // Act
+        var options = ChatGenerationParameterMapping.ToChatOptions(plan);
+
+        // Assert
+        Assert.NotNull(options.RawRepresentationFactory);
     }
 
     /// <summary>

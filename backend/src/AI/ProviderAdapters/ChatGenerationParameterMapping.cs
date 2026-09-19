@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using Microsoft.Extensions.AI;
 using OpenAI.Chat;
@@ -46,7 +48,10 @@ internal static class ChatGenerationParameterMapping
             TopP = plan.TopP,
         };
 
-        options.RawRepresentationFactory = RequestOptionsFactoryFor(plan.Endpoint.Api, plan.ReasoningEffort);
+        options.RawRepresentationFactory = RequestOptionsFactoryFor(
+            plan.Endpoint.Api,
+            plan.ReasoningEffort,
+            plan.AdditionalProperties);
 
         return options;
     }
@@ -56,9 +61,9 @@ internal static class ChatGenerationParameterMapping
     /// <para>
     /// The hook is where this deployment states what the client library's own request options carry, and the two APIs
     /// need it for different reasons. The responses API always needs one, because storage at the provider is decided
-    /// per request and its default is to store; chat completions needs one only when an effort was declared, because
-    /// its default is already what this deployment wants and a member nobody asked for is what a model rejects a whole
-    /// request over.
+    /// per request and its default is to store; chat completions needs one only when an effort or an additional property
+    /// was declared, because its default is already what this deployment wants and a member nobody asked for is what a
+    /// model rejects a whole request over.
     /// </para>
     /// <para>
     /// Everything else on the options is left alone — the abstraction fills the members it owns over whatever this
@@ -72,15 +77,23 @@ internal static class ChatGenerationParameterMapping
     /// </remarks>
     /// <param name="api">The API the request is conducted through.</param>
     /// <param name="effort">The declared reasoning effort, or <see langword="null" /> to send none.</param>
+    /// <param name="additionalProperties">The request members every call carries beside the ones this deployment writes, or <see langword="null" /> for none.</param>
     /// <returns>The hook, or <see langword="null" /> where the request needs none.</returns>
-    public static Func<IChatClient, object?>? RequestOptionsFactoryFor(ChatProviderApi api, string? effort)
+    public static Func<IChatClient, object?>? RequestOptionsFactoryFor(
+        ChatProviderApi api,
+        string? effort,
+        IReadOnlyDictionary<string, JsonElement>? additionalProperties = null)
     {
+        additionalProperties ??= new Dictionary<string, JsonElement>();
+
         if (api is ChatProviderApi.Responses)
         {
-            return _ => StatelessResponseOptions(effort);
+            return _ => StatelessResponseOptions(effort, additionalProperties);
         }
 
-        return effort is null ? null : _ => ChatCompletionOptionsFor(effort);
+        return effort is null && additionalProperties.Count == 0
+            ? null
+            : _ => ChatCompletionOptionsFor(effort, additionalProperties);
     }
 
     /// <summary>Builds the responses request that leaves the provider holding nothing once it has answered.</summary>
@@ -106,12 +119,20 @@ internal static class ChatGenerationParameterMapping
     /// release of MailFathom caught up. The library's own type is built from a string, so the value the operator wrote
     /// is the value that goes out.
     /// </para>
+    /// <para>
+    /// The additional properties go in last, through the request's own JSON patch, because they are exactly the members
+    /// this build has no typed property for. None of them can be a member set above: the plan refuses every name this
+    /// deployment writes, so the storage refusal and the included reasoning content cannot be undone from here.
+    /// </para>
     /// </remarks>
     // The whole responses request-options surface carries the evaluation-only marker in this release of the client
-    // library, as does the chat completions reasoning member, so the suppression covers the two methods that build a
-    // request and nothing else in the file inherits it.
-#pragma warning disable OPENAI001
-    private static CreateResponseOptions StatelessResponseOptions(string? effort)
+    // library, as does the chat completions reasoning member, and the JSON patch both carry is marked experimental by the
+    // client model library, so the suppression covers the methods that build a request and nothing else in the file
+    // inherits it.
+#pragma warning disable OPENAI001, SCME0001
+    private static CreateResponseOptions StatelessResponseOptions(
+        string? effort,
+        IReadOnlyDictionary<string, JsonElement> additionalProperties)
     {
         var options = new CreateResponseOptions { StoredOutputEnabled = false };
 
@@ -125,11 +146,35 @@ internal static class ChatGenerationParameterMapping
             };
         }
 
+        foreach (var (name, value) in additionalProperties)
+        {
+            options.Patch.Set(PathTo(name), BinaryData.FromString(value.GetRawText()));
+        }
+
         return options;
     }
 
-    /// <summary>Builds the chat completions request, which carries the declared effort and nothing else.</summary>
-    private static ChatCompletionOptions ChatCompletionOptionsFor(string effort) =>
-        new() { ReasoningEffortLevel = new ChatReasoningEffortLevel(effort) };
-#pragma warning restore OPENAI001
+    /// <summary>Builds the chat completions request, which carries the declared effort and the additional properties and nothing else.</summary>
+    private static ChatCompletionOptions ChatCompletionOptionsFor(
+        string? effort,
+        IReadOnlyDictionary<string, JsonElement> additionalProperties)
+    {
+        var options = new ChatCompletionOptions();
+
+        if (effort is not null)
+        {
+            options.ReasoningEffortLevel = new ChatReasoningEffortLevel(effort);
+        }
+
+        foreach (var (name, value) in additionalProperties)
+        {
+            options.Patch.Set(PathTo(name), BinaryData.FromString(value.GetRawText()));
+        }
+
+        return options;
+    }
+#pragma warning restore OPENAI001, SCME0001
+
+    /// <summary>Addresses a top-level member of the request body, which the plan's name shape keeps from reaching anywhere deeper.</summary>
+    private static byte[] PathTo(string name) => Encoding.UTF8.GetBytes($"$.{name}");
 }

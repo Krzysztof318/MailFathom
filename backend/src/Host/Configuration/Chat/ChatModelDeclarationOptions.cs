@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -25,6 +26,9 @@ namespace MailFathom.Host.Configuration.Chat;
 /// </remarks>
 internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclaration
 {
+    /// <summary>The longest one additional property's value may be, which bounds what a declaration adds to every request.</summary>
+    private const int MaximumAdditionalPropertyValueLength = 4096;
+
     /// <summary>Gets or sets the deployment's own name for this model, which every reference to it is written with.</summary>
     /// <remarks>
     /// Everything else here is an address or a credential and neither may be written down, so this is the name a log
@@ -164,6 +168,21 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     /// </remarks>
     public IList<ProviderEndpointHeaderOptions> ExtraHeaders { get; } = [];
 
+    /// <summary>Gets the request members every call to this model carries beside the ones this deployment writes, keyed by their wire name.</summary>
+    /// <remarks>
+    /// <para>
+    /// Empty for the ordinary deployment. What fills it is a parameter this build has no key for — <c>top_k</c>,
+    /// <c>min_p</c>, a seed, a gateway's routing switch — sent as a top-level member of the request body on both APIs.
+    /// </para>
+    /// <para>
+    /// Configuration hands every value over as text, so the type is read back from it: a value that parses as JSON — a
+    /// number, <c>true</c> or <c>false</c> in any casing, <c>null</c>, or an array or object written as JSON text — goes out as that
+    /// value, and anything else goes out as a string. A member this deployment writes itself, or has a key of its own
+    /// for, is refused rather than overridden.
+    /// </para>
+    /// </remarks>
+    public IDictionary<string, string?> AdditionalProperties { get; } = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Reports everything an operator must fix before this model could be called.</summary>
     /// <param name="position">Where in the declared array this block sits, which is how a message names a block whose alias is missing.</param>
     /// <returns>One result per rule the declaration breaks, empty when it is usable.</returns>
@@ -263,6 +282,73 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         {
             yield return error;
         }
+
+        foreach (var error in this.FindAdditionalPropertyErrors(description))
+        {
+            yield return error;
+        }
+    }
+
+    private IEnumerable<ValidationResult> FindAdditionalPropertyErrors(string description)
+    {
+        if (this.AdditionalProperties.Count > ChatGenerationPlan.GreatestAdditionalPropertyCount)
+        {
+            yield return new ValidationResult(
+                $"{description} declares {this.AdditionalProperties.Count} AdditionalProperties, more than the {ChatGenerationPlan.GreatestAdditionalPropertyCount} one model may carry.",
+                [nameof(this.AdditionalProperties)]);
+        }
+
+        foreach (var (name, value) in this.AdditionalProperties)
+        {
+            string[] key = [$"{nameof(this.AdditionalProperties)}:{name}"];
+
+            if (!ChatGenerationPlan.IsUsableAdditionalPropertyName(name))
+            {
+                yield return new ValidationResult(
+                    $"{description} declares an additional property '{name}' that is not a top-level request member name. Write the member as the provider documents it, in letters, digits, and underscores.",
+                    key);
+            }
+            else if (ChatGenerationPlan.IsOwnedRequestMember(name))
+            {
+                yield return new ValidationResult(
+                    $"{description} declares an additional property '{name}', which is a request member this deployment writes itself. Use the model's own key where one exists — MaxOutputTokens, Temperature, TopP, or ReasoningEffort — and leave the rest to the deployment.",
+                    key);
+            }
+
+            if (value?.Length > MaximumAdditionalPropertyValueLength)
+            {
+                yield return new ValidationResult(
+                    $"{description} declares an additional property '{name}' longer than {MaximumAdditionalPropertyValueLength} characters.",
+                    key);
+            }
+        }
+    }
+
+    /// <summary>Reads each declared value back into the JSON it stands for, since configuration carries every value as text.</summary>
+    private Dictionary<string, JsonElement> ToAdditionalProperties() =>
+        this.AdditionalProperties.ToDictionary(entry => entry.Key, entry => ToJsonValue(entry.Value), StringComparer.Ordinal);
+
+    private static JsonElement ToJsonValue(string? value)
+    {
+        if (value is null)
+        {
+            return JsonSerializer.SerializeToElement<string?>(null);
+        }
+
+        // The JSON configuration provider hands a boolean over as .NET writes one, capitalized, which JSON does not read.
+        if (bool.TryParse(value, out var flag))
+        {
+            return JsonSerializer.SerializeToElement(flag);
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(value);
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(value);
+        }
     }
 
     /// <summary>Builds the plan a request to this model runs on.</summary>
@@ -277,7 +363,8 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         this.MaxMessagesPerRequest,
         this.MaxRequestCharacters,
         this.MaxRequestImageOctets,
-        this.RequestTimeout);
+        this.RequestTimeout,
+        this.ToAdditionalProperties());
 
     private List<ValidationResult> FindBoundErrors()
     {

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.AI.UnitTests.TestDoubles;
 using Xunit;
@@ -229,6 +230,99 @@ public sealed class ChatGenerationPlanTests
             maximumRequestCharacters: 4000,
             maximumRequestImageOctets: 1024,
             requestTimeout: TimeSpan.Zero));
+    }
+
+    /// <summary>A parameter this build has no key for is carried under the name the provider documents, whatever its JSON type.</summary>
+    [Fact]
+    public void Create_DeclaredAdditionalProperties_AreCarried()
+    {
+        // Act
+        var plan = ChatDeclarations.Plan(additionalProperties: new Dictionary<string, JsonElement>
+        {
+            ["top_k"] = JsonSerializer.SerializeToElement(40),
+            ["min_p"] = JsonSerializer.SerializeToElement(0.05),
+        });
+
+        // Assert
+        Assert.Equal(40, plan.AdditionalProperties["top_k"].GetInt32());
+        Assert.Equal(0.05, plan.AdditionalProperties["min_p"].GetDouble());
+    }
+
+    [Fact]
+    public void Create_WithoutAdditionalProperties_CarriesNone()
+    {
+        // Act
+        var plan = ChatDeclarations.Plan();
+
+        // Assert
+        Assert.Empty(plan.AdditionalProperties);
+    }
+
+    /// <summary>
+    /// A member this deployment writes is a bound, a privacy decision, or a parameter with a key of its own, so an
+    /// additional property naming one would undo the first two and give the third a second source.
+    /// </summary>
+    [Theory]
+    [InlineData("model")]
+    [InlineData("messages")]
+    [InlineData("tools")]
+    [InlineData("store")]
+    [InlineData("max_completion_tokens")]
+    [InlineData("max_output_tokens")]
+    [InlineData("temperature")]
+    [InlineData("Top_P")]
+    [InlineData("reasoning")]
+    [InlineData("n")]
+    public void Create_AnAdditionalPropertyNamingAMemberThisDeploymentWrites_IsRefused(string name)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan(additionalProperties: new Dictionary<string, JsonElement>
+        {
+            [name] = JsonSerializer.SerializeToElement(1),
+        }));
+    }
+
+    /// <summary>The name becomes a path into the request body, so one that could address anything but a top-level member is refused.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("top k")]
+    [InlineData("provider.order")]
+    [InlineData("stop[0]")]
+    [InlineData("1st")]
+    public void Create_AnAdditionalPropertyNameThatIsNotAMemberName_IsRefused(string name)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan(additionalProperties: new Dictionary<string, JsonElement>
+        {
+            [name] = JsonSerializer.SerializeToElement(1),
+        }));
+    }
+
+    [Fact]
+    public void Create_MoreAdditionalPropertiesThanOneModelMayCarry_IsRefused()
+    {
+        // Arrange
+        var properties = Enumerable.Range(0, ChatGenerationPlan.GreatestAdditionalPropertyCount + 1)
+            .ToDictionary(index => $"member_{index}", index => JsonSerializer.SerializeToElement(index));
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan(additionalProperties: properties));
+    }
+
+    [Fact]
+    public void WithFallback_APlanWithAdditionalProperties_KeepsThem()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan(additionalProperties: new Dictionary<string, JsonElement>
+        {
+            ["top_k"] = JsonSerializer.SerializeToElement(40),
+        });
+
+        // Act
+        var withFallback = plan.WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint(alias: "standby")));
+
+        // Assert
+        Assert.Equal(40, withFallback.AdditionalProperties["top_k"].GetInt32());
     }
 
     /// <summary>A plan declaring no fallback is a chain of one, which is what every deployment that named a single model holds.</summary>
