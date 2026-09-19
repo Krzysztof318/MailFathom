@@ -15,9 +15,20 @@ namespace MailFathom.Evaluations.Answering;
 /// <summary>Asks every declared model every mailbox question in <see cref="MailAnsweringScenario.All" />.</summary>
 /// <remarks>
 /// <para>
-/// Shaped like the enrichment evaluation for the reasons it gives: one test over the whole model list, the models
-/// measured at the same time over clients, meters, and a store handle of their own, a model that falls short collected
-/// rather than failing the run, and a retry that pays only for what the previous attempt did not reach.
+/// One test over the whole model list rather than a theory per model, because the list is read from the run's
+/// declaration and a theory's data is read before the skip condition is: a run nobody asked for would fail on a list
+/// nobody declared. Each model is still its own result in the store, filed under its name.
+/// </para>
+/// <para>
+/// The models are measured at the same time rather than one after another, because a run costs whatever the slowest
+/// model takes to answer. Each carries its own clients, its own spend meters, and its own handle on the store, so
+/// nothing is shared between two models but the directory their results are filed in. A model that falls short is
+/// collected rather than failing the run, so one weak model never hides what the others did, and the test fails at the
+/// end naming every model that fell short and why.
+/// </para>
+/// <para>
+/// Retried like every test that reaches a real provider, and cheaper to retry than one: whatever an attempt was already
+/// answered is read back from the cache, so a second attempt pays only for what the first did not reach.
 /// </para>
 /// <para>
 /// One model's scenarios run one after another, because each one's cost is read off that model's meters and two
