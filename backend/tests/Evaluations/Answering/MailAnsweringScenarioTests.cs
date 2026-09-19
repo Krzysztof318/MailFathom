@@ -198,7 +198,7 @@ public sealed class MailAnsweringScenarioTests : IDisposable
     {
         using var ownJudge = judge is null ? Judge() : null;
         using var anonymousJudge = new AnonymousJudgeChatClient(judge ?? ownJudge!);
-        var declaration = JudgeDeclaration.Of(new Uri("https://planted-judge-host.invalid/v1/"), "planted-judge-model", "planted-judge-key");
+        var declaration = JudgeDeclaration.Of(new Uri("https://planted-judge-host.invalid/v1/"), "planted-judge-model", "planted-judge-key", reasoningEffort: null);
         var reporting = EvaluationStore.OpenAt(
             this.store.FullName,
             executionName,
