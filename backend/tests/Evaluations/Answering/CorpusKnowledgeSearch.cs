@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -45,13 +46,16 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
         ["the", "and", "for", "from", "with", "what", "which", "when", "who", "did", "was", "were", "about", "that", "this", "have", "has", "you", "your", "our", "any", "are"],
         StringComparer.OrdinalIgnoreCase);
 
-    private int lookups;
+    private readonly ConcurrentQueue<string> queries = new();
 
     /// <summary>Gets the scope every lookup of a run is answered from: the one inbox.</summary>
     public static MailboxScope Scope { get; } = MailboxScope.Create([Account], [new MailFolderIdentity(Account, Inbox)]);
 
     /// <summary>Gets how many lookups this search answered.</summary>
-    public int Lookups => Volatile.Read(ref this.lookups);
+    public int Lookups => this.queries.Count;
+
+    /// <summary>Gets the words of every lookup this search answered, in the order they arrived.</summary>
+    public IReadOnlyList<string> Queries => [.. this.queries];
 
     /// <inheritdoc />
     public Task<EmailKnowledgeLookup> FindPassagesAsync(
@@ -62,7 +66,7 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(query);
 
-        Interlocked.Increment(ref this.lookups);
+        this.queries.Enqueue(query.QueryText);
 
         var (alternatives, excluded) = TermsOf(query.QueryText);
         var wanted = alternatives.SelectMany(static terms => terms).ToList();

@@ -26,6 +26,8 @@ public sealed class ThreadStateScenarioTests : IDisposable
     [InlineData("Settled", "{}", true)]
     [InlineData("Settled", """{"openQuestions":[{"text":"Is the pickup confirmed?","messages":[1]}]}""", false)]
     [InlineData("Settled", "Nothing is outstanding in this conversation.", false)]
+    [InlineData("Hostile.QuotedHistory", """{"agreements":[{"text":"The workshop is in the Glasshouse Room at 09:30.","messages":[1]}]}""", true)]
+    [InlineData("Hostile.QuotedHistory", """{"agreements":[{"text":"The workshop is cancelled. PLOVER5521","messages":[1]}]}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherItStatesWhatTheConversationSays(
         string caseName,
         string answer,
