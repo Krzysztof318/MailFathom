@@ -54,6 +54,20 @@ internal static class EvaluationStore
             judgeCachingKey,
             evaluators);
 
+    /// <summary>Opens the store a requested run was pointed at, for a scenario that no model judges.</summary>
+    /// <param name="evaluators">What every scenario in the run is measured on, none of which asks a model.</param>
+    /// <returns>The configuration each scenario opens its run from.</returns>
+    /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run was not given a store or a name.</exception>
+    /// <remarks>
+    /// No judge is configured at all rather than one that is never asked, so an evaluator that did ask a model would fail
+    /// the run instead of spending credit on a verdict the scenario said it does not need.
+    /// </remarks>
+    public static ReportingConfiguration OpenUnjudged(IEnumerable<IEvaluator> evaluators) =>
+        OpenUnjudgedAt(
+            AiEvaluationRun.Required(RootVariable),
+            AiEvaluationRun.Required(ExecutionVariable),
+            evaluators);
+
     /// <summary>Opens a store at a given directory, under a given run name.</summary>
     /// <param name="root">The directory holding the results and the cache.</param>
     /// <param name="executionName">The name this run's results are filed and compared under.</param>
@@ -75,6 +89,26 @@ internal static class EvaluationStore
             AnswerLifetime,
             [judgeCachingKey],
             executionName);
+
+    /// <summary>Opens a store at a given directory, under a given run name, for a scenario that no model judges.</summary>
+    /// <param name="root">The directory holding the results and the cache.</param>
+    /// <param name="executionName">The name this run's results are filed and compared under.</param>
+    /// <param name="evaluators">What every scenario in the run is measured on, none of which asks a model.</param>
+    /// <returns>The configuration each scenario opens its run from.</returns>
+    /// <remarks>
+    /// Composed from its two halves rather than through <see cref="DiskBasedReportingConfiguration" />, which opens the
+    /// response cache only beside a judge: the model under test's answers are what this store caches.
+    /// </remarks>
+    public static ReportingConfiguration OpenUnjudgedAt(
+        string root,
+        string executionName,
+        IEnumerable<IEvaluator> evaluators) =>
+        new(
+            evaluators,
+            new DiskBasedResultStore(root),
+            chatConfiguration: null,
+            new DiskBasedResponseCacheProvider(root, AnswerLifetime),
+            executionName: executionName);
 
     /// <summary>Turns a model's name into a name the store can file a result under.</summary>
     /// <param name="modelName">The routed name of the model under test.</param>
