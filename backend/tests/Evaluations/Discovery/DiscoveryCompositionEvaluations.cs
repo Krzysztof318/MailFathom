@@ -64,15 +64,23 @@ public sealed class DiscoveryCompositionEvaluations
 
         foreach (var scenario in DiscoveryCompositionScenario.All)
         {
+            var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, scenario.Evaluators);
             var verdict = await scenario.RunAsync(
-                EvaluationStore.Open(judgeClient, judge.CachingKey, scenario.Evaluators),
+                reporting,
                 model,
                 plan,
                 modelSpend,
                 judgeSpend,
                 TestContext.Current.CancellationToken);
 
-            shortfalls.AddRange(scenario.ShortfallsOf(verdict).Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
+            var scenarioShortfalls = scenario.ShortfallsOf(verdict).ToList();
+
+            if (scenarioShortfalls.Count > 0)
+            {
+                await EvaluationStore.ForgetAsync(reporting, scenario.Name, plan.Endpoint.RoutedModelName, TestContext.Current.CancellationToken);
+            }
+
+            shortfalls.AddRange(scenarioShortfalls.Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
         }
 
         return shortfalls;

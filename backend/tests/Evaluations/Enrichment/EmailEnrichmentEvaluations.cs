@@ -82,13 +82,20 @@ public sealed class EmailEnrichmentEvaluations
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, EmailEnrichmentScenario.Evaluators);
 
-        return await EmailEnrichmentScenario.RunAsync(
+        var outcome = await EmailEnrichmentScenario.RunAsync(
             reporting,
             model,
             plan,
             modelSpend,
             judgeSpend,
             TestContext.Current.CancellationToken);
+
+        if (ShortfallsOf(outcome).Any())
+        {
+            await EvaluationStore.ForgetAsync(reporting, EmailEnrichmentScenario.Name, outcome.Model, TestContext.Current.CancellationToken);
+        }
+
+        return outcome;
     }
 
     /// <summary>Names what one model's outcome falls short on, in words a failed run can be read by.</summary>

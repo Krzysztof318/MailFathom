@@ -198,8 +198,14 @@ internal static class StructuredAnswerScenario
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, request.Evaluators);
+        var answer = await RunAsync(reporting, model, plan, request, modelSpend, judgeSpend, cancellationToken);
 
-        return await RunAsync(reporting, model, plan, request, modelSpend, judgeSpend, cancellationToken);
+        if (ShortfallsOf(answer).Any())
+        {
+            await EvaluationStore.ForgetAsync(reporting, request.ScenarioName, answer.Model, cancellationToken);
+        }
+
+        return answer;
     }
 
     /// <summary>Adds the deterministic verdict to the result, before the run is written to the store.</summary>

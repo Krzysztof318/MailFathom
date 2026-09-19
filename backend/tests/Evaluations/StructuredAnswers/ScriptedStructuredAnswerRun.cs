@@ -73,7 +73,10 @@ internal sealed class ScriptedStructuredAnswerRun : IDisposable
         this.store.Delete(recursive: true);
     }
 
-    private static ChatGenerationPlan PlanFor(string model) =>
+    /// <summary>Plans a scripted model the way a declared one is planned, under the routed name it answers as.</summary>
+    /// <param name="model">The routed name.</param>
+    /// <returns>The plan.</returns>
+    public static ChatGenerationPlan PlanFor(string model) =>
         ChatGenerationPlan.Create(
             new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
             maximumOutputTokens: 1024,
