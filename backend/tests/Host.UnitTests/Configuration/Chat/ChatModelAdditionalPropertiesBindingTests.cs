@@ -52,6 +52,26 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
         Assert.Equal("40", properties["route"].GetString());
     }
 
+    /// <summary>
+    /// The JSON configuration provider hands a <c>null</c> literal over as a missing value rather than as empty text, so
+    /// the null an operator wrote reaches the request as null — and empty text, which is a different declaration, stays
+    /// an empty string.
+    /// </summary>
+    [Fact]
+    public void Bind_ANullLiteralAndAnEmptyString_ArriveAsTheTwoDifferentValuesTheyAre()
+    {
+        // Arrange
+        var model = BindModel("""{ "seed": null, "suffix": "" }""");
+
+        // Act
+        var properties = model.ToPlan().AdditionalProperties;
+
+        // Assert
+        Assert.Null(model.AdditionalProperties["seed"]);
+        Assert.Equal(JsonValueKind.Null, properties["seed"].ValueKind);
+        Assert.Equal(string.Empty, properties["suffix"].GetString());
+    }
+
     [Fact]
     public void ToPlan_AModelDeclaringNoAdditionalProperties_CarriesNone()
     {
