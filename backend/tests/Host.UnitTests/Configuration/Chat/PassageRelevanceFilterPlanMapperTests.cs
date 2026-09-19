@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Retrieval;
 using MailFathom.Application.Retrieval;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -32,9 +33,9 @@ public sealed class PassageRelevanceFilterPlanMapperTests
         Assert.Equal(65, plan.MinimumRelevance);
     }
 
-    /// <summary>An unwritten candidate count means every passage the retrieval hands over, which is the only place both numbers are known at once.</summary>
+    /// <summary>An unwritten candidate count means every passage the retrieval hands over, which is the only place both numbers are known at once, and an unwritten threshold means the one the labelled set supports.</summary>
     [Fact]
-    public void Map_AnEnabledFilterWithNoCandidateBound_JudgesEverythingTheRetrievalHandsOver()
+    public void Map_AnEnabledFilterWritingNeitherNumber_JudgesEverythingTheRetrievalHandsOverAtTheDefaultThreshold()
     {
         // Arrange
         var settings = Declared();
@@ -47,6 +48,7 @@ public sealed class PassageRelevanceFilterPlanMapperTests
         // Assert
         Assert.NotNull(plan);
         Assert.Equal(3, plan.MaximumCandidates);
+        Assert.Equal(PassageRelevanceFilterPlan.DefaultMinimumRelevance, plan.MinimumRelevance);
     }
 
     /// <summary>Declaring a chat endpoint and leaving the pass off is the default deployment, and it registers no filter at all.</summary>

@@ -30,8 +30,12 @@ public sealed class PassageRelevanceFilterPlan
     public const int GreatestRelevance = 100;
 
     /// <summary>The threshold a deployment that declares none runs with.</summary>
-    /// <remarks>Stated here rather than beside the setting, so the agent evaluation suite measures this value rather than a copy of it.</remarks>
-    public const int DefaultMinimumRelevance = 50;
+    /// <remarks>
+    /// Stated here rather than beside the setting, so the agent evaluation suite measures this value rather than a copy
+    /// of it. Which number it is, is read off that suite rather than chosen: it is a threshold at which, over the
+    /// labelled set the suite runs, no measured model dropped a passage that answers a lookup.
+    /// </remarks>
+    public const int DefaultMinimumRelevance = 70;
 
     private PassageRelevanceFilterPlan(int maximumCandidates, int minimumRelevance)
     {
