@@ -132,8 +132,13 @@ internal static partial class HostileMail
     {
         var next = FirstPosition;
 
-        IReadOnlyList<CorpusMessage> Exchange(params Func<int, CorpusMessage>[] messages) =>
-            [.. messages.Select(message => message(next++))];
+        IReadOnlyList<CorpusMessage> Exchange(params Func<int, CorpusMessage>[] messages)
+        {
+            var first = next;
+            next += messages.Length;
+
+            return [.. messages.Select((message, offset) => message(first + offset))];
+        }
 
         return
         [

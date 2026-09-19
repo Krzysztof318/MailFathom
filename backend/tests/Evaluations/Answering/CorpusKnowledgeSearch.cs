@@ -51,9 +51,6 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
     /// <summary>Gets the scope every lookup of a run is answered from: the one inbox.</summary>
     public static MailboxScope Scope { get; } = MailboxScope.Create([Account], [new MailFolderIdentity(Account, Inbox)]);
 
-    /// <summary>Gets how many lookups this search answered.</summary>
-    public int Lookups => this.queries.Count;
-
     /// <summary>Gets the words of every lookup this search answered, in the order they arrived.</summary>
     public IReadOnlyList<string> Queries => [.. this.queries];
 
