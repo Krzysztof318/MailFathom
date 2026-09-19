@@ -29,6 +29,10 @@ public sealed class PassageRelevanceFilterPlan
     /// <summary>The relevance of an extract that answers the query.</summary>
     public const int GreatestRelevance = 100;
 
+    /// <summary>The threshold a deployment that declares none runs with.</summary>
+    /// <remarks>Stated here rather than beside the setting, so the agent evaluation suite measures this value rather than a copy of it.</remarks>
+    public const int DefaultMinimumRelevance = 50;
+
     private PassageRelevanceFilterPlan(int maximumCandidates, int minimumRelevance)
     {
         this.MaximumCandidates = maximumCandidates;

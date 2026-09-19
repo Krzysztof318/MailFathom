@@ -30,12 +30,14 @@ internal static class EvaluationCost
     /// <param name="verdict">The result the metric is added to, before the run is written to the store.</param>
     /// <param name="model">The model under test.</param>
     /// <param name="modelSpend">What reaching that model cost, answers the cache served excluded.</param>
-    /// <param name="judgeSpend">What reaching the judge cost, verdicts the cache served excluded.</param>
+    /// <param name="judgeSpend">What reaching the judge cost, verdicts the cache served excluded, and nothing for a scenario no judge grades.</param>
     public static void Record(EvaluationResult verdict, string model, PaidUsage modelSpend, PaidUsage judgeSpend)
     {
         var metric = new NumericMetric(
             MetricName,
-            modelSpend.Cost + judgeSpend.Cost is { } charged ? (double)charged : null,
+            !(modelSpend.IsFree && judgeSpend.IsFree) && ChargeOf(modelSpend) + ChargeOf(judgeSpend) is { } charged
+                ? (double)charged
+                : null,
             Describe(model, modelSpend, judgeSpend));
 
         metric.AddOrUpdateMetadata("paid-calls", Invariant(modelSpend.Calls + judgeSpend.Calls));
@@ -52,11 +54,16 @@ internal static class EvaluationCost
             return "Nothing reached a provider: every answer and every verdict came from the store's cache.";
         }
 
+        var judgeShare = judgeSpend.IsFree
+            ? string.Empty
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $", and the judge {judgeSpend.InputTokens} and {judgeSpend.OutputTokens} over {judgeSpend.Calls}");
         var spend = string.Create(
             CultureInfo.InvariantCulture,
-            $"{model} was sent {modelSpend.InputTokens} input and {modelSpend.OutputTokens} output tokens over {modelSpend.Calls} call(s), and the judge {judgeSpend.InputTokens} and {judgeSpend.OutputTokens} over {judgeSpend.Calls}.");
+            $"{model} was sent {modelSpend.InputTokens} input and {modelSpend.OutputTokens} output tokens over {modelSpend.Calls} call(s){judgeShare}.");
 
-        return (modelSpend.Cost, judgeSpend.Cost) switch
+        return (ChargeOf(modelSpend), ChargeOf(judgeSpend)) switch
         {
             (null, null) => $"{spend} Neither answer carried a charge, so what that cost is the provider's to state.",
             (null, _) => $"{spend} The model's answers carried no charge, so the total is left unstated rather than reported as the judge's share alone.",
@@ -64,6 +71,13 @@ internal static class EvaluationCost
             _ => spend,
         };
     }
+
+    /// <summary>Reads what a client was charged, which is nothing at all where no call of its reached a provider.</summary>
+    /// <remarks>
+    /// A client that made no call is not a client whose provider stated no charge: a judge whose verdicts all came from
+    /// the cache, or a scenario no judge grades, adds nothing to the total rather than leaving it unstated.
+    /// </remarks>
+    private static decimal? ChargeOf(PaidUsage spend) => spend.IsFree ? 0m : spend.Cost;
 
     private static string Invariant(long value) => value.ToString(CultureInfo.InvariantCulture);
 }

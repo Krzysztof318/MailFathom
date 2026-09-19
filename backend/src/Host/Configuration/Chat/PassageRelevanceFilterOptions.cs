@@ -45,7 +45,7 @@ internal sealed class PassageRelevanceFilterOptions
 
     /// <summary>Gets or sets the least relevance a judged passage may carry and still be handed over.</summary>
     /// <remarks>Stated on the scale the model answers on. Half of it is a starting point rather than a recommendation: how much of an answer an extract has to hold depends on the mail an instance actually carries.</remarks>
-    public int MinimumRelevance { get; set; } = 50;
+    public int MinimumRelevance { get; set; } = PassageRelevanceFilterPlan.DefaultMinimumRelevance;
 
     /// <summary>Gets or sets which declared model judges a candidate, and empty to judge it with <c>Chat:MainModel</c>.</summary>
     /// <remarks>One call per candidate on every lookup is the heaviest per-message work a deployment does, which is the case a cheap model is declared for.</remarks>
