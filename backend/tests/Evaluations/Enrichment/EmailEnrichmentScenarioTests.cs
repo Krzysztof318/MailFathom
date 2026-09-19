@@ -117,6 +117,8 @@ public sealed partial class EmailEnrichmentScenarioTests : IDisposable
     [InlineData("DatedPaymentPromise", """{"commitment":{"text":"Pay invoice 7842.","reason":"It says so.","passages":[0]}}""", false)]
     [InlineData("SeveralAmountsAndDates", """{"sense":{"text":"Billing items.","reason":"It lists them.","passages":[0]},"commitment":{"text":"Circulate the checklist.","reason":"It says so.","passages":[0],"dueAt":"2026-10-12"}}""", true)]
     [InlineData("SeveralAmountsAndDates", """{"sense":{"text":"Billing items.","reason":"It lists them.","passages":[0]},"commitment":{"text":"Circulate the checklist.","reason":"It says so.","passages":[0],"dueAt":"2026-10-20"}}""", false)]
+    [InlineData("SeveralAmountsAndDates", """{"sense":{"text":"Billing items.","reason":"It lists them.","passages":[0]},"commitment":{"text":"Circulate the checklist.","reason":"It says so.","passages":[0],"dueAt":"2026-10-15"}}""", false)]
+    [InlineData("SeveralOwnersAndDays", """{"sense":{"text":"Pilot tasks.","reason":"It lists them.","passages":[0]},"commitment":{"text":"Update the checklist.","reason":"It says so.","passages":[0],"dueAt":"2026-09-08"}}""", false)]
     [InlineData("RelativeDeadlines", """{"commitment":{"text":"Circulate the agenda.","reason":"By Friday.","passages":[0],"dueAt":"2026-09-04"}}""", true)]
     [InlineData("RelativeDeadlines", """{"commitment":{"text":"Circulate the agenda.","reason":"By Friday.","passages":[0],"dueAt":"2026-09-08"}}""", false)]
     [InlineData("RelativeDeadlines", """{"commitment":{"text":"Circulate the agenda.","reason":"By Friday.","passages":[0]}}""", false)]

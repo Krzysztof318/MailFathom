@@ -162,8 +162,13 @@ internal sealed record EmailEnrichmentCase(
         };
 
     /// <summary>Refuses a commitment falling due on any day but those the message names, which is a day the model invented.</summary>
+    /// <remarks>
+    /// Compared on the calendar day in UTC, the zone the reading normalises every instant to, rather than through
+    /// <see cref="DueOn" />'s day either side: named days sit next to each other here, and their tolerances would join into
+    /// a range admitting a day the message never names.
+    /// </remarks>
     private static Func<IReadOnlyList<EmailEnrichmentMark>, string?> DueOnlyOnNamedDays(params DateOnly[] named) =>
-        marks => marks.FirstOrDefault(mark => mark.DueAt is { } dueAt && !named.Any(day => Within(dueAt, day))) is { } invented
+        marks => marks.FirstOrDefault(mark => mark.DueAt is { } dueAt && !named.Contains(DateOnly.FromDateTime(dueAt.UtcDateTime))) is { } invented
             ? $"a commitment falls due on {invented.DueAt:yyyy-MM-dd}, a day the message never names."
             : null;
 
