@@ -39,6 +39,15 @@ internal sealed class JudgeDeclaration
     private const string ModelVariable = "MAILFATHOM_JUDGE_MODEL";
     private const string ReasoningEffortVariable = "MAILFATHOM_JUDGE_REASONING_EFFORT";
 
+    /// <summary>The output budget a verdict is asked for under a declared effort, reasoning and answer together.</summary>
+    /// <remarks>
+    /// The evaluators ask for 800 tokens, sized for the verdict alone, while a provider counts reasoning against the same
+    /// budget — OpenRouter reserves up to 95% of it at the highest effort — so under a declared effort the verdict arrives
+    /// cut off and is read as one the evaluator could not parse. This leaves the 800 standing beside the largest share any
+    /// level reserves, and costs nothing unspent, since only the tokens a verdict uses are billed.
+    /// </remarks>
+    private const int ReasonedVerdictOutputTokens = 16_000;
+
     private readonly ChatEndpoint endpoint;
     private readonly string apiKey;
     private readonly string? reasoningEffort;
@@ -130,7 +139,7 @@ internal sealed class JudgeDeclaration
         }
     }
 
-    /// <summary>Puts the declaration onto the judge's own client: its reasoning effort on every call, and its anonymity.</summary>
+    /// <summary>Puts the declaration onto the judge's own client: its reasoning effort and the room it needs on every call, and its anonymity.</summary>
     /// <param name="judge">The judge's own client, which the result takes ownership of.</param>
     /// <returns>The client every verdict is asked through.</returns>
     /// <remarks>
@@ -146,6 +155,10 @@ internal sealed class JudgeDeclaration
 
         return requestOptions is null
             ? pipeline.Build()
-            : pipeline.ConfigureOptions(options => options.RawRepresentationFactory = requestOptions).Build();
+            : pipeline.ConfigureOptions(options =>
+            {
+                options.RawRepresentationFactory = requestOptions;
+                options.MaxOutputTokens = ReasonedVerdictOutputTokens;
+            }).Build();
     }
 }

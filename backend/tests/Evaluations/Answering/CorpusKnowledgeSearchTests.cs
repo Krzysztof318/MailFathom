@@ -46,7 +46,7 @@ public sealed class CorpusKnowledgeSearchTests
     }
 
     [Fact]
-    public async Task FindPassagesAsync_AQueryItsWordsNarrow_RanksTheMessageCarryingMoreOfThemFirst()
+    public async Task FindPassagesAsync_SeveralWords_ReturnsOnlyMailCarryingEveryOne()
     {
         // Arrange
         var query = EmailKnowledgeQuery.ForText("Lumenfield INV-4827");
@@ -55,7 +55,26 @@ public sealed class CorpusKnowledgeSearchTests
         var found = await this.FindAsync(query);
 
         // Assert
-        Assert.Contains("Lumenfield", found[0].GroundingText, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(found);
+        Assert.All(found, static message => Assert.True(
+            message.GroundingText.Contains("Lumenfield", StringComparison.OrdinalIgnoreCase)
+            && message.GroundingText.Contains("INV-4827", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public async Task FindPassagesAsync_WordsJoinedByOr_ReturnsMailCarryingEitherAlternative()
+    {
+        // Arrange
+        var either = EmailKnowledgeQuery.ForText("Lumenfield OR Pettersen");
+
+        // Act
+        var found = await this.FindAsync(either);
+        var lumenfield = await this.FindAsync(EmailKnowledgeQuery.ForText("Lumenfield"));
+        var pettersen = await this.FindAsync(EmailKnowledgeQuery.ForText("Pettersen"));
+
+        // Assert
+        Assert.Contains(found, message => lumenfield.Contains(message));
+        Assert.Contains(found, message => pettersen.Contains(message));
     }
 
     [Fact]

@@ -53,7 +53,8 @@ internal static class DiscoveryPlanningInstructions
         "receivedOnOrAfter" and "receivedBefore" for an ISO 8601 instant bounding when mail arrived, "isRemotelySeen"
         and "isRemotelyFlagged" for the read and starred states, "keyword" for a label, and "hasAttachments" for whether
         mail carries files. Omit a filter you have no reason to set; a filter narrows exactly, while the same words in
-        the query only compete with every other word in it.
+        the query only compete with every other word in it. A person the question names without an address has no
+        filter to go into, so their name belongs in the words, which is where their mail carries it.
 
         "sufficientPassages" is how many separate extracts of mail you judge would answer this question, between 1 and
         the number the turn names. Lookups stop once that many have been found, so a small number on a narrow question

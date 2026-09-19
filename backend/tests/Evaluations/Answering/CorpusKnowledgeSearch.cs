@@ -19,7 +19,10 @@ namespace MailFathom.Evaluations.Answering;
 /// <para>
 /// What is measured is the agent — which lookups it writes, which filters it reaches for, and what it does with what
 /// comes back — so the search only has to honour the tool's contract: every filter the tool publishes narrows exactly
-/// as it says, and the ranking puts mail carrying more of the query's words first. It answers through the same
+/// as it says, and the words match the way a deployment's lexical search matches them, every word required unless
+/// <c>OR</c> offers an alternative. That last part is what keeps a lookup from flooding the run: admitting any message
+/// carrying any word fills a whole window with mail that barely matches and spends the run's retrieval allowance on
+/// the first lookup. It answers through the same
 /// <see cref="EmailKnowledgeLookup" /> a deployment's search returns, one passage per message, bounded the way
 /// <see cref="EmailKnowledgeBounds.Default" /> bounds one.
 /// </para>
@@ -60,15 +63,17 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
 
         Interlocked.Increment(ref this.lookups);
 
-        var (wanted, excluded) = TermsOf(query.QueryText);
+        var (alternatives, excluded) = TermsOf(query.QueryText);
+        var wanted = alternatives.SelectMany(static terms => terms).ToList();
 
-        // ponytail: word-overlap ranking, not the deployment's PostgreSQL full-text search — no stemming, no phrase
-        // proximity; run the scenarios over the real search in the integration harness if the ranking itself is measured.
+        // ponytail: substring matching over websearch_to_tsquery's AND and OR, not the deployment's PostgreSQL full-text
+        // search — no tokenizer, no phrase adjacency, ranked by words carried rather than ts_rank; run the scenarios over
+        // the real search in the integration harness if the ranking itself is measured.
         var found = corpus
             .Where(message => Admits(message, query))
             .Where(message => !excluded.Any(term => Mentions(message, term)))
+            .Where(message => alternatives.Count is 0 || alternatives.Any(terms => terms.All(term => Mentions(message, term))))
             .Select(message => (Message: message, Score: wanted.Count(term => Mentions(message, term))))
-            .Where(candidate => wanted.Count is 0 || candidate.Score > 0)
             .OrderByDescending(static candidate => candidate.Score)
             .ThenByDescending(static candidate => candidate.Message.ReceivedAt)
             .Take(EmailKnowledgeBounds.Default.MaximumPassages)
@@ -92,26 +97,44 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
     private static bool Mentions(CorpusMessage message, string term) =>
         message.GroundingText.Contains(term, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Reads the words a query wants and the ones it excludes, keeping a quoted phrase whole.</summary>
-    private static (IReadOnlyList<string> Wanted, IReadOnlyList<string> Excluded) TermsOf(string queryText)
+    /// <summary>Reads the alternatives a query offers, each the words it requires together, and the words it excludes, keeping a quoted phrase whole.</summary>
+    private static (IReadOnlyList<IReadOnlyList<string>> Alternatives, IReadOnlyList<string> Excluded) TermsOf(string queryText)
     {
-        List<string> wanted = [];
+        List<IReadOnlyList<string>> alternatives = [];
+        List<string> current = [];
         List<string> excluded = [];
 
         foreach (Match token in QueryToken().Matches(queryText))
         {
+            if (string.Equals(token.Value, "OR", StringComparison.OrdinalIgnoreCase))
+            {
+                EndAlternative();
+                continue;
+            }
+
             var excludes = token.Value.StartsWith('-');
             var term = token.Value.TrimStart('-').Trim('"').Trim('.', ',', ';', ':', '!', '?', '(', ')', '\'');
 
-            if (term.Length < 2 || term is "OR" || CommonWords.Contains(term))
+            if (term.Length < 2 || CommonWords.Contains(term))
             {
                 continue;
             }
 
-            (excludes ? excluded : wanted).Add(term);
+            (excludes ? excluded : current).Add(term);
         }
 
-        return (wanted, excluded);
+        EndAlternative();
+
+        return (alternatives, excluded);
+
+        void EndAlternative()
+        {
+            if (current.Count > 0)
+            {
+                alternatives.Add(current);
+                current = [];
+            }
+        }
     }
 
     /// <summary>Cuts the message down to the passages that carry a wanted word, the way a deployment's extract does.</summary>

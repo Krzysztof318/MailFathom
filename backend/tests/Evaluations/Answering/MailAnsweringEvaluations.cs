@@ -51,7 +51,7 @@ public sealed class MailAnsweringEvaluations
         var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
 
         // Assert
-        Assert.Empty(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Puts every scenario to one model and names what it fell short on.</summary>

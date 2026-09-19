@@ -52,7 +52,7 @@ public sealed class RelevanceFilterEvaluations
         var outcomes = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey))]);
 
         // Assert
-        Assert.Empty(outcomes.SelectMany(static outcome => ShortfallsOf(outcome.Model, outcome.Verdict)));
+        AiEvaluationRun.AssertNoShortfalls(outcomes.SelectMany(static outcome => ShortfallsOf(outcome.Model, outcome.Verdict)));
     }
 
     /// <summary>Measures one model over a client, a meter, and a store handle of its own, which is what lets the models run at once.</summary>
