@@ -12,7 +12,9 @@ set -euo pipefail
 # Without MAILFATHOM_AI_EVALUATIONS=true the paid scenarios skip, and what runs is only the free proof
 # of what the store holds. With it, the run needs MAILFATHOM_EVALUATION_MODELS, MAILFATHOM_CHAT_API_KEY,
 # and MAILFATHOM_JUDGE_MODEL, and fails naming whichever is missing. The judge answers from the same
-# endpoint and the same key as the models under test, so its model is all that is declared apart.
+# endpoint and the same key as the models under test, so its model is all that is declared apart —
+# beside MAILFATHOM_JUDGE_REASONING_EFFORT, which a run may leave unset to send the judge no reasoning
+# parameter at all.
 #
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it

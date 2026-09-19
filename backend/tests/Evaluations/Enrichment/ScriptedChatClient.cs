@@ -22,6 +22,9 @@ internal sealed class ScriptedChatClient(string answer, ChatClientMetadata metad
     /// <summary>Gets how many requests reached this provider.</summary>
     public int Requests { get; private set; }
 
+    /// <summary>Gets the options every request that reached this provider carried, in the order they arrived.</summary>
+    public List<ChatOptions?> ReceivedOptions { get; } = [];
+
     /// <inheritdoc />
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -29,6 +32,7 @@ internal sealed class ScriptedChatClient(string answer, ChatClientMetadata metad
         CancellationToken cancellationToken = default)
     {
         this.Requests++;
+        this.ReceivedOptions.Add(options);
 
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer))
         {

@@ -48,7 +48,7 @@ public sealed partial class EmailEnrichmentScenarioTests : IDisposable
     public async Task RunAsync_WithADeclaredJudge_PublishesNoValueOfItAndNoAddressOutsideAReservedDomain()
     {
         // Arrange
-        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey);
+        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey, reasoningEffort: null);
         using var judge = new ScriptedChatClient(JudgeAnswer, new ChatClientMetadata("planted-provider", JudgeAddress, JudgeModel));
         using var model = ModelClient();
 
@@ -75,7 +75,7 @@ public sealed partial class EmailEnrichmentScenarioTests : IDisposable
     public async Task RunAsync_AgainOverAnUnchangedPromptAndModel_AsksNeitherTheModelNorTheJudgeASecondTime()
     {
         // Arrange
-        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey);
+        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey, reasoningEffort: null);
         using var judge = new ScriptedChatClient(JudgeAnswer, new ChatClientMetadata("planted-provider", JudgeAddress, JudgeModel));
         using var model = ModelClient();
 
@@ -93,7 +93,7 @@ public sealed partial class EmailEnrichmentScenarioTests : IDisposable
     public async Task RunAsync_WithNothingReachingAProvider_ReportsTheRunAsHavingSpentNothing()
     {
         // Arrange
-        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey);
+        var declaration = JudgeDeclaration.Of(JudgeAddress, JudgeModel, JudgeApiKey, reasoningEffort: null);
         using var judge = new ScriptedChatClient(JudgeAnswer, new ChatClientMetadata("planted-provider", JudgeAddress, JudgeModel));
         using var model = ModelClient();
 
