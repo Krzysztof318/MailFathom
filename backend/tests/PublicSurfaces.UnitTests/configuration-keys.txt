@@ -2,7 +2,8 @@
 #
 # One line per key an operator may write: the key, the type it binds as, and whether the section refuses to
 # start without it. A ':<index>' segment is a position in a list and a ':<key>' segment is a name the operator
-# chooses. Regenerate this file with:
+# chooses; a type of '<json>' is a subtree they write freely, whose own rules the section's page states.
+# Regenerate this file with:
 #
 #   MAILFATHOM_UPDATE_PUBLIC_SURFACES=1 dotnet test --project backend/tests/PublicSurfaces.UnitTests
 #
@@ -85,7 +86,7 @@ Chat:MailAnswering:Model:Alias = string (optional)
 Chat:MailAnswering:Model:Fallback = string (optional)
 Chat:MainModel:Alias = string (optional)
 Chat:MainModel:Fallback = string (optional)
-Chat:Models:<index>:AdditionalProperties:<key> = string (optional)
+Chat:Models:<index>:AdditionalProperties:<key> = <json> (optional)
 Chat:Models:<index>:Address = string (optional)
 Chat:Models:<index>:Alias = string (optional)
 Chat:Models:<index>:Api = ChatProviderApi(ChatCompletions|Responses) (optional)

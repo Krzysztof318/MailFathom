@@ -10,6 +10,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using Microsoft.Extensions.Configuration;
 
 namespace MailFathom.PublicSurfaces.UnitTests;
 
@@ -57,7 +58,8 @@ internal static class ConfigurationKeySurface
         "#",
         "# One line per key an operator may write: the key, the type it binds as, and whether the section refuses to",
         "# start without it. A ':<index>' segment is a position in a list and a ':<key>' segment is a name the operator",
-        "# chooses. Regenerate this file with:",
+        "# chooses; a type of '<json>' is a subtree they write freely, whose own rules the section's page states.",
+        "# Regenerate this file with:",
         "#",
         $"#   {PublicSurfaceGolden.RegenerationVariable}=1 dotnet test --project backend/tests/PublicSurfaces.UnitTests",
         "#",
@@ -157,6 +159,14 @@ internal static class ConfigurationKeySurface
 
         // Below this point the flag stops travelling. A requirement belongs to the property that carries the attribute,
         // and no key beneath a list or a nested class is the one an operator satisfied by writing it.
+
+        // A subtree the binder hands over whole instead of binding, so the operator names the members and writes any
+        // JSON beneath them. Walking it would publish the section type's own Value property as though it were the key.
+        if (typeof(IConfiguration).IsAssignableFrom(underlying))
+        {
+            return [new($"{path}:<key>", "<json>", Required: false)];
+        }
+
         if (DictionaryValueType(underlying) is { } dictionaryValue)
         {
             return WalkValue($"{path}:<key>", dictionaryValue, nullable: false, required: false, ancestors, nullability);

@@ -182,9 +182,12 @@ public sealed partial class ChatGenerationPlan
     /// <summary>Gets the request members every call carries beside the ones this deployment writes, keyed by their wire name.</summary>
     /// <remarks>
     /// Empty for the ordinary deployment. What fills it is a parameter this build has no key for — <c>top_k</c>,
-    /// <c>min_p</c>, a seed, a gateway's own routing switch — written into the request body as a top-level member of
-    /// the same name, which is what lets a model released after this version be tuned without one. No member this
-    /// deployment owns can appear here, which <see cref="IsOwnedRequestMember" /> decides.
+    /// <c>min_p</c>, a seed, a gateway's own routing block — written into the request body as a top-level member of
+    /// the same name, which is what lets a model released after this version be tuned without one. A value is any
+    /// JSON, an object or an array as readily as a scalar, because a gateway states its routing as a nested document
+    /// and in no header. No member this deployment owns can appear here, which
+    /// <see cref="IsOwnedRequestMember" /> decides, and the name shape keeps that refusal whole: a name is a member of
+    /// the body's top level, never a path into it.
     /// </remarks>
     public IReadOnlyDictionary<string, JsonElement> AdditionalProperties { get; }
 

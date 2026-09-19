@@ -12,9 +12,10 @@ namespace MailFathom.Host.UnitTests.Configuration.Chat;
 
 /// <summary>Covers what a model's <c>AdditionalProperties</c> object becomes on the way from a configuration file to a request.</summary>
 /// <remarks>
-/// Configuration carries every value as text, so the JSON type an operator wrote is lost at the provider and has to be
-/// read back before the request is built. These tests bind through the same strict binding the section is read with,
-/// because what the binder keeps and what it refuses is the half of the claim no other test would notice changing.
+/// Configuration carries a document as a tree of text leaves, so both halves of what an operator wrote — the structure
+/// and the JSON type of each value — are lost at the provider and have to be read back before the request is built.
+/// These tests bind through the same strict binding the section is read with, because what survives that binding is
+/// the half of the claim no other test would notice changing.
 /// </remarks>
 public sealed class ChatModelAdditionalPropertiesBindingTests
 {
@@ -58,7 +59,7 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
     /// an empty string.
     /// </summary>
     [Fact]
-    public void Bind_ANullLiteralAndAnEmptyString_ArriveAsTheTwoDifferentValuesTheyAre()
+    public void ToPlan_ANullLiteralAndAnEmptyString_ArriveAsTheTwoDifferentValuesTheyAre()
     {
         // Arrange
         var model = BindModel("""{ "seed": null, "suffix": "" }""");
@@ -67,7 +68,6 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
         var properties = model.ToPlan().AdditionalProperties;
 
         // Assert
-        Assert.Null(model.AdditionalProperties["seed"]);
         Assert.Equal(JsonValueKind.Null, properties["seed"].ValueKind);
         Assert.Equal(string.Empty, properties["suffix"].GetString());
     }
@@ -85,15 +85,99 @@ public sealed class ChatModelAdditionalPropertiesBindingTests
         Assert.Empty(properties);
     }
 
+    /// <summary>A gateway's routing block is written as ordinary nested JSON and reaches the request as that structure.</summary>
+    [Fact]
+    public void ToPlan_AnObjectWrittenAsNestedJson_ReachesThePlanAsThatObject()
+    {
+        // Arrange
+        var model = BindModel(
+            """{ "provider": { "order": ["anthropic", "openai"], "allow_fallbacks": false, "max_price": { "prompt": 1 } } }""");
+
+        // Act
+        var provider = model.ToPlan().AdditionalProperties["provider"];
+
+        // Assert
+        Assert.Equal(["anthropic", "openai"], provider.GetProperty("order").EnumerateArray().Select(element => element.GetString()));
+        Assert.Equal(JsonValueKind.False, provider.GetProperty("allow_fallbacks").ValueKind);
+        Assert.Equal(1, provider.GetProperty("max_price").GetProperty("prompt").GetInt32());
+    }
+
+    /// <summary>A node whose children are the integers below their own count is an array, which is how a configuration provider carries one.</summary>
+    [Fact]
+    public void ToPlan_AnArrayWrittenAsNestedJson_ReachesThePlanAsAnArrayInIndexOrder()
+    {
+        // Arrange
+        var model = BindModel("""{ "transforms": ["middle-out", "compress", "trim"] }""");
+
+        // Act
+        var transforms = model.ToPlan().AdditionalProperties["transforms"];
+
+        // Assert
+        Assert.Equal(JsonValueKind.Array, transforms.ValueKind);
+        Assert.Equal(["middle-out", "compress", "trim"], transforms.EnumerateArray().Select(element => element.GetString()));
+    }
+
     /// <summary>
-    /// An array written as JSON rather than as JSON text flattens into keys the dictionary cannot hold, and the strict
-    /// binding the section is read with refuses it rather than dropping the member without a word.
+    /// An array of eleven elements is where index order and key order disagree, because a configuration provider hands
+    /// its children over sorted as text and <c>10</c> sorts before <c>2</c>.
     /// </summary>
     [Fact]
-    public void Bind_AnArrayWrittenAsJsonRatherThanAsText_IsRefused()
+    public void ToPlan_AnArrayLongerThanTenElements_KeepsTheOrderItWasWrittenIn()
     {
-        // Act, Assert
-        Assert.Throws<InvalidOperationException>(() => BindModel("""{ "stop": ["###", "END"] }"""));
+        // Arrange
+        var written = Enumerable.Range(0, 11).Select(position => $"stop-{position}").ToArray();
+        var model = BindModel($$"""{ "stop": {{JsonSerializer.Serialize(written)}} }""");
+
+        // Act
+        var stop = model.ToPlan().AdditionalProperties["stop"];
+
+        // Assert
+        Assert.Equal(written, stop.EnumerateArray().Select(element => element.GetString()));
+    }
+
+    /// <summary>
+    /// A deployment configured through environment variables writes the same tree under <c>__</c>, so the two
+    /// provisioning shapes reach one request member rather than one of them being a file-only affordance.
+    /// </summary>
+    [Fact]
+    public void ToPlan_AMemberDeclaredThroughEnvironmentVariables_ReachesThePlanAsTheSameJson()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Chat:Models:0:Alias"] = "main",
+                ["Chat:Models:0:Model"] = "a-chat-model",
+                ["Chat:Models:0:Unauthenticated"] = "true",
+                ["Chat:Models:0:AdditionalProperties:provider:order:0"] = "anthropic",
+                ["Chat:Models:0:AdditionalProperties:provider:allow_fallbacks"] = "false",
+            })
+            .Build();
+
+        var model = configuration.GetSection(ChatModelOptions.SectionName)
+            .Get<ChatModelOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)!
+            .Models[0];
+
+        // Act
+        var provider = model.ToPlan().AdditionalProperties["provider"];
+
+        // Assert
+        Assert.Equal("anthropic", provider.GetProperty("order")[0].GetString());
+        Assert.Equal(JsonValueKind.False, provider.GetProperty("allow_fallbacks").ValueKind);
+    }
+
+    /// <summary>An object with no members carries no children and no value, which is the same thing a null literal carries, so the reference states that it arrives as null.</summary>
+    [Fact]
+    public void ToPlan_AnEmptyObject_ArrivesAsNull()
+    {
+        // Arrange
+        var model = BindModel("""{ "provider": {} }""");
+
+        // Act
+        var properties = model.ToPlan().AdditionalProperties;
+
+        // Assert
+        Assert.Equal(JsonValueKind.Null, properties["provider"].ValueKind);
     }
 
     private static ChatModelDeclarationOptions BindModel(string? additionalProperties)
