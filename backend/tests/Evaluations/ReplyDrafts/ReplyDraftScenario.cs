@@ -194,7 +194,7 @@ internal sealed partial record ReplyDraftScenario(
 
     /// <summary>Names every check and rating the verdict falls short on, in words a failed run can be read by.</summary>
     /// <param name="verdict">The verdict one model's run of this scenario produced.</param>
-    /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
+    /// <returns>One line per shortfall, naming the metric; the repetition header above them names the case and the model.</returns>
     public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(verdict);
 
     private static EmailAddress AddressOf(CorpusMessage message)

@@ -47,7 +47,7 @@ internal static class AiEvaluationRun
             + "rather than skipping.");
 
     /// <summary>Fails the test naming every shortfall in full, one to a line.</summary>
-    /// <param name="shortfalls">What each model fell short on, already prefixed with the model.</param>
+    /// <param name="shortfalls">What each model fell short on, each case under a header naming the case and the model.</param>
     /// <remarks>Rather than <c>Assert.Empty</c>, which cuts every item it prints to a few dozen characters and so names the model and nothing of why.</remarks>
     public static void AssertNoShortfalls(IEnumerable<string> shortfalls)
     {
