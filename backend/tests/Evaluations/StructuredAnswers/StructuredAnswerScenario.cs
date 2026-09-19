@@ -110,7 +110,7 @@ internal static class StructuredAnswerScenario
 
         if (answer.Shortfall is { } shortfall)
         {
-            yield return $"{answer.Model}: {shortfall}";
+            yield return shortfall;
         }
 
         if (!answer.Verdict.Metrics.ContainsKey(IntentResolutionMetricName))
@@ -122,7 +122,7 @@ internal static class StructuredAnswerScenario
 
         if (resolution.Value is not >= IntentResolutionThreshold)
         {
-            yield return $"{answer.Model}: intent resolution {resolution.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"}, below {IntentResolutionThreshold.ToString(CultureInfo.InvariantCulture)} — {resolution.Reason}";
+            yield return $"intent resolution {resolution.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"}, below {IntentResolutionThreshold.ToString(CultureInfo.InvariantCulture)} — {resolution.Reason}";
         }
     }
 
