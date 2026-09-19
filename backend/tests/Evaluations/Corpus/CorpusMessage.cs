@@ -84,20 +84,14 @@ internal sealed record CorpusMessage(
 
         // A message's position counts across every conversation before its own, which is the order the archive numbers
         // its files in and the one every identifier below is derived from.
-        var firstPositions = exchanges
-            .Select(static exchange => exchange.Count)
-            .Aggregate(new List<int> { 0 }, static (positions, count) =>
-            {
-                positions.Add(positions[^1] + count);
-                return positions;
-            });
-
         return
         [
             .. exchanges.Select(IReadOnlyList<CorpusMessage> (exchange, index) =>
-            [
-                .. exchange.Select((turn, offset) => Read(turn.Compose(), firstPositions[index] + offset)),
-            ]),
+            {
+                var firstPosition = exchanges.Take(index).Sum(static earlier => earlier.Count);
+
+                return [.. exchange.Select((turn, offset) => Read(turn.Compose(), firstPosition + offset))];
+            }),
         ];
     }
 

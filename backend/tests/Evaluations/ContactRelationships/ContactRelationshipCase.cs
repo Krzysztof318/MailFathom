@@ -14,8 +14,12 @@ namespace MailFathom.Evaluations.ContactRelationships;
 /// <para>
 /// The correspondence is built the way the correspondence index answers for an opened contact: every conversation a
 /// message from or to the address belongs to, named by the most recent of those messages, and every file the address
-/// sent — each list newest first and held to the bounds a deployment holds it to. The turn carries subjects, file names,
-/// and instants and no message text, so an expectation asks only what those can settle.
+/// sent — each list newest first and cut to the index's <see cref="ContactCorrespondenceBounds.Threads" /> and
+/// <see cref="ContactCorrespondenceBounds.Documents" />. The index's recency window is deliberately not applied: it is
+/// measured back from the moment a contact is opened, so applying it here would make what a case measures depend on the
+/// day the run happens and would empty every case once the corpus is a year old. Its message-scan bound is not applied
+/// either, because the whole corpus is smaller than it. The turn carries subjects, file names, and instants and no message
+/// text, so an expectation asks only what those can settle.
 /// </para>
 /// <para>
 /// Every address here is under the corpus's reserved domain and every name belongs to nobody.
