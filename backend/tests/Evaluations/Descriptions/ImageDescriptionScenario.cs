@@ -76,7 +76,7 @@ internal sealed record ImageDescriptionScenario(
         new(
             "ImageDescription.Chart",
             "chart.png",
-            "A bar chart titled \"Tickets closed per quarter\" with three green bars on a white background, labelled Q1, "
+            "A bar chart titled \"Tickets closed per quarter\" with three teal bars on a white background, labelled Q1, "
             + "Q2, and Q3 along the horizontal axis and rising from left to right, with the values 12, 19, and 27 written "
             + "above them.",
             ["Tickets closed per quarter", "Q1", "Q3", "27"],
