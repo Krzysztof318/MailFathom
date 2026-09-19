@@ -103,7 +103,7 @@ public sealed class RelevanceFilterScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_AModelAnsweringNothing_FailsTheFloorAsCountsTheFilterNeverMade()
+    public async Task RunAsync_AModelAnsweringNothing_FailsBothBoundsAsCountsTheFilterNeverMade()
     {
         // Arrange
         using var model = new ScriptedChatClient(" ", new ChatClientMetadata("scripted", defaultModelId: ModelUnderTest));
@@ -112,11 +112,17 @@ public sealed class RelevanceFilterScenarioTests : IDisposable
         var verdict = await this.RunScenarioAsync(model);
 
         // Assert
-        var floor = verdict.Get<NumericMetric>(
-            RelevanceFilterEvaluator.AnsweringKeptName(PassageRelevanceFilterPlan.DefaultMinimumRelevance));
+        NumericMetric[] atDefault =
+        [
+            verdict.Get<NumericMetric>(RelevanceFilterEvaluator.AnsweringKeptName(PassageRelevanceFilterPlan.DefaultMinimumRelevance)),
+            verdict.Get<NumericMetric>(RelevanceFilterEvaluator.NotAnsweringKeptName(PassageRelevanceFilterPlan.DefaultMinimumRelevance)),
+        ];
 
-        Assert.True(floor.Interpretation?.Failed);
-        Assert.Contains("unjudged", floor.Interpretation?.Reason, StringComparison.Ordinal);
+        Assert.All(atDefault, static metric =>
+        {
+            Assert.True(metric.Interpretation?.Failed);
+            Assert.Contains("unjudged", metric.Interpretation?.Reason, StringComparison.Ordinal);
+        });
     }
 
     public void Dispose() => this.store.Delete(recursive: true);

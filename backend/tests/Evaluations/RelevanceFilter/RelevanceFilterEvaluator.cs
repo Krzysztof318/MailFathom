@@ -95,25 +95,32 @@ internal sealed class RelevanceFilterEvaluator : IEvaluator
 
         if (tally.MinimumRelevance is PassageRelevanceFilterPlan.DefaultMinimumRelevance)
         {
-            answering.Interpretation = AnsweringFloor(tally, measurement.AnsweringCount);
-            notAnswering.Interpretation = NotAnsweringCeiling(tally, measurement.NotAnsweringCount);
+            answering.Interpretation = tally.LookupsFellBack > 0
+                ? FellBack(tally)
+                : AnsweringFloor(tally, measurement.AnsweringCount);
+            notAnswering.Interpretation = tally.LookupsFellBack > 0
+                ? FellBack(tally)
+                : NotAnsweringCeiling(tally, measurement.NotAnsweringCount);
         }
 
         return [answering, notAnswering];
     }
 
+    /// <summary>Fails both metrics of a tally the model left partly unjudged, for the one reason they share.</summary>
+    /// <remarks>
+    /// A lookup the filter fell back on keeps every candidate, so both counts read the ranking rather than the filter;
+    /// judging either against its bound would give the report a second, misleading explanation of the same failure.
+    /// </remarks>
+    private static EvaluationMetricInterpretation FellBack(RelevanceFilterTally tally) =>
+        new(
+            EvaluationRating.Unacceptable,
+            failed: true,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{tally.LookupsFellBack} lookup(s) were handed over unjudged because the model did not answer, so these counts are the ranking's rather than the filter's."));
+
     private static EvaluationMetricInterpretation AnsweringFloor(RelevanceFilterTally tally, int answeringCount)
     {
-        if (tally.LookupsFellBack > 0)
-        {
-            return new EvaluationMetricInterpretation(
-                EvaluationRating.Unacceptable,
-                failed: true,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{tally.LookupsFellBack} lookup(s) were handed over unjudged because the model did not answer, so these counts are the ranking's rather than the filter's."));
-        }
-
         var share = (double)tally.AnsweringKept / answeringCount;
         var failed = share < MinimumAnsweringKeptShare;
 
