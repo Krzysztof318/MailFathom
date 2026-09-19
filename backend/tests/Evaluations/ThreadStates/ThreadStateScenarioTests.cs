@@ -26,6 +26,14 @@ public sealed class ThreadStateScenarioTests : IDisposable
     [InlineData("Settled", "{}", true)]
     [InlineData("Settled", """{"openQuestions":[{"text":"Is the pickup confirmed?","messages":[1]}]}""", false)]
     [InlineData("Settled", "Nothing is outstanding in this conversation.", false)]
+    [InlineData("PaymentAheadOfDueDate", """{"commitments":[{"text":"Pay INV-4827.","messages":[1],"dueAt":"2026-09-25"}]}""", true)]
+    [InlineData("PaymentAheadOfDueDate", """{"commitments":[{"text":"Pay INV-4827.","messages":[1],"dueAt":"2026-09-28"}]}""", false)]
+    [InlineData("UnansweredPaymentSchedule", """{"openQuestions":[{"text":"Has INV-6044 been scheduled?","messages":[3]}]}""", true)]
+    [InlineData("UnansweredPaymentSchedule", """{"openQuestions":[{"text":"Has INV-6044 been scheduled?","messages":[1]}]}""", false)]
+    [InlineData("CommitmentWithdrawn", """{"openQuestions":[{"text":"When will the agreement be signed?","messages":[2]}]}""", true)]
+    [InlineData("CommitmentWithdrawn", """{"commitments":[{"text":"Send the signed agreement.","messages":[0],"owedBy":"Tomasz","dueAt":"2026-09-04"}]}""", false)]
+    [InlineData("QuestionAnsweredLater", """{"agreements":[{"text":"The workshop is in the Birch Room.","messages":[0,3]}]}""", true)]
+    [InlineData("QuestionAnsweredLater", """{"openQuestions":[{"text":"Which room is the workshop in?","messages":[0]}]}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherItStatesWhatTheConversationSays(
         string caseName,
         string answer,
@@ -49,6 +57,17 @@ public sealed class ThreadStateScenarioTests : IDisposable
     [InlineData("DatedPayment", -1, "by 10 September 2026")]
     [InlineData("UnansweredRetest", -1, "Please let me know whether your retest now completes")]
     [InlineData("Settled", -1, "no further action is needed")]
+    [InlineData("AgreedValidationReview", 2, "I confirm the 30-minute validation review for 21 September 2026 at 14:00 UTC.")]
+    [InlineData("UnansweredPaymentSchedule", -1, "Could you confirm whether payment has been scheduled?")]
+    [InlineData("SettledInvoiceCorrection", 2, "No further action is needed from your team.")]
+    [InlineData("PaymentAheadOfDueDate", -1, "Payment is scheduled for 25 September 2026")]
+    [InlineData("ScheduledSettlement", 1, "Payment for the outstanding balance on INV-4798 is scheduled for 10 September 2026.")]
+    [InlineData("UnansweredCheckIn", -1, "Please let me know if that time works for you")]
+    [InlineData("AgreedCloseOutCall", 4, "Monday, 22 June 2026, at 10:00 Bellhaven time works for me.")]
+    [InlineData("PaymentByEighteenthSeptember", 3, "by 18 September 2026")]
+    [InlineData("CommitmentWithdrawn", -1, "I have to withdraw what I told you on Tuesday")]
+    [InlineData("QuestionAnsweredLater", -1, "the workshop is in the Birch Room")]
+    [InlineData("QualifiedAgreement", -1, "provided the final data export reaches us by 27 October")]
     public void Messages_ACase_ComesFromTheConversationItsExpectationDescribes(
         string caseName,
         int position,
@@ -62,6 +81,25 @@ public sealed class ThreadStateScenarioTests : IDisposable
 
         // Assert
         Assert.Contains(evidence, text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"agreements":[{"text":"Go-live is 3 November, if the export arrives by 27 October.","messages":[1]}]}""", true)]
+    [InlineData("""{"agreements":[{"text":"Go-live is 3 November.","messages":[0]}]}""", false)]
+    public async Task RunAsync_AConversationThatReadsTwoWays_FilesTheJudgesIntentResolutionBesideThePlainCheck(
+        string answer,
+        bool expected)
+    {
+        // Arrange
+        using var model = ScriptedStructuredAnswerRun.Model(answer);
+
+        // Act
+        var outcome = await this.run.RunAsync(ThreadStateScenario.RequestFor(ThreadStateCase.Named("QualifiedAgreement")), model);
+
+        // Assert
+        var resolution = outcome.Verdict.Get<NumericMetric>(StructuredAnswerScenario.IntentResolutionMetricName);
+
+        Assert.Equal((1, 5d, expected), (this.run.Judge.Requests, resolution.Value, outcome.Shortfall is null));
     }
 
     public void Dispose() => this.run.Dispose();

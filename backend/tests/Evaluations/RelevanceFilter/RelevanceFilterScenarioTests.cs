@@ -65,8 +65,8 @@ public sealed class RelevanceFilterScenarioTests : IDisposable
         int?[] answeringKept = [.. RelevanceFilterEvaluator.Thresholds.Select(threshold => KeptAt(verdict, RelevanceFilterEvaluator.AnsweringKeptName(threshold)))];
         int?[] notAnsweringKept = [.. RelevanceFilterEvaluator.Thresholds.Select(threshold => KeptAt(verdict, RelevanceFilterEvaluator.NotAnsweringKeptName(threshold)))];
 
-        Assert.Equal([6, 6, 6, 6, 6, 6, 6, 6, 0], answeringKept);
-        Assert.Equal([16, 16, 16, 0, 0, 0, 0, 0, 0], notAnsweringKept);
+        Assert.Equal([12, 12, 12, 12, 12, 12, 12, 12, 0], answeringKept);
+        Assert.Equal([25, 25, 25, 0, 0, 0, 0, 0, 0], notAnsweringKept);
         Assert.Equal(40, verdict.Get<NumericMetric>(RelevanceFilterEvaluator.BestThresholdMetricName).Value);
         Assert.DoesNotContain(verdict.Metrics.Values, static metric => metric.Interpretation is { Failed: true });
     }

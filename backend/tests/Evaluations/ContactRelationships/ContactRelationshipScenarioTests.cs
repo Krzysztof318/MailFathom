@@ -27,6 +27,20 @@ public sealed class ContactRelationshipScenarioTests : IDisposable
     [InlineData("TooThin", "{}", true)]
     [InlineData("TooThin", """{"note":{"text":"An invoice and its correction.","sources":[0]}}""", false)]
     [InlineData("TooThin", "There is too little to say about this person.", false)]
+    [InlineData("ToneTurnedToFinalNotice", """{"note":{"text":"A supplier chasing an unpaid invoice.","sources":[0,4]},"openItem":{"text":"FW-2207 unpaid","sources":[0]}}""", true)]
+    [InlineData("ToneTurnedToFinalNotice", """{"note":{"text":"A supplier chasing an unpaid invoice.","sources":[0,4]},"openItem":{"text":"FW-2207 unpaid","sources":[2]}}""", false)]
+    [InlineData("OnlyInCopy", """{"note":{"text":"Copied on Lindenrow updates.","sources":[0,1]}}""", true)]
+    [InlineData("OnlyInCopy", """{"note":{"text":"Copied on Lindenrow updates.","sources":[0,1]},"nextAction":{"text":"Reply to the minutes.","sources":[2]}}""", false)]
+    [InlineData("WeeklyReports", """{"note":{"text":"Weekly status reports.","sources":[0,1]},"activePeriod":{"text":"Monday mornings","sources":[0,1,2,3]}}""", true)]
+    [InlineData("WeeklyReports", """{"note":{"text":"Weekly status reports.","sources":[0,1]}}""", false)]
+    [InlineData("NegotiatedContract", """{"note":{"text":"An MSA, drafted twice and signed.","sources":[0,3]}}""", true)]
+    [InlineData("NegotiatedContract", """{"note":{"text":"An MSA, drafted twice and signed.","sources":[0,1]}}""", false)]
+    [InlineData("NewsletterOnly", "{}", true)]
+    [InlineData("NewsletterOnly", """{"note":{"text":"A monthly newsletter.","sources":[0]},"nextAction":{"text":"Read the September issue.","sources":[0]}}""", false)]
+    [InlineData("UnansweredQuote", """{"note":{"text":"A quote for office chairs.","sources":[0,1]},"nextAction":{"text":"Chase the chair quote.","sources":[0]}}""", true)]
+    [InlineData("UnansweredQuote", """{"note":{"text":"A quote for office chairs.","sources":[0,1]},"nextAction":{"text":"Chase the chair quote.","sources":[1]}}""", false)]
+    [InlineData("OneItinerary", "{}", true)]
+    [InlineData("OneItinerary", """{"note":{"text":"A trip to Solmere.","sources":[0]}}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherTheCardSaysWhatTheCorrespondenceSupports(
         string caseName,
         string answer,
@@ -74,6 +88,17 @@ public sealed class ContactRelationshipScenarioTests : IDisposable
     [InlineData("OutstandingBalance", 4)]
     [InlineData("Settled", 2)]
     [InlineData("TooThin", 1)]
+    [InlineData("ThreeMatters", 3)]
+    [InlineData("OneItinerary", 1)]
+    [InlineData("OneBillingThread", 1)]
+    [InlineData("ResolvedTicketOnly", 1)]
+    [InlineData("ToneTurnedToFinalNotice", 5)]
+    [InlineData("OnlyInCopy", 3)]
+    [InlineData("WeeklyReports", 4)]
+    [InlineData("NegotiatedContract", 3)]
+    [InlineData("NewsletterOnly", 3)]
+    [InlineData("UnansweredQuote", 2)]
+    [InlineData("FinalisedItinerary", 3)]
     public void Correspondence_ACase_PublishesEveryConversationTheAddressTookPartIn(string caseName, int conversations)
     {
         // Arrange
