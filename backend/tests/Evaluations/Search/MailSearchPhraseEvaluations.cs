@@ -6,15 +6,11 @@ using MailFathom.Evaluations.StructuredAnswers;
 using xRetry.v3;
 using Xunit;
 
-namespace MailFathom.Evaluations.Discovery;
+namespace MailFathom.Evaluations.Search;
 
-/// <summary>Measures what the Discover planning agent reads each question into, under every declared model.</summary>
-/// <remarks>
-/// A theory over the cases rather than over the models, because the cases are written here while the models are read
-/// from the run's declaration, which a theory's data would read before the skip condition. A model whose plan falls short
-/// is collected rather than failing the case, so the case fails at the end naming every model that fell short and why.
-/// </remarks>
-public sealed class DiscoveryPlanningEvaluations
+/// <summary>Measures what the search-phrase agent reads each typed sentence into, under every declared model.</summary>
+/// <remarks>A theory over the cases for the reason <c>DiscoveryPlanningEvaluations</c> gives.</remarks>
+public sealed class MailSearchPhraseEvaluations
 {
     /// <summary>How many times a case is run before its failure is reported.</summary>
     private const int MaxAttempts = 3;
@@ -27,7 +23,7 @@ public sealed class DiscoveryPlanningEvaluations
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
     /// <summary>Gets every case, by the name it is filed under.</summary>
-    public static TheoryData<string> Cases { get; } = new(DiscoveryPlanningCase.All.Select(static scenario => scenario.Name));
+    public static TheoryData<string> Cases { get; } = new(MailSearchPhraseCase.All.Select(static scenario => scenario.Name));
 
     [RetryTheory(
         MaxAttempts,
@@ -35,10 +31,10 @@ public sealed class DiscoveryPlanningEvaluations
         Skip = AiEvaluationRun.SkipReason,
         SkipUnless = nameof(EvaluationsRequested))]
     [MemberData(nameof(Cases))]
-    public async Task DerivePlan_AQuestion_EveryDeclaredModelReadsItIntoThePlanItStated(string caseName)
+    public async Task ReadAsync_ATypedSentence_EveryDeclaredModelReadsItIntoTheFiltersItStated(string caseName)
     {
         // Arrange
-        var request = DiscoveryPlanningScenario.RequestFor(DiscoveryPlanningCase.Named(caseName));
+        var request = MailSearchPhraseScenario.RequestFor(MailSearchPhraseCase.Named(caseName));
 
         // Act
         var answers = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(

@@ -30,27 +30,42 @@ namespace MailFathom.Evaluations.Corpus;
 /// <param name="Subject">The subject.</param>
 /// <param name="ReceivedAt">When the message is dated, which is what a relative date in it resolves against.</param>
 /// <param name="Sender">The address it was sent from.</param>
+/// <param name="SenderName">The name it was sent under, or <see langword="null" /> where it carried none.</param>
 /// <param name="Recipients">The addresses in its To and Cc headers.</param>
-/// <param name="HasAttachments">Whether it carries an attachment.</param>
+/// <param name="Attachments">What it attached, in the order it carries them.</param>
+/// <param name="Text">What it added, with the history it quoted trimmed off, which is what a conversation is derived from.</param>
 /// <param name="Passages">The passages, in order.</param>
+/// <param name="RawMime">The message as a deployment would have stored it, which is what its body is drawn from.</param>
 internal sealed record CorpusMessage(
     StoredEmailId Id,
     string Subject,
     DateTimeOffset ReceivedAt,
     string Sender,
+    string? SenderName,
     IReadOnlyList<string> Recipients,
-    bool HasAttachments,
-    IReadOnlyList<EnrichablePassage> Passages)
+    IReadOnlyList<CorpusAttachment> Attachments,
+    string Text,
+    IReadOnlyList<EnrichablePassage> Passages,
+    ReadOnlyMemory<byte> RawMime)
 {
     /// <summary>The bound a deployment extracts a body under by default.</summary>
     private const int MaximumBodyCharacters = 100_000;
 
     private static readonly string ArchivePath = Path.Combine(AppContext.BaseDirectory, "corpora", "office-en.zip");
 
-    private static readonly Lazy<IReadOnlyList<CorpusMessage>> Delivered = new(ReadArchive);
+    private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Delivered = new(ReadArchive);
+
+    private static readonly Lazy<IReadOnlyList<CorpusMessage>> Flattened =
+        new(static () => [.. Delivered.Value.SelectMany(static exchange => exchange)]);
 
     /// <summary>Gets every message of the corpus, in delivery order.</summary>
-    public static IReadOnlyList<CorpusMessage> All => Delivered.Value;
+    public static IReadOnlyList<CorpusMessage> All => Flattened.Value;
+
+    /// <summary>Gets every conversation of the corpus, in delivery order, each in the order its messages were written.</summary>
+    public static IReadOnlyList<IReadOnlyList<CorpusMessage>> Exchanges => Delivered.Value;
+
+    /// <summary>Gets whether it carries an attachment.</summary>
+    public bool HasAttachments => this.Attachments.Count > 0;
 
     /// <summary>Gets the text a judge holds the answer against: the subject and every passage.</summary>
     public string GroundingText =>
@@ -61,16 +76,22 @@ internal sealed record CorpusMessage(
     /// <returns>The message.</returns>
     public static CorpusMessage At(int position) => All[position];
 
-    private static IReadOnlyList<CorpusMessage> ReadArchive()
+    private static IReadOnlyList<IReadOnlyList<CorpusMessage>> ReadArchive()
     {
         using var archive = File.OpenRead(ArchivePath);
 
+        var exchanges = CorpusArchive.Read(archive).Exchanges;
+
+        // A message's position counts across every conversation before its own, which is the order the archive numbers
+        // its files in and the one every identifier below is derived from.
         return
         [
-            .. CorpusArchive.Read(archive)
-                .Exchanges
-                .SelectMany(static exchange => exchange)
-                .Select(static (turn, position) => Read(turn.Compose(), position)),
+            .. exchanges.Select(IReadOnlyList<CorpusMessage> (exchange, index) =>
+            {
+                var firstPosition = exchanges.Take(index).Sum(static earlier => earlier.Count);
+
+                return [.. exchange.Select((turn, offset) => Read(turn.Compose(), firstPosition + offset))];
+            }),
         ];
     }
 
@@ -78,29 +99,41 @@ internal sealed record CorpusMessage(
     {
         using (message)
         {
+            using var stored = new MemoryStream();
+
+            message.WriteTo(stored);
+
+            // The same pair a deployment derives: what the message carried, and the reading with the quoted history
+            // cut off it. A message with no plain-text part is read from its markup the way a deployment reads it,
+            // rather than being taken for one that said nothing.
+            var text = message.TextBody is { } plain
+                ? ExtractedEmailText.FromPlainTextBody(plain, QuotedHistoryTrimmer.Trim(plain))
+                : DerivedFromMarkup(message.HtmlBody ?? string.Empty);
+
+            var author = message.From.Mailboxes.FirstOrDefault();
+
             // Identifiers a deployment would have assigned in its store: distinct, and the same on every run, so an
             // answer's citation names the same message whether it was written today or read back from the cache.
             return new CorpusMessage(
                 StoredEmailId.Create(new Guid(position + 1, 0, 0, new byte[8])),
                 message.Subject ?? string.Empty,
                 message.Date,
-                message.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty,
+                author?.Address ?? string.Empty,
+                author?.Name is { Length: > 0 } name ? name : null,
                 [.. message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(static mailbox => mailbox.Address)],
-                message.Attachments.Any(),
-                PassagesOf(message));
+                [.. message.Attachments.Select(static part => new CorpusAttachment(
+                    part.ContentDisposition?.FileName ?? part.ContentType.Name,
+                    part.ContentType.MimeType))],
+                text.TrimmedText ?? string.Empty,
+                PassagesOf(text),
+                stored.ToArray());
         }
     }
 
-    private static List<EnrichablePassage> PassagesOf(MimeMessage message)
+    private static List<EnrichablePassage> PassagesOf(ExtractedEmailText text)
     {
-        // The same pair a deployment derives: what the message carried, and the reading with the quoted history cut
-        // off it. The rules chunk the trimmed one, so handing the raw body twice would cut passages out of a reply's
-        // whole history — which is exactly the text the corpus's own replies carry. A message with no plain-text part
-        // is read from its markup the way a deployment reads it, rather than being taken for one that said nothing.
-        var text = message.TextBody is { } plain
-            ? ExtractedEmailText.FromPlainTextBody(plain, QuotedHistoryTrimmer.Trim(plain))
-            : DerivedFromMarkup(message.HtmlBody ?? string.Empty);
-
+        // The rules chunk the trimmed reading, so handing the raw body twice would cut passages out of a reply's whole
+        // history — which is exactly the text the corpus's own replies carry.
         var chunks = new DeterministicEmailTextChunker()
             .DeriveChunks(text, EmailChunkingRules.Current, EmbeddingInputBound.Default)
             .Chunks;
