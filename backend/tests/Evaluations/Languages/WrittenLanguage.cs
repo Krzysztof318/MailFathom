@@ -34,7 +34,7 @@ internal static partial class WrittenLanguage
     private const int FewestWordsToDecide = 8;
 
     private static readonly FrozenSet<string> PolishWords = FrozenSet.ToFrozenSet(
-        ["w", "z", "na", "nie", "jest", "jak", "oraz", "dla", "od", "przez", "czy", "ale", "tak", "ten", "ta", "te", "tym", "tego", "jej", "jego", "ich", "za", "przy", "lub", "co", "dnia", "pani", "pana", "który", "która", "które", "zostanie", "został", "została", "prosi", "proszę", "termin", "wiadomość"],
+        ["w", "z", "na", "nie", "jest", "jak", "oraz", "dla", "od", "przez", "czy", "ale", "ten", "ta", "te", "tym", "tego", "jej", "jego", "ich", "za", "przy", "lub", "co", "dnia", "pani", "pana", "który", "która", "które", "zostanie", "został", "została", "prosi", "proszę", "termin", "wiadomość"],
         StringComparer.OrdinalIgnoreCase);
 
     private static readonly FrozenSet<string> EnglishWords = FrozenSet.ToFrozenSet(

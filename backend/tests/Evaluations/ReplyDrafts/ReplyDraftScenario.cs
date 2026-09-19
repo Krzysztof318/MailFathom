@@ -230,7 +230,7 @@ internal sealed partial record ReplyDraftScenario(
         new(
             "ReplyDraft.Polish.AfterACorrection",
             PolishCorpus.ConversationUpTo(position: 12),
-            "Podziękuj Tomaszowi za informację i potwierdź, że niedziela, 27 września, nam odpowiada.",
+            "Podziękuj Tomaszowi za informację i potwierdź, że niedziela, 27 września, jest dla nas odpowiednia.",
             "Dwa zdania.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
