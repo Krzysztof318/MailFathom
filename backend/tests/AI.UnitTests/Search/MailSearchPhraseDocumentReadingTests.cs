@@ -133,6 +133,56 @@ public sealed class MailSearchPhraseDocumentReadingTests
         Assert.Null(reading.Filters.SenderAddress);
     }
 
+    /// <summary>
+    /// A sentence naming two senders is answered with both addresses, which the one field there is cannot hold. The
+    /// shape of that field says nothing about the rest of the answer, so the rest is read exactly as it was written.
+    /// </summary>
+    /// <remarks><see cref="WrittenTextJsonConverter" /> is what makes that hold: the field is read as no value rather than the answer as no document.</remarks>
+    [Theory]
+    [InlineData("senderAddress", """["billing@northwind.example", "accounts@fabrikam.example"]""")]
+    [InlineData("recipientAddress", """["legal@fabrikam.example", "legal@contoso.example"]""")]
+    [InlineData("senderAddress", """{"address": "billing@northwind.example"}""")]
+    [InlineData("recipientAddress", "7")]
+    public void Read_AnAddressWrittenInAnotherShapeThanOneAddress_CostsThatFilterAndNothingElse(
+        string field,
+        string written)
+    {
+        // Arrange
+        var answer = $$"""
+            {
+              "filters": {"{{field}}": {{written}}, "unread": true, "receivedFrom": "2026-08-01"},
+              "criteria": ["renewal"],
+              "unaccounted": "soon"
+            }
+            """;
+
+        // Act
+        var reading = MailSearchPhraseDocumentReading.Read(answer);
+
+        // Assert
+        Assert.True(reading.WasRead);
+        Assert.Null(reading.Filters.SenderAddress);
+        Assert.Null(reading.Filters.RecipientAddress);
+        Assert.True(reading.Filters.Unread);
+        Assert.Equal(new DateOnly(2026, 8, 1), reading.Filters.ReceivedFrom);
+        Assert.Equal(["renewal"], reading.Criteria);
+        Assert.Equal("soon", reading.Unaccounted);
+    }
+
+    /// <summary>Every other field a model writes as text is read the same way round, each one alone.</summary>
+    [Theory]
+    [InlineData("""{"filters": {"receivedFrom": ["2026-08-01", "2026-08-31"]}, "criteria": ["invoice"]}""")]
+    [InlineData("""{"criteria": ["invoice"], "unaccounted": ["soon", "urgent"]}""")]
+    public void Read_ATextFieldWrittenInAnotherShape_LeavesTheRestOfTheAnswerRead(string answer)
+    {
+        // Act
+        var reading = MailSearchPhraseDocumentReading.Read(answer);
+
+        // Assert
+        Assert.True(reading.WasRead);
+        Assert.Equal(["invoice"], reading.Criteria);
+    }
+
     /// <summary>More criteria than a sentence carries is a model listing synonyms, and the ones past the bound rank nothing better.</summary>
     [Fact]
     public void Read_MoreCriteriaThanASentenceIsReadInto_KeepsTheBestOnesInOrder()

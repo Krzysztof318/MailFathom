@@ -465,7 +465,7 @@ scope, the same filters, the same rankings, and the same bounds. **No sentence, 
 this use case** — what arrives is filters and query text a person could have typed themselves, which is what makes
 every filter removable and the result explicable.
 
-Four things follow from reading it that way:
+Five things follow from reading it that way:
 
 - **Constraints and criteria are separate**, because they promise different things. A constraint decides what may come
   back and a criterion only decides the order, so taking a criterion off widens what ranks well rather than what can be
@@ -478,6 +478,13 @@ Four things follow from reading it that way:
 - **The part nothing was made of is stated.** A sentence half of which was silently discarded is a search nobody can
   correct, because nothing on the screen is wrong — so what the reading could not account for comes back quoted and is
   drawn beside the filters.
+- **A field nothing can be made of costs that field alone.** An answer is a set of filters, the criteria, and the part
+  left over rather than one indivisible thing, so a field written in a shape this build cannot use — two addresses
+  where one was asked for, a day no calendar holds, a filter this version has no control for — is dropped and
+  everything else is drawn. Only an answer nothing survives of becomes the plain word search the sentence was typed as.
+  A sentence naming two senders is the case this is worth most for: the instruction asks for no sender filter at all
+  there, because either address written alone hides the other's mail, and what the sentence named ranks from the
+  criteria instead.
 - **Its absence costs the search nothing.** A deployment with no chat provider, one whose operator turned the reading
   off, and one whose provider is unreachable each serve the plain search over the words that were typed. The one thing
   that is not silently absorbed is a spend ceiling, which is reported rather than fallen back from.

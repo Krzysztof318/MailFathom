@@ -16,18 +16,22 @@ internal sealed record MailSearchPhraseFiltersDocument
 {
     /// <summary>Gets the address the model read as the sender's.</summary>
     [JsonPropertyName("senderAddress")]
+    [JsonConverter(typeof(WrittenTextJsonConverter))]
     public string? SenderAddress { get; init; }
 
     /// <summary>Gets the address the model read as a recipient's.</summary>
     [JsonPropertyName("recipientAddress")]
+    [JsonConverter(typeof(WrittenTextJsonConverter))]
     public string? RecipientAddress { get; init; }
 
     /// <summary>Gets the first calendar day the model resolved the sentence's time expression to.</summary>
     [JsonPropertyName("receivedFrom")]
+    [JsonConverter(typeof(WrittenTextJsonConverter))]
     public string? ReceivedFrom { get; init; }
 
     /// <summary>Gets the last calendar day the model resolved it to, inclusive.</summary>
     [JsonPropertyName("receivedTo")]
+    [JsonConverter(typeof(WrittenTextJsonConverter))]
     public string? ReceivedTo { get; init; }
 
     /// <summary>Gets whether the model read the sentence as asking for unread mail.</summary>
