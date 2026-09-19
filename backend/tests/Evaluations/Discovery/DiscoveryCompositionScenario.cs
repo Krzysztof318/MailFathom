@@ -146,6 +146,7 @@ internal sealed record DiscoveryCompositionScenario(
     /// <param name="reporting">The run's store, judge, and name, opened with <see cref="Evaluators" />.</param>
     /// <param name="model">The model under test's client.</param>
     /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
     /// <param name="judgeSpend">What reaching the judge has cost, which is the meter the run's judge is opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
@@ -158,12 +159,13 @@ internal sealed record DiscoveryCompositionScenario(
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
+        int repetition,
         SpendMeter modelSpend,
         SpendMeter judgeSpend,
         CancellationToken cancellationToken)
     {
         var modelName = plan.Endpoint.RoutedModelName;
-        var iterationName = EvaluationStore.IterationNameFor(modelName);
+        var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
             this.Name,
@@ -211,8 +213,8 @@ internal sealed record DiscoveryCompositionScenario(
 
     /// <summary>Names every check and rating the verdict falls short on, in words a failed run can be read by.</summary>
     /// <param name="verdict">The verdict one model's run of this scenario produced.</param>
-    /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
-    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(this.Name, verdict);
+    /// <returns>One line per shortfall, naming the metric; the repetition header above them names the case and the model.</returns>
+    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(verdict);
 
     /// <summary>Writes the opening block as the text a person would read it as.</summary>
     private static string Rendered(PresentationBlock block) => block switch

@@ -14,7 +14,8 @@ set -euo pipefail
 # and MAILFATHOM_JUDGE_MODEL, and fails naming whichever is missing. The judge answers from the same
 # endpoint and the same key as the models under test, so its model is all that is declared apart —
 # beside MAILFATHOM_JUDGE_REASONING_EFFORT, which a run may leave unset to send the judge no reasoning
-# parameter at all.
+# parameter at all. MAILFATHOM_EVALUATION_REPETITIONS says how many times each case is asked of each
+# model, from 1 to 20, and a run that leaves it unset asks each case once.
 #
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it

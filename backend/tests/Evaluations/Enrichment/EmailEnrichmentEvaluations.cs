@@ -60,19 +60,21 @@ public sealed class EmailEnrichmentEvaluations
         // Arrange
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var outcomes = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions))]);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(outcomes.SelectMany(ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<EmailEnrichmentOutcome> MeasureAsync(
+    private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ChatGenerationPlan plan,
-        string apiKey)
+        string apiKey,
+        int repetitions)
     {
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
@@ -82,20 +84,20 @@ public sealed class EmailEnrichmentEvaluations
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, EmailEnrichmentScenario.Evaluators);
 
-        var outcome = await EmailEnrichmentScenario.RunAsync(
+        return await EvaluationRepetitions.MeasureAsync(
             reporting,
-            model,
-            plan,
-            modelSpend,
-            judgeSpend,
+            EmailEnrichmentScenario.Name,
+            plan.Endpoint.RoutedModelName,
+            repetitions,
+            async repetition => [.. ShortfallsOf(await EmailEnrichmentScenario.RunAsync(
+                reporting,
+                model,
+                plan,
+                repetition,
+                modelSpend,
+                judgeSpend,
+                TestContext.Current.CancellationToken))],
             TestContext.Current.CancellationToken);
-
-        if (ShortfallsOf(outcome).Any())
-        {
-            await EvaluationStore.ForgetAsync(reporting, EmailEnrichmentScenario.Name, outcome.Model, TestContext.Current.CancellationToken);
-        }
-
-        return outcome;
     }
 
     /// <summary>Names what one model's outcome falls short on, in words a failed run can be read by.</summary>
@@ -103,14 +105,14 @@ public sealed class EmailEnrichmentEvaluations
     {
         if (!outcome.Marks.Any(static mark => mark.Aspect is EmailEnrichmentAspect.Sense))
         {
-            yield return $"{outcome.Model}: no reading of what the message is about survived.";
+            yield return "no reading of what the message is about survived.";
         }
 
         var groundedness = outcome.Verdict.Get<NumericMetric>(GroundednessEvaluator.GroundednessMetricName);
 
         if (groundedness.Interpretation is not { Failed: false })
         {
-            yield return $"{outcome.Model}: groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
+            yield return $"groundedness {groundedness.Value?.ToString("0.#", CultureInfo.InvariantCulture) ?? "was not rated"} — {groundedness.Interpretation?.Reason ?? groundedness.Reason}";
         }
     }
 }

@@ -39,11 +39,11 @@ public sealed class MailBodyCleanupEvaluations
             TestContext.Current.CancellationToken);
 
         // Act
-        var answers = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
+        var shortfalls = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
             request,
             TestContext.Current.CancellationToken);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(answers.SelectMany(StructuredAnswerScenario.ShortfallsOf));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls);
     }
 }

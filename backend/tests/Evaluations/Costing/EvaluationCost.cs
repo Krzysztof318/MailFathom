@@ -26,6 +26,11 @@ internal static class EvaluationCost
     /// <summary>The name the cost is recorded and compared under.</summary>
     public const string MetricName = "Cost (USD)";
 
+    /// <summary>The name what every repetition of a scenario cost together is recorded under.</summary>
+    public const string RepetitionsMetricName = "Cost over repetitions (USD)";
+
+    private const string PaidCallsMetadata = "paid-calls";
+
     /// <summary>Records what a scenario run paid, for the model under test and for the judge that graded it.</summary>
     /// <param name="verdict">The result the metric is added to, before the run is written to the store.</param>
     /// <param name="model">The model under test.</param>
@@ -40,11 +45,47 @@ internal static class EvaluationCost
                 : null,
             Describe(model, modelSpend, judgeSpend));
 
-        metric.AddOrUpdateMetadata("paid-calls", Invariant(modelSpend.Calls + judgeSpend.Calls));
+        metric.AddOrUpdateMetadata(PaidCallsMetadata, Invariant(modelSpend.Calls + judgeSpend.Calls));
         metric.AddOrUpdateMetadata("paid-input-tokens", Invariant(modelSpend.InputTokens + judgeSpend.InputTokens));
         metric.AddOrUpdateMetadata("paid-output-tokens", Invariant(modelSpend.OutputTokens + judgeSpend.OutputTokens));
 
         verdict.Metrics[metric.Name] = metric;
+    }
+
+    /// <summary>Sums what every repetition of one scenario under one model cost, from the cost each of them recorded.</summary>
+    /// <param name="repetitions">The verdicts each repetition filed, each carrying its own cost.</param>
+    /// <returns>The total, left unstated where any repetition that reached a provider carried no charge.</returns>
+    public static NumericMetric SumOver(IReadOnlyCollection<EvaluationResult> repetitions)
+    {
+        ArgumentNullException.ThrowIfNull(repetitions);
+
+        var paid = repetitions
+            .Select(static verdict => verdict.Metrics.TryGetValue(MetricName, out var cost) ? cost as NumericMetric : null)
+            .Where(static cost => cost?.Metadata is not { } metadata
+                || !metadata.TryGetValue(PaidCallsMetadata, out var calls)
+                || calls is not "0")
+            .ToList();
+
+        if (paid.Count is 0)
+        {
+            return new NumericMetric(
+                RepetitionsMetricName,
+                value: null,
+                $"Nothing reached a provider over the {repetitions.Count} repetition(s): every answer and every verdict came from the store's cache.");
+        }
+
+        if (paid.Any(static cost => cost?.Value is null))
+        {
+            return new NumericMetric(
+                RepetitionsMetricName,
+                value: null,
+                "A repetition that reached a provider carried no charge, so the total is left unstated rather than reported as what the others stated.");
+        }
+
+        return new NumericMetric(
+            RepetitionsMetricName,
+            paid.Sum(static cost => cost!.Value!.Value),
+            $"What the {repetitions.Count} repetition(s) paid together.");
     }
 
     private static string Describe(string model, PaidUsage modelSpend, PaidUsage judgeSpend)

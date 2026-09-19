@@ -48,6 +48,7 @@ internal static class RelevanceFilterScenario
     /// <param name="reporting">The run's store, opened without a judge.</param>
     /// <param name="model">The model under test's client.</param>
     /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The metrics the measurement produced.</returns>
@@ -59,11 +60,12 @@ internal static class RelevanceFilterScenario
         ReportingConfiguration reporting,
         IChatClient model,
         ChatGenerationPlan plan,
+        int repetition,
         SpendMeter modelSpend,
         CancellationToken cancellationToken)
     {
         var modelName = plan.Endpoint.RoutedModelName;
-        var iterationName = EvaluationStore.IterationNameFor(modelName);
+        var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
             Name,

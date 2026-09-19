@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.AI.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -109,37 +110,44 @@ internal static class EvaluationStore
             ResponseCacheAt(root),
             executionName: executionName);
 
-    /// <summary>Removes every answer and every verdict a scenario cached under a model, so the next attempt asks again.</summary>
+    /// <summary>Removes every answer and every verdict a scenario cached under one iteration, so the next attempt asks again.</summary>
     /// <param name="reporting">The store the scenario ran in, opened here.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
-    /// <param name="modelName">The routed name of the model under test.</param>
+    /// <param name="iterationName">The iteration the answers are filed under, which names the model and the repetition.</param>
     /// <param name="cancellationToken">Withdraws the removal.</param>
     /// <returns>A task that completes once the entries are gone.</returns>
     /// <remarks>
-    /// Called where a model fell short. Left cached, the answer would be what every retry and every later run reads back,
-    /// so one miss would fail them all however the model answers when asked again. The verdict already filed stays in
-    /// the result store, so the report still shows the attempt that fell short.
+    /// Called where a model fell short of the share <see cref="EvaluationRepetitions" /> holds it to. Left cached, the
+    /// answers would be what every retry and every later run reads back, so one sample would decide them all however the
+    /// model answers when asked again. The verdict already filed stays in the result store, so the report still shows the
+    /// attempt that fell short.
     /// </remarks>
     public static Task ForgetAsync(
         ReportingConfiguration reporting,
         string scenarioName,
-        string modelName,
+        string iterationName,
         CancellationToken cancellationToken) =>
         ((RecallingResponseCacheProvider)reporting.ResponseCacheProvider!).ForgetAsync(
             scenarioName,
-            IterationNameFor(modelName),
+            iterationName,
             cancellationToken);
 
-    /// <summary>Turns a model's name into a name the store can file a result under.</summary>
+    /// <summary>Turns a model's name and a repetition into a name the store can file a result under.</summary>
     /// <param name="modelName">The routed name of the model under test.</param>
+    /// <param name="repetition">Which repetition of the case, counted from one.</param>
     /// <returns>The name, readable as the model's.</returns>
     /// <remarks>
     /// The store files an iteration as a directory, and a routed name such as one naming its vendor carries a separator;
-    /// the name stays readable as the model's with that character replaced.
+    /// the name stays readable as the model's with that character replaced. The first repetition is filed under the
+    /// model's name alone, so a run declaring none reads back every answer a run before repetitions existed paid for.
     /// </remarks>
-    public static string IterationNameFor(string modelName) =>
-        string.Concat(modelName.Select(static character =>
+    public static string IterationNameFor(string modelName, int repetition)
+    {
+        var model = string.Concat(modelName.Select(static character =>
             Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+
+        return repetition is 1 ? model : string.Create(CultureInfo.InvariantCulture, $"{model}#{repetition}");
+    }
 
     /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
     /// <param name="reporting">The run's store.</param>

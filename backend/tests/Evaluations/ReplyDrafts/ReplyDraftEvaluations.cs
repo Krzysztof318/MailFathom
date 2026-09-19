@@ -36,9 +36,10 @@ public sealed class ReplyDraftEvaluations
         // Arrange
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
+        var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
@@ -48,7 +49,8 @@ public sealed class ReplyDraftEvaluations
     private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
         ChatGenerationPlan plan,
-        string apiKey)
+        string apiKey,
+        int repetitions)
     {
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
@@ -61,22 +63,20 @@ public sealed class ReplyDraftEvaluations
 
         foreach (var scenario in ReplyDraftScenario.All)
         {
-            var verdict = await scenario.RunAsync(
+            shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
                 reporting,
-                model,
-                plan,
-                modelSpend,
-                judgeSpend,
-                TestContext.Current.CancellationToken);
-
-            var scenarioShortfalls = scenario.ShortfallsOf(verdict).ToList();
-
-            if (scenarioShortfalls.Count > 0)
-            {
-                await EvaluationStore.ForgetAsync(reporting, scenario.Name, plan.Endpoint.RoutedModelName, TestContext.Current.CancellationToken);
-            }
-
-            shortfalls.AddRange(scenarioShortfalls.Select(shortfall => $"{plan.Endpoint.RoutedModelName}: {shortfall}"));
+                scenario.Name,
+                plan.Endpoint.RoutedModelName,
+                repetitions,
+                async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
+                    reporting,
+                    model,
+                    plan,
+                    repetition,
+                    modelSpend,
+                    judgeSpend,
+                    TestContext.Current.CancellationToken))],
+                TestContext.Current.CancellationToken));
         }
 
         return shortfalls;
