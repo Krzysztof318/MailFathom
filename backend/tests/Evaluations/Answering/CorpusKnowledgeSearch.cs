@@ -41,9 +41,13 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
     /// <summary>The folder the corpus is delivered to.</summary>
     public static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
-    /// <summary>Words too common to say anything about which message a query means.</summary>
+    /// <summary>Words too common to say anything about which message a query means, in either language a question is asked in.</summary>
+    /// <remarks>No Polish word here is spelt like an English one, so an English lookup matches exactly what it matched before.</remarks>
     private static readonly HashSet<string> CommonWords = new(
-        ["the", "and", "for", "from", "with", "what", "which", "when", "who", "did", "was", "were", "about", "that", "this", "have", "has", "you", "your", "our", "any", "are"],
+        [
+            "the", "and", "for", "from", "with", "what", "which", "when", "who", "did", "was", "were", "about", "that", "this", "have", "has", "you", "your", "our", "any", "are",
+            "na", "jak", "czy", "się", "nie", "jest", "dla", "jaki", "jaka", "jakie", "który", "która", "które", "kiedy", "ile", "oraz", "przez", "mój", "moja", "moje", "nasz", "nasza", "nasze",
+        ],
         StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentQueue<string> queries = new();

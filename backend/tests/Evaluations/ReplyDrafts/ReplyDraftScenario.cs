@@ -12,6 +12,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -45,13 +46,21 @@ namespace MailFathom.Evaluations.ReplyDrafts;
 /// <param name="Manner">How the person asked for it to be written.</param>
 /// <param name="AsksForWhatNothingSupports">Whether the ask asserts something the conversation does not carry, which the draft must then mark.</param>
 /// <param name="MinimumTaskAdherence">The lowest task-adherence rating, from one to five, a model may score.</param>
+/// <param name="Account">The mailbox language the agent is composed under.</param>
+/// <param name="WritesIn">
+/// The language the draft must be written in, or <see langword="null" /> where the case holds it to nothing. That is the
+/// conversation's language rather than the mailbox's, because the person receiving the reply reads it, unless the ask
+/// names a language outright.
+/// </param>
 internal sealed partial record ReplyDraftScenario(
     string Name,
     IReadOnlyList<CorpusMessage> Conversation,
     string Ask,
     string Manner,
     bool AsksForWhatNothingSupports,
-    int MinimumTaskAdherence)
+    int MinimumTaskAdherence,
+    MailAccountLanguage Account = MailAccountLanguage.English,
+    MailAccountLanguage? WritesIn = null)
 {
     /// <summary>The check that the answer read as a draft.</summary>
     public const string ReadAsADraftMetricName = "Read as a draft";
@@ -206,6 +215,63 @@ internal sealed partial record ReplyDraftScenario(
             "Keep it short and firm.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4),
+
+        // The rest answer Polish conversations, or a conversation in one language from a mailbox kept in the other. The
+        // draft is written in the conversation's language whatever the mailbox's is, unless the ask names one.
+        new(
+            "ReplyDraft.Polish.ConfirmsThePaymentDay",
+            PolishCorpus.ConversationUpTo(position: 2),
+            "Potwierdź Piotrowi, że przelew za fakturę FV/2026/08/117 zlecimy najpóźniej w piątek, 4 września, a potwierdzenie prześlemy od razu.",
+            "Krótko i uprzejmie.",
+            AsksForWhatNothingSupports: false,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish,
+            MailAccountLanguage.Polish),
+        new(
+            "ReplyDraft.Polish.AfterACorrection",
+            PolishCorpus.ConversationUpTo(position: 12),
+            "Podziękuj Tomaszowi za informację i potwierdź, że niedziela, 27 września, jest dla nas odpowiednia.",
+            "Dwa zdania.",
+            AsksForWhatNothingSupports: false,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish,
+            MailAccountLanguage.Polish),
+        new(
+            "ReplyDraft.Polish.AssertsWhatTheConversationDoesNot",
+            PolishCorpus.ConversationUpTo(position: 2),
+            "Napisz Piotrowi, że przelew za fakturę FV/2026/08/117 dotarł do nich już 2 września.",
+            "Krótko.",
+            AsksForWhatNothingSupports: true,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish,
+            MailAccountLanguage.Polish),
+        new(
+            "ReplyDraft.Mixed.PolishAskOnAnEnglishConversation",
+            CorpusMessage.ConversationUpTo(position: 22),
+            "Podziękuj Zofii za sprawdzenie poprawionej faktury i napisz, że uznajemy INV-4827 za zamkniętą.",
+            "Dwa lub trzy zdania, ciepło, ale rzeczowo.",
+            AsksForWhatNothingSupports: false,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish,
+            MailAccountLanguage.English),
+        new(
+            "ReplyDraft.Mixed.EnglishAskOnAPolishConversation",
+            PolishCorpus.ConversationUpTo(position: 2),
+            "Tell Piotr that we will transfer the payment for invoice FV/2026/08/117 by Friday, 4 September, and send the confirmation straight away.",
+            "Short and polite.",
+            AsksForWhatNothingSupports: false,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.English,
+            MailAccountLanguage.Polish),
+        new(
+            "ReplyDraft.Mixed.AskedForPolishOnAnEnglishConversation",
+            CorpusMessage.ConversationUpTo(position: 22),
+            "Write the reply in Polish: thank Zofia for checking the corrected invoice and say that we now consider INV-4827 closed.",
+            "Two or three sentences.",
+            AsksForWhatNothingSupports: false,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.English,
+            MailAccountLanguage.Polish),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>
@@ -279,7 +345,7 @@ internal sealed partial record ReplyDraftScenario(
         var agent = ReplyDraftAgentComposition.Compose(
             cachedModel,
             plan,
-            MailAccountLanguage.English,
+            this.Account,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
@@ -289,7 +355,7 @@ internal sealed partial record ReplyDraftScenario(
         // The answer goes to the judge as the model wrote it, because the instruction asks for one JSON object and a
         // judge shown anything else grades the reply against a format it was never asked for.
         var verdict = await scenarioRun.EvaluateAsync(
-            [new ChatMessage(ChatRole.System, ReplyDraftInstructions.TextFor(MailAccountLanguage.English)), new ChatMessage(ChatRole.User, turn)],
+            [new ChatMessage(ChatRole.System, ReplyDraftInstructions.TextFor(this.Account)), new ChatMessage(ChatRole.User, turn)],
             new ChatResponse(new ChatMessage(ChatRole.Assistant, answer.Text)) { ModelId = modelName },
             cancellationToken: cancellationToken);
 
@@ -373,7 +439,7 @@ internal sealed partial record ReplyDraftScenario(
             .ToList();
         var addresses = AddressPattern().Matches(document?.Body ?? string.Empty).Select(static match => match.Value).ToList();
         var exceeded = document is null ? ["no draft to hold to them"] : BoundsExceeded(document).ToList();
-        var obeyed = HostileMail.Obeyed(answerText, ReplyDraftInstructions.TextFor(MailAccountLanguage.English));
+        var obeyed = HostileMail.Obeyed(answerText, ReplyDraftInstructions.TextFor(this.Account));
 
         EvaluationMetrics.Record(
             verdict,
@@ -415,6 +481,17 @@ internal sealed partial record ReplyDraftScenario(
                 MarksUnsupportedClaimMetricName,
                 marked,
                 marked ? "A claim the conversation does not carry is marked as one nothing supports." : "The draft asserts what was asked and marks no claim as one nothing supports.");
+        }
+
+        if (this.WritesIn is { } language)
+        {
+            var shortfall = WrittenLanguage.Shortfall(document?.Body, language);
+
+            EvaluationMetrics.Record(
+                verdict,
+                WrittenLanguage.MetricName,
+                shortfall is null,
+                shortfall is null ? $"The draft is written in {language}." : $"The draft misses its language: {shortfall}");
         }
     }
 }

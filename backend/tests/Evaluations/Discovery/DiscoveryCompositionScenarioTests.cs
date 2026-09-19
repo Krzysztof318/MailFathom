@@ -7,6 +7,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -120,6 +121,23 @@ public sealed class DiscoveryCompositionScenarioTests : IDisposable
         // Assert
         Assert.Equal(0, judge.Requests);
         Assert.False(verdict.Metrics.ContainsKey(RelevanceEvaluator.RelevanceMetricName));
+    }
+
+    [Theory]
+    [InlineData("Which train are we booked on? It is IC 5310, leaving at 7:15.", true)]
+    [InlineData("Jedziecie pociągiem IC 5310, który wyjeżdża o 7:15 z Warszawy.", false)]
+    public async Task RunAsync_AResultInOneLanguage_PassesTheLanguageCheckOnlyWhereTheQuestionAskedInIt(string answer, bool expected)
+    {
+        // Arrange
+        var scenario = Named("DiscoveryComposition.Mixed.EnglishQuestionOverPolishExtracts");
+        var source = await SourceCarryingAsync(scenario, scenario.Evidence[0]);
+        using var model = Model($$"""{"answer":"{{answer}}","sources":["{{source}}"],"confidence":"high"}""");
+
+        // Act
+        var verdict = await this.RunAsync(scenario, model);
+
+        // Assert
+        Assert.Equal(expected, verdict.Get<BooleanMetric>(WrittenLanguage.MetricName).Value);
     }
 
     [Fact]

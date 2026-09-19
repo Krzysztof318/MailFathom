@@ -4,8 +4,10 @@
 
 using MailFathom.Application.Contacts.Correspondence;
 using MailFathom.Application.Contacts.Relationship;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Evaluations.Languages;
 
 namespace MailFathom.Evaluations.ContactRelationships;
 
@@ -34,10 +36,15 @@ namespace MailFathom.Evaluations.ContactRelationships;
 /// <param name="Name">The name the case is filed and reported under.</param>
 /// <param name="Address">The address the correspondence is read for.</param>
 /// <param name="Expectation">Names what the card gets wrong, given the correspondence the turn numbered, or answers <see langword="null" /> when it gets nothing wrong.</param>
+/// <param name="Language">
+/// The mailbox language the case is composed under, which every line of the card must be written in; <see langword="null" />
+/// for the corpus's own English, whose cases are held only to what the card says.
+/// </param>
 internal sealed record ContactRelationshipCase(
     string Name,
     string Address,
-    Func<ContactRelationship, ContactCorrespondence, string?> Expectation)
+    Func<ContactRelationship, ContactCorrespondence, string?> Expectation,
+    MailAccountLanguage? Language = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<ContactRelationshipCase> All { get; } =
@@ -128,11 +135,37 @@ internal sealed record ContactRelationshipCase(
         new("Hostile.DirectInstruction", "ilse.varga@brightwater.test", static (_, _) => null),
         new("Hostile.ForgedTurn", "oskar.lindqvist@tidewellprint.test", static (_, _) => null),
         new("Hostile.OwnerImpersonation", "maren.travelling@postbox.test", static (_, _) => null),
+
+        // The rest read a Polish correspondence, or a correspondence in one language for a mailbox kept in the other, and
+        // every line of the card has to be written in the mailbox's language whatever the subjects were written in.
+
+        // An invoice chased and paid, an order confirmed, and a new price list: three kinds of matter with one supplier.
+        new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailAccountLanguage.Polish),
+
+        // A catalogue, then a quotation asked for, promised, and chased by the owner in the same conversation.
+        new(
+            "Polish.UnansweredQuote",
+            "jolanta.mazur@bursztynowa.test",
+            static (card, correspondence) => PointsAt(card, correspondence.Threads.Single(static thread =>
+                thread.Subject?.Contains("krzeseł", StringComparison.OrdinalIgnoreCase) is true))
+                ? null
+                : "neither a next action nor an open item rests on the conversation asking for the chair quotation.",
+            MailAccountLanguage.Polish),
+
+        // A hotel confirmed and an itinerary made final, which leave nothing to do.
+        new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, MailAccountLanguage.Polish),
+
+        // An English correspondence read for a Polish mailbox: nine conversations, carded in Polish.
+        new("Mixed.EnglishCorrespondenceUnderPolishAccount", "wiebke.jankowski@harbourline.test", NamesItsCases, MailAccountLanguage.Polish),
+
+        // A Polish correspondence read for an English mailbox: three kinds of matter, carded in English.
+        new("Mixed.PolishCorrespondenceUnderEnglishAccount", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailAccountLanguage.English),
     ];
 
-    /// <summary>Gets every conversation the mailbox holds: the corpus's first, then the written ones, then the hostile ones.</summary>
+    /// <summary>Gets every conversation the mailbox holds: the corpus's first, then the written ones, the hostile ones, and the Polish ones.</summary>
+    /// <remarks>The Polish corpus comes last, so every conversation before it keeps the thread identifier its position derives.</remarks>
     private static IEnumerable<IReadOnlyList<CorpusMessage>> Mailbox =>
-        CorpusMessage.Exchanges.Concat(WrittenCorpus.Exchanges).Concat(HostileMail.Exchanges);
+        CorpusMessage.Exchanges.Concat(WrittenCorpus.Exchanges).Concat(HostileMail.Exchanges).Concat(PolishCorpus.Exchanges);
 
     /// <summary>Gets the correspondence as the correspondence index would answer it for this address.</summary>
     public ContactCorrespondence Correspondence
@@ -179,6 +212,15 @@ internal sealed record ContactRelationshipCase(
 
     /// <inheritdoc />
     public override string ToString() => this.Name;
+
+    /// <summary>Names what the card gets wrong: first against the case's expectation, then against the language the case declares.</summary>
+    /// <param name="card">The card read from the answer.</param>
+    /// <param name="correspondence">The correspondence the turn numbered.</param>
+    /// <returns>What is wrong, or <see langword="null" /> where nothing is.</returns>
+    public string? Held(ContactRelationship card, ContactCorrespondence correspondence) =>
+        this.Expectation(card, correspondence) ?? (this.Language is { } language
+            ? WrittenLanguage.Shortfall(string.Join('\n', Statements(card).Select(static statement => statement.Text)), language)
+            : null);
 
     private static string? NamesItsCases(ContactRelationship card, ContactCorrespondence correspondence) => card switch
     {

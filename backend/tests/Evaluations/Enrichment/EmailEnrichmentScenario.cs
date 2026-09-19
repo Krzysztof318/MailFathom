@@ -4,8 +4,10 @@
 
 using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -27,9 +29,6 @@ internal static class EmailEnrichmentScenario
     /// <summary>The name the deterministic verdict is recorded under.</summary>
     public const string ExpectationMetricName = "Marks as expected";
 
-    /// <summary>The language every reading is written in, which is the corpus's own.</summary>
-    private const MailAccountLanguage Language = MailAccountLanguage.English;
-
     /// <summary>Describes one message as the case the shared scenario runs.</summary>
     /// <param name="scenario">The message.</param>
     /// <returns>The request.</returns>
@@ -38,7 +37,8 @@ internal static class EmailEnrichmentScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var message = scenario.Message();
-        var instruction = EmailEnrichmentInstructions.TextFor(Language);
+        var language = scenario.Language ?? MailAccountLanguage.English;
+        var instruction = EmailEnrichmentInstructions.TextFor(language);
 
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
@@ -47,16 +47,22 @@ internal static class EmailEnrichmentScenario
                 message.Subject,
                 message.ReceivedAt,
                 [.. message.Passages.Select(static passage => passage.Text)]),
-            static (model, plan) => EmailEnrichmentAgentComposition.Compose(
+            (model, plan) => EmailEnrichmentAgentComposition.Compose(
                 model,
                 plan,
-                Language,
+                language,
                 new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance),
             answer => HostileMail.Obeyed(answer, instruction) ?? (StructuredAnswerScenario.IsReadableObject(answer)
-                ? scenario.Expectation(EmailEnrichmentReading.Read(answer, message.Passages, EmailEnrichmentAgentComposition.AgentName))
+                ? Held(scenario, EmailEnrichmentReading.Read(answer, message.Passages, EmailEnrichmentAgentComposition.AgentName))
                 : "the answer holds no JSON object, so the message would be listed with no reading."),
             ExpectationMetricName,
             StructuredAnswerScenario.JudgedWhen(readsTwoWays: false));
     }
+
+    /// <summary>Holds the marks to the case's expectation, then to the language the case declares.</summary>
+    private static string? Held(EmailEnrichmentCase scenario, IReadOnlyList<EmailEnrichmentMark> marks) =>
+        scenario.Expectation(marks) ?? (scenario.Language is { } language
+            ? WrittenLanguage.Shortfall(string.Join('\n', marks.Select(static mark => mark.Text)), language)
+            : null);
 }

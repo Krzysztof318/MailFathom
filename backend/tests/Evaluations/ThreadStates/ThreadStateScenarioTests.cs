@@ -36,6 +36,14 @@ public sealed class ThreadStateScenarioTests : IDisposable
     [InlineData("CommitmentWithdrawn", """{"commitments":[{"text":"Send the signed agreement.","messages":[0],"owedBy":"Tomasz","dueAt":"2026-09-04"}]}""", false)]
     [InlineData("QuestionAnsweredLater", """{"agreements":[{"text":"The workshop is in the Birch Room.","messages":[0,3]}]}""", true)]
     [InlineData("QuestionAnsweredLater", """{"openQuestions":[{"text":"Which room is the workshop in?","messages":[0]}]}""", false)]
+    [InlineData("Polish.DatedPayment", """{"commitments":[{"text":"Zapłacić całą kwotę faktury do piątku, 4 września.","messages":[1],"dueAt":"2026-09-04"}]}""", true)]
+    [InlineData("Polish.DatedPayment", """{"commitments":[{"text":"Pay the whole invoice by Friday, 4 September.","messages":[1],"dueAt":"2026-09-04"}]}""", false)]
+    [InlineData("Polish.Settled", "{}", true)]
+    [InlineData("Polish.Settled", """{"agreements":[{"text":"The ticket is closed and the fix works in version 3.2.1.","messages":[1,2]}]}""", false)]
+    [InlineData("Mixed.EnglishConversationUnderPolishAccount", """{"commitments":[{"text":"Zapłacić fakturę 7842 najpóźniej do czwartku, 10 września.","messages":[3],"dueAt":"2026-09-10"}]}""", true)]
+    [InlineData("Mixed.EnglishConversationUnderPolishAccount", """{"commitments":[{"text":"Pay the invoice 7842 by Thursday, 10 September.","messages":[3],"dueAt":"2026-09-10"}]}""", false)]
+    [InlineData("Mixed.PolishConversationUnderEnglishAccount", """{"commitments":[{"text":"Pay the whole invoice by Friday, 4 September.","messages":[1],"dueAt":"2026-09-04"}]}""", true)]
+    [InlineData("Mixed.PolishConversationUnderEnglishAccount", """{"commitments":[{"text":"Zapłacić całą kwotę faktury do piątku, 4 września.","messages":[1],"dueAt":"2026-09-04"}]}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherItStatesWhatTheConversationSays(
         string caseName,
         string answer,
@@ -70,6 +78,12 @@ public sealed class ThreadStateScenarioTests : IDisposable
     [InlineData("CommitmentWithdrawn", -1, "I have to withdraw what I told you on Tuesday")]
     [InlineData("QuestionAnsweredLater", -1, "the workshop is in the Birch Room")]
     [InlineData("QualifiedAgreement", -1, "provided the final data export reaches us by 27 October")]
+    [InlineData("Polish.DatedPayment", -1, "Zapłacimy całą kwotę do piątku, 4 września 2026.")]
+    [InlineData("Polish.CommitmentWithdrawn", 0, "11 września")]
+    [InlineData("Polish.UnansweredQuote", -1, "krzeseł")]
+    [InlineData("Polish.Settled", -1, "Zgłoszenie można zamknąć")]
+    [InlineData("Mixed.EnglishConversationUnderPolishAccount", -1, "by 10 September 2026")]
+    [InlineData("Mixed.PolishConversationUnderEnglishAccount", -1, "Zapłacimy całą kwotę do piątku, 4 września 2026.")]
     public void Messages_ACase_ComesFromTheConversationItsExpectationDescribes(
         string caseName,
         int position,

@@ -4,8 +4,10 @@
 
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ThreadStates;
+using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,9 +27,6 @@ internal static class ThreadStateScenario
     /// <summary>The name the deterministic verdict is recorded under.</summary>
     public const string ExpectationMetricName = "State as expected";
 
-    /// <summary>The language every derivation is written in, which is the corpus's own.</summary>
-    private const MailAccountLanguage Language = MailAccountLanguage.English;
-
     /// <summary>Describes one conversation as the case the shared scenario runs.</summary>
     /// <param name="scenario">The conversation.</param>
     /// <returns>The request.</returns>
@@ -36,7 +35,8 @@ internal static class ThreadStateScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var messages = scenario.Messages;
-        var instruction = ThreadStateInstructions.TextFor(Language);
+        var language = scenario.Language ?? MailAccountLanguage.English;
+        var instruction = ThreadStateInstructions.TextFor(language);
 
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
@@ -48,16 +48,25 @@ internal static class ThreadStateScenario
                     message.AuthorDisplayName,
                     message.SentAt,
                     message.Text))]),
-            static (model, plan) => ThreadStateAgentComposition.Compose(
+            (model, plan) => ThreadStateAgentComposition.Compose(
                 model,
                 plan,
-                Language,
+                language,
                 new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance),
             answer => HostileMail.Obeyed(answer, instruction) ?? (StructuredAnswerScenario.IsReadableObject(answer)
-                ? scenario.Expectation(ThreadStateReading.Read(answer, messages), messages)
+                ? Held(scenario, ThreadStateReading.Read(answer, messages), messages)
                 : "the answer holds no JSON object, so the conversation would be recorded with no statements."),
             ExpectationMetricName,
             StructuredAnswerScenario.JudgedWhen(scenario.ReadsTwoWays));
     }
+
+    /// <summary>Holds the statements to the case's expectation, then to the language the case declares.</summary>
+    private static string? Held(
+        ThreadStateCase scenario,
+        IReadOnlyList<ThreadStateEntry> entries,
+        IReadOnlyList<DerivableThreadMessage> messages) =>
+        scenario.Expectation(entries, messages) ?? (scenario.Language is { } language
+            ? WrittenLanguage.Shortfall(string.Join('\n', entries.Select(static entry => entry.Text)), language)
+            : null);
 }

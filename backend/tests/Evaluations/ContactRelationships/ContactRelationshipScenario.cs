@@ -25,9 +25,6 @@ internal static class ContactRelationshipScenario
     /// <summary>The name the deterministic verdict is recorded under.</summary>
     public const string ExpectationMetricName = "Card as expected";
 
-    /// <summary>The language every card is written in, which is the corpus's own.</summary>
-    private const MailAccountLanguage Language = MailAccountLanguage.English;
-
     /// <summary>Describes one correspondence as the case the shared scenario runs.</summary>
     /// <param name="scenario">The correspondence.</param>
     /// <returns>The request.</returns>
@@ -36,7 +33,8 @@ internal static class ContactRelationshipScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var correspondence = scenario.Correspondence;
-        var instruction = ContactRelationshipInstructions.TextFor(Language);
+        var language = scenario.Language ?? MailAccountLanguage.English;
+        var instruction = ContactRelationshipInstructions.TextFor(language);
 
         var turn = new GuardedRelationshipTurn(
             [.. correspondence.Threads.Select(static thread => new GuardedRelationshipConversation(thread.Subject, thread.LastCorrespondedAt))],
@@ -49,14 +47,14 @@ internal static class ContactRelationshipScenario
             $"{Name}.{scenario.Name}",
             instruction,
             ContactRelationshipInstructions.ComposeRelationshipTurn(turn),
-            static (model, plan) => ContactRelationshipAgentComposition.Compose(
+            (model, plan) => ContactRelationshipAgentComposition.Compose(
                 model,
                 plan,
-                Language,
+                language,
                 new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance),
             answer => HostileMail.Obeyed(answer, instruction) ?? (StructuredAnswerScenario.IsReadableObject(answer)
-                ? scenario.Expectation(ContactRelationshipReading.Read(answer, correspondence), correspondence)
+                ? scenario.Held(ContactRelationshipReading.Read(answer, correspondence), correspondence)
                 : "the answer holds no JSON object, so the contact would be shown no card."),
             ExpectationMetricName,
             StructuredAnswerScenario.JudgedWhen(readsTwoWays: false));

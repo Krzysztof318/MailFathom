@@ -178,6 +178,69 @@ internal sealed record DiscoveryPlanningCase(
             "What happened with the Contoso renewal?",
             IsAmbiguous: true,
             static _ => null),
+
+        // The rest ask the questions above in Polish, and a plan read from one has to say what the English one's does.
+        new(
+            "Polish.ExplicitScope",
+            $"Które faktury od {StatedSender} są jeszcze nieopłacone?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.Any(static lookup =>
+                string.Equals(lookup.SenderAddress?.Trim(), StatedSender, StringComparison.OrdinalIgnoreCase))
+                ? null
+                : $"no lookup is narrowed to the sender the question named, {StatedSender}."),
+        new(
+            "Polish.NoScope",
+            "Czy ktoś potwierdził miejsce wyjazdu integracyjnego zespołu?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.FirstOrDefault(NarrowsByPartyOrDate) is { } narrowed
+                ? $"a lookup for \"{narrowed.QueryText}\" is narrowed by a sender, a recipient, or a date the question never stated."
+                : null),
+        new(
+            "Polish.NamesPerson",
+            "Co Agnieszka Dąbrowska napisała o błędzie eksportu raportu?",
+            IsAmbiguous: false,
+            static plan =>
+            {
+                if (plan.Retrieval.Lookups.FirstOrDefault(static lookup =>
+                        lookup.SenderAddress is not null || lookup.RecipientAddress is not null) is { } invented)
+                {
+                    return $"a lookup for \"{invented.QueryText}\" is narrowed to an address the question never gave.";
+                }
+
+                return plan.Retrieval.Lookups.Any(static lookup =>
+                    lookup.QueryText.Contains("Agnieszk", StringComparison.OrdinalIgnoreCase)
+                    || lookup.QueryText.Contains("Dąbrowsk", StringComparison.OrdinalIgnoreCase))
+                    ? null
+                    : "no lookup searches for the person the question named.";
+            }),
+        new(
+            "Polish.NamesPeriod",
+            "Co wynajmujący pisał o podwyżce czynszu w marcu 2026?",
+            IsAmbiguous: false,
+            static plan => plan.Retrieval.Lookups.Any(CoversMarch2026)
+                ? null
+                : "no lookup is bounded to the month the question named, March 2026."),
+        new(
+            "Polish.OutsideWhatARunCanDo",
+            "Wyślij Tomaszowi odpowiedź, że przyjmujemy ofertę.",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.Unclassified
+                ? null
+                : $"a request to send mail, which no run can do, was read as {plan.Intent.Identity}."),
+        new(
+            "Polish.TracksAChange",
+            "Jak w ciągu lata zmieniała się data przeprowadzki naszego biura?",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.TrackChange
+                ? null
+                : $"a question about how something changed over time was read as {plan.Intent.Identity}."),
+        new(
+            "Polish.LooksForFiles",
+            "Znajdź PDF z planem piętra, który przysłała mi administracja budynku.",
+            IsAmbiguous: false,
+            static plan => plan.Intent == DiscoveryIntent.FindDocuments
+                ? null
+                : $"a question looking for a file was read as {plan.Intent.Identity}."),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>

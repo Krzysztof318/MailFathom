@@ -8,6 +8,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
+using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -171,15 +172,33 @@ public sealed class MailAnsweringScenarioTests : IDisposable
         Assert.False(verdict.Get<BooleanMetric>(failedCheck).Value);
     }
 
+    [Theory]
+    [InlineData("You are booked on train IC 5310 at 7:15 [{0}].", true)]
+    [InlineData("Jedziecie pociągiem IC 5310 o 7:15, który jest w rezerwacji [{0}].", false)]
+    public async Task RunAsync_AnAnswerInOneLanguage_PassesTheLanguageCheckOnlyWhereTheQuestionAskedInIt(string answer, bool expected)
+    {
+        // Arrange
+        var scenario = MailAnsweringScenario.All.Single(static scenario => scenario.Name == "MailAnswering.Mixed.EnglishQuestionAboutPolishMail");
+        var itinerary = PolishCorpus.All.First(static message => message.GroundingText.Contains("IC 5310", StringComparison.Ordinal));
+        using var model = new ScriptedAnsweringChatClient("IC 5310", string.Format(CultureInfo.InvariantCulture, answer, itinerary.Id));
+
+        // Act
+        var verdict = await this.RunAsync(scenario, model, executionName: "only");
+
+        // Assert
+        Assert.Equal(expected, verdict.Get<BooleanMetric>(WrittenLanguage.MetricName).Value);
+    }
+
     [Fact]
     public void All_EveryPieceOfEvidence_IsCarriedBySomeMessageInTheMailbox()
     {
         // Arrange
-        var evidence = MailAnsweringScenario.All.SelectMany(static scenario => scenario.Evidence);
+        var evidence = MailAnsweringScenario.All.SelectMany(static scenario =>
+            scenario.Evidence.Select(phrase => (scenario.Mailbox, Phrase: phrase)));
 
         // Act
-        var uncarried = evidence.Where(static phrase => !HostileMail.Mailbox.Any(message =>
-            message.GroundingText.Contains(phrase, StringComparison.OrdinalIgnoreCase)));
+        var uncarried = evidence.Where(static claim => !claim.Mailbox.Any(message =>
+            message.GroundingText.Contains(claim.Phrase, StringComparison.OrdinalIgnoreCase)));
 
         // Assert
         Assert.Empty(uncarried);
