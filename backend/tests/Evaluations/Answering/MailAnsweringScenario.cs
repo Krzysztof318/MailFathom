@@ -93,7 +93,11 @@ internal sealed partial record MailAnsweringScenario(
             "MailAnswering.NothingAnswers",
             "What did my dentist say about moving my check-up?",
             [],
-            MinimumIntentResolution: 4,
+
+            // Nothing in the corpus answers it, so the right answer leaves the intent unresolved, and the evaluator's
+            // rubric grades an honest "nothing found" as a partial resolution rather than a full one. Task adherence is
+            // what holds the answer to citing nothing and inventing nothing.
+            MinimumIntentResolution: 3,
             MinimumTaskAdherence: 4),
         new(
             "MailAnswering.NamesAPerson",

@@ -69,14 +69,16 @@ internal sealed class JudgeDeclaration
     /// </para>
     /// <para>
     /// The effort joins the key only where one is declared, so a judge that declares none keeps the verdicts it cached
-    /// before the effort could be declared at all.
+    /// before the effort could be declared at all. The output budget joins it beside the effort, because the budget is
+    /// set beneath the response cache and so never reaches the key the cache derives from a request: without it, a
+    /// verdict cut short under a smaller budget would be served again after the budget was raised.
     /// </para>
     /// </remarks>
     public string CachingKey => Convert.ToHexString(HMACSHA256.HashData(
         Encoding.UTF8.GetBytes(this.apiKey),
         Encoding.UTF8.GetBytes(this.reasoningEffort is null
             ? $"{this.endpoint.Address}\n{this.endpoint.RoutedModelName}"
-            : $"{this.endpoint.Address}\n{this.endpoint.RoutedModelName}\n{this.reasoningEffort}")));
+            : $"{this.endpoint.Address}\n{this.endpoint.RoutedModelName}\n{this.reasoningEffort}\n{ReasonedVerdictOutputTokens}")));
 
     /// <summary>Reads the declaration a requested run was given.</summary>
     /// <returns>The declaration.</returns>
