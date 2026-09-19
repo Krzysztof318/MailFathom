@@ -178,13 +178,21 @@ public sealed class DiscoveryCompositionScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task All_AQuestionTheExtractsDoNotAnswer_IsStillHandedExtracts()
+    public async Task All_EveryQuestionTheExtractsDoNotAnswer_IsStillHandedExtracts()
     {
+        // Arrange
+        var unanswerable = DiscoveryCompositionScenario.All.Where(static scenario => scenario.Evidence.Count is 0);
+
         // Act
-        var (_, sources) = await ExtractsDoNotAnswer.RetrieveAsync(TestContext.Current.CancellationToken);
+        var handedNothing = await Task.WhenAll(unanswerable.Select(async scenario =>
+        {
+            var (_, sources) = await scenario.RetrieveAsync(TestContext.Current.CancellationToken);
+
+            return sources.Count is 0 ? scenario.Name : null;
+        }));
 
         // Assert
-        Assert.NotEmpty(sources);
+        Assert.Empty(handedNothing.OfType<string>());
     }
 
     public void Dispose() => this.store.Delete(recursive: true);

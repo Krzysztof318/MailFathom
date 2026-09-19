@@ -17,9 +17,9 @@ namespace MailFathom.Evaluations.Corpus;
 /// <summary>One message of the committed synthetic corpus, cut into the passages a deployment would have stored for it.</summary>
 /// <remarks>
 /// <para>
-/// The corpus is the only input a scenario sends a provider. Every message in it was written by a model for this
-/// repository, every address sits under a reserved domain, and nobody received any of it — which is what lets a
-/// scenario, its cached answers, and its report be published.
+/// The corpus is the only input a scenario sends a provider. Every message in it was written for this repository — by a
+/// model in <c>office-en.zip</c>, by hand in <c>hard-shapes-en.zip</c> — every address sits under a reserved domain, and
+/// nobody received any of it, which is what lets a scenario, its cached answers, and its report be published.
 /// </para>
 /// <para>
 /// The passages come from the chunker a deployment runs, under the rules it runs with, so an agent is measured on the
@@ -51,7 +51,12 @@ internal sealed record CorpusMessage(
     /// <summary>The bound a deployment extracts a body under by default.</summary>
     private const int MaximumBodyCharacters = 100_000;
 
-    private static readonly string ArchivePath = Path.Combine(AppContext.BaseDirectory, "corpora", "office-en.zip");
+    /// <summary>The committed corpora, read in this order: the model-written one first, so every position it numbers stays where it was.</summary>
+    private static readonly string[] ArchivePaths =
+    [
+        Path.Combine(AppContext.BaseDirectory, "corpora", "office-en.zip"),
+        Path.Combine(AppContext.BaseDirectory, "corpora", "hard-shapes-en.zip"),
+    ];
 
     private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Delivered = new(ReadArchive);
 
@@ -89,9 +94,12 @@ internal sealed record CorpusMessage(
 
     private static IReadOnlyList<IReadOnlyList<CorpusMessage>> ReadArchive()
     {
-        using var archive = File.OpenRead(ArchivePath);
+        var exchanges = ArchivePaths.SelectMany(static path =>
+        {
+            using var archive = File.OpenRead(path);
 
-        var exchanges = CorpusArchive.Read(archive).Exchanges;
+            return CorpusArchive.Read(archive).Exchanges;
+        }).ToList();
 
         // A message's position counts across every conversation before its own, which is the order the archive numbers
         // its files in and the one every identifier below is derived from.
