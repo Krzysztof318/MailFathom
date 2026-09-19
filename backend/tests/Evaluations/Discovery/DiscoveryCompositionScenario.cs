@@ -214,7 +214,7 @@ internal sealed record DiscoveryCompositionScenario(
     /// <summary>Names every check and rating the verdict falls short on, in words a failed run can be read by.</summary>
     /// <param name="verdict">The verdict one model's run of this scenario produced.</param>
     /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
-    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(this.Name, verdict);
+    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(verdict);
 
     /// <summary>Writes the opening block as the text a person would read it as.</summary>
     private static string Rendered(PresentationBlock block) => block switch

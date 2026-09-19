@@ -155,7 +155,7 @@ internal sealed record ImageDescriptionScenario(
     /// <summary>Names every check and rating the verdict falls short on, in words a failed run can be read by.</summary>
     /// <param name="verdict">The verdict one model's run of this scenario produced.</param>
     /// <returns>One line per shortfall, naming the scenario and the metric.</returns>
-    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(this.Name, verdict);
+    public IEnumerable<string> ShortfallsOf(EvaluationResult verdict) => EvaluationMetrics.ShortfallsOf(verdict);
 
     /// <summary>Records every structural check as a metric beside the judge's.</summary>
     private void Check(EvaluationResult verdict, string? description, string? refusal)
