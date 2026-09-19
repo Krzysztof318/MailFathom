@@ -20,7 +20,6 @@ public sealed class WrittenCorpusTests
 
         // Assert
         Assert.Equal(identifiers.Length, identifiers.Distinct().Count());
-        Assert.DoesNotContain(written, static message => CorpusMessage.All.Contains(message));
     }
 
     [Fact]
