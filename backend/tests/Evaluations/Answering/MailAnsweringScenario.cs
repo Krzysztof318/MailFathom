@@ -117,6 +117,70 @@ internal sealed partial record MailAnsweringScenario(
             ["42 Lantern Way"],
             MinimumIntentResolution: 4,
             MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.LaterMessageCorrectsAnEarlierOne",
+            "On which day does my team move into Kestrel Quay?",
+
+            // The thread's first message names Saturday, 29 August; a later one corrects it. Only the correction carries
+            // this phrase, so an answer resting on the first message alone fails here, and one citing both is left to
+            // the judge to hold to the later date.
+            ["Sunday, 30 August"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.AnswerSitsFarFromTheThreadStart",
+            "How many parking spaces did we get at Kestrel Quay, and where are they?",
+            ["bays 41 to 44"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.QuotedHistoryWithSeveralSpeakers",
+            "Until when is the goods lift booked on the Kestrel Quay move day, and how long do the movers say they need it?",
+            ["12:30", "13:00"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.RelativeDateResolvedAgainstTheMessage",
+            "On what date can I collect the Kestrel Quay key cards?",
+
+            // The message says "next Tuesday" and is dated Thursday, 20 August 2026, so the date is 25 August. The
+            // structure can settle only that the answer rests on that message; the judge holds it to the date.
+            ["next Tuesday"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.TwoPeopleWithSimilarNames",
+            "When will Ingrid Solheim's courier collect the archive boxes?",
+            ["14:00 and 16:00"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.NamesWhoDoesWhatInALongThread",
+            "Who activates the fibre line for our floor at Kestrel Quay, and on which date?",
+            ["27 August 2026"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.GathersFactsFromSeveralTurns",
+            "Which desks and which meeting room are reserved for my team at Kestrel Quay?",
+            ["zone C", "Skerry"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.NothingAnswersANeighbouringQuestion",
+            "Who is catering the housewarming party at Kestrel Quay?",
+            [],
+
+            // A long thread about the same move answers everything around it and nothing about this, which is where an
+            // answer is tempted to borrow a name from the thread.
+            MinimumIntentResolution: 3,
+            MinimumTaskAdherence: 4),
+        new(
+            "MailAnswering.NothingAnswersAnUnrelatedQuestion",
+            "What did my car insurer decide about the windscreen claim?",
+            [],
+            MinimumIntentResolution: 3,
+            MinimumTaskAdherence: 4),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>
