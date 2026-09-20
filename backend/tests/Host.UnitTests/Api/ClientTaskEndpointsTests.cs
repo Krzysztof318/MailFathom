@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Calendar;
+using MailFathom.Application.Persistence;
 using MailFathom.Application.Tasks;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
@@ -28,6 +30,8 @@ public sealed class ClientTaskEndpointsTests
     private static readonly MailUserId User = SyntheticMailUser.Deployment;
 
     private static readonly DateTimeOffset Stamped = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset DayStart = new(2026, 9, 21, 8, 0, 0, TimeSpan.Zero);
 
     private static readonly Guid TaskIdentifier = new("2f0b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d");
 
@@ -471,6 +475,179 @@ public sealed class ClientTaskEndpointsTests
         // Assert
         Assert.False(result.Value!.Erased);
         await store.DidNotReceiveWithAnyArgs().EraseAsync(default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A screen asks once whether this deployment arranges a day, and the answer costs no provider call.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ArrangesDays_ADeploymentInEitherState_SaysWhichWithoutComposingAnything(bool isActive)
+    {
+        // Arrange
+        var planner = Substitute.For<IDayLayoutPlanner>();
+        planner.IsActive.Returns(isActive);
+
+        // Act
+        var result = ClientTaskEndpoints.ArrangesDays(planner);
+
+        // Assert
+        Assert.Equal(isActive, result.Value!.ArrangesDays);
+    }
+
+    /// <summary>An arrangement names tasks and windows, and the client draws each row from the task it already holds.</summary>
+    [Fact]
+    public async Task LayOutTodayAsync_AnArrangementOfTheDay_DescribesEveryPlacementAndWhatDoesNotFit()
+    {
+        // Arrange
+        var deferred = new Guid("3a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d");
+        var layout = LayingOut(DayLayoutDerivation.Settled(new DayLayoutSuggestion(
+            [
+                new DayLayoutPlacement(
+                    PersonalTaskId.Create(TaskIdentifier),
+                    DayStart.AddHours(2),
+                    TimeSpan.FromMinutes(45)),
+            ],
+            [PersonalTaskId.Create(deferred)])));
+
+        // Act
+        var result = await ClientTaskEndpoints.LayOutTodayAsync(
+            new ClientDayLayoutRequest(DayStart, DayStart.AddHours(12)),
+            layout,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var arrangement = Assert.IsType<Ok<ClientDayLayoutResponse>>(result.Result).Value!;
+        var placement = Assert.Single(arrangement.Placements);
+
+        Assert.True(arrangement.Arranged);
+        Assert.Equal(TaskIdentifier, placement.TaskId);
+        Assert.Equal(DayStart.AddHours(2), placement.StartAt);
+        Assert.Equal(45, placement.Minutes);
+        Assert.Equal(deferred, Assert.Single(arrangement.NotToday));
+    }
+
+    /// <summary>A deployment that arranges no day and a provider that did not answer are one answer to a screen.</summary>
+    [Theory]
+    [InlineData(DayLayoutWithholding.NotActivated)]
+    [InlineData(DayLayoutWithholding.ProviderUnavailable)]
+    public async Task LayOutTodayAsync_AnArrangementWithheld_SaysTheDayWasNotArranged(DayLayoutWithholding withholding)
+    {
+        // Arrange
+        var layout = LayingOut(DayLayoutDerivation.Withholding(withholding));
+
+        // Act
+        var result = await ClientTaskEndpoints.LayOutTodayAsync(
+            new ClientDayLayoutRequest(DayStart, DayStart.AddHours(12)),
+            layout,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var arrangement = Assert.IsType<Ok<ClientDayLayoutResponse>>(result.Result).Value!;
+
+        Assert.False(arrangement.Arranged);
+        Assert.Empty(arrangement.Placements);
+        Assert.Empty(arrangement.NotToday);
+    }
+
+    /// <summary>A spent allowance travels, because pressing the control again is what a person would otherwise do.</summary>
+    [Fact]
+    public async Task LayOutTodayAsync_TheDeploymentsAllowanceSpent_ReportsThatRatherThanAnEmptyDay()
+    {
+        // Arrange
+        var layout = LayingOut(DayLayoutDerivation.Withholding(DayLayoutWithholding.AllowanceExhausted));
+
+        // Act
+        var result = await ClientTaskEndpoints.LayOutTodayAsync(
+            new ClientDayLayoutRequest(DayStart, DayStart.AddHours(12)),
+            layout,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refusal.StatusCode);
+    }
+
+    /// <summary>Which hours are somebody's day is their client's to state, so a request stating none is not a day.</summary>
+    [Fact]
+    public async Task LayOutTodayAsync_ARequestStatingNoWindow_RefusesItWithoutArrangingAnything()
+    {
+        // Arrange
+        var layout = LayingOut(DayLayoutDerivation.Settled(new DayLayoutSuggestion([], [])));
+
+        // Act
+        var result = await ClientTaskEndpoints.LayOutTodayAsync(
+            new ClientDayLayoutRequest(DayStart, Until: null),
+            layout,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+    }
+
+    /// <summary>A window the reading does not answer for is reported as a day this deployment does not arrange.</summary>
+    [Fact]
+    public async Task LayOutTodayAsync_AWindowTheReadingRefuses_NamesTheRuleRatherThanTheValue()
+    {
+        // Arrange
+        var layout = LayingOut(DayLayoutDerivation.Settled(new DayLayoutSuggestion([], [])));
+
+        // Act
+        var result = await ClientTaskEndpoints.LayOutTodayAsync(
+            new ClientDayLayoutRequest(DayStart, DayStart.AddDays(30)),
+            layout,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+    }
+
+    /// <summary>Composes the reading over a planner answering what a case states, and a list holding one task due that day.</summary>
+    private static TodayLayout LayingOut(DayLayoutDerivation derivation)
+    {
+        var authorization = AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead);
+        var store = Substitute.For<IPersonalTaskStore>();
+        store
+            .ReadAsync(
+                User,
+                PersonalTaskOrigin.Asserted,
+                Arg.Any<PersonalTaskCursor?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => [Kept(dueOn: DateOnly.FromDateTime(DayStart.DateTime))]);
+
+        var calendar = Substitute.For<ICalendarEventStore>();
+        calendar
+            .ReadRangeAsync(User, Arg.Any<CalendarEventQuery>(), Arg.Any<CancellationToken>())
+            .Returns(_ => []);
+
+        var planner = Substitute.For<IDayLayoutPlanner>();
+        planner.IsActive.Returns(true);
+        planner
+            .SuggestAsync(Arg.Any<DayLayoutQuestion>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(derivation));
+
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionFactory
+            .BeginSessionAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Substitute.For<IPersistenceSession>());
+
+        var clock = new FakeTimeProvider(Stamped);
+
+        return new TodayLayout(
+            authorization,
+            new OwnTasks(authorization, store, clock),
+            new OwnCalendar(
+                authorization,
+                calendar,
+                new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
+                clock),
+            planner,
+            SensitiveContentEgressGuards.Inactive());
     }
 
     private static OwnTasks SignedIn(IPersonalTaskStore store) => new(

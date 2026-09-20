@@ -8,23 +8,22 @@ using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
-using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Accounts;
+using MailFathom.Application.Tasks;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace MailFathom.AI.Enrichment;
+namespace MailFathom.AI.DayLayout;
 
-/// <summary>Derives one message's marks by putting it to the composed enrichment agent.</summary>
+/// <summary>Arranges one day by putting it to the composed day-layout agent.</summary>
 /// <remarks>
 /// <para>
-/// One call, no tools, and one message. What leaves this deployment is the subject, the arrival instant, and the
-/// passages the pass selected, every one of them guarded first — so a derivation sends the message and nothing about
-/// the mailbox it sits in.
+/// One call, no tools, and one day. What leaves this deployment is the window, the lines of the tasks owed by the end
+/// of it, and the titles and times of what is already committed during it, every one of them guarded first — so an
+/// arrangement sends the day and nothing about the lists it was read from.
 /// </para>
 /// <para>
 /// It opens no chat call of its own. The agent is composed by <see cref="AgentComposition" /> like every other
@@ -32,24 +31,23 @@ namespace MailFathom.AI.Enrichment;
 /// and the registered instruction envelope is wrapped around the instruction rather than written into it.
 /// </para>
 /// <para>
-/// Every derivation is admitted against the same period ceilings a question is, and every call is counted by the same
-/// two ledgers. That is what makes enrichment bounded rather than a second, unmetered way of spending a deployment's
-/// allowance — and it is also why it competes with questions for that allowance, which is the trade an operator makes
-/// when they turn it on. A refused admission withholds the derivation rather than failing it: the message stays
-/// outstanding and the next period reaches it.
+/// Every arrangement is admitted against the same period ceilings a question is, and every call is counted by the same
+/// two ledgers. It is not a new category of spend: this runs when somebody presses a control, so what it costs a
+/// deployment is what its people asked for, and a refused admission withholds the arrangement rather than failing it —
+/// the day is unchanged and the control may be pressed again.
 /// </para>
 /// <para>
-/// A provider that fails, times out, or is unreachable withholds the derivation for the same reason. A provider that
+/// A provider that fails, times out, or is unreachable withholds the arrangement for the same reason. A provider that
 /// <em>answered</em> with something unreadable does not: the call was made and paid for, and repeating it buys the same
-/// answer, so the message is recorded as having nothing to say rather than being offered to the endpoint forever.
+/// answer, so the day is answered with an arrangement of nothing rather than with a failure the person cannot act on.
 /// </para>
 /// <para>
-/// Each derivation opens its own credential, transport, chat client, and agent, and releases all four with it. That is
+/// Each arrangement opens its own credential, transport, chat client, and agent, and releases all four with it. That is
 /// the same lifetime every other agent here uses and for the same reasons: a rotated key is picked up by the next
-/// message rather than at the next restart, and one message's text cannot outlive the call that sent it.
+/// request rather than at the next restart, and one person's day cannot outlive the call that sent it.
 /// </para>
 /// </remarks>
-internal sealed class EmailEnrichmentAgent : IEmailEnricher
+internal sealed class DayLayoutAgent : IDayLayoutPlanner
 {
     private readonly ChatGenerationPlan plan;
     private readonly MailAnsweringRunBounds runBounds;
@@ -62,12 +60,12 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IAgentInstructionEnvelope instructionEnvelope;
     private readonly ILoggerFactory loggerFactory;
-    private readonly ILogger<EmailEnrichmentAgent> logger;
+    private readonly ILogger<DayLayoutAgent> logger;
 
-    /// <summary>Initializes the derivation over the declared endpoint, its credentials, and its transport.</summary>
-    /// <param name="plan">The validated declaration: which endpoint derives and with which parameters.</param>
-    /// <param name="runBounds">What one derivation may send, call, and consume before it is stopped.</param>
-    /// <param name="spendLedger">Admits one derivation against the current period and counts what its call consumed.</param>
+    /// <summary>Initializes the arrangement over the declared endpoint, its credentials, and its transport.</summary>
+    /// <param name="plan">The validated declaration: which endpoint arranges and with which parameters.</param>
+    /// <param name="runBounds">What one arrangement may send, call, and consume before it is stopped.</param>
+    /// <param name="spendLedger">Admits one arrangement against the current period and counts what its call consumed.</param>
     /// <param name="credentialSource">Resolves the endpoint's credential for the one call.</param>
     /// <param name="clientFactory">Opens the provider client.</param>
     /// <param name="transportFactory">Supplies the named outbound transport that client speaks over.</param>
@@ -76,10 +74,10 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// <param name="egressGuard">Withholds from the provider whatever this deployment withholds.</param>
     /// <param name="instructionEnvelope">The preamble and postamble every agent here carries.</param>
     /// <param name="loggerFactory">The factory the composed agent and the resilience decorator log through.</param>
-    /// <param name="logger">Records the outcome without recording the message or what was derived from it.</param>
+    /// <param name="logger">Records the outcome without recording the day or what was arranged.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public EmailEnrichmentAgent(
-        [FromKeyedServices(ChatCapability.Enrichment)] ChatGenerationPlan plan,
+    public DayLayoutAgent(
+        [FromKeyedServices(ChatCapability.DayLayout)] ChatGenerationPlan plan,
         MailAnsweringRunBounds runBounds,
         IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,
@@ -90,7 +88,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
         SensitiveContentEgressGuard egressGuard,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory,
-        ILogger<EmailEnrichmentAgent> logger)
+        ILogger<DayLayoutAgent> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(runBounds);
@@ -120,42 +118,43 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     }
 
     /// <inheritdoc />
-    /// <remarks>This one is registered only where a deployment turned enrichment on, so it is active by construction.</remarks>
+    /// <remarks>This one is registered only where a chat endpoint was declared, so it is active by construction.</remarks>
     public bool IsActive => true;
 
     /// <inheritdoc />
-    public async Task<EmailEnrichmentDerivation> DeriveAsync(
-        EnrichableEmail email,
-        MailAccountLanguage language,
+    public async Task<DayLayoutDerivation> SuggestAsync(
+        DayLayoutQuestion question,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(email);
+        ArgumentNullException.ThrowIfNull(question);
 
-        if (email.Passages.Count is 0)
+        // A day with nothing owed is arranged without asking anybody: the only answer is two empty lists, and a call
+        // to produce it would spend a person's allowance on a question that has one answer.
+        if (question.Tasks.Count is 0)
         {
-            return EmailEnrichmentDerivation.Settled([]);
+            return DayLayoutDerivation.Settled(new DayLayoutSuggestion([], []));
         }
 
         // Admitted before anything is composed or scanned, so a period this deployment has already spent costs nothing
-        // to refuse. The count is what stops enrichment from spending an allowance a question would otherwise have.
+        // to refuse.
         if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
-            return this.Withhold(EmailEnrichmentWithholding.AllowanceExhausted);
+            return this.Withhold(DayLayoutWithholding.AllowanceExhausted);
         }
 
-        // The subject and the passages are somebody's mail, so they are scanned like every other text this deployment
-        // sends: a message quoting a key a colleague pasted has put that key into the request.
-        var subject = await this.egressGuard.GuardOptionalAsync(
+        // A task's line and an appointment's title are somebody's own text and some of it was read out of their mail,
+        // so both are scanned like every other text this deployment sends.
+        var taskTitles = await this.egressGuard.GuardAllAsync(
             SensitiveContentEgressPoint.ChatPrompt,
-            email.Subject,
+            [.. question.Tasks.Select(static task => task.Title)],
             cancellationToken);
-        var passages = await this.egressGuard.GuardAllAsync(
+        var commitmentTitles = await this.egressGuard.GuardAllAsync(
             SensitiveContentEgressPoint.ChatPrompt,
-            [.. email.Passages.Select(static passage => passage.Text)],
+            [.. question.Commitments.Select(static commitment => commitment.Title)],
             cancellationToken);
 
         var turn = Bounded(
-            EmailEnrichmentInstructions.ComposeEnrichmentTurn(subject, email.ReceivedAt, passages),
+            DayLayoutInstructions.ComposeLayoutTurn(question, taskTitles, commitmentTitles),
             this.plan.MaximumRequestCharacters);
 
         ChatRequestBounds.Require(
@@ -164,42 +163,38 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var answer = await this.AskAsync(turn, language, cancellationToken);
+        var answer = await this.AskAsync(turn, cancellationToken);
 
         if (answer is not { Text: { } answerText })
         {
-            return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable, answer?.Alias);
+            return this.Withhold(DayLayoutWithholding.ProviderUnavailable, answer?.Alias);
         }
 
-        var derivation = EmailEnrichmentReading.Read(
-            answerText,
-            email.Passages,
-            EmailEnrichmentAgentComposition.AgentName);
+        var suggestion = DayLayoutReading.Read(answerText, question);
 
-        if (derivation.Marks.Count is 0 && derivation.Tasks.Count is 0)
+        if (suggestion.Placements.Count is 0 && suggestion.NotToday.Count is 0)
         {
-            EmailEnrichmentEvents.LogAnswerUnreadable(this.logger, answer.Alias);
+            DayLayoutEvents.LogAnswerUnreadable(this.logger, answer.Alias);
         }
         else
         {
-            EmailEnrichmentEvents.LogDerived(
+            DayLayoutEvents.LogSuggested(
                 this.logger,
                 answer.Alias,
-                derivation.Marks.Count,
-                derivation.Tasks.Count,
-                email.Passages.Count);
+                suggestion.Placements.Count,
+                question.Tasks.Count,
+                suggestion.NotToday.Count);
         }
 
-        return derivation;
+        return DayLayoutDerivation.Settled(suggestion);
     }
 
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
     /// <remarks>
-    /// A bound rather than a refusal, which is the one place this derivation departs from
-    /// <see cref="ChatRequestBounds" />'s posture and does so deliberately. A refusal here would be permanent — the same
-    /// message would be composed to the same length on every run — so an endpoint declared narrower than a long
-    /// message's passages would leave that message outstanding forever. What a bounded turn costs instead is the tail
-    /// of the last passage, and a mark citing a passage the model saw only part of is still a mark somebody can check.
+    /// A bound rather than a refusal, for the reason a derivation of mail states: a refusal here would be permanent
+    /// for as long as the person's day stayed as it is, so a deployment whose endpoint is declared narrower than a
+    /// long list would never arrange a day at all. What a bounded turn costs is the tail of the list, and an
+    /// arrangement of the tasks the model saw is still an arrangement somebody can read.
     /// </remarks>
     private static string Bounded(string turn, int maximumCharacters) =>
         turn.Length <= maximumCharacters
@@ -209,18 +204,14 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
     /// <remarks>
     /// A failure is swallowed here rather than raised because the caller already has an outcome for that case, and the
-    /// endpoint's own health record — which the resilience decorator wrote before this returned — is what a deployment's
-    /// availability gate reads. Opening the call is inside that guarantee rather than in front of it, because a
-    /// derivation that never reached the endpoint was withheld the same way as one the endpoint refused. A cancellation
-    /// stays outside, being the caller withdrawing the work rather than a provider failing to answer.
+    /// endpoint's own health record — which the resilience decorator wrote before this returned — is what a
+    /// deployment's availability gate reads. A cancellation stays outside, being the person withdrawing the request
+    /// rather than a provider failing to answer.
     /// </remarks>
-    private async Task<ChatModelAnswer?> AskAsync(
-        string turn,
-        MailAccountLanguage language,
-        CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        // One ledger for the whole chain, so a derivation that falls through to the fallback spends the run's
-        // single allowance across both attempts rather than opening a second one behind the first.
+        // One ledger for the whole chain, so an arrangement that falls through to the fallback spends the run's single
+        // allowance across both attempts rather than opening a second one behind the first.
         var runLedger = new MailAnsweringRunLedger(this.runBounds);
 
         try
@@ -228,21 +219,20 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             return await ChatModelFallThrough.RunAsync(
                 this.plan,
                 this.logger,
-                (model, attemptToken) => this.AskModelAsync(model, turn, language, runLedger, attemptToken),
+                (model, attemptToken) => this.AskModelAsync(model, turn, runLedger, attemptToken),
                 cancellationToken);
         }
         catch (ChatGenerationFailedException failure)
         {
-            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
-            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
-            // working. There is no text, which is what tells the caller nothing answered.
+            // The alias the chain's last model failed under, which is what a line about this outage has to name. There
+            // is no text, which is what tells the caller nothing answered.
             return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (MailAnsweringBudgetExhaustedException)
         {
-            // The per-derivation ceiling, which a single call reaches only where an operator declared a run smaller
-            // than one call. It is a withholding rather than an empty answer for the same reason a spent period is:
-            // nothing about the message decided it.
+            // The per-request ceiling, which a single call reaches only where an operator declared a run smaller than
+            // one call. It is a withholding rather than an empty answer for the same reason a spent period is: nothing
+            // about the day decided it.
             return null;
         }
     }
@@ -251,12 +241,11 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailAccountLanguage language,
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {
-        // Against this model's own bounds rather than the main model's, because a fallback may be declared
-        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower
+        // and a turn too wide for it is refused here rather than sent and billed for.
         ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
 
         var endpoint = model.Endpoint;
@@ -274,17 +263,16 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.loggerFactory.CreateLogger<ResilientChatClient>());
 
         // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
-        // the derivation's own and is handed in, one message being one run however many models it was asked of.
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is the
+        // arrangement's own and is handed in, one day being one run however many models it was asked of.
         await using var chatClient = new BudgetedChatClient(
             resilientClient,
             runLedger,
             this.spendLedger);
 
-        var agent = EmailEnrichmentAgentComposition.Compose(
+        var agent = DayLayoutAgentComposition.Compose(
             chatClient,
             model,
-            language,
             this.instructionEnvelope,
             this.loggerFactory);
 
@@ -294,15 +282,10 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     }
 
     /// <summary>Withholds, naming the model this attempt reached where one was reached at all.</summary>
-    /// <remarks>
-    /// A chain that failed outright failed at its last model, and the alias the capability was configured with names
-    /// the one asked first — an endpoint that may be working. Where nothing reached a model, that configured alias is
-    /// the only one there is and is what the line carries.
-    /// </remarks>
-    private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding, string? answeringAlias = null)
+    private DayLayoutDerivation Withhold(DayLayoutWithholding withholding, string? answeringAlias = null)
     {
-        EmailEnrichmentEvents.LogWithheld(this.logger, answeringAlias ?? this.plan.Endpoint.Alias, withholding);
+        DayLayoutEvents.LogWithheld(this.logger, answeringAlias ?? this.plan.Endpoint.Alias, withholding);
 
-        return EmailEnrichmentDerivation.Withholding(withholding);
+        return DayLayoutDerivation.Withholding(withholding);
     }
 }

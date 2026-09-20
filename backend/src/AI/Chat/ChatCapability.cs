@@ -55,4 +55,7 @@ public enum ChatCapability
 
     /// <summary>Reading text into the calendar events it names, whether a message named them or somebody typed one.</summary>
     CalendarEventExtraction = 11,
+
+    /// <summary>Arranging one person's day around what is already committed during it.</summary>
+    DayLayout = 12,
 }

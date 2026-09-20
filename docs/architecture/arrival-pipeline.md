@@ -225,6 +225,15 @@ rather than waited on, because a reading that will never happen would hold every
 for ever.
 The ordering costs nothing beyond the wait: a message enrichment did not reach is simply outstanding for the next run.
 
+**The tasks a message asks for are written after that statement rather than inside it**, which is the one place this
+pass's two proposals behave differently. A calendar proposal joins the enrichment record's own commit, because an
+event nobody was offered is an event nobody will ever be offered. A task is written through the task store, which
+opens a session of its own by design: a list somebody owns is not part of the transaction that records having read
+their mail, and a suggestion that failed must not fail mail already committed. What that costs is a crash between the
+two, which loses a suggestion rather than proposing one twice — the opposite order would offer the same work again on
+the next run, since what takes a message out of the selection is the derivation being recorded. [Tasks read out of
+mail](../features/tasks-from-mail.md) is what a proposal is and what happens to it afterwards.
+
 **Nothing re-derives a message this pass settled.** Being derived from is what takes a message out of the pass's own
 selection, which is what makes an interrupted pass repeat nothing and skip nothing — and it is also the whole of how a
 mailbox stored before the switch was turned on is backfilled: successive runs drain it, eight messages at a time, and
@@ -381,6 +390,7 @@ has a scanner switched on.
 | What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |
 | What a message is about, why it may matter, and what backs each mark | [Message enrichment](../features/message-enrichment.md) |
 | Which occasions a message names, and why a deadline is not one | [Reading a calendar event out of text](../features/calendar-event-extraction.md) |
+| What a message asks its reader to do, offered as a task | [Tasks read out of mail](../features/tasks-from-mail.md) |
 | What a correspondence settled, left open, and undertook | [A conversation's state](../features/thread-state.md) |
 | Offering, embedding, and what a ceiling does | [Automatic embedding](../features/automatic-embedding.md) |
 | Reaching mail the live path missed | [Embedding backfill](../features/embedding-backfill.md) |

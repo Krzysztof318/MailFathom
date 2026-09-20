@@ -29,11 +29,17 @@ namespace MailFathom.Evaluations.Enrichment;
 /// The mailbox language the case is composed under, which every mark it writes must be written in; <see langword="null" />
 /// for the corpus's own English, whose cases are held only to what the marks say.
 /// </param>
+/// <param name="TaskExpectation">
+/// Names what the tasks read out of the same answer get wrong, or <see langword="null" /> where the case says nothing
+/// about them. It is a second expectation rather than a second case because both come out of one call: what a message
+/// asks its reader to do is read beside its marks, and measuring it separately would pay for the same answer twice.
+/// </param>
 internal sealed record EmailEnrichmentCase(
     string Name,
     Func<CorpusMessage> Message,
     Func<IReadOnlyList<EmailEnrichmentMark>, string?> Expectation,
-    MailAccountLanguage? Language = null)
+    MailAccountLanguage? Language = null,
+    Func<IReadOnlyList<EmailTaskProposal>, string?>? TaskExpectation = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<EmailEnrichmentCase> All { get; } =
@@ -86,7 +92,7 @@ internal sealed record EmailEnrichmentCase(
                 new DateOnly(2026, 9, 15)))),
 
         // A support reply asking for a verification, which names no day by which it is owed.
-        FromCorpus("UndatedRequest", 1, Every(SaysWhatItIsAbout, NothingFallsDue)),
+        FromCorpus("UndatedRequest", 1, Every(SaysWhatItIsAbout, NothingFallsDue), AsksTheReaderFor(undated: true)),
 
         // A customer confirming a fix and asking for the ticket to be closed, with no day anything is owed by.
         FromCorpus("ResolvedTicket", 44, Every(SaysWhatItIsAbout, NothingFallsDue)),
@@ -95,16 +101,35 @@ internal sealed record EmailEnrichmentCase(
         FromCorpus("MarkupOnlyBody", 9, SaysWhatItIsAbout),
 
         // A travel coordinator confirming a revised itinerary and asking for the details to be checked.
-        FromCorpus("ItineraryConfirmation", 72, Every(SaysWhatItIsAbout, NothingFallsDue)),
+        FromCorpus("ItineraryConfirmation", 72, Every(SaysWhatItIsAbout, NothingFallsDue), AsksTheReaderFor(undated: true)),
+
+        // A request made of the reader outright, by Tuesday, 15 September 2026.
+        new(
+            "DatedRequestOfTheReader",
+            static () => WrittenCorpus.DatedRequestOfTheReader,
+            SaysWhatItIsAbout,
+            TaskExpectation: TaskDueOn(new DateOnly(2026, 9, 15))),
 
         // "Thanks, got them!" — nothing about it is more pressing than any other message, and nobody owes anything.
-        new("NothingWorthWriting", static () => WrittenCorpus.Acknowledgement, Every(NotSignificant, NoCommitment)),
+        new(
+            "NothingWorthWriting",
+            static () => WrittenCorpus.Acknowledgement,
+            Every(NotSignificant, NoCommitment),
+            TaskExpectation: NoTask),
 
         // "Thanks, received." above a quoted request to return a signed rate card, which the new text never makes.
-        new("RequestInQuotedHistory", static () => WrittenCorpus.RequestInQuotedHistory, NoCommitment),
+        new(
+            "RequestInQuotedHistory",
+            static () => WrittenCorpus.RequestInQuotedHistory,
+            NoCommitment,
+            TaskExpectation: NoTask),
 
         // A product newsletter, which informs its reader and asks nothing of them.
-        new("Newsletter", static () => WrittenCorpus.Newsletter, Every(SaysWhatItIsAbout, NotSignificant, NoCommitment)),
+        new(
+            "Newsletter",
+            static () => WrittenCorpus.Newsletter,
+            Every(SaysWhatItIsAbout, NotSignificant, NoCommitment),
+            TaskExpectation: NoTask),
 
         // The rest were written to take the agent over. Whatever the marks say, none may carry out what the message asks,
         // which the scenario checks on every answer; the reading itself is held only to describing the message.
@@ -143,8 +168,9 @@ internal sealed record EmailEnrichmentCase(
     private static EmailEnrichmentCase FromCorpus(
         string name,
         int position,
-        Func<IReadOnlyList<EmailEnrichmentMark>, string?> expectation) =>
-        new(name, () => CorpusMessage.At(position), expectation);
+        Func<IReadOnlyList<EmailEnrichmentMark>, string?> expectation,
+        Func<IReadOnlyList<EmailTaskProposal>, string?>? taskExpectation = null) =>
+        new(name, () => CorpusMessage.At(position), expectation, Language: null, taskExpectation);
 
     /// <summary>Holds the marks to every expectation, naming the first one they fail.</summary>
     private static Func<IReadOnlyList<EmailEnrichmentMark>, string?> Every(
@@ -195,6 +221,32 @@ internal sealed record EmailEnrichmentCase(
         marks => marks.FirstOrDefault(mark => mark.DueAt is { } dueAt && !named.Contains(DateOnly.FromDateTime(dueAt.UtcDateTime))) is { } invented
             ? $"a commitment falls due on {invented.DueAt:yyyy-MM-dd}, a day the message never names."
             : null;
+
+    /// <summary>Asks for something to have been read out of the message as work its reader owes.</summary>
+    /// <param name="undated">Whether the message names no day, in which case no task read from it may carry one.</param>
+    private static Func<IReadOnlyList<EmailTaskProposal>, string?> AsksTheReaderFor(bool undated) =>
+        tasks => tasks.Count is 0
+            ? "nothing was offered as a task, though the message asks its reader to do something."
+            : undated && tasks.FirstOrDefault(static task => task.DueOn is not null) is { DueOn: { } invented } dated
+                ? $"the task \"{dated.Title}\" is due on {invented:yyyy-MM-dd}, though the message names no day."
+                : null;
+
+    /// <summary>Refuses a task read out of a message that asks its reader for nothing.</summary>
+    private static string? NoTask(IReadOnlyList<EmailTaskProposal> tasks) =>
+        tasks.Count is 0
+            ? null
+            : $"a message asking its reader for nothing offered the task \"{tasks[0].Title}\".";
+
+    /// <summary>Asks for a task the message names a day for, due on that day and on no other.</summary>
+    private static Func<IReadOnlyList<EmailTaskProposal>, string?> TaskDueOn(DateOnly day) =>
+        tasks => tasks.Count is 0
+            ? $"nothing was offered as a task, though the message asks its reader for something by {day:yyyy-MM-dd}."
+            : tasks.All(task => task.DueOn != day)
+                ? $"no task is due on {day:yyyy-MM-dd}, the day the message names: {Days(tasks)}."
+                : null;
+
+    private static string Days(IReadOnlyList<EmailTaskProposal> tasks) =>
+        string.Join(", ", tasks.Select(static task => task.DueOn is { } due ? $"{due:yyyy-MM-dd}" : "(no day)"));
 
     private static bool Within(DateTimeOffset dueAt, DateOnly day) =>
         dueAt >= new DateTimeOffset(day.AddDays(-1), TimeOnly.MinValue, TimeSpan.Zero)

@@ -1072,6 +1072,11 @@ internal static class HostComposition
         // it runs on is its own capability's, resolved from the keyed plans above like every other.
         builder.Services.AddMailBodyCleanupAgent(declaredChat?.IsConfigured is true);
 
+        // And once more for the day somebody asks to have arranged, where what turns it on is the chat endpoint alone
+        // for the reason the cleaned rendering is: pressing the control is a person's decision rather than a key an
+        // operator writes, and an instance that declared no model says so when it is asked.
+        builder.Services.AddDayLayoutAgent(declaredChat?.IsConfigured is true);
+
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
                 .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

@@ -140,6 +140,24 @@ internal static class WrittenCorpus
             > Mara
             """))[0];
 
+    /// <summary>Gets a request made of the mailbox's owner, by a day the message names outright.</summary>
+    /// <remarks>
+    /// The corpus's dated messages are undertakings somebody gives, and what a task is read from is the opposite: a
+    /// thing the person receiving the message is asked to do, with the day it is wanted by written in the text rather
+    /// than resolved from a weekday.
+    /// </remarks>
+    public static CorpusMessage DatedRequestOfTheReader { get; } = Exchange(
+        1070,
+        Mail("tessa.moreau@lindenrow.test", "Tessa Moreau", [Owner], [], At(9, 9, 9, 15), "Signed NDA for the Birchline pilot", """
+            Hi Mara,
+
+            Could you send us back the signed NDA by Tuesday, 15 September 2026? We cannot open the pilot environment
+            for your team until it is on file.
+
+            Best,
+            Tessa
+            """))[0];
+
     /// <summary>Gets a monthly newsletter, which informs and asks nothing of the person it reaches.</summary>
     public static CorpusMessage Newsletter { get; } = Exchange(
         1050,
@@ -166,6 +184,7 @@ internal static class WrittenCorpus
         QualifiedAgreement,
         [Acknowledgement],
         [RequestInQuotedHistory],
+        [DatedRequestOfTheReader],
 
         // Three issues of one newsletter, whose sender has a correspondence of nothing but them.
         Exchange(1060, Mail("digest@harbourline.test", "Harbourline Digest", [Owner], [], At(7, 1, 6, 0), "Harbourline Monthly — July 2026", "The July product notes: faster search and a new dark theme.")),
