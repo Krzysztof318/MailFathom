@@ -1230,7 +1230,7 @@ the client reads back from the sequence it already holds.
 They are tables rather than a buffer in a process because a load balancer places the request that asks the question, the
 requests that read the answer, and the request that stops the run independently, so a run held by the replica composing
 it is readable about one time in the replica count.
-[ADR 0035](../decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
+[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
 records that, and records why the answer is not carried over the optional signal backplane instead: what crosses it is
 a statement that something changed, never the thing itself.
 

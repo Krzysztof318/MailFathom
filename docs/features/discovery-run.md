@@ -196,7 +196,7 @@ Two refusals come before any of the above, and neither is a fallback.
 A run takes as long as a model and a mailbox take, and what it produces becomes readable in pieces — so it is written
 down as it happens rather than composed into one answer at the end. **The run is a row in PostgreSQL and its events are
 rows beside it**, written as each one is produced, which is what
-[ADR 0035](../decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
+[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
 settles. Three routes read and write it, all under the [client endpoint](../operations/client-endpoint.md) and all
 published under the same grant that governs asking a question anywhere else:
 
