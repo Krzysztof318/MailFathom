@@ -1479,8 +1479,14 @@ public static class ServiceCollectionExtensions
     /// operator switches on, and every surface over it is optional while none of them can be reached without it. It is
     /// scoped beside the context it reads and the session it writes through.
     /// </remarks>
-    private static void AddCalendar(IServiceCollection services) =>
+    private static void AddCalendar(IServiceCollection services)
+    {
         services.AddScoped<ICalendarEventStore, CalendarEventStore>();
+
+        // The use case a person reads and writes their own calendar through, scoped like the store beneath it: what it
+        // acts for comes off the principal the scope authenticated.
+        services.AddScoped<OwnCalendar>();
+    }
 
     /// <summary>Registers the units of work that turn a message's passages into vectors.</summary>
     /// <param name="services">The service collection.</param>
