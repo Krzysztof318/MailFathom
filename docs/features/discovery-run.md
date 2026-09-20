@@ -349,7 +349,10 @@ that crosses it is paid for.
 
 The eight is one person's across the deployment rather than one replica's, and it is counted by the statement that
 opens a run rather than by anything a process holds — so what the `429` says is what a person is actually held to,
-whichever replica answers them and however many replicas there are.
+whichever replica answers them and however many replicas there are. That statement counts behind a lock on the person,
+because a statement reads the database as it stood before the statement began: openings arriving together would
+otherwise each count the runs the others had not finished opening, and each find the room the last of them was about to
+take.
 
 Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
 is one whose execution never reported at all: a replica that stopped between the run being opened and being started, or

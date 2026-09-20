@@ -141,7 +141,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         }
 
         // Act
-        var refused = await store.TryOpenAsync(
+        var admittedNinth = await store.TryOpenAsync(
             DiscoveryRunId.New(),
             SyntheticMailUser.Deployment,
             Now,
@@ -153,15 +153,15 @@ public sealed class InMemoryDiscoveryRunStoreTests
             Now,
             TestContext.Current.CancellationToken);
 
-        var admitted = await store.TryOpenAsync(
+        var admittedAfterOneEnded = await store.TryOpenAsync(
             DiscoveryRunId.New(),
             SyntheticMailUser.Deployment,
             Now,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(refused);
-        Assert.True(admitted);
+        Assert.False(admittedNinth);
+        Assert.True(admittedAfterOneEnded);
     }
 
     /// <summary>The bound is one person's, so another person's questions are not refused by this one's.</summary>

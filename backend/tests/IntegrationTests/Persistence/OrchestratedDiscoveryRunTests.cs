@@ -218,7 +218,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
         }
     }
 
-    /// <summary>The concurrency bound is one person's across the deployment, counted by the statement that opens a run.</summary>
+    /// <summary>The concurrency bound is one person's across the deployment, counted wherever the run is opened.</summary>
     /// <remarks>
     /// The number an operator is told is what a person may run at once on the whole deployment, so it is counted in the
     /// table rather than per replica: a bound each process kept would let a deployment of four replicas run four times
@@ -247,13 +247,59 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             }
 
             // Act
-            var refused = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
+            var admittedNinth = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
             await oneReplica.AppendAsync(opened[0], Completed(), Instant, cancellationToken);
-            var admitted = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
+            var admittedAfterOneEnded = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
 
             // Assert
-            Assert.False(refused);
-            Assert.True(admitted);
+            Assert.False(admittedNinth);
+            Assert.True(admittedAfterOneEnded);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(oneHost, user);
+        }
+    }
+
+    /// <summary>The last place one person has left is given to one opening, however many reach for it together.</summary>
+    /// <remarks>
+    /// Two tabs, a retried click, and two replicas produce the same shape, and it is the shape the bound is lost in: a
+    /// statement takes its snapshot before it runs, so openings arriving together would each count the runs the others
+    /// had not committed yet and each find the room the last of them was going to take. Only a real database can show
+    /// that, because what decides it is the isolation level and the lock the opening takes ahead of its count.
+    /// </remarks>
+    [Fact]
+    public async Task TryOpenAsync_FromSeveralReplicasAtOnce_AdmitsOnlyWhatIsLeftOfThePersonsBound()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var oneHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await using var anotherHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(oneHost, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var oneReplica = await StoreOfAsync(oneHost, cancellationToken);
+            var anotherReplica = await StoreOfAsync(anotherHost, cancellationToken);
+
+            for (var run = 0; run < DiscoveryRunBounds.MaximumConcurrentRunsPerUser - 1; run++)
+            {
+                await OpenedAsync(oneReplica, user, cancellationToken);
+            }
+
+            // Act
+            var attempts = await ConcurrentIdempotency.RunAsync(
+                "Opening a Discover run from several replicas at once",
+                ContendingReplicas,
+                (ordinal, token) => (ordinal % 2 == 0 ? oneReplica : anotherReplica)
+                    .TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, token),
+                cancellationToken);
+
+            // Assert
+            Assert.Empty(attempts.Failures);
+            Assert.Equal(1, attempts.Results.Count(admitted => admitted));
         }
         finally
         {

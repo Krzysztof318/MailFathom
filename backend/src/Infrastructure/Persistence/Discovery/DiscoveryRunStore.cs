@@ -24,7 +24,8 @@ namespace MailFathom.Infrastructure.Persistence.Discovery;
 /// <para>
 /// <strong>Each statement is one round trip and decides everything it needs to.</strong> Opening sweeps, counts one
 /// person's runs, and inserts together, so the bound is the deployment's rather than a number each replica finds room
-/// under separately. Appending derives the sequence from what the run already holds inside the insert, so a run's
+/// under separately — behind one lock of its own, because a count is the one decision here a statement cannot settle
+/// alone. Appending derives the sequence from what the run already holds inside the insert, so a run's
 /// order is the database's rather than a counter in whichever process happens to be executing it. Reading stamps the
 /// run as used in the same statement that reads it. What would otherwise be a read followed by a write is one
 /// statement everywhere, which is what stops two replicas from acting on a state neither of them still holds.
@@ -45,12 +46,22 @@ namespace MailFathom.Infrastructure.Persistence.Discovery;
 [RequiresIntegrationCoverage]
 internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscoveryRunStore
 {
+    /// <summary>The seed one person's opening key is derived with, so this store's locks meet no other store's.</summary>
+    /// <remarks>
+    /// The value is arbitrary and only has to stay distinct from whatever else this product locks advisorily, which is
+    /// today the one deployment-wide key <c>StoredContentClaimStore</c> holds.
+    /// </remarks>
+    private const long OpeningSerializationSeed = 8_147_220_396_051_774_001L;
+
     /// <summary>Removes what nobody can come back for, then opens the run while this person is under the deployment's bound.</summary>
     /// <remarks>
     /// The removal is housekeeping rather than part of the decision: every figure the count reads filters on the same
     /// two windows anyway, so a row the sweep is deleting in this statement is one the count has already left out.
     /// Counting and inserting are one statement because two requests that each read a count of seven and then inserted
     /// would leave the person running nine, and the bound is a number a client is told rather than approximately it.
+    /// One statement is not enough on its own: a statement takes its snapshot before it runs, so two openings arriving
+    /// together would each count the runs the other had not committed yet and each find room. <c>HoldOpeningStatement</c>
+    /// is what puts a boundary between them.
     /// </remarks>
     private const string OpenRunStatement = $"""
         WITH forgotten AS (
@@ -68,6 +79,18 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
               AND "{DiscoveryRunEntity.EndedAtColumnName}" IS NULL
               AND "{DiscoveryRunEntity.StartedAtColumnName}" > @unreportedFrom) < @mostConcurrent;
         """;
+
+    /// <summary>Holds one person's openings against each other for as long as the count and the insert need.</summary>
+    /// <remarks>
+    /// A transaction-level advisory lock rather than a row to contend on, for the reason
+    /// <c>StoredContentClaimStore</c> gives: there is no row an opening naturally belongs to, and an insert takes no
+    /// lock a second insert would wait behind. It is taken in a statement of its own because a lock acquired inside
+    /// the counting statement would come too late — that statement's snapshot is taken before the lock could
+    /// serialize anything. The key is the person's rather than the deployment's, because the ceiling is one person's:
+    /// two people opening at once are exactly the pair that has nothing to wait for. The seed keeps this store's keys
+    /// clear of every other advisory lock the product takes.
+    /// </remarks>
+    private const string HoldOpeningStatement = "SELECT pg_advisory_xact_lock(hashtextextended(@userId::text, @seed));";
 
     /// <summary>Writes one event at the next place in its run, and ends the run where the event is an ending.</summary>
     /// <remarks>
@@ -183,7 +206,18 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand(OpenRunStatement);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var opening = await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var hold = new NpgsqlCommand(HoldOpeningStatement, connection, opening))
+        {
+            hold.Parameters.AddWithValue("userId", user.Value);
+            hold.Parameters.AddWithValue("seed", OpeningSerializationSeed);
+
+            await hold.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var command = new NpgsqlCommand(OpenRunStatement, connection, opening);
         command.Parameters.AddWithValue("id", id.Value);
         command.Parameters.AddWithValue("userId", user.Value);
         command.Parameters.AddWithValue("now", now.ToUniversalTime());
@@ -191,7 +225,11 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
         command.Parameters.AddWithValue("unreportedFrom", UnreportedFrom(now));
         command.Parameters.AddWithValue("mostConcurrent", DiscoveryRunBounds.MaximumConcurrentRunsPerUser);
 
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        var opened = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+
+        await opening.CommitAsync(cancellationToken);
+
+        return opened;
     }
 
     /// <inheritdoc />
