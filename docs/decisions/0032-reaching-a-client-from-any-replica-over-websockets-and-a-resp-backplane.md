@@ -107,7 +107,7 @@ The in-process dictionary becomes a table every replica shares, in the shape iss
 
 ADR 0009 refuses a message broker until PostgreSQL-backed work demonstrates a concrete limitation, and issue 1287 carried that refusal over to running in more than one replica. A RESP pub/sub backplane is a broker in the ordinary sense of the word, so this is an exception, and its boundary is part of the decision:
 
-- **It carries client signals, and nothing else.** The limitation it answers is concrete and narrow: no first-party SignalR fan-out runs over PostgreSQL. [Amendment 2](#amendment-2-a-configuration-change-is-announced-over-the-backplane) adds the one exception since decided — an empty announcement that a configuration change committed — and holds it to every other bullet here.
+- **It carries client signals, and nothing else.** The limitation it answers is concrete and narrow: no first-party SignalR fan-out runs over PostgreSQL. [Amendment 2](#amendment-2-a-configuration-change-is-announced-over-the-backplane) adds the one exception since decided — an empty announcement that a configuration change committed — and holds it to every other bullet here. [Amendment 3](#amendment-3-a-running-ai-answer-announces-only-how-far-it-has-got) adds no exception at all: it admits a seventh client signal, and states what that kind may carry so the vocabulary below stays where this record put it.
 - **It coordinates no work.** No job, lease, ceiling, ticket, or schedule goes through it. Every kind of work that must not run twice stays coordinated through PostgreSQL alone, as ADR 0031 decides.
 - **Nothing reads back from it.** It holds no state that any part of MailFathom depends on finding there later.
 - **Any later use is a decision of its own.** A cache would need its own record, weighing what caching mail-derived data in a second store costs against the privacy obligations every derived copy inherits.
@@ -290,11 +290,43 @@ The section above limited the backplane to client signals and made any other use
 
 **Anything further is still a decision of its own.** A second kind of message, a payload on this one, or a cache would each need the record the section above requires.
 
+### Amendment 3: a running AI answer announces only how far it has got
+
+*2026-09-20. Issue 2099.*
+
+The sections above fixed what a client signal may carry and made any other use of the backplane a decision of its own.
+[ADR 0035](0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) decides how a
+running AI answer — the Discover run's, and the Agent conversation's — reaches a client, and it rests entirely on this
+record's settlement: the answer is written to PostgreSQL as it is composed, the client re-reads the tail from its own
+cursor, and the backplane says only when to look. This amendment admits the one signal kind that needs, and records what
+it may carry.
+
+**A seventh kind joins the six.** It names the run — and, for the Agent, the conversation it belongs to — and the
+sequence that run has reached. That is an identifier this deployment generated and a number, published to the owner's
+group like every other signal, so every connection that person holds is told rather than only the one that asked.
+
+**It carries no part of the answer, and the vocabulary is unwidened.** No block, citation, retrieval count, spend
+figure, model name, endpoint alias, or any fragment of composed text crosses, and *no subject, address, body fragment,
+or attachment name* stands exactly as *What crosses the backplane* wrote it. That is the whole reason the answer is
+delivered by a re-read rather than by a push: an answer quotes mail in every part, and this record permits an operator
+to point the backplane at a managed service somebody else runs, which would make pushing one a disclosure of mail to
+that processor and a change to what the operator owes their own processing record.
+
+**It is held to every bullet under *The backplane carries client signals and nothing else*.** It is a client signal, so
+it is no exception to the broker refusal at all. It coordinates no work: a run executes on the replica that started it,
+and nothing about which replica does what travels here. Nothing reads back from it — the rows are the only source a
+client's answer comes from, and the signal says only when to read them. And it is not the guarantee: a client reads on
+mount unconditionally, after every reconnect, and on a fallback poll it arms from its own observation that a run is in
+flight and has not advanced, so a signal lost across a gap in the backplane costs latency and never the answer.
+
+**What it costs a deployment** is nothing beyond what this record already charges. It travels on the connection the hub
+already holds, to the group the client already joined, under the prefix already configured.
+
 ## More Information
 
 - **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts the deployed server or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children. Issue 1886 decided how a signed-in session survives more than one replica, which this record does not reach; [ADR 0033](0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md) is that answer, issue 1900 implements it, and issue 1295 waits on it as well.
 - **ADR 0009 and ADR 0031.** [ADR 0009](0009-durable-job-store-and-execution-identity.md) states the refusal of a message broker that this record makes one exception to, and that refusal stands for everything else. [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) divides the work between replicas, and this record does not touch it. This is a new record rather than an amendment to ADR 0031, because it adds a second kind of shared infrastructure beside PostgreSQL rather than refining the lease. The three records are linked in both directions.
 - **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the server's image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) decides the two heads that ship, and [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) the Android artifact beside them that nothing supports. All three speak WebSockets.
-- **Out of scope.** Azure SignalR Service and every other hosted backplane, any change to what a signal carries, and any use of the RESP endpoint other than client signals and the configuration announcement [Amendment 2](#amendment-2-a-configuration-change-is-announced-over-the-backplane) adds.
+- **Out of scope.** Azure SignalR Service and every other hosted backplane, any change to what the six signals named here carry, and any use of the RESP endpoint other than client signals and the configuration announcement [Amendment 2](#amendment-2-a-configuration-change-is-announced-over-the-backplane) adds. The seventh kind [Amendment 3](#amendment-3-a-running-ai-answer-announces-only-how-far-it-has-got) admits is the one addition since decided, and it widens the vocabulary by nothing.
 - **The `describes:` marker.** It names the code this decision is about as that code exists today: the hub, the ticket, and the channel under `backend/src/Host/Signals/`, and the client's transport and reconnection. It gains the ticket store, the backplane's registration, and the deployment assets as issues 1878 to 1881 land them.
 - **When to revisit.** Revisit when a supported head cannot speak WebSockets, or a deployment's network blocks the upgrade and needs a fallback. Revisit when the RESP endpoint is wanted for anything but client signals and the configuration announcement, which is a record of its own. Revisit when a first-party SignalR backplane over PostgreSQL appears. And revisit when signals lost during a backplane outage are measured as a problem the five-minute re-read does not cover.
