@@ -539,7 +539,11 @@ task already stands in writes nothing, and erasing something already erased is t
 
 `ix_tasks_user_due` covers `(UserId, DueOn, Id)`, which is the order the list is both read and drawn in: one person's
 tasks soonest due first, with PostgreSQL's own `NULLS LAST` putting the undated ones at the end and the identifier
-keeping two tasks due on one day in a stable order across reads. The groupings a screen shows — today, this week,
+keeping two tasks due on one day in a stable order across reads. That pair is also the keyset a page continues from,
+so a list longer than one page is walked by position rather than by offset — which matters on a list somebody edits
+while they read it, since dating or completing a task between two pages would shift an offset window and repeat or
+skip a row on every page after it. Continuing from a boundary with no day walks the undated block alone, because
+nothing in this order comes after it. The groupings a screen shows — today, this week,
 later — are derived from `DueOn` against the reader's own day rather than stored, so nothing can say one thing in the
 column and another in the group.
 

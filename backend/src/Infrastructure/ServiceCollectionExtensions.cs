@@ -1395,8 +1395,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SynchronizationNotifications>();
         services.AddScoped<NotificationRetention>();
         services.AddScoped<OwnNotifications>();
-        // What a person owes, native to this deployment. Scoped like every other store, because each write opens a
-        // session on the scope's own context.
+        // What a person owes, native to this deployment. Scoped like every other store: a write that has a read to
+        // make first opens a session on the scope's own context, and the erasure, which has none, reaches that same
+        // context directly.
         services.AddScoped<IPersonalTaskStore, PersistedPersonalTaskStore>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive

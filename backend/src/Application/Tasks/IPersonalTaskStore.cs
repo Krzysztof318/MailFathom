@@ -25,18 +25,24 @@ public interface IPersonalTaskStore
     /// <summary>Reads one bounded page of a person's tasks, soonest due first.</summary>
     /// <param name="user">The person whose list is read.</param>
     /// <param name="origin">The origin to read, or <see langword="null" /> for the whole list.</param>
+    /// <param name="after">The position a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <param name="limit">The greatest number of tasks the answer may hold.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The tasks, soonest due first, with the undated ones last, holding at most <paramref name="limit" />.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin, or when <paramref name="limit" /> is not positive.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="after" /> is the struct default, which names no position.</exception>
     /// <remarks>
     /// Naming an origin is what reads the proposals apart from the commitments, so a screen can offer what mail
     /// suggested without it standing on the list as something the person agreed to. Completed tasks are read with the
     /// outstanding ones, because whether a list shows what is done is the screen's decision and not the store's.
+    /// The boundary is a position rather than an offset, so a task dated, completed, or accepted while somebody is
+    /// paging neither shifts the window nor causes a row to be repeated or skipped. Whether the cursor was issued to
+    /// this user is the caller's question rather than the store's: this reads the user it is given and nothing else.
     /// </remarks>
     Task<IReadOnlyList<PersonalTask>> ReadAsync(
         MailUserId user,
         PersonalTaskOrigin? origin,
+        PersonalTaskCursor? after,
         int limit,
         CancellationToken cancellationToken);
 

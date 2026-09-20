@@ -60,6 +60,7 @@ internal sealed class PersistedPersonalTaskStore(
     public async Task<IReadOnlyList<PersonalTask>> ReadAsync(
         MailUserId user,
         PersonalTaskOrigin? origin,
+        PersonalTaskCursor? after,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -70,6 +71,13 @@ internal sealed class PersistedPersonalTaskStore(
             throw new ArgumentOutOfRangeException(nameof(origin), requested, "A task carries a declared origin.");
         }
 
+        if (after is { Task.IsSpecified: false })
+        {
+            throw new ArgumentException(
+                "A cursor continues a walk after a specified task, so the struct default names no position.",
+                nameof(after));
+        }
+
         var userValue = user.Value;
         var rows = readContext.PersonalTasks
             .AsNoTracking()
@@ -78,6 +86,11 @@ internal sealed class PersistedPersonalTaskStore(
         if (origin is { } named)
         {
             rows = rows.Where(task => task.Origin == named);
+        }
+
+        if (after is { } boundary)
+        {
+            rows = ReadBeyond(rows, boundary);
         }
 
         var page = await rows
@@ -145,6 +158,31 @@ internal sealed class PersistedPersonalTaskStore(
             .ExecuteDeleteAsync(cancellationToken);
 
         return erased > 0;
+    }
+
+    /// <summary>Narrows a person's tasks to the ones the order puts after a boundary.</summary>
+    /// <remarks>
+    /// The order is the day ascending with PostgreSQL's own <c>NULLS LAST</c> and the identifier breaking a tie, so
+    /// continuing past a boundary is two cases rather than one. From a dated boundary the rest is every later day, the
+    /// same day beyond that identifier, and the whole undated block that follows every date; a comparison against
+    /// <c>NULL</c> yields <c>NULL</c> rather than true, which is why the undated block is named rather than left to
+    /// the inequality. From an undated boundary the rest is the remainder of that block alone, because nothing in this
+    /// order comes after it.
+    /// </remarks>
+    private static IQueryable<PersonalTaskEntity> ReadBeyond(
+        IQueryable<PersonalTaskEntity> rows,
+        PersonalTaskCursor boundary)
+    {
+        var boundaryId = boundary.Task.Value;
+
+        if (boundary.DueOn is not { } boundaryDueOn)
+        {
+            return rows.Where(task => task.DueOn == null && task.Id > boundaryId);
+        }
+
+        return rows.Where(task => task.DueOn == null
+            || task.DueOn > boundaryDueOn
+            || (task.DueOn == boundaryDueOn && task.Id > boundaryId));
     }
 
     /// <summary>Finds one of a person's tasks inside the session and applies a change to it.</summary>
