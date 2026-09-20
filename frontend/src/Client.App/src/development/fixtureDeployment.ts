@@ -12,6 +12,7 @@ import {
     type ClientRequest,
     type ClientResponse,
 } from '@mailfathom/client-backend';
+import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
@@ -349,12 +350,55 @@ function answerFor(
     }
 
     return (
+        calendarAnswer(route, asked, request, options) ??
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??
         contactAnswer(route, request, options) ??
         draftAnswer(route, request) ??
         messageAnswer(route, asked) ?? { status: 404, body: '', headers: {} }
     );
+}
+
+/**
+ * What the calendar answers: the window a view is drawing, the capability behind the description field, and the four
+ * writes.
+ *
+ * The drafting address is read before the window for the reason the collected book is read before the asserted one —
+ * the window's path is a prefix of it.
+ */
+function calendarAnswer(
+    route: string,
+    asked: URLSearchParams,
+    request: ClientRequest,
+    options: Readonly<FixtureDeploymentOptions>,
+): ClientResponse | null {
+    if (!route.startsWith('/calendar')) {
+        return null;
+    }
+
+    if (route === '/calendar/drafts') {
+        return request.method === 'GET'
+            ? answering(calendar.calendarDescriptionsRead)
+            : answering(calendar.calendarEventDrafted);
+    }
+
+    if (request.method === 'DELETE') {
+        return { status: 204, body: '', headers: {} };
+    }
+
+    if (request.method === 'POST' || request.method === 'PUT') {
+        return answering(calendar.calendarEventWritten);
+    }
+
+    if (route === '/calendar') {
+        return answering(
+            options.emptyCollections
+                ? calendar.emptyCalendarWindow
+                : calendar.calendarWindow(asked.get('from') ?? '', asked.get('until') ?? ''),
+        );
+    }
+
+    return answering(calendar.calendarEventWritten);
 }
 
 /**

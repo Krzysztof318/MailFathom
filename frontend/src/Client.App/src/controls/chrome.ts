@@ -19,3 +19,21 @@ export const borderedControl = 'rounded-md border border-line bg-panel text-text
  * restyle of the pill is one edit rather than three that drift.
  */
 export const chip = 'rounded-full border border-line bg-rail text-base text-text-soft transition hover:bg-hover';
+
+/**
+ * What a field in a dialog is drawn with: the corner, the line around it, the fill it stands on, and what focus does to
+ * that line.
+ *
+ * Stated once because three dialogs draw one — writing a contact down, naming a folder, and putting an event on the
+ * calendar — and the first two had already written the same nine utilities out twice before the third arrived.
+ */
+export const dialogField =
+    'w-full rounded-lg border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
+
+/**
+ * What the label over such a field is drawn with, which travels with the field rather than beside it.
+ *
+ * The same three dialogs draw one, and a label that drifted from the field under it would be the half of a form that
+ * looks like a second form.
+ */
+export const dialogFieldLabel = 'text-2xs tracking-widest text-muted uppercase';

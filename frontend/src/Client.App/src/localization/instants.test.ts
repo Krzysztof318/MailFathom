@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { wordCalendarDay, wordInstant, wordRecentInstant } from './instants';
+import { wordCalendarDay, wordInstant, wordInstantRange, wordRecentInstant } from './instants';
 
 // The zone is pinned rather than compared against a formatter built the same way, which is the whole point of this
 // file: an assertion written as `expect(shown).toBe(new Intl.DateTimeFormat(locale, options).format(at))` passes for a
@@ -49,6 +49,55 @@ describe('wordInstant', () => {
 
     it('answers with nothing where what the service sent is not an instant this client can read', () => {
         expect(wordInstant('the day before yesterday', 'en', 'full')).toBeNull();
+    });
+});
+
+describe('wordInstantRange', () => {
+    // A meeting on one morning in Warsaw, which is the shape a calendar entry has: two instants an hour and a half
+    // apart on one day.
+    const opens = '2026-09-24T09:00:00+02:00';
+    const closes = '2026-09-24T10:30:00+02:00';
+
+    it('says the run between two instants with the dash and the spacing the language uses', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordInstantRange(opens, closes, 'en', 'time')).toBe('9:00\u2009\u2013\u200910:30 AM');
+    });
+
+    it('says the same run the way the other language says one, rather than in English order', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordInstantRange(opens, closes, 'pl', 'time')).toBe('09:00\u201310:30');
+    });
+
+    it('places the run in the zone the reader is actually in', () => {
+        process.env['TZ'] = 'America/Los_Angeles';
+
+        expect(wordInstantRange(opens, closes, 'en', 'time')).toBe('12:00\u2009\u2013\u20091:30 AM');
+    });
+
+    it('says the whole of both ends where a reader has stopped on them', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordInstantRange(opens, closes, 'en', 'full')).toBe(
+            'September 24, 2026, 9:00\u2009\u2013\u200910:30 AM',
+        );
+    });
+
+    it('says the first alone where the event states no end', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordInstantRange(opens, null, 'en', 'time')).toBe('9:00 AM');
+    });
+
+    it('says the first alone where the end is not an instant this client can read', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordInstantRange(opens, 'the day after', 'en', 'time')).toBe('9:00 AM');
+    });
+
+    it('answers with nothing where the beginning is not an instant this client can read', () => {
+        expect(wordInstantRange('whenever', closes, 'en', 'time')).toBeNull();
     });
 });
 

@@ -9739,6 +9739,12 @@ FAKE_MAGICK
 # surface at all, and each one says why.
 client_answer_bindings() {
   cat <<'BINDINGS'
+calendar.ts calendarWindow GET /api/client/calendar
+calendar.ts placed GET /api/client/calendar
+calendar.ts emptyCalendarWindow GET /api/client/calendar
+calendar.ts calendarEventWritten POST /api/client/calendar
+calendar.ts calendarDescriptionsRead GET /api/client/calendar/drafts
+calendar.ts calendarEventDrafted POST /api/client/calendar/drafts
 changes.ts flagsRecorded POST /api/client/mutations/flags
 changes.ts movesPartlyRecorded POST /api/client/mutations/moves
 changes.ts mutationRecords GET /api/client/mutations

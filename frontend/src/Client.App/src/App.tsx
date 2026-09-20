@@ -19,6 +19,7 @@ import {
 } from '@mailfathom/client-backend';
 import { BlockingOverlay } from './blocking/BlockingOverlay';
 import { BlockingContext, type BlockingOperation } from './blocking/useBlocking';
+import { CalendarSpace } from './calendar/CalendarSpace';
 import { Composer } from './composer/Composer';
 import type { ComposerOpening } from './composer/composition';
 import { forgetComposition } from './composer/keptComposition';
@@ -1090,6 +1091,32 @@ export function App({
                                                                                             });
                                                                                             openTabs.openMail(
                                                                                                 document.messageId,
+                                                                                                null,
+                                                                                            );
+                                                                                            window.location.hash =
+                                                                                                addressOf('mail');
+                                                                                        }}
+                                                                                    />
+                                                                                )
+                                                                            }
+                                                                            calendar={
+                                                                                session === null ||
+                                                                                !readsMail ? null : (
+                                                                                    <CalendarSpace
+                                                                                        session={session}
+                                                                                        transport={readMail}
+                                                                                        onOpenMessage={(messageId) => {
+                                                                                            // An event read out of
+                                                                                            // mail cites the message
+                                                                                            // it came from, and mail
+                                                                                            // is read in the Mail
+                                                                                            // space: the message is
+                                                                                            // opened and the address
+                                                                                            // follows it, exactly as
+                                                                                            // a person's page does
+                                                                                            // with what it cites.
+                                                                                            openTabs.openMail(
+                                                                                                messageId,
                                                                                                 null,
                                                                                             );
                                                                                             window.location.hash =

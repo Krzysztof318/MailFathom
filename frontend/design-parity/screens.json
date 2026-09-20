@@ -253,6 +253,21 @@
       "compositions": ["tablet", "desktop"]
     },
     {
+      "id": "calendar",
+      "route": "/#/calendar",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "button",
+            "name": "Today",
+            "exact": true
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
       "id": "people",
       "route": "/#/people",
       "signIn": true,
