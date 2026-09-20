@@ -7,6 +7,7 @@ using MailFathom.AI.CalendarEvents;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.ContactRelationships;
+using MailFathom.AI.DayLayout;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Discovery;
 using MailFathom.AI.Embeddings;
@@ -38,6 +39,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -402,6 +404,46 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IMailBodyCleaner, MailBodyCleanupAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the one way a day is arranged, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="isActivated">Whether the deployment declared a chat endpoint to arrange a day with.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called unconditionally and always registering something, for the reason enrichment beside it is: the port
+    /// answers with a reason rather than with an absence, so the screen draws what a deployment cannot do as a
+    /// sentence rather than as a control that fails.
+    /// </para>
+    /// <para>
+    /// What turns it on is the chat endpoint alone, exactly as the cleaned rendering of a body is: whether a day is
+    /// ever arranged follows from somebody pressing the control, which is a person's decision rather than a key an
+    /// operator writes. Which of the two is registered is decided once, at composition, so an instance that declared
+    /// no model never resolves a chat client, never opens a transport, and never composes a turn.
+    /// </para>
+    /// <para>
+    /// Scoped when it is active, because a request is one scope and the agent's ledger, credential, and transport
+    /// belong to that request. The inactive one is a singleton holding nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddDayLayoutAgent(this IServiceCollection services, bool isActivated)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (!isActivated)
+        {
+            services.AddSingleton<IDayLayoutPlanner>(InactiveDayLayoutPlanner.Instance);
+
+            return services;
+        }
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IDayLayoutPlanner, DayLayoutAgent>();
 
         return services;
     }

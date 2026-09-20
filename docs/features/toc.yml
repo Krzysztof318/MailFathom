@@ -82,6 +82,9 @@
 - name: Reading a calendar event out of text
   href: calendar-event-extraction.md
   description: Which occasions MailFathom reads out of an arriving message and out of a sentence somebody types, why a deadline is not one of them, which clock an hour is resolved in, and what the reading costs.
+- name: Tasks read out of mail
+  href: tasks-from-mail.md
+  description: How a message that asks its reader to do something becomes a task nobody has agreed to yet, and how the tasks owed today are arranged around what the day already holds when somebody asks for it.
 - name: The Discover run
   href: discovery-run.md
   description: How a question and its scope become a retrieval plan and a block composition, what the model decides and what the code derives, and what a run does when no plan can be read.

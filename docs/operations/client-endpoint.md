@@ -128,6 +128,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/notifications/deletions` | `mailfathom.mail.read` |
 | `GET /api/client/tasks` | `mailfathom.mail.read` |
 | `GET /api/client/tasks/proposed` | `mailfathom.mail.read` |
+| `GET /api/client/tasks/today/layout` | `mailfathom.mail.ask` |
+| `POST /api/client/tasks/today/layout` | `mailfathom.mail.ask` |
 | `GET /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
 | `POST /api/client/tasks` | `mailfathom.mail.read` |
 | `PUT /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
@@ -2932,6 +2934,50 @@ reasoning rather than [the mutation routes](#the-mutation-routes)' — a person 
 maintains does not hold a write grant and still has to be able to keep their own list. `mailfathom.mail.delete` is the
 power to remove somebody's mail and is not what the erasure asks for: what leaves is a commitment about a message that
 stays.
+
+### The day-layout routes
+
+These are the two routes behind *Lay out today*: one says whether this deployment arranges a day at all, and the other
+arranges one. Nothing here writes: an arrangement is drawn beside the list the person already holds and comes to
+nothing unless they act on it, through the routes above that own each of those acts.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/tasks/today/layout` | Says whether this deployment arranges a day |
+| `POST /api/client/tasks/today/layout` | Suggests an arrangement of one day, and changes nothing |
+
+**Which hours are somebody's day is their client's to state.** The body carries `from` and `until` as ISO 8601
+instants, exactly as [the calendar window](#the-calendar-routes) does and for the same reason: this deployment keeps no
+timezone for a person, so the offsets their own client drew are what say which day is meant. A window that closes
+before it opens, or runs longer than 48 hours, is answered `400` naming the rule; a body stating neither instant is
+answered the same way.
+
+**What is arranged is what they owe by that day.** The committed half of the list is read — a proposal nobody accepted
+is not work they owe — narrowed to the tasks due on or before that day and not yet done, soonest due first and at most
+20 of them. An undated task is not part of any particular day and stays where it is. What the day is already spoken
+for is read through the calendar route's own reading, narrowed to the events on the calendar rather than the dates
+mail proposed.
+
+**The answer names tasks and never repeats them.** `placements` carries `taskId`, `startAt`, and `minutes` for each
+task the arrangement placed, earliest first; `notToday` carries the identifiers of the ones that do not realistically
+fit. A client draws each row from the task it already holds, so no line of anybody's list travels back over this
+route. A placement falls inside the window that was asked about and runs between 5 and 480 minutes, and a task appears
+in at most one of the two lists.
+
+**A deployment that arranges no day answers `200` saying so**, with `arranged` false and both lists empty, and so does
+a provider that did not answer. The two are one answer on purpose — what a client does about either is identical, and
+naming which would publish a deployment's configuration to every signed-in browser. `GET` is what a screen asks before
+it offers the control, so a deployment that composes nothing is not offering a button that fails. **A spent allowance
+is the one refusal that travels**, as `429`, because falling back to "nothing arranged" would leave somebody pressing
+a control the last of the allowance has already been paid for, told nothing.
+
+**Both routes are `mailfathom.mail.ask` rather than the read grant the rest of the list is served under**, for the
+reason [reply drafting](#the-reply-drafting-routes) carries that grant: arranging a day is a provider call charged to
+the same allowance a question is. It is what the call costs that decides the grant here, rather than which of this
+deployment's own records were read to compose it. **`POST` asks for `mailfathom.mail.read` beneath it as well**, for
+the reason [the contact card](#the-contact-relationship-route) asks for the grants its correlation needs: the tasks and
+the calendar it reads to compose the turn are that grant's own records, so a caller holding the asking grant alone is
+refused naming the one they are missing. `GET` reads neither and answers on the asking grant alone.
 
 ### The calendar routes
 

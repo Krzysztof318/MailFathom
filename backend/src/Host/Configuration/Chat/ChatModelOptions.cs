@@ -98,6 +98,14 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default as the block above it is — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
     public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
 
+    /// <summary>Gets or sets which declared model arranges a day when somebody asks for one.</summary>
+    /// <remarks>
+    /// A block carrying the reference and nothing else, and one of the two that carries no switch at all. What decides
+    /// whether a day is ever arranged is the person pressing the control, not a key an operator writes: an instance
+    /// that declared a model offers it, and one that declared none says so when it is asked.
+    /// </remarks>
+    public ChatCapabilityModelOptions DayLayout { get; set; } = new();
+
     /// <summary>Gets or sets whether an opened contact is read into a note about where the correspondence with them stands.</summary>
     /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and on is the default for the reason reply drafting is — the block itself says why, and what turning it off leaves is the contact page every deployment drew before this existed.</remarks>
     public ContactRelationshipOptions ContactRelationship { get; set; } = new();
@@ -170,6 +178,7 @@ internal sealed class ChatModelOptions : IValidatableObject
         ChatCapability.ImageDescription => this.ImageDescription.Model,
         ChatCapability.BodyCleanup => this.BodyCleanup.Model,
         ChatCapability.CalendarEventExtraction => this.CalendarEventExtraction.Model,
+        ChatCapability.DayLayout => this.DayLayout.Model,
         _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, "The section declares no model reference for this capability."),
     };
 

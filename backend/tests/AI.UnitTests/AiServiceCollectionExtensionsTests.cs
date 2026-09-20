@@ -5,6 +5,7 @@
 using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.CalendarEvents;
 using MailFathom.AI.Chat;
+using MailFathom.AI.DayLayout;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Enrichment;
@@ -28,6 +29,7 @@ using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Tasks;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -448,6 +450,66 @@ public sealed class AiServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => AiServiceCollectionExtensions.AddCalendarEventExtractionAgent(null!, isActivated: false));
+    }
+
+    /// <summary>
+    /// The port is registered whichever declaration a deployment made, for the reason enrichment's is: the reading
+    /// needs a reason it can report to the person who pressed the control, rather than an absent service a screen
+    /// would have to interpret.
+    /// </summary>
+    [Fact]
+    public void AddDayLayoutAgent_NotActivated_ResolvesThePlannerThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddDayLayoutAgent(isActivated: false);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveDayLayoutPlanner>(provider.GetRequiredService<IDayLayoutPlanner>());
+    }
+
+    /// <summary>Scoped where it is active, because each arrangement opens its own credential, transport, and client.</summary>
+    [Fact]
+    public void AddDayLayoutAgent_Activated_ResolvesTheAgentOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(services);
+        services.AddScoped(_ => MailAnsweringRunBounds.Default);
+        services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddScoped(_ => Substitute.For<IHttpClientFactory>());
+        services.AddScoped(_ => Substitute.For<IOutboundOperationRunner>());
+        services.AddScoped(_ => Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped(_ => SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddDayLayoutAgent(isActivated: true);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var planner = scope.ServiceProvider.GetRequiredService<IDayLayoutPlanner>();
+
+        Assert.IsType<DayLayoutAgent>(planner);
+        Assert.Same(planner, scope.ServiceProvider.GetRequiredService<IDayLayoutPlanner>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(planner, second.ServiceProvider.GetRequiredService<IDayLayoutPlanner>());
+    }
+
+    [Fact]
+    public void AddDayLayoutAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddDayLayoutAgent(null!, isActivated: false));
     }
 
     /// <summary>

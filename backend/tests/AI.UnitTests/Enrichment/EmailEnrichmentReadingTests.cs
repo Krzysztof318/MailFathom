@@ -49,7 +49,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Equal(
@@ -72,7 +72,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Equal(EmailEnrichmentSource.Model, marks[0].Provenance.Source);
@@ -92,7 +92,7 @@ public sealed class EmailEnrichmentReadingTests
             "```");
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Equal("a quotation", Assert.Single(marks).Text);
@@ -108,7 +108,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Empty(marks);
@@ -124,7 +124,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Empty(marks);
@@ -143,7 +143,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Equal(EmailEnrichmentAspect.Significance, Assert.Single(marks).Aspect);
@@ -166,7 +166,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         var mark = Assert.Single(marks);
@@ -191,7 +191,7 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Null(Assert.Single(marks).DueAt);
@@ -207,7 +207,7 @@ public sealed class EmailEnrichmentReadingTests
     public void Read_AnAnswerNothingCanBeReadFrom_ProducesNoMarks(string? answer)
     {
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, Passages, AgentName).Marks;
 
         // Assert
         Assert.Empty(marks);
@@ -231,11 +231,117 @@ public sealed class EmailEnrichmentReadingTests
             """;
 
         // Act
-        var marks = EmailEnrichmentReading.Read(answer, manyPassages, AgentName);
+        var marks = EmailEnrichmentReading.Read(answer, manyPassages, AgentName).Marks;
 
         // Assert
         Assert.Equal(
             [.. manyPassages.Take(EmailEnrichmentMark.MaximumEvidenceCount).Select(passage => passage.Id)],
             Assert.Single(marks).Evidence);
+    }
+
+    /// <summary>What the message asks of the person is read beside the marks, out of the one answer both came in.</summary>
+    [Fact]
+    public void Read_AnAnswerListingWhatTheMessageAsksFor_ReadsEachOfThemAsAProposal()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "sense": { "text": "a racking quotation", "reason": "the first passage attaches one", "passages": [0] },
+              "tasks": [
+                { "title": "Answer the supplier", "dueOn": "2026-09-11" },
+                { "title": "Countersign the quotation" }
+              ]
+            }
+            """;
+
+        // Act
+        var derivation = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+
+        // Assert
+        Assert.Equal(
+            ["Answer the supplier", "Countersign the quotation"],
+            derivation.Tasks.Select(task => task.Title));
+        Assert.Equal(new DateOnly(2026, 9, 11), derivation.Tasks[0].DueOn);
+        Assert.Null(derivation.Tasks[1].DueOn);
+        Assert.Single(derivation.Marks);
+    }
+
+    /// <summary>Most mail asks for nothing, and an answer that says so proposes nothing.</summary>
+    [Fact]
+    public void Read_AnAnswerListingNothingToDo_ProposesNoTask()
+    {
+        // Arrange
+        const string answer = """
+            { "sense": { "text": "a newsletter", "reason": "it announces a release", "passages": [0] } }
+            """;
+
+        // Act
+        var derivation = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+
+        // Assert
+        Assert.Empty(derivation.Tasks);
+    }
+
+    /// <summary>A task is due on a day, so an instant a model wrote instead is read as the day it falls on.</summary>
+    [Fact]
+    public void Read_AProposalDatedByTheInstant_ReadsItAsTheDayItFallsOn()
+    {
+        // Arrange
+        const string answer = """
+            { "tasks": [{ "title": "Answer the supplier", "dueOn": "2026-09-11T16:30:00Z" }] }
+            """;
+
+        // Act
+        var derivation = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+
+        // Assert
+        Assert.Equal(new DateOnly(2026, 9, 11), Assert.Single(derivation.Tasks).DueOn);
+    }
+
+    /// <summary>A day nothing can read falls away on its own rather than taking with it something somebody was asked to do.</summary>
+    [Fact]
+    public void Read_AProposalDatedByNothingReadable_KeepsTheProposalWithoutADay()
+    {
+        // Arrange
+        const string answer = """
+            { "tasks": [{ "title": "Answer the supplier", "dueOn": "as soon as you can" }] }
+            """;
+
+        // Act
+        var derivation = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+
+        // Assert
+        Assert.Null(Assert.Single(derivation.Tasks).DueOn);
+    }
+
+    /// <summary>A proposal with no line states nothing a person could act on.</summary>
+    [Theory]
+    [InlineData("""{ "tasks": [{ "dueOn": "2026-09-11" }] }""")]
+    [InlineData("""{ "tasks": [{ "title": "   " }] }""")]
+    public void Read_AProposalStatingNothingToDo_DropsIt(string answer)
+    {
+        // Act
+        var derivation = EmailEnrichmentReading.Read(answer, Passages, AgentName);
+
+        // Assert
+        Assert.Empty(derivation.Tasks);
+    }
+
+    /// <summary>A person handed a list of twenty things from one message has been given work rather than saved it.</summary>
+    [Fact]
+    public void Read_MoreProposalsThanOneMessageProduces_KeepsTheLeadingOnes()
+    {
+        // Arrange
+        var written = string.Join(
+            ",",
+            Enumerable.Range(0, EmailTaskProposal.MaximumPerEmail + 3)
+                .Select(ordinal => $$"""{ "title": "Task {{ordinal}}" }"""));
+
+        // Act
+        var derivation = EmailEnrichmentReading.Read($$"""{ "tasks": [{{written}}] }""", Passages, AgentName);
+
+        // Assert
+        Assert.Equal(EmailTaskProposal.MaximumPerEmail, derivation.Tasks.Count);
+        Assert.Equal("Task 0", derivation.Tasks[0].Title);
     }
 }

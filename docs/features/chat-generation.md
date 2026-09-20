@@ -50,9 +50,10 @@ reader waits in front of on a small fast model writes a second block rather than
 **Every capability may name a model of its own**, through a `Model` block shaped exactly alike wherever it appears:
 `Chat:MailAnswering`, `Chat:DiscoveryPlanning`, `Chat:DiscoveryComposition`, `Chat:Enrichment`, `Chat:ThreadState`,
 `Chat:ReplyDrafting`, `Chat:ContactRelationship`, `Chat:SearchPhrasing`, `Chat:RelevanceFilter`,
-`Chat:ImageDescription`, `Chat:BodyCleanup`, and `Chat:CalendarEventExtraction`. That is what lets one deployment run the per-message derivations and
-the per-candidate judgement on a cheap fast model while answering and drafting keep the best one it pays for, and
-describe a picture with a vision model while everything else runs on a cheaper text-only one. A capability that names
+`Chat:ImageDescription`, `Chat:BodyCleanup`, `Chat:CalendarEventExtraction`, and `Chat:DayLayout`. That is what lets
+one deployment run the per-message derivations and the per-candidate judgement on a cheap fast model while answering
+and drafting keep the best one it pays for, and describe a picture with a vision model while everything else runs on a
+cheaper text-only one. A capability that names
 none runs on `Chat:MainModel`, which is what every deployment did before these keys existed.
 
 **A deployment with one model writes one block and nothing else.** `Chat:MainModel` may be left unwritten where exactly
@@ -580,10 +581,10 @@ fallback answered records `Serving`: the deployment *can* answer questions, whic
 fall-through — naming both aliases and the failure that caused it — is what does.
 
 **Every other capability records the role's health against whichever model answered it.** A deployment that routed
-enrichment, a thread state, a reply draft, a relationship card, a search reading, a Discover step, a judged candidate or
-an image description to a model of its own therefore has that endpoint's outcomes deciding the chat role — so a failing
-cheap endpoint reports the role degraded, and withholds `ask_mail`, although the model questions are answered with is
-working. Routing a capability elsewhere is worth knowing for that reason as much as for the bill, and the warning each
+enrichment, a thread state, a reply draft, a relationship card, a search reading, a Discover step, a judged candidate,
+an arranged day or an image description to a model of its own therefore has that endpoint's outcomes deciding the chat
+role — so a failing cheap endpoint reports the role degraded, and withholds `ask_mail`, although the model questions
+are answered with is working. Routing a capability elsewhere is worth knowing for that reason as much as for the bill, and the warning each
 fall-through writes is what names the endpoint that actually failed.
 
 **The body-cleanup pass records nothing, because the state it would write is not about it.** `Chat:BodyCleanup:Model`

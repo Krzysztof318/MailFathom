@@ -8,7 +8,7 @@ using MailFathom.Application.Emails.Enrichment;
 
 namespace MailFathom.AI.Enrichment;
 
-/// <summary>Turns what an enrichment agent wrote into marks, keeping only what the message itself can back.</summary>
+/// <summary>Turns what an enrichment agent wrote into marks and proposals, keeping only what the message itself can back.</summary>
 /// <remarks>
 /// <para>
 /// Every reading below is a pure function of the answer and the passages the turn published, which is what makes the
@@ -31,13 +31,17 @@ internal static class EmailEnrichmentReading
 {
     private const string JsonFence = "```";
 
-    /// <summary>Reads the marks out of an agent's answer.</summary>
+    /// <summary>Reads the marks and the proposed tasks out of an agent's answer.</summary>
     /// <param name="answerText">What the agent wrote, which may be empty, fenced, or surrounded by prose.</param>
     /// <param name="passages">The passages the turn published, in the order it numbered them.</param>
     /// <param name="agentName">The name the agent was composed under, which every mark records as its origin.</param>
-    /// <returns>The marks that survived, which is empty where none did.</returns>
+    /// <returns>The settled derivation, which carries nothing at all where nothing survived.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="passages" /> is <see langword="null" />.</exception>
-    internal static IReadOnlyList<EmailEnrichmentMark> Read(
+    /// <remarks>
+    /// One reading for both halves, because both come out of the one answer: the derivation is what the call produced,
+    /// and splitting it into two readings would parse the same text twice to hand the caller two lists to recombine.
+    /// </remarks>
+    internal static EmailEnrichmentDerivation Read(
         string? answerText,
         IReadOnlyList<EnrichablePassage> passages,
         string agentName)
@@ -46,21 +50,57 @@ internal static class EmailEnrichmentReading
 
         if (ReadDocument(answerText) is not { } document)
         {
-            return [];
+            return EmailEnrichmentDerivation.Settled([]);
         }
 
         var provenance = EmailEnrichmentProvenance.FromAgent(agentName);
 
-        return
-        [
-            .. new[]
-                {
-                    ToMark(EmailEnrichmentAspect.Sense, document.Sense, passages, provenance),
-                    ToMark(EmailEnrichmentAspect.Significance, document.Significance, passages, provenance),
-                    ToMark(EmailEnrichmentAspect.Commitment, document.Commitment, passages, provenance),
-                }
-                .OfType<EmailEnrichmentMark>(),
-        ];
+        return EmailEnrichmentDerivation.Settled(
+            [
+                .. new[]
+                    {
+                        ToMark(EmailEnrichmentAspect.Sense, document.Sense, passages, provenance),
+                        ToMark(EmailEnrichmentAspect.Significance, document.Significance, passages, provenance),
+                        ToMark(EmailEnrichmentAspect.Commitment, document.Commitment, passages, provenance),
+                    }
+                    .OfType<EmailEnrichmentMark>(),
+            ],
+            ToProposals(document.Tasks));
+    }
+
+    /// <summary>Turns what the model listed into proposals, keeping only the entries that state something to do.</summary>
+    /// <remarks>
+    /// It drops rather than repairs, exactly as a mark does. An entry with no title states nothing a person could act
+    /// on, and a day written in a shape nothing reads falls away on its own rather than taking the proposal with it —
+    /// a thing somebody has been asked to do is worth offering whether or not the message said when.
+    /// </remarks>
+    private static IReadOnlyList<EmailTaskProposal> ToProposals(IReadOnlyList<EmailTaskDocument>? written) =>
+    [
+        .. (written ?? [])
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry?.Title))
+            .Take(EmailTaskProposal.MaximumPerEmail)
+            .Select(static entry => EmailTaskProposal.Create(entry.Title!, ReadDueOn(entry.DueOn))),
+    ];
+
+    /// <summary>Reads the day a proposal falls due on, or nothing where the model wrote something that is not one.</summary>
+    /// <remarks>
+    /// An instant is read as the day it falls on, because a task is due on a date: a model handed an hour by the
+    /// message writes one often enough that refusing the value would lose the day it names as well.
+    /// </remarks>
+    private static DateOnly? ReadDueOn(string? dueOn)
+    {
+        if (DateOnly.TryParse(dueOn, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+        {
+            return day;
+        }
+
+        return DateTimeOffset.TryParse(
+            dueOn,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+            out var instant)
+            ? DateOnly.FromDateTime(instant.UtcDateTime)
+            : null;
     }
 
     /// <summary>Turns one written reading into a mark, or into nothing where the message cannot back it.</summary>

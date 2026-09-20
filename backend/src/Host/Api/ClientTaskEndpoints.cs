@@ -40,11 +40,20 @@ namespace MailFathom.Host.Api;
 /// told apart only by the word a screen puts on the button.
 /// </para>
 /// <para>
-/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the five writes included.</b> A task is this
-/// deployment's own record of what one person owes: nothing here reaches a mail server, nothing moves in a mailbox,
-/// and the citation a task carries is a value rather than a reading of mail. It is the notification centre's reasoning
-/// rather than the mutation routes' — a person whose mail accounts an administrator maintains does not hold a write
-/// grant and still has to be able to keep their own list.
+/// <b>Every route that reads or writes the list is <see cref="MailFathomPermission.MailRead" />, the five writes
+/// included.</b> A task is this deployment's own record of what one person owes: nothing here reaches a mail server,
+/// nothing moves in a mailbox, and the citation a task carries is a value rather than a reading of mail. It is the
+/// notification centre's reasoning rather than the mutation routes' — a person whose mail accounts an administrator
+/// maintains does not hold a write grant and still has to be able to keep their own list.
+/// </para>
+/// <para>
+/// <b>The day-layout pair is <see cref="MailFathomPermission.MailAsk" /> instead, and the arrangement asks
+/// <see cref="MailFathomPermission.MailRead" /> beneath it.</b> What the published grant follows is where the lines
+/// go: arranging a day leaves this deployment for a chat provider and is charged to the same allowance a question is.
+/// What the arrangement then reads to compose that turn is this list and the day's calendar, both of them the reading
+/// grant's own records, so the use case beneath asks for it on its own and a caller holding the asking grant alone is
+/// refused naming the one they are missing — the shape the contact card already stands in. The route that only says
+/// whether a day is arranged at all reads neither, and answers on the asking grant alone.
 /// </para>
 /// </remarks>
 internal static class ClientTaskEndpoints
@@ -78,6 +87,14 @@ internal static class ClientTaskEndpoints
     /// than proposing it back to themselves.
     /// </remarks>
     internal const string TaskAcceptanceRoute = $"{TaskRoute}/acceptance";
+
+    /// <summary>The route the acting person's day is arranged at, relative to the client prefix.</summary>
+    /// <remarks>
+    /// Two literal segments where the single-task route takes an identifier, so routing prefers this and the two
+    /// cannot be confused. It is under the task list rather than beside it because what it arranges is that list —
+    /// the calendar is read to say where the day is already spoken for, and nothing about it is answered here.
+    /// </remarks>
+    internal const string TodayLayoutRoute = $"{TasksRoute}/today/layout";
 
     /// <summary>The greatest request body a task write reads before refusing it.</summary>
     /// <remarks>
@@ -126,6 +143,84 @@ internal static class ClientTaskEndpoints
 
         api.MapDelete(TaskRoute, EraseAsync)
             .RequirePermission(MailFathomPermission.MailRead);
+
+        // The two routes of the arrangement, under the grant that governs asking rather than the one the list is read
+        // under: laying out a day is a provider call charged to the same allowance a question is, which is what
+        // decides the grant here rather than which records are read to compose it. The use case beneath the
+        // arrangement asks for the reading grant as well, since the list and the calendar it reads are that grant's
+        // own records, so a caller holding this one alone is refused naming the one it is missing.
+        api.MapGet(TodayLayoutRoute, ArrangesDays)
+            .RequirePermission(MailFathomPermission.MailAsk);
+
+        api.MapPost(TodayLayoutRoute, LayOutTodayAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailAsk);
+    }
+
+    /// <summary>Says whether this deployment arranges a day at all.</summary>
+    /// <param name="planner">Arranges a day, in whichever state the deployment left it.</param>
+    /// <returns><c>200</c> saying whether days are arranged, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>
+    /// A capability rather than a probe: it resolves a registration and calls nothing, so a screen asking it once
+    /// costs no provider call and reads nobody's list. It exists for the reason the drafting capability does — a
+    /// control that promises an arrangement over a deployment that cannot compose one fails a person at the one
+    /// moment they trusted it.
+    /// </remarks>
+    internal static Ok<ClientDayLayoutAvailabilityResponse> ArrangesDays(
+        [FromServices] IDayLayoutPlanner planner)
+    {
+        ArgumentNullException.ThrowIfNull(planner);
+
+        return TypedResults.Ok(new ClientDayLayoutAvailabilityResponse(planner.IsActive));
+    }
+
+    /// <summary>Suggests how the acting person's day could be arranged, and changes nothing.</summary>
+    /// <param name="request">The window the person's day runs in, as their own client drew it.</param>
+    /// <param name="layout">Composes the arrangement, for the person the credential names.</param>
+    /// <param name="cancellationToken">Cancels the arrangement when the client disconnects.</param>
+    /// <returns><c>200</c> with the arrangement, <c>400</c> where the window is not a day this deployment arranges, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Nothing is written by asking. No task is rescheduled, no proposal is accepted, and no event is put on a
+    /// calendar: what comes back is drawn beside the list the person already holds, and every one of those acts stays
+    /// behind the route that owns it.
+    /// </para>
+    /// <para>
+    /// A deployment that arranges no day answers <c>200</c> saying so rather than a failure, and so does a provider
+    /// that did not answer. The two are one answer here for the reason the drafting route gives: what a client does
+    /// about either is identical, and naming which would publish a deployment's configuration to every signed-in
+    /// browser. The spent allowance is the one that travels, because falling back there would leave somebody pressing
+    /// a control the last of the allowance has already been paid for, told nothing.
+    /// </para>
+    /// </remarks>
+    internal static async Task<Results<Ok<ClientDayLayoutResponse>, ProblemHttpResult>> LayOutTodayAsync(
+        [FromBody] ClientDayLayoutRequest? request,
+        [FromServices] TodayLayout layout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        if (request is not { From: { } opens, Until: { } closes })
+        {
+            return Refuse("A day is arranged between a stated opening and closing instant.");
+        }
+
+        var derivation = await layout.SuggestAsync(opens, closes, cancellationToken);
+
+        if (derivation is null)
+        {
+            return Refuse(
+                $"A day closes after it opens and runs for at most {TodayLayout.MaximumDaySpan.TotalHours} hours.");
+        }
+
+        if (derivation.Withheld is DayLayoutWithholding.AllowanceExhausted)
+        {
+            return TypedResults.Problem(
+                "This deployment has spent what it allows a provider for now, so the day was not arranged.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        return TypedResults.Ok(ClientDayLayoutResponse.For(derivation.Suggestion));
     }
 
     /// <summary>Serves one page of what the acting person has committed to, soonest due first.</summary>
@@ -508,6 +603,65 @@ internal sealed record ClientTaskResponse(
             task.SourceMessage?.Value);
     }
 }
+
+/// <summary>What this deployment does about arranging a day, which is what says whether a screen may offer it.</summary>
+/// <param name="ArrangesDays">Whether a day is arranged when somebody asks for one.</param>
+/// <remarks>
+/// One field and no reason beside it, for the reason the drafting capability carries one: a deployment that declared
+/// no chat endpoint is the same answer to a screen as one whose provider is down — arrange the day yourself — and
+/// naming which would publish a deployment's configuration to every signed-in browser.
+/// </remarks>
+internal sealed record ClientDayLayoutAvailabilityResponse(bool ArrangesDays);
+
+/// <summary>The day a person asked to have arranged, as their own client drew it.</summary>
+/// <param name="From">The instant their day opens.</param>
+/// <param name="Until">The instant it closes.</param>
+/// <remarks>
+/// The window is stated rather than derived, exactly as it is for reading the calendar and for the same reason: this
+/// deployment keeps no timezone for a person, so which hours are their day is something only their client knows.
+/// Bound strictly: a key nothing here binds fails the bind rather than being ignored, so a client that meant to state
+/// something else about the day is told that nothing else is read.
+/// </remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ClientDayLayoutRequest(DateTimeOffset? From, DateTimeOffset? Until);
+
+/// <summary>An arrangement of one day, offered and applied to nothing.</summary>
+/// <param name="Arranged">Whether an arrangement was composed at all, which is <see langword="false" /> where this deployment composed none.</param>
+/// <param name="Placements">What to do and when, earliest first.</param>
+/// <param name="NotToday">The tasks that do not realistically fit the day.</param>
+/// <remarks>
+/// Tasks are named by identity and nothing else, because the client drawing this already holds each row: repeating the
+/// lines here would put a second copy of somebody's list on the wire to say something the first copy already says.
+/// </remarks>
+internal sealed record ClientDayLayoutResponse(
+    bool Arranged,
+    IReadOnlyList<ClientDayLayoutPlacementResponse> Placements,
+    IReadOnlyList<Guid> NotToday)
+{
+    /// <summary>The answer a deployment that arranged nothing gives.</summary>
+    internal static ClientDayLayoutResponse NotArranged { get; } = new(Arranged: false, [], []);
+
+    /// <summary>Describes one arrangement on the wire.</summary>
+    /// <param name="suggestion">The arrangement, or <see langword="null" /> where none was composed.</param>
+    /// <returns>The response body.</returns>
+    internal static ClientDayLayoutResponse For(DayLayoutSuggestion? suggestion) => suggestion is null
+        ? NotArranged
+        : new ClientDayLayoutResponse(
+            Arranged: true,
+            [
+                .. suggestion.Placements.Select(static placement => new ClientDayLayoutPlacementResponse(
+                    placement.Task.Value,
+                    placement.StartAt,
+                    (int)placement.Duration.TotalMinutes)),
+            ],
+            [.. suggestion.NotToday.Select(static task => task.Value)]);
+}
+
+/// <summary>Where one task is suggested to sit in the day.</summary>
+/// <param name="TaskId">The task being placed, as a task row published it.</param>
+/// <param name="StartAt">When it is suggested to begin.</param>
+/// <param name="Minutes">How long it is suggested to take.</param>
+internal sealed record ClientDayLayoutPlacementResponse(Guid TaskId, DateTimeOffset StartAt, int Minutes);
 
 /// <summary>What erasing a task removed.</summary>
 /// <param name="Id">The task that was named.</param>

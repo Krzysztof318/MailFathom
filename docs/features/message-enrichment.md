@@ -11,6 +11,10 @@ Deriving them per row would be a model call per message per scroll, on somebody'
 them once and storing them is what makes the readings affordable at all, and it is also what makes them checkable: a
 mark that was written down can be shown its evidence, and a mark computed for a screen and discarded cannot.
 
+The same call also reads what the message asks its reader to *do*, and offers it as a task nobody has agreed to yet.
+[The same reading offers a task](#the-same-reading-offers-a-task) below is that half, and
+[Tasks read out of mail](tasks-from-mail.md) is where what it produces lives afterwards.
+
 ## What a mark is
 
 A mark is never a sentence on its own. Each one carries:
@@ -117,6 +121,34 @@ A provider that *answered* with something unreadable is the one failure that set
 was made and paid for, and asking again buys the same answer, so the message is recorded as having nothing to say
 rather than being offered to the endpoint forever.
 
+## The same reading offers a task
+
+A message that asks its reader to do something is read for that in the same call, and what comes back beside the marks
+is at most **three** lines, each one a title and, where the message named a day, the day it is due on. Each of them is
+written onto the task list of every person the mailbox is assigned to, as a proposal: the half of the list nobody has
+agreed to, which a person accepts or dismisses from. Nothing here writes onto the other half, and nothing accepts on
+anybody's behalf.
+
+**It is the same call and the same allowance.** No second request is made, no ceiling of its own exists, and the bulkhead
+and the period ceilings below are the whole of what bounds it — which is why enrichment being on is the whole of what
+turns this on. A message asking for nothing produces no proposal, exactly as a message there is nothing to say about
+produces no mark.
+
+**The proposals are written after the derivation is committed, and outside its statement.** A list somebody owns is
+not part of the transaction that records having read their mail — the task store opens a session of its own precisely
+so that a suggestion that failed cannot fail mail already committed — and after rather than before, so a crash between
+the two loses a suggestion rather than proposing one twice. One message produces one derivation and is then out of the
+queue, which is what makes a duplicate unreachable without a read per person per message on the arrival path.
+
+**A task cites its message and copies none of it.** What is stored beside the title is the identity of the message it
+was read out of, so the thread opens from the list; the subject, the body, and every address stay where they are. The
+task outlives the citation, because what somebody owes does not stop being owed when the mail naming it is erased —
+which is the one place a derived row deliberately survives its message, and [Tasks read out of
+mail](tasks-from-mail.md) holds the reasoning.
+
+**A mailbox two people are assigned produces one derivation and two proposals**, one on each list, each accepted or
+dismissed without deciding anything for the other. A mailbox assigned to nobody proposes to nobody.
+
 ## The agent, and what leaves the deployment
 
 The derivation runs as an agent composed the way every agent in this product is: one instruction carried as the agent's
@@ -178,6 +210,9 @@ A mark is a sentence derived from somebody's mail and inherits its classificatio
   erasure removes the readings with the mail rather than leaving them behind.
 - **The evidence is published as passage identifiers rather than as text**, because following one is a request of its
   own — a list page carrying the passages themselves would be publishing a body it had no reason to.
+- **A proposed task is not a mark and is not deleted with the message.** It is a row on somebody's own list, carrying a
+  title derived from mail, and [Tasks read out of mail](tasks-from-mail.md) holds why it outlives the mail and what
+  erasing it takes.
 
 ## What a client reads
 
@@ -195,8 +230,8 @@ beside it shows marks for would be stating that no derivation has reached it, wh
 
 - **Rendering it.** What a row draws, how a mark expands into its evidence, and how a commitment appears on a screen
   belong to the client and are not decided here.
-- **Acting on a commitment.** Nothing reminds, schedules, files, or replies. A commitment is a reading of the message,
-  not a task this deployment took on.
+- **Acting on a commitment.** Nothing reminds, schedules, files, or replies, and nothing puts a date on a calendar. A
+  proposed task is offered to a person and waits for them; a commitment mark is a reading of the message and stays one.
 - **A deterministic rule that writes a mark.** The record expresses one; nothing produces one yet.
 - **Re-deriving a message.** A settled message is settled. Nothing re-runs enrichment over mail already derived from,
   including after the instruction or the model behind it changes.

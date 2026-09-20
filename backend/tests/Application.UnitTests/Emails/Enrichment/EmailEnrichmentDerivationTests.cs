@@ -80,6 +80,59 @@ public sealed class EmailEnrichmentDerivationTests
             EmailEnrichmentDerivation.Withholding((EmailEnrichmentWithholding)61));
     }
 
+    /// <summary>A derivation carries what the message asked for beside what it says about it.</summary>
+    [Fact]
+    public void Settled_ProposalsBesideTheMarks_CarriesBoth()
+    {
+        // Arrange
+        var proposal = EmailTaskProposal.Create("Answer the supplier", new DateOnly(2026, 9, 21));
+
+        // Act
+        var derivation = EmailEnrichmentDerivation.Settled([Mark(EmailEnrichmentAspect.Sense)], [proposal]);
+
+        // Assert
+        Assert.True(derivation.IsSettled);
+        Assert.Equal([proposal], derivation.Tasks);
+    }
+
+    /// <summary>A derivation that read nothing to do carries an empty list rather than nothing at all.</summary>
+    [Fact]
+    public void Settled_NoProposalsStated_CarriesNone()
+    {
+        // Act
+        var derivation = EmailEnrichmentDerivation.Settled([]);
+
+        // Assert
+        Assert.Empty(derivation.Tasks);
+    }
+
+    /// <summary>The bound is the record's rather than the reading's, so nothing can offer one message's worth of work.</summary>
+    [Fact]
+    public void Settled_MoreProposalsThanOneMessageProduces_IsRefused()
+    {
+        // Arrange
+        IReadOnlyList<EmailTaskProposal> proposals =
+        [
+            .. Enumerable
+                .Range(0, EmailTaskProposal.MaximumPerEmail + 1)
+                .Select(static _ => EmailTaskProposal.Create("Answer the supplier", dueOn: null)),
+        ];
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => EmailEnrichmentDerivation.Settled([], proposals));
+    }
+
+    /// <summary>A withheld derivation carries nothing of either kind, because nothing was derived.</summary>
+    [Fact]
+    public void Withholding_AnyCondition_CarriesNoProposals()
+    {
+        // Act
+        var derivation = EmailEnrichmentDerivation.Withholding(EmailEnrichmentWithholding.ProviderUnavailable);
+
+        // Assert
+        Assert.Empty(derivation.Tasks);
+    }
+
     private static EmailEnrichmentMark Mark(EmailEnrichmentAspect aspect) =>
         EmailEnrichmentMark.Create(
             aspect,
