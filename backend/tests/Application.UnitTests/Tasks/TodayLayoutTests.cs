@@ -259,6 +259,8 @@ public sealed class TodayLayoutTests
         CalendarEventTitle.Create(title),
         start,
         start.AddMinutes(30),
+        isAllDay: false,
+        reminders: [],
         CalendarEventOrigin.Asserted,
         sourceMessage: null,
         importedUid: null,

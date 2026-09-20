@@ -229,7 +229,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Act
         var result = await ClientCalendarEndpoints.CreateAsync(
-            new CalendarEventCreationRequest("Standup", Start: null, End: null, SourceMessage: null),
+            new CalendarEventCreationRequest("Standup", Start: null, End: null, IsAllDay: false, Reminders: null, SourceMessage: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -242,7 +242,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Act
         var result = await ClientCalendarEndpoints.CreateAsync(
-            new CalendarEventCreationRequest("Standup", Monday, End: null, Guid.Empty),
+            new CalendarEventCreationRequest("Standup", Monday, End: null, IsAllDay: false, Reminders: null, Guid.Empty),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -256,7 +256,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Act
         var result = await ClientCalendarEndpoints.CreateAsync(
-            new CalendarEventCreationRequest("Lunch‮with Anna", Monday, End: null, SourceMessage: null),
+            new CalendarEventCreationRequest("Lunch‮with Anna", Monday, End: null, IsAllDay: false, Reminders: null, SourceMessage: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -271,7 +271,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Act
         var result = await ClientCalendarEndpoints.CreateAsync(
-            new CalendarEventCreationRequest("Standup", Monday, Monday.AddMinutes(30), SourceMessage: null),
+            new CalendarEventCreationRequest("Standup", Monday, Monday.AddMinutes(30), IsAllDay: false, Reminders: null, SourceMessage: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -293,7 +293,7 @@ public sealed class ClientCalendarEndpointsTests
         // Act
         var result = await ClientCalendarEndpoints.AmendAsync(
             Guid.CreateVersion7(Now),
-            new CalendarEventAmendmentRequest("Standup", Monday, End: null),
+            new CalendarEventAmendmentRequest("Standup", Monday, End: null, IsAllDay: false, Reminders: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -311,7 +311,7 @@ public sealed class ClientCalendarEndpointsTests
         // Act
         var result = await ClientCalendarEndpoints.AmendAsync(
             held.Id.Value,
-            new CalendarEventAmendmentRequest("Interview, moved", Monday.AddHours(2), End: null),
+            new CalendarEventAmendmentRequest("Interview, moved", Monday.AddHours(2), End: null, IsAllDay: false, Reminders: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);
 
@@ -403,6 +403,75 @@ public sealed class ClientCalendarEndpointsTests
         Assert.IsType<NotFound>(result.Result);
     }
 
+    /// <summary>A client reads the leads back and the instants they fall at, so it never derives the second itself.</summary>
+    [Fact]
+    public async Task CreateAsync_AnEventStatedWithReminders_AnswersTheLeadsAndWhenEachComesDue()
+    {
+        // Act
+        var result = await ClientCalendarEndpoints.CreateAsync(
+            new CalendarEventCreationRequest("Standup", Monday, End: null, IsAllDay: false, [15, 1440], SourceMessage: null),
+            this.Calendar(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var written = Assert.IsType<Ok<CalendarEventResponse>>(result.Result).Value!;
+        Assert.Equal([1440, 15], written.Reminders);
+        Assert.Equal([Monday.AddDays(-1), Monday.AddMinutes(-15)], written.RemindsAt);
+    }
+
+    /// <summary>An event stating nothing about reminders announces nothing rather than being refused for saying nothing.</summary>
+    [Fact]
+    public async Task CreateAsync_ARequestNamingNoReminders_WritesAnEventThatAnnouncesNothing()
+    {
+        // Act
+        var result = await ClientCalendarEndpoints.CreateAsync(
+            new CalendarEventCreationRequest("Standup", Monday, End: null, IsAllDay: false, Reminders: null, SourceMessage: null),
+            this.Calendar(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(Assert.IsType<Ok<CalendarEventResponse>>(result.Result).Value!.Reminders);
+    }
+
+    /// <summary>A lead nobody can set is reported as a lead rather than as a fault in the deployment.</summary>
+    [Fact]
+    public async Task CreateAsync_ALeadNoReminderMayState_IsRefused()
+    {
+        // Act
+        var result = await ClientCalendarEndpoints.CreateAsync(
+            new CalendarEventCreationRequest(
+                "Standup",
+                Monday,
+                End: null,
+                IsAllDay: false,
+                [CalendarReminder.MaximumMinutesBefore + 1],
+                SourceMessage: null),
+            this.Calendar(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+    }
+
+    /// <summary>A day is announced from the morning of it, and the client reads that instant rather than deriving it.</summary>
+    [Fact]
+    public async Task CreateAsync_ADayRatherThanAClockTime_AnswersTheInstantMeasuredFromThatMorning()
+    {
+        // Arrange
+        var theDay = new DateTimeOffset(Monday.Date, TimeSpan.Zero);
+
+        // Act
+        var result = await ClientCalendarEndpoints.CreateAsync(
+            new CalendarEventCreationRequest("Anna's birthday", theDay, End: null, IsAllDay: true, [0], SourceMessage: null),
+            this.Calendar(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var written = Assert.IsType<Ok<CalendarEventResponse>>(result.Result).Value!;
+        Assert.True(written.IsAllDay);
+        Assert.Equal([theDay.AddHours(CalendarEvent.AllDayReminderHour)], written.RemindsAt);
+    }
+
     private static CalendarEvent Proposal(DateTimeOffset start, string title) =>
         Compose(start, title, CalendarEventOrigin.Proposed);
 
@@ -412,6 +481,8 @@ public sealed class ClientCalendarEndpointsTests
             CalendarEventTitle.Create(title),
             start,
             end: null,
+            isAllDay: false,
+            reminders: [],
             origin,
             sourceMessage: null,
             importedUid: null,

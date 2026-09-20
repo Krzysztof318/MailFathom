@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
 using MailFathom.Infrastructure.Persistence.Notifications;
@@ -10,7 +11,7 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Notifications;
 
-/// <summary>Covers the row a notification is written as, and the three shapes its target flattens into.</summary>
+/// <summary>Covers the row a notification is written as, and the four shapes its target flattens into.</summary>
 public sealed class NotificationMappingTests
 {
     private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
@@ -39,9 +40,9 @@ public sealed class NotificationMappingTests
         Assert.False(entity.IsRead);
     }
 
-    /// <summary>A statement with nowhere to go carries neither of the two columns a target would fill.</summary>
+    /// <summary>A statement with nowhere to go carries none of the columns a target would fill.</summary>
     [Fact]
-    public void ToEntity_ANotificationLeadingNowhere_FillsNeitherTargetColumn()
+    public void ToEntity_ANotificationLeadingNowhere_FillsNoTargetColumn()
     {
         // Act
         var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.Nothing));
@@ -82,6 +83,23 @@ public sealed class NotificationMappingTests
         Assert.Equal(NotificationScreen.Settings, entity.TargetScreen);
     }
 
+    /// <summary>The event a reminder is about is the second foreign key, so it carries the identifier itself.</summary>
+    [Fact]
+    public void ToEntity_ANotificationLeadingToACalendarEvent_FillsTheEventColumnAlone()
+    {
+        // Arrange
+        var calendarEvent = CalendarEventId.Create(Guid.NewGuid());
+
+        // Act
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToCalendarEvent(calendarEvent)));
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.CalendarEvent, entity.TargetKind);
+        Assert.Equal(calendarEvent.Value, entity.TargetCalendarEventId);
+        Assert.Null(entity.TargetStoredEmailId);
+        Assert.Null(entity.TargetScreen);
+    }
+
     /// <summary>The kind is the whole source line where nothing narrows it, and the column says so by holding nothing.</summary>
     [Fact]
     public void ToEntity_ANotificationWithoutASource_LeavesTheSourceColumnEmpty()
@@ -119,7 +137,7 @@ public sealed class NotificationMappingTests
         Assert.Equal(isRead, restored.IsRead);
     }
 
-    /// <summary>The three columns a target flattened into are read back as the one shape they came from.</summary>
+    /// <summary>The columns a target flattened into are read back as the one shape they came from.</summary>
     [Fact]
     public void ToNotification_ARowLeadingToAMessage_ReadsTheMessageBackAsItsTarget()
     {
@@ -152,6 +170,24 @@ public sealed class NotificationMappingTests
         Assert.Equal(NotificationScreen.Settings, target.Screen);
     }
 
+    /// <summary>A reminder read back leads to the event it was raised about, which is what the centre opens from the row.</summary>
+    [Fact]
+    public void ToNotification_ARowLeadingToACalendarEvent_ReadsTheEventBackAsItsTarget()
+    {
+        // Arrange
+        var calendarEvent = CalendarEventId.Create(Guid.NewGuid());
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToCalendarEvent(calendarEvent)));
+
+        // Act
+        var target = NotificationMapping.ToNotification(entity).Target;
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.CalendarEvent, target.Kind);
+        Assert.Equal(calendarEvent, target.CalendarEvent);
+        Assert.Null(target.Message);
+        Assert.Null(target.Screen);
+    }
+
     /// <summary>A row naming a shape without the column that shape is carried in is refused rather than read as a target leading nowhere.</summary>
     [Fact]
     public void ToNotification_ARowNamingAShapeWithoutItsColumn_IsRefused()
@@ -171,6 +207,19 @@ public sealed class NotificationMappingTests
         // Arrange
         var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToScreen(NotificationScreen.Settings)));
         entity.TargetScreen = null;
+
+        // Act and assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));
+    }
+
+    /// <summary>The event column is refused on the same terms as the other two, a reminder leading nowhere being no reminder.</summary>
+    [Fact]
+    public void ToNotification_ARowNamingACalendarEventShapeWithoutItsColumn_IsRefused()
+    {
+        // Arrange
+        var entity = NotificationMapping.ToEntity(
+            Compose(NotificationTarget.ToCalendarEvent(CalendarEventId.Create(Guid.NewGuid()))));
+        entity.TargetCalendarEventId = null;
 
         // Act and assert
         Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));

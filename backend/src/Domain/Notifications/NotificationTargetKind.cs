@@ -15,4 +15,7 @@ public enum NotificationTargetKind
 
     /// <summary>The notification leads to a screen rather than to a record.</summary>
     Screen = 2,
+
+    /// <summary>The notification leads to one event of the person's own calendar.</summary>
+    CalendarEvent = 3,
 }

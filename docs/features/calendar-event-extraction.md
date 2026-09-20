@@ -38,7 +38,10 @@ and *reply by Monday afternoon* are all commitments, and the [enrichment pass](m
 them; only *we meet on Tuesday at half past ten* is an occasion.
 
 **A day with no hour is read as the day.** The event starts at midnight and carries no end, which leaves the hour to
-whoever acts on it rather than stating one nobody wrote down.
+whoever acts on it rather than stating one nobody wrote down. That is a start with no hour and not an
+[all-day event](calendar-events.md#reminders): a whole-day statement moves where a reminder falls, so it is somebody's
+to make about a date they have accepted rather than a reading's to make about a date they have only been offered. A
+proposal carries no reminders for the same reason.
 
 **An end only where the text says how long it lasts.** No length is invented, and an end that is not after its start
 is dropped while the event is kept — what the text fixed was when the thing begins, so the length is the part to

@@ -5,6 +5,7 @@
 using System.Text.Json;
 using MailFathom.Application.Notifications;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
 using MailFathom.Host.Api;
@@ -67,6 +68,38 @@ public sealed class ClientNotificationEndpointsTests
         Assert.Equal("MailArrived", row.Statement?.Cause);
         Assert.Equal(2, row.Statement?.Counted);
         Assert.Null(row.Statement?.OutOf);
+    }
+
+    /// <summary>
+    /// A reminder leads to the event it is about, and the answer names that shape beside the identifier: a client
+    /// that read only which value is present could not tell a calendar target from a message one on a row that
+    /// carries neither, which is the whole reason the kind is reported at all.
+    /// </summary>
+    [Fact]
+    public async Task ReadPageAsync_AReminderThatCameDue_LeadsToTheEventItIsAbout()
+    {
+        // Arrange
+        var calendarEvent = CalendarEventId.Create(new Guid("9b2c3d4e-5f60-4172-8384-95a617b8c9da"));
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.ReadPageAsync(User, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => [ReminderNotification(calendarEvent)]);
+
+        // Act
+        var result = await ClientNotificationEndpoints.ReadPageAsync(
+            pageSize: 1,
+            cursor: null,
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var row = Assert.Single(Assert.IsType<Ok<ClientNotificationPageResponse>>(result.Result).Value!.Notifications);
+
+        Assert.Equal("Calendar", row.Kind);
+        Assert.Equal("CalendarEvent", row.Target.Kind);
+        Assert.Equal(calendarEvent.Value, row.Target.CalendarEventId);
+        Assert.Null(row.Target.MessageId);
+        Assert.Null(row.Target.Screen);
+        Assert.Equal("CalendarReminderDue", row.Statement?.Cause);
     }
 
     /// <summary>A row written before conditions were kept names none, and the answer says so rather than inventing one.</summary>
@@ -388,5 +421,17 @@ public sealed class ClientNotificationEndpointsTests
         source: "work",
         NotificationTarget.ToMessage(StoredEmailId.Create(new Guid("8a1b2c3d-4e5f-4061-8273-849506a7b8c9"))),
         NotificationDeduplicationKey.Create("mail-arrived"),
+        OccurredAt);
+
+    private static Notification ReminderNotification(CalendarEventId calendarEvent) => Notification.Compose(
+        NotificationId.Create(NotificationIdentifier),
+        User,
+        NotificationKind.Calendar,
+        title: "Quarterly review",
+        body: "15 minutes left.",
+        NotificationStatement.CalendarReminderDue(15),
+        source: null,
+        NotificationTarget.ToCalendarEvent(calendarEvent),
+        NotificationDeduplicationKey.Create("calendar-reminder:15"),
         OccurredAt);
 }

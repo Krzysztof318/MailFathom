@@ -1313,6 +1313,10 @@ internal static class HostComposition
         builder.Services.AddHostedService<JobWorker>();
         builder.Services.AddHostedService<UnlinkedStoredFileSweepWorker>();
 
+        // Registered unconditionally, because a calendar is a store every deployment has rather than a capability an
+        // operator switches on, and a deployment whose calendars carry no reminder is answered by an empty pass.
+        builder.Services.AddHostedService<CalendarReminderWorker>();
+
         // Started only where a provider was declared. A deployment that declared none resolves no generator at all, so a
         // worker registered anyway would fail on the first message the backlog handed it rather than idle harmlessly.
         if (embedsMail)

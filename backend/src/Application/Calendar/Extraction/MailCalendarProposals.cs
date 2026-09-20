@@ -126,6 +126,11 @@ public sealed class MailCalendarProposals
     /// The identity is minted from the instant the proposal was written, which is what every other record here is
     /// identified by, and it carries no imported identifier because nothing imports a proposal. Both times are the
     /// same instant on a row nobody has amended yet.
+    /// <para>
+    /// A proposal announces nothing and states a clock time. A reading of mail is not the place either is decided:
+    /// what a person wants to be told about is theirs to set once they have agreed to the date, so the reminders are
+    /// empty until they open the event and the extraction is never read as a statement about a whole day.
+    /// </para>
     /// </remarks>
     private static CalendarEvent Compose(
         ExtractedCalendarEvent proposal,
@@ -136,6 +141,8 @@ public sealed class MailCalendarProposals
             proposal.Title,
             proposal.Start,
             proposal.End,
+            isAllDay: false,
+            reminders: [],
             CalendarEventOrigin.Proposed,
             sourceMessage,
             importedUid: null,

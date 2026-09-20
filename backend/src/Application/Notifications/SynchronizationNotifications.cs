@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Notifications;
 
@@ -36,10 +35,9 @@ namespace MailFathom.Application.Notifications;
 /// to describe different runs.
 /// </para>
 /// <para>
-/// A row that was kept is also announced to whatever the user has open, because this is the place that already
-/// observes it: the signal carries the row's own already-derived text and the count that follows from writing it, and a
-/// client draws the bell from that rather than from the next interval. A row the deduplication rule folded into a
-/// standing one is not announced, for the same reason it is not written.
+/// A row that was kept is also announced to whatever the user has open, which is <see cref="NotificationRaiser" />'s
+/// half of the raise rather than this producer's: writing and announcing are one act, and a row the deduplication rule
+/// folded into a standing one is not announced for the same reason it is not written.
 /// </para>
 /// <para>
 /// A notification is one person's, so a mailbox assigned to several people is one condition raised once for each of
@@ -50,31 +48,26 @@ namespace MailFathom.Application.Notifications;
 /// </remarks>
 public sealed class SynchronizationNotifications
 {
-    private readonly INotificationStore store;
+    private readonly NotificationRaiser raiser;
     private readonly IMailAccountAssignments assignments;
-    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the producer from the record it raises into.</summary>
-    /// <param name="store">Keeps what is raised.</param>
+    /// <param name="raiser">Keeps what is raised and announces it to whatever the person has open.</param>
     /// <param name="assignments">Answers who a condition about one mailbox is about.</param>
-    /// <param name="signals">Tells an open client that a row was written, so a bell is drawn without waiting for an interval.</param>
     /// <param name="timeProvider">Stamps a notification with when the run observed what it describes.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public SynchronizationNotifications(
-        INotificationStore store,
+        NotificationRaiser raiser,
         IMailAccountAssignments assignments,
-        ClientSignals signals,
         TimeProvider timeProvider)
     {
-        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(raiser);
         ArgumentNullException.ThrowIfNull(assignments);
-        ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        this.store = store;
+        this.raiser = raiser;
         this.assignments = assignments;
-        this.signals = signals;
         this.timeProvider = timeProvider;
     }
 
@@ -212,25 +205,7 @@ public sealed class SynchronizationNotifications
                 NotificationDeduplicationKey.For(condition, account.Value),
                 occurredAt);
 
-            var kept = await this.store.RecordAsync(notification, cancellationToken);
-
-            if (!kept)
-            {
-                continue;
-            }
-
-            anyKept = true;
-
-            if (!this.signals.Reaches)
-            {
-                continue;
-            }
-
-            // The count is read only where a row was actually written and something is listening, so a deployment
-            // serving no client and a run that changed nothing both pay nothing for this.
-            var unreadCount = await this.store.CountUnreadAsync(user, cancellationToken);
-
-            this.signals.Publish(ClientSignal.NotificationRaised(notification, unreadCount));
+            anyKept |= await this.raiser.RecordAndAnnounceAsync(notification, cancellationToken);
         }
 
         return anyKept;

@@ -91,6 +91,49 @@ public sealed class CalendarEventModelTests
             reference => reference.PrincipalEntityType.ClrType == typeof(StoredEmailEntity));
     }
 
+    /// <summary>
+    /// The producer asks one question of the whole deployment every interval, and the index it rides holds only the
+    /// reminders still owed: a filter on the claim leaves out every reminder of every event already past, which is
+    /// nearly all of them once a calendar has any history.
+    /// </summary>
+    [Fact]
+    public void CalendarEventReminderModel_DueIndex_HoldsOnlyTheRemindersNothingHasAnnouncedYet()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var index = IndexNamed(
+            EntityTypeOf<CalendarEventReminderEntity>(context),
+            PersistenceConstraintNames.CalendarEventReminderDueIndexName);
+
+        // Assert
+        Assert.Equal(["DueAt"], index.Properties.Select(property => property.Name));
+        Assert.Equal("\"RaisedForDueAt\" IS NULL", index.GetFilter());
+    }
+
+    /// <summary>
+    /// What the delete confirmation promises: an event deleted takes its reminders with it, so nothing is left to
+    /// announce a commitment that is gone. The lead is half the key, which is what makes one lead set twice one row.
+    /// </summary>
+    [Fact]
+    public void CalendarEventReminderModel_TheEvent_IsTheKeyItCascadesFrom()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var reminder = EntityTypeOf<CalendarEventReminderEntity>(context);
+        var reference = Assert.Single(reminder.GetForeignKeys());
+
+        // Assert
+        Assert.Equal(
+            ["CalendarEventId", "MinutesBefore"],
+            reminder.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Equal(typeof(CalendarEventEntity), reference.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
+    }
+
     private static IIndex IndexNamed(IEntityType entityType, string name) =>
         Assert.Single(entityType.GetIndexes(), candidate => candidate.GetDatabaseName() == name);
 

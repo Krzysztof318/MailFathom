@@ -71,6 +71,14 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
             .HasForeignKey(notification => notification.TargetStoredEmailId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // The same shape for the other record a notification can lead to, and cascading for the same reason: a
+        // reminder about an event somebody deleted is a statement about a commitment that no longer exists, and the
+        // delete confirmation already promises them it goes.
+        entity.HasOne(notification => notification.TargetCalendarEvent)
+            .WithMany()
+            .HasForeignKey(notification => notification.TargetCalendarEventId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // The deduplication rule, in the database rather than before the insert: a raise repeated while the first is
         // still unread passes any application check, and only the constraint closes that window. It is partial so that
         // reading the notification frees the condition to be said again when it recurs — and being partial is what

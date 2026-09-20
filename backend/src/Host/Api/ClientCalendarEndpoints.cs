@@ -60,9 +60,9 @@ internal static class ClientCalendarEndpoints
 
     /// <summary>The greatest request body a calendar write reads before refusing it.</summary>
     /// <remarks>
-    /// A full request is one title, two instants, and an identifier, which is under a kilobyte however it is escaped.
-    /// This stands well above that, so a body that was never an event at all is answered <c>413</c> before the handler
-    /// is reached rather than parsed.
+    /// A full request is one title, two instants, an identifier, and a short list of whole numbers, which is under a
+    /// kilobyte however it is escaped. This stands well above that, so a body that was never an event at all is
+    /// answered <c>413</c> before the handler is reached rather than parsed.
     /// </remarks>
     internal const int MaxWriteRequestBytes = 4 * 1024;
 
@@ -191,7 +191,14 @@ internal static class ClientCalendarEndpoints
             return Refuse("A message identifier cannot be empty.");
         }
 
-        var written = await calendar.CreateAsync(request.Title, start, request.End, cited, cancellationToken);
+        var written = await calendar.CreateAsync(
+            request.Title,
+            start,
+            request.End,
+            request.IsAllDay,
+            request.Reminders ?? [],
+            cited,
+            cancellationToken);
 
         return written.Outcome is CalendarEventWriteOutcome.Written
             ? TypedResults.Ok(CalendarEventResponse.For(written.Event!))
@@ -227,7 +234,14 @@ internal static class ClientCalendarEndpoints
             return Refuse("An event states when it begins.");
         }
 
-        var written = await calendar.AmendAsync(identity, request.Title, start, request.End, cancellationToken);
+        var written = await calendar.AmendAsync(
+            identity,
+            request.Title,
+            start,
+            request.End,
+            request.IsAllDay,
+            request.Reminders ?? [],
+            cancellationToken);
 
         return Answer(written);
     }
@@ -308,6 +322,9 @@ internal static class ClientCalendarEndpoints
         CalendarEventWriteOutcome.EndNotAfterStart => "An event that states an end ends after it begins.",
         CalendarEventWriteOutcome.AlreadyOnTheCalendar =>
             "The event is already on the calendar, so there is no proposal left to accept.",
+        CalendarEventWriteOutcome.RemindersRefused =>
+            $"An event carries at most {CalendarEvent.MaximumReminderCount} reminders, each stated once, as whole "
+            + $"minutes between 0 and {CalendarReminder.MaximumMinutesBefore} before it.",
         _ => "The event cannot be written as stated.",
     };
 

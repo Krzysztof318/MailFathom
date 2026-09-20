@@ -10,6 +10,10 @@ import type { Space } from '../routing/spaces';
 // than a branch inside the frame because it is the one place the two vocabularies meet, and because a mapping nothing
 // can call on its own is a mapping nothing can be asserted about either.
 //
+// **A record this client has no screen for is a space rather than nothing.** A reminder names one calendar event, and
+// the Calendar screen that would open it has not shipped — so following it goes to that space, which is as close to
+// the thing as this client can take somebody. Opening the event itself joins this in the change that draws it.
+//
 // **A target this client cannot open leaves the reader where they were.** A screen no space here answers for is a
 // stage that has not shipped, and a notification about nothing is one that was never a place to go: neither is a
 // failure to report, so neither moves anybody. The panel closing is the reader's own act and happens either way.
@@ -34,6 +38,12 @@ const screenSpaces: Readonly<Record<NotificationScreen, Space | null>> = {
 export function followTarget(target: NotificationTarget, client: NotificationDestinations): void {
     if (target.kind === 'Message') {
         client.openMail(target.storedEmailId);
+
+        return;
+    }
+
+    if (target.kind === 'CalendarEvent') {
+        client.goTo('calendar');
 
         return;
     }

@@ -72,13 +72,14 @@ export type NotificationScreen = 'Mail' | 'Settings';
 /**
  * Where opening a notification leads.
  *
- * Three closed shapes rather than two optional values, because which of them a producer chose is what a reader
+ * Four closed shapes rather than a set of optional values, because which of them a producer chose is what a reader
  * switches on: a notification that leads nowhere is a different thing from one whose record this client cannot name.
  */
 export type NotificationTarget =
     | { readonly kind: 'Nothing' }
     | { readonly kind: 'Message'; readonly storedEmailId: string }
-    | { readonly kind: 'Screen'; readonly screen: NotificationScreen };
+    | { readonly kind: 'Screen'; readonly screen: NotificationScreen }
+    | { readonly kind: 'CalendarEvent'; readonly calendarEventId: string };
 
 /**
  * What a notification was raised for, as a closed set rather than as the sentence it is said in.
@@ -87,7 +88,8 @@ export type NotificationTarget =
  * numbers it is stated with, and the application says it in words. A cause this build does not name reaches
  * `parseNotification` as no statement at all rather than as a value nothing can draw.
  */
-export type NotificationCause = 'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused';
+export type NotificationCause =
+    'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused' | 'CalendarReminderDue';
 
 /**
  * What a notification says, as the condition it was raised for and the numbers it is stated with.
@@ -167,7 +169,12 @@ export interface ErasedNotifications {
 }
 
 const kinds: readonly NotificationKind[] = ['Mail', 'Calendar', 'Case', 'Task', 'System'];
-const causes: readonly NotificationCause[] = ['MailArrived', 'SynchronizationIncomplete', 'CredentialRefused'];
+const causes: readonly NotificationCause[] = [
+    'MailArrived',
+    'SynchronizationIncomplete',
+    'CredentialRefused',
+    'CalendarReminderDue',
+];
 const screens: readonly NotificationScreen[] = ['Mail', 'Settings'];
 
 /** Reads one page of the signed-in person's notifications, newest first. */
@@ -416,6 +423,7 @@ const countsPerCause: Readonly<Record<NotificationCause, readonly ('counted' | '
     MailArrived: ['counted'],
     SynchronizationIncomplete: ['counted', 'outOf'],
     CredentialRefused: [],
+    CalendarReminderDue: ['counted'],
 };
 
 /**
@@ -459,6 +467,7 @@ function parseTarget(value: unknown): NotificationTarget | null {
 
     const storedEmailId = record['messageId'] ?? null;
     const screen = record['screen'] ?? null;
+    const calendarEventId = record['calendarEventId'] ?? null;
 
     switch (record['kind']) {
         case 'Nothing':
@@ -467,6 +476,8 @@ function parseTarget(value: unknown): NotificationTarget | null {
             return isNotificationIdentity(storedEmailId) ? { kind: 'Message', storedEmailId } : null;
         case 'Screen':
             return isScreen(screen) ? { kind: 'Screen', screen } : null;
+        case 'CalendarEvent':
+            return isNotificationIdentity(calendarEventId) ? { kind: 'CalendarEvent', calendarEventId } : null;
         default:
             return null;
     }

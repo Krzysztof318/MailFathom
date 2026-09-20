@@ -102,6 +102,67 @@ public sealed class CalendarEventMappingTests
     }
 
     /// <summary>
+    /// The instant a reminder falls at is written beside the lead so the pass announcing them asks the database which
+    /// have come due rather than reading every calendar to find out.
+    /// </summary>
+    [Fact]
+    public void ToEntity_AnEventCarryingReminders_WritesEachLeadWithTheInstantItFallsAt()
+    {
+        // Arrange
+        var held = EventOf(
+            end: null,
+            origin: CalendarEventOrigin.Asserted,
+            reminders: [CalendarReminder.Create(15), CalendarReminder.Create(60)]);
+
+        // Act
+        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+
+        // Assert
+        Assert.Equal([60, 15], row.Reminders.Select(reminder => reminder.MinutesBefore));
+        Assert.Equal([Start.AddHours(-1), Start.AddMinutes(-15)], row.Reminders.Select(reminder => reminder.DueAt));
+        Assert.All(row.Reminders, reminder => Assert.Null(reminder.RaisedForDueAt));
+    }
+
+    /// <summary>A day is announced back from the morning of it, which is the event's rule and therefore the row's.</summary>
+    [Fact]
+    public void ToEntity_ADayRatherThanAClockTime_MeasuresTheRowsInstantFromThatMorning()
+    {
+        // Arrange
+        var held = EventOf(
+            end: null,
+            origin: CalendarEventOrigin.Asserted,
+            isAllDay: true,
+            reminders: [CalendarReminder.Create(0)]);
+
+        // Act
+        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+
+        // Assert
+        Assert.True(row.IsAllDay);
+        Assert.Equal(
+            new DateTimeOffset(Start.Date.AddHours(CalendarEvent.AllDayReminderHour), Start.Offset),
+            Assert.Single(row.Reminders).DueAt);
+    }
+
+    [Fact]
+    public void ToDomain_ARowCarryingReminders_ReadsThemBackAsTheEventStatedThem()
+    {
+        // Arrange
+        var held = EventOf(
+            end: null,
+            origin: CalendarEventOrigin.Asserted,
+            isAllDay: true,
+            reminders: [CalendarReminder.Create(15), CalendarReminder.Create(1440)]);
+
+        // Act
+        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
+
+        // Assert
+        Assert.True(read.IsAllDay);
+        Assert.Equal(held.Reminders, read.Reminders);
+    }
+
+    /// <summary>
     /// A row is input from outside this process however it got there, so one the schema admits and the calendar does
     /// not is refused rather than answered as an event.
     /// </summary>
@@ -129,12 +190,16 @@ public sealed class CalendarEventMappingTests
         DateTimeOffset? end,
         CalendarEventOrigin origin,
         StoredEmailId? sourceMessage = null,
-        ImportedCalendarEventUid? importedUid = null) =>
+        ImportedCalendarEventUid? importedUid = null,
+        bool isAllDay = false,
+        IReadOnlyCollection<CalendarReminder>? reminders = null) =>
         CalendarEvent.Create(
             CalendarEventId.Create(Guid.CreateVersion7()),
             CalendarEventTitle.Create("Design review"),
             Start,
             end,
+            isAllDay,
+            reminders ?? [],
             origin,
             sourceMessage,
             importedUid,

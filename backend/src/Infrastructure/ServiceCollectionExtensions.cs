@@ -1396,6 +1396,9 @@ public static class ServiceCollectionExtensions
         // scopes: a run's folders each have a scope of their own, and folding them is the whole point. It holds no
         // scoped service and is disposed with the container, which drains whatever a window was still holding.
         services.AddSingleton<ClientSignals>();
+        // Every producer writes and announces through this rather than reaching the store and the publisher itself,
+        // so a row nobody announced and an announcement of a row nobody kept are both unreachable.
+        services.AddScoped<NotificationRaiser>();
         services.AddScoped<SynchronizationNotifications>();
         services.AddScoped<NotificationRetention>();
         services.AddScoped<OwnNotifications>();
@@ -1488,6 +1491,13 @@ public static class ServiceCollectionExtensions
     private static void AddCalendar(IServiceCollection services)
     {
         services.AddScoped<ICalendarEventStore, CalendarEventStore>();
+
+        // The one reader over every calendar at once rather than one person's, which is what the pass that announces
+        // reminders asks. Scoped beside the context it reads, like the store above it.
+        services.AddScoped<ICalendarReminderSchedule, CalendarReminderSchedule>();
+
+        // The producer that turns a reminder that has come due into a notification, under the lease on its own scope.
+        services.AddScoped<CalendarReminderSweep>();
 
         // The use case a person reads and writes their own calendar through, scoped like the store beneath it: what it
         // acts for comes off the principal the scope authenticated.

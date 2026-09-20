@@ -28,6 +28,16 @@ describe('followTarget', () => {
         expect(client.openMail).not.toHaveBeenCalled();
     });
 
+    // As close to the event as this client can take somebody until the Calendar screen draws one.
+    it('goes to the calendar for a reminder, which names an event no screen opens yet', () => {
+        const client = following();
+
+        followTarget({ kind: 'CalendarEvent', calendarEventId: 'c-4' }, client);
+
+        expect(client.goTo).toHaveBeenCalledExactlyOnceWith('calendar');
+        expect(client.openMail).not.toHaveBeenCalled();
+    });
+
     it('leaves the reader where they were where the screen has no address in this client yet', () => {
         const client = following();
 

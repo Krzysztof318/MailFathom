@@ -91,6 +91,37 @@ describe('wordNotification', () => {
         expect(said({ cause: 'CredentialRefused', counted: null, outOf: null }, locale).title).toBe(title);
     });
 
+    // The one cause whose headline names the record it is about, because what a reminder is about is one event and
+    // what that event is called is the person's own text rather than anything a catalogue could hold. The deployment
+    // sends it as the headline, and each language puts it where its own sentence wants it.
+    it.each([
+        ['en', 'Reminder: Design review'],
+        ['pl', 'Przypomnienie: Design review'],
+    ] as const)('says a due reminder in %s with the event it is about in the headline', (locale, title) => {
+        const reminder: ClientNotification = {
+            ...englishArrival,
+            kind: 'Calendar',
+            title: 'Design review',
+            body: '15 minutes left.',
+            target: { kind: 'CalendarEvent', calendarEventId: '0197a3c0-0000-7000-8000-000000000001' },
+            statement: { cause: 'CalendarReminderDue', counted: 15, outOf: null },
+        };
+
+        expect(wordNotification(reminder, locale, translating(locale)).title).toBe(title);
+    });
+
+    // The lead is said in the coarsest whole unit that states it exactly, which is the same reading the panel a lead
+    // was set in uses — so the row and the chip cannot come to word one lead two ways.
+    it.each([
+        [0, 'en', 'Starting now.'],
+        [15, 'en', '15 minutes left.'],
+        [120, 'en', '2 hours left.'],
+        [2 * 24 * 60, 'pl', 'Zostały 2 dni.'],
+        [0, 'pl', 'Zaczyna się teraz.'],
+    ] as const)('says what is left before an event %i minutes ahead, in %s', (minutesBefore, locale, body) => {
+        expect(said({ cause: 'CalendarReminderDue', counted: minutesBefore, outOf: null }, locale).body).toBe(body);
+    });
+
     // A record written before this deployment kept conditions, and one raised for a condition a newer deployment
     // knows, both reach a screen the same way: as the service's own English, which is better than a row nobody draws.
     it('falls back to what the deployment sent where it named no condition', () => {
