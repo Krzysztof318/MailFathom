@@ -83,6 +83,33 @@ public sealed class MailAccountCommandTests : IDisposable
         Assert.Contains(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
     }
 
+    /// <summary>An operator who edits an account as YAML reads it as YAML too, so the two views of one declaration agree.</summary>
+    [Fact]
+    public async Task Show_AYamlView_PrintsTheDeclarationAsYaml()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account",
+            "show",
+            "--account",
+            $"{Account:D}",
+            "--format",
+            "yaml",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("EmailAddress: alex@example.test", StringComparison.Ordinal));
+        Assert.DoesNotContain(FakeMailAccountDeployment.Declaration, this.harness.Console.Lines);
+    }
+
     /// <summary>The identifier is the deployment's to generate, and a deployment holding one user needs nobody named.</summary>
     [Fact]
     public async Task Add_ADeclarationInAFile_CreatesItForTheResolvedUserAndReportsTheIdentifier()
@@ -101,10 +128,104 @@ public sealed class MailAccountCommandTests : IDisposable
         var body = JsonDocument.Parse(created.ContentAsUtf8String()).RootElement;
 
         Assert.Equal(User, body.GetProperty("userId").GetGuid());
-        Assert.Contains("archive@example.test", body.GetProperty("account").GetString(), StringComparison.Ordinal);
+        Assert.Equal(
+            """{"EmailAddress":"archive@example.test","DisplayName":"Archive"}""",
+            body.GetProperty("account").GetString());
         Assert.Contains(
             this.harness.Console.Lines,
             line => line.Contains($"{FakeMailAccountDeployment.CreatedAccount:D}", StringComparison.Ordinal));
+    }
+
+    /// <summary>A declaration written in YAML reaches the deployment as the JSON it describes, with every value's type kept.</summary>
+    [Fact]
+    public async Task Add_ADeclarationWrittenInYaml_SendsTheEquivalentJson()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+        var declaration = await this.WriteDeclarationAsync(
+            """
+            # the archive mailbox
+            EmailAddress: archive@example.test
+            DisplayName: "993"
+            Port: 993
+            UseTls: true
+            Folders:
+              - INBOX
+            """,
+            ".yaml");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "add", "--from-file", declaration, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var created = Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountsPath));
+        var body = JsonDocument.Parse(created.ContentAsUtf8String()).RootElement;
+
+        Assert.True(YamlDocumentView.DescribeTheSameDocument(
+            """{"EmailAddress":"archive@example.test","DisplayName":"993","Port":993,"UseTls":true,"Folders":["INBOX"]}""",
+            body.GetProperty("account").GetString()!));
+    }
+
+    /// <summary>The extension decides the format, so a JSON declaration named as one is sent as the operator wrote it.</summary>
+    [Fact]
+    public async Task Add_ADeclarationWrittenInYamlNamedAsJson_ReachesTheDeploymentUnconverted()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+        var declaration = await this.WriteDeclarationAsync("EmailAddress: archive@example.test\n");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "add", "--from-file", declaration, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var created = Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountsPath));
+        var body = JsonDocument.Parse(created.ContentAsUtf8String()).RootElement;
+
+        Assert.Equal("EmailAddress: archive@example.test\n", body.GetProperty("account").GetString());
+    }
+
+    /// <summary>What YAML can say and JSON cannot is refused before anything is sent, naming the file the operator fixes.</summary>
+    [Theory]
+    [InlineData("EmailAddress: archive@example.test\nEmailAddress: second@example.test\n")]
+    [InlineData("EmailAddress: &held archive@example.test\nAlternate: *held\n")]
+    [InlineData("EmailAddress: archive@example.test\n---\nEmailAddress: second@example.test\n")]
+    [InlineData("EmailAddress: archive@example.test\nPort: .nan\n")]
+    public async Task Add_AYamlDeclarationSayingWhatJsonCannot_FailsNamingTheFileAndCreatesNothing(string declaration)
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+        var path = await this.WriteDeclarationAsync(declaration, ".yml");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "add", "--from-file", path, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountsPath));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(path, StringComparison.Ordinal));
+    }
+
+    /// <summary>A YAML file holding only comments declares nothing, which is the answer an empty file already gets.</summary>
+    [Fact]
+    public async Task Add_AYamlDeclarationHoldingOnlyComments_SaysItDeclaresNoMailAccount()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.Holding();
+        var declaration = await this.WriteDeclarationAsync("# the mailbox is declared below\n", ".yaml");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "add", "--from-file", declaration, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.MailAccountsPath));
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("declares no mail account", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -332,9 +453,9 @@ public sealed class MailAccountCommandTests : IDisposable
         }
     }
 
-    private async Task<string> WriteDeclarationAsync(string declaration)
+    private async Task<string> WriteDeclarationAsync(string declaration, string extension = ".json")
     {
-        var path = Path.Combine(this.declarations, $"mail-account-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(this.declarations, $"mail-account-{Guid.NewGuid():N}{extension}");
 
         Directory.CreateDirectory(this.declarations);
         await File.WriteAllTextAsync(path, declaration, TestContext.Current.CancellationToken);
