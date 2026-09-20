@@ -1,8 +1,13 @@
 [
   {
-    "etag": "1789559384433055",
+    "etag": "1789913441546223",
     "path": ".thumbnail",
-    "size": 20002
+    "size": 12794
+  },
+  {
+    "etag": "1789913123894867",
+    "path": "MailFathom AI Blocks.dc.html",
+    "size": 76452
   },
   {
     "etag": "1788947636854293",
@@ -15,14 +20,9 @@
     "size": 27967
   },
   {
-    "etag": "1789559108659991",
+    "etag": "1789913449365493",
     "path": "MailFathom Prototype.dc.html",
-    "size": 667910
-  },
-  {
-    "etag": "1788947540991746",
-    "path": "MailFathom Result Blocks.dc.html",
-    "size": 57740
+    "size": 712210
   },
   {
     "etag": "1789404092590895",
@@ -135,7 +135,7 @@
     "size": 17231
   },
   {
-    "etag": "1789559379959161",
+    "etag": "1789913329641024",
     "path": "support.js",
     "size": 69150
   },

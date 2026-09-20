@@ -25,8 +25,8 @@
 
     <div style="{{ headerRowStyle }}">
       <div style="display:flex;flex-direction:column;gap:3px">
-        <div style="{{ pageTitleStyle }}">Result blocks</div>
-        <div style="font-size:13px;color:var(--muted)">A catalogue of the nine block types in the presentation plan — Discover</div>
+        <div style="{{ pageTitleStyle }}">AI blocks</div>
+        <div style="font-size:13px;color:var(--muted)">One catalogue for both surfaces — Discover renders these read-only, the Agent renders the same blocks with controls</div>
       </div>
       <div style="{{ badgeRowStyle }}">
         <div style="{{ chipStyle }}">theme: {{ themeAttr }}</div>
@@ -39,6 +39,8 @@
       <div style="{{ resultColStyle }}">
 
         <div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ schemaBannerText }}</div>
+
+        <div style="{{ crossHeadingStyle }}">Shared — Discover and the Agent draw these identically</div>
 
         <div style="{{ cardStyle }}">
           <div style="{{ headStyle }}"><div style="{{ labelStyle }}">ANSWER</div><div style="{{ metaStyle }}">{{ answerMeta }}</div></div>
@@ -311,12 +313,179 @@
       </div>
 
     </div>
+
+    <div style="{{ propSectionStyle }}">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="{{ crossHeadingStyle }}">Proposal blocks — the Agent's three phases</div>
+        <div style="font-size:12.5px;color:var(--muted);text-wrap:pretty;max-width:760px">In Discover these read as a static “needs confirmation” badge. In a conversation the same blocks carry real controls, so approving, sending and scheduling happen where the person is reading. EVENT PROPOSAL and TASK PROPOSAL exist only where something has to be seen and corrected before it is approved — everything else stays a one-line SUGGESTED ACTION.</div>
+      </div>
+      <div style="{{ propGridStyle }}">
+        <sc-for list="{{ propCards }}" as="pc" hint-placeholder-count="4">
+          <div style="{{ pc.cardStyle }}">
+            <div style="{{ headStyle }}">
+              <div style="{{ labelStyle }}">{{ pc.label }}</div>
+              <div style="{{ pc.phaseChipStyle }}"><span style="{{ pc.phaseIconStyle }}">{{ pc.phaseIcon }}</span>{{ pc.phaseLabel }}</div>
+              <div style="{{ metaStyle }}">{{ pc.meta }}</div>
+            </div>
+
+            <sc-if value="{{ pc.isDeclined }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ pc.declinedStyle }}">
+                <span style="{{ pc.declinedIconStyle }}">block</span>
+                <span style="{{ pc.strikeStyle }}">{{ pc.title }}</span>
+                <span>Declined — nothing was done</span>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ pc.showBody }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+              </sc-if>
+              <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+                <div style="{{ pc.titleStyle }}">{{ pc.title }}</div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <sc-for list="{{ pc.fields }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex;gap:10px;align-items:baseline"><div style="{{ pc.kStyle }}">{{ f.k }}</div><div style="{{ pc.vStyle }}">{{ f.v }}</div></div>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ pc.hasBody }}" hint-placeholder-val="{{ false }}">
+                  <sc-for list="{{ pc.paras }}" as="p" hint-placeholder-count="3"><div style="{{ pc.paraStyle }}">{{ p.t }}</div></sc-for>
+                </sc-if>
+                <sc-if value="{{ pc.hasConflict }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.conflictStyle }}"><span style="{{ pc.conflictIconStyle }}">warning</span>{{ pc.conflict }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasNoConflictNote }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.okStyle }}"><span style="{{ pc.okIconStyle }}">event_available</span>{{ pc.noConflictNote }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasReason }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.reasonStyle }}">{{ pc.reason }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasEffect }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.effectStyle }}"><span style="{{ pc.effectIconStyle }}">bolt</span>Effect: {{ pc.effect }}</div>
+                </sc-if>
+                <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ pc.partialNote }}</div>
+                </sc-if>
+              </sc-if>
+              <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ pc.emptyIcon }}</span><div style="{{ emptyTextStyle }}">{{ pc.emptyText }}</div></div>
+              </sc-if>
+              <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ pc.errorText }}</div><div style="{{ emptyReasonStyle }}">{{ pc.errorReason }}</div><div role="button" tabIndex="0" aria-label="{{ pc.retryAria }}" style="{{ retryBtnStyle }}" style-hover="cursor:pointer;opacity:0.9" style-focus="outline:2px solid var(--accent);outline-offset:2px">Try again</div></div>
+              </sc-if>
+              <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div>
+              </sc-if>
+
+              <sc-if value="{{ pc.hasResult }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.resultStyle }}"><span style="{{ pc.resultIconStyle }}">{{ pc.resultIcon }}</span>{{ pc.result }}</div>
+              </sc-if>
+              <sc-if value="{{ pc.hasControls }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.controlsStyle }}">
+                  <sc-for list="{{ pc.controls }}" as="cn" hint-placeholder-count="2">
+                    <div role="button" tabIndex="0" aria-label="{{ cn.aria }}" style="{{ cn.style }}" style-hover="cursor:pointer;opacity:0.9" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ cn.label }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ pc.hasNav }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.navStyle }}">
+                  <sc-for list="{{ pc.nav }}" as="nv" hint-placeholder-count="1">
+                    <div role="button" tabIndex="0" aria-label="{{ nv.aria }}" style="{{ nv.style }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px"><span style="{{ nv.iconStyle }}">{{ nv.icon }}</span>{{ nv.label }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
   </div>
 </div>
 
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ready&quot;,&quot;loading&quot;,&quot;partial&quot;,&quot;empty&quot;,&quot;error&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;ready&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Block state&quot;}}">
 const FRAMES = { tablet: { w: 1024, h: 768 }, fold: { w: 884, h: 832 }, phone: { w: 390, h: 844 } };
+
+/* The blocks that gain controls in a conversation. EVENT and TASK earn a block of their own only
+   because the object has to be seen and corrected before it is approved; move to folder, mark as
+   read, add to a case and close a case stay one-line SUGGESTED ACTIONs. */
+const DRAFT_PARAS = [
+  "Thank you for the addendum. We accept shortening the response time for critical incidents to 2 hours on business days.",
+  "In return we ask for an upper cap on CPI indexation of 5% per year. At the 4.1% forecast this keeps the cost predictable for both sides through 2027.",
+  "If the cap is acceptable, we are ready to close the decision by 28 August.",
+];
+
+const PROPOSAL_SPECS = [
+  {
+    type: "event", phase: "pending", meta: "calendar · work",
+    title: "Focus block: IT contract audit list",
+    fields: [["When", "today 16:00–17:00"], ["Duration", "1 h"], ["Attendees", "You"], ["From", "thread “IT contract audit”"]],
+    conflict: "overlaps Rollout status with Piotr (15:00–16:30)",
+    nav: [["Open the calendar", "calendar_month"]],
+  },
+  {
+    type: "event", phase: "pending", meta: "calendar · work",
+    title: "Focus block: CPI cap counter-proposal",
+    fields: [["When", "tomorrow 09:00–10:00"], ["Duration", "1 h"], ["Attendees", "You"], ["From", "thread “Contract addendum — signatures”"]],
+    noConflict: "The slot is clear — nothing else in the calendar.",
+  },
+  {
+    type: "event", phase: "accepted", meta: "calendar · work",
+    title: "Focus block: CPI cap counter-proposal",
+    fields: [["When", "today 10:00–11:00"], ["Duration", "1 h"], ["Attendees", "You"], ["From", "thread “Contract addendum — signatures”"]],
+    result: "Added to the calendar · 09:42",
+    nav: [["Open the calendar", "calendar_month"]],
+  },
+  { type: "event", phase: "declined", meta: "calendar · work", title: "Focus block: IT contract audit list" },
+  {
+    type: "task", phase: "pending", meta: "tasks · from mail",
+    title: "Send the notice-period list to the audit",
+    fields: [["Due", "tomorrow, 17:00"], ["From", "message “IT contract audit”"], ["Reminder", "09:00 tomorrow"]],
+    nav: [["Open the thread", "forum"]],
+  },
+  {
+    type: "task", phase: "accepted", meta: "tasks · from mail",
+    title: "Send the notice-period list to the audit",
+    fields: [["Due", "tomorrow, 17:00"], ["From", "message “IT contract audit”"]],
+    result: "Added to tasks · 08:21",
+  },
+  {
+    type: "draft", phase: "pending", meta: "reply · 96 words",
+    title: "Reply to Anna Kowalska",
+    fields: [["To", "Anna Kowalska"], ["Subject", "Re: Contract addendum — signatures"]],
+    paras: DRAFT_PARAS,
+  },
+  {
+    type: "draft", phase: "accepted", meta: "reply · 96 words",
+    title: "Reply to Anna Kowalska",
+    fields: [["To", "Anna Kowalska"], ["Subject", "Re: Contract addendum — signatures"]],
+    paras: DRAFT_PARAS,
+    result: "Sent into “Contract addendum — signatures” · 11:07",
+    nav: [["Open the thread", "forum"]],
+  },
+  { type: "draft", phase: "declined", meta: "reply", title: "Reply to Anna Kowalska" },
+  {
+    type: "action", phase: "pending", meta: "one step",
+    title: "Attach the legal opinion to the Contoso 2027 case",
+    reason: "The opinion answers the open question about the indexation cap and is not in the case file.",
+    effect: "Adds the document to the case — nothing is sent to anyone.",
+    cta: "Attach it", nav: [["Open the case", "folder_open"]],
+  },
+  {
+    type: "action", phase: "accepted", meta: "one step",
+    title: "Attach the legal opinion to the Contoso 2027 case",
+    effect: "Adds the document to the case — nothing is sent to anyone.",
+    result: "Attached to Contoso 2027 · 14:16",
+  },
+  {
+    type: "action", phase: "accepted", failed: true, meta: "one step",
+    title: "Add the 12.11 date to the Fabrikam case",
+    effect: "Writes the date into the case file.",
+    result: "Could not add it — the case server rejected the write · 07:31",
+  },
+  { type: "action", phase: "declined", meta: "one step", title: "Mark the Fabrikam thread as waiting on them" },
+];
+
+const PROP_LABEL = { event: "EVENT PROPOSAL", task: "TASK PROPOSAL", draft: "DRAFT", action: "SUGGESTED ACTION" };
 
 const ANSWER_PARTS_FULL = [
   { text: "The terms changed in three stages: the master agreement of April 2021", cite: "1", source: "Master agreement.pdf" },
@@ -468,7 +637,9 @@ class Component extends DCLogic {
     const retryBtnStyle = "font-size:12.5px;color:var(--onaccent);background:var(--accent);border-radius:7px;padding:7px 14px;margin-top:2px";
     const skelRows = [92, 78, 55].map(pct => ({ style: "height:13px;border-radius:6px;background:var(--hover);animation:mfpulse 1.4s ease-in-out infinite;width:" + pct + "%" }));
 
-    const answerParts = isPartial ? ANSWER_PARTS_FULL.slice(0, 2) : ANSWER_PARTS_FULL;
+    const answerParts = (isPartial ? ANSWER_PARTS_FULL.slice(0, 2) : ANSWER_PARTS_FULL).map(p => Object.assign({}, p, {
+      ariaLabel: "Citation " + p.cite + ": " + p.source,
+    }));
     const evidenceItems = (isPartial ? EVIDENCE_FULL.slice(0, 2) : EVIDENCE_FULL).map(e => {
       const vi = verdictInfo(e.verdict);
       const sb = srcBadge(e);
@@ -499,7 +670,110 @@ class Component extends DCLogic {
     const threadAgreed = AGREED_FULL;
     const threadOpenQuestions = isPartial ? [] : OPEN_Q_FULL;
 
+    const mIcon = (size, color) => "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + size + "px;line-height:1;flex:0 0 auto;color:" + color;
+    const propBtn = (primary) => "display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;font-size:13.5px;white-space:nowrap;" +
+      (isMobile ? "width:100%;min-height:44px;padding:0 16px;" : "padding:9px 15px;") +
+      (primary ? "font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);" : "color:var(--text2);background:var(--panel);border:1px solid var(--border2);");
+    const propSpecs = bodyReady ? PROPOSAL_SPECS : ["event", "task", "draft", "action"].map(t => PROPOSAL_SPECS.filter(s => s.type === t && s.phase === "pending")[0]);
+    const propCards = propSpecs.map(s => {
+      const declined = s.phase === "declined";
+      const accepted = s.phase === "accepted";
+      const pending = s.phase === "pending";
+      const controls = !bodyReady ? [] : pending ? (
+        s.type === "event" ? [
+          { label: "Add to calendar", aria: "Add “" + s.title + "” to the calendar", primary: true },
+          { label: "Another time" , aria: "Ask for another time for “" + s.title + "”" },
+          { label: "Decline", aria: "Decline putting “" + s.title + "” in the calendar" },
+        ] : s.type === "task" ? [
+          { label: "Add", aria: "Add the task “" + s.title + "”", primary: true },
+          { label: "Decline", aria: "Decline the task “" + s.title + "”" },
+        ] : s.type === "draft" ? [
+          { label: "Send", aria: "Send the draft to Anna Kowalska", primary: true },
+          { label: "Edit here", aria: "Edit the draft to Anna Kowalska inside the conversation" },
+          { label: "Discard", aria: "Discard the draft to Anna Kowalska" },
+        ] : [
+          { label: s.cta || "Do it", aria: s.title, primary: true },
+          { label: "Decline", aria: "Decline: " + s.title },
+        ]
+      ) : (accepted && s.failed ? [{ label: "Try again", aria: "Try again: " + s.title, primary: true }] : []);
+      return {
+        label: PROP_LABEL[s.type],
+        meta: s.meta || "",
+        title: s.title,
+        cardStyle: "display:flex;flex-direction:column;gap:10px;border-radius:9px;padding:16px 18px;" +
+          (declined ? "border:1px dashed var(--border2);background:transparent;"
+            : pending ? "border:1px solid var(--accent-line);background:var(--accent-soft);"
+            : "border:1px solid var(--line);background:var(--panel);"),
+        phaseLabel: pending ? "pending · needs confirmation" : declined ? "declined" : s.failed ? "accepted · not done" : "accepted",
+        phaseIcon: pending ? "help" : declined ? "block" : s.failed ? "error" : "check_circle",
+        phaseIconStyle: mIcon(13, "inherit"),
+        phaseChipStyle: "display:inline-flex;align-items:center;gap:5px;border-radius:16px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
+          (pending ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
+            : s.failed ? "color:var(--warn-text);background:var(--warn-soft);border:1px solid var(--warn-soft);"
+            : "color:var(--muted);background:var(--rail);border:1px solid var(--line);"),
+        isDeclined: declined,
+        showBody: !declined,
+        declinedStyle: "display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)",
+        declinedIconStyle: mIcon(16, "var(--muted)"),
+        strikeStyle: "text-decoration:line-through;min-width:0",
+        titleStyle: "font-size:15px;font-weight:600;letter-spacing:-0.01em;text-wrap:pretty",
+        kStyle: "flex:0 0 " + (isMobile ? 66 : 82) + "px;font-size:11.5px;letter-spacing:0.03em;color:var(--muted)",
+        vStyle: "flex:1;min-width:0;font-size:13.5px;color:var(--text);text-wrap:pretty",
+        fields: (s.fields || []).map(f => ({ k: f[0], v: f[1] })),
+        hasBody: (s.paras || []).length > 0,
+        paras: (s.paras || []).map(p => ({ t: p })),
+        paraStyle: "font-size:13.5px;line-height:1.6;color:var(--text2);text-wrap:pretty",
+        hasConflict: !!s.conflict,
+        conflict: s.conflict || "",
+        conflictStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--warn-text);background:var(--warn-soft);border-radius:7px;padding:8px 11px;text-wrap:pretty",
+        conflictIconStyle: mIcon(16, "var(--warn)"),
+        hasNoConflictNote: !!s.noConflict,
+        noConflictNote: s.noConflict || "",
+        okStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ok-text);background:var(--ok-soft);border-radius:7px;padding:8px 11px;text-wrap:pretty",
+        okIconStyle: mIcon(16, "var(--ok)"),
+        hasReason: !!s.reason,
+        reason: s.reason || "",
+        reasonStyle: "font-size:13px;color:var(--text2);text-wrap:pretty",
+        hasEffect: !!s.effect,
+        effect: s.effect || "",
+        effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--muted);text-wrap:pretty",
+        effectIconStyle: mIcon(15, "var(--muted)"),
+        partialNote: s.type === "event" ? "One calendar has not answered — a conflict may still appear."
+          : s.type === "draft" ? "The closing paragraph is still being written."
+          : "Part of the source data is still being read.",
+        emptyIcon: s.type === "draft" ? "edit_note" : s.type === "task" ? "task_alt" : s.type === "event" ? "event_busy" : "task_alt",
+        emptyText: s.type === "event" ? "No free slot long enough this week — nothing to propose."
+          : s.type === "task" ? "Nothing in this thread carries a date or an owner."
+          : s.type === "draft" ? "Nothing to draft — the last message in the thread is yours."
+          : "Nothing worth doing here — the thread needs no step.",
+        errorText: "Could not build this proposal.",
+        errorReason: s.type === "event" ? "The calendar did not answer." : s.type === "task" ? "The task list did not answer." : "The model timed out.",
+        retryAria: "Try again: " + PROP_LABEL[s.type].toLowerCase(),
+        hasResult: accepted,
+        result: s.result || "",
+        resultIcon: s.failed ? "error" : "check_circle",
+        resultIconStyle: mIcon(16, s.failed ? "var(--warn)" : "var(--ok)"),
+        resultStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;text-wrap:pretty;color:" + (s.failed ? "var(--warn-text)" : "var(--ok-text)"),
+        hasControls: controls.length > 0,
+        controls: controls.map(c => ({ label: c.label, aria: c.aria, style: propBtn(!!c.primary) })),
+        controlsStyle: (isMobile ? "display:flex;flex-direction:column;gap:8px;" : "display:flex;gap:8px;flex-wrap:wrap;align-items:center;") + "border-top:1px solid var(--line2);padding-top:10px",
+        hasNav: !declined && (s.nav || []).length > 0,
+        nav: (s.nav || []).map(n => ({
+          label: n[0], icon: n[1], aria: n[0] + " — leaves the conversation, you can come straight back",
+          iconStyle: mIcon(16, "var(--muted)"),
+          style: "display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text2);font-size:12.5px;white-space:nowrap;" +
+            (isMobile ? "min-height:44px;padding:0 14px;" : "padding:6px 12px;"),
+        })),
+        navStyle: isMobile ? "display:flex;flex-direction:column;gap:8px" : "display:flex;gap:8px;flex-wrap:wrap",
+      };
+    });
+
     return {
+      propCards,
+      propSectionStyle: "display:flex;flex-direction:column;gap:14px",
+      propGridStyle: isMobile || stacked
+        ? "display:grid;grid-template-columns:minmax(0,1fr);gap:16px"
+        : "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start",
       rootRef: this.rootRef,
       themeAttr: theme,
       outerStyle: "min-height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;padding:" + (isMobile ? "0" : "32px 24px"),
