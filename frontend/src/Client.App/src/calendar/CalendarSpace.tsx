@@ -206,7 +206,7 @@ export function CalendarSpace({
                 if (answer.outcome !== 'failed' && answer.value.event !== null) {
                     const written = answer.value.event;
 
-                    setOpened((standing) => (standing === null ? null : { ...standing, event: written }));
+                    setOpened((opening) => (opening === null ? null : { ...opening, event: written }));
                 }
 
                 return {
@@ -459,6 +459,11 @@ export function CalendarSpace({
 
             {session === null ? null : (
                 <NewEvent
+                    // Keyed on the day it opens on, because the draft is seeded once and this component outlives
+                    // every move between spans: a reader who walks to another week before writing anything down
+                    // would otherwise be handed the day the screen was first drawn on. The dialog is modal, so the
+                    // day cannot move under a form somebody is typing into.
+                    key={anchor.toISOString()}
                     asked={asking}
                     session={session}
                     transport={transport}

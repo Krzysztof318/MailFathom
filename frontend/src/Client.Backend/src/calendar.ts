@@ -620,7 +620,12 @@ export function parseCalendarEvent(value: unknown): CalendarEvent | null {
 }
 
 function isReminderSet(value: unknown): value is readonly number[] {
-    return Array.isArray(value) && value.every((lead) => typeof lead === 'number') && isStatableReminderSet(value);
+    return (
+        Array.isArray(value) &&
+        value.length <= mostRemindersOnAnEvent &&
+        value.every((lead) => typeof lead === 'number') &&
+        isStatableReminderSet(value)
+    );
 }
 
 function isInstantList(value: unknown): value is readonly string[] {

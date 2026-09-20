@@ -213,6 +213,25 @@ describe('NewEvent', () => {
         expect(written.writtenAt).toBe('2026-09-24T10:00:00+02:00');
     });
 
+    it('reads the description on Enter rather than saving the fields typed beside it', async () => {
+        const { transport, sent } = deployment(drafted({ drafted: false, spent: false }));
+        const { onSave } = drawDialog(transport);
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Lunch with Anna' } });
+        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '13:00' } });
+        fireEvent.change(describedIn(), { target: { value: 'lunch on Thursday' } });
+        fireEvent.keyDown(describedIn(), { key: 'Enter' });
+
+        await waitFor(() => {
+            expect(sent()).toHaveLength(1);
+        });
+
+        // What the field promises is that the sentence is read, so the key that ends a line in it reads rather than
+        // writing the event down from the two fields that happen to be filled.
+        expect(sent()[0]?.path).toContain('/calendar/drafts');
+        expect(onSave).not.toHaveBeenCalled();
+    });
+
     it('says a sentence it could read nothing out of rather than filling the fields with a guess', async () => {
         const { transport } = deployment(drafted({ drafted: false, spent: false }));
         drawDialog(transport);

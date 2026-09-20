@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -388,7 +388,7 @@ describe('CalendarSpace', () => {
         expect(await screen.findByText('Some of them were not deleted.')).toBeDefined();
     });
 
-    it('offers the event"s own menu on a right press, with the three acts this client can perform', async () => {
+    it('offers the event"s own menu on a right press, with the four acts this client can perform', async () => {
         const { transport } = deployment();
         drawSpace(transport);
 
@@ -396,7 +396,34 @@ describe('CalendarSpace', () => {
 
         expect(await screen.findByRole('menuitem', { name: 'Select events' })).toBeDefined();
         expect(screen.getByRole('menuitem', { name: 'Open the event' })).toBeDefined();
+        expect(screen.getByRole('menuitem', { name: 'Reminders' })).toBeDefined();
         expect(screen.getByRole('menuitem', { name: 'Delete the event' })).toBeDefined();
+    });
+
+    it('opens the event with what announces it in front, where the menu asked for the reminders', async () => {
+        const { transport } = deployment();
+        drawSpace(transport);
+
+        fireEvent.contextMenu(await screen.findByRole('option', { name: /Review with Anna/u }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Reminders' }));
+
+        expect(await screen.findByRole('dialog', { name: 'Reminders' })).toBeDefined();
+    });
+
+    it('opens a new event on the day the reader walked to, not on the one the screen was drawn on', async () => {
+        const { transport } = deployment();
+        drawSpace(transport);
+
+        expect(await screen.findByRole('option', { name: /Review with Anna/u })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'New event' }));
+
+        // Scoped to the dialog, the view control beside it carrying the same word: what is read here is the field the
+        // event is written into, and the week walked to opens on its own Monday.
+        const writing = within(screen.getByRole('dialog', { name: 'New event' }));
+
+        expect(writing.getByLabelText<HTMLInputElement>('Day').value).toBe('2026-09-28');
     });
 
     it('draws the description field only where the deployment reads one', async () => {

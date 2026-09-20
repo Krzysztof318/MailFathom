@@ -211,6 +211,18 @@ describe('recordCalendarEvent', () => {
 
         expect(answer.outcome === 'failed' && answer.failure.reason).toBe('unreadable');
     });
+
+    // The branch every write shares, which is what a status neither the contract nor the refusal above accounts for
+    // arrives on: a credential that stopped being one is reported as itself rather than as a deployment that is down.
+    it.each([
+        [401, 'unauthenticated'],
+        [403, 'unauthorized'],
+        [500, 'unavailable'],
+    ])('reads %s as a failure of its own kind', async (status, reason) => {
+        const answer = await recordCalendarEvent(session, answering({ status, body: '' }), record);
+
+        expect(answer.outcome === 'failed' && answer.failure.reason).toBe(reason);
+    });
 });
 
 describe('amendCalendarEvent', () => {

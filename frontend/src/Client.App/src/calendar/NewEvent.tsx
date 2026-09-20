@@ -183,6 +183,15 @@ export function NewEvent({
                                 onChange={(typing) => {
                                     setDescribed(typing.target.value);
                                 }}
+                                // Enter in a field inside a form submits it, which here would write the event from
+                                // whatever was typed by hand and drop the sentence unread. What this field promises
+                                // is that it is read, so that is what the key does.
+                                onKeyDown={(typing) => {
+                                    if (typing.key === 'Enter' && !typing.shiftKey) {
+                                        typing.preventDefault();
+                                        readDescription();
+                                    }
+                                }}
                             />
 
                             <SecondaryButton
