@@ -9,7 +9,7 @@ informed:
 
 # Write a running AI answer into PostgreSQL as it is composed, announce over the hub only the run and the sequence it reached, let the client's own re-read from a cursor carry the answer, and keep starting, posting, steering, and stopping ordinary HTTP routes
 
-<!-- describes: backend/src/Application/Discovery/Streaming/**, backend/src/Application/Discovery/Runs/**, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Signals/**, frontend/src/Client.Backend/src/signals.ts -->
+<!-- describes: backend/src/Application/Discovery/Streaming/**, backend/src/Application/Discovery/Runs/**, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Signals/**, frontend/src/Client.Backend/src/signals.ts, frontend/src/Client.Backend/src/runFollowing.ts -->
 
 ## Context and Problem Statement
 

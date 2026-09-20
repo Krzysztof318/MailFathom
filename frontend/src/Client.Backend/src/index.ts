@@ -334,6 +334,16 @@ export {
 } from './ownPortrait';
 export { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
 export {
+    followRun,
+    silentRunPollInterval,
+    type FollowedRun,
+    type FollowedRunEvent,
+    type RunFollowingSchedule,
+    type RunTail,
+    type RunTailReading,
+    type RunToFollow,
+} from './runFollowing';
+export {
     endSession,
     parseMintedSession,
     renewSession,

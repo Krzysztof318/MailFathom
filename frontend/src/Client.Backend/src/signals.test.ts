@@ -229,6 +229,14 @@ describe('parseClientSignal', () => {
         });
     });
 
+    it('reads an advancing run as the run and how far it has got', () => {
+        expect(parseClientSignal({ kind: 'discovery.run.advanced', run: 'a4f1', sequence: 12 })).toStrictEqual({
+            kind: 'discovery.run.advanced',
+            run: 'a4f1',
+            sequence: 12,
+        });
+    });
+
     const refused: readonly (readonly [string, unknown])[] = [
         ['nothing at all', null],
         ['an array', []],
@@ -255,6 +263,12 @@ describe('parseClientSignal', () => {
         [
             'a flag change naming no row',
             { kind: 'mail.flags.changed', account: 'work', folder: 'INBOX', flags: [{ isSeen: true }] },
+        ],
+        ['an advancing run naming no run', { kind: 'discovery.run.advanced', sequence: 3 }],
+        ['an advancing run that has published nothing', { kind: 'discovery.run.advanced', run: 'a4f1', sequence: 0 }],
+        [
+            'an advancing run whose sequence is not a sequence',
+            { kind: 'discovery.run.advanced', run: 'a4f1', sequence: '3' },
         ],
     ];
 
