@@ -499,6 +499,54 @@ A month is what a working set is: long enough that somebody back from leave stil
 away, and short enough that the table never becomes the thing the bound exists to prevent — three months of a person's
 arrivals is their mailbox in miniature.
 
+## What a person owes
+
+`tasks` holds a personal list: what somebody entered for themselves, and what MailFathom read out of their mail and is
+offering them. It is native to this deployment in the strong sense — no external task-management protocol is spoken,
+chosen, or synchronized against — so the list a person sees is the rows below and nothing else. It belongs to the
+deployment rather than to a device, for the reason `notifications` does, and it is a personal list rather than a shared
+board: no column assigns work to anybody but the person whose list it is.
+
+| Column of `tasks` | What it records |
+|---|---|
+| `Id` | What addresses the task |
+| `UserId` | The person whose list it is on. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `notifications` keys the same way |
+| `Title` | The line the list is drawn with, bounded at 200 characters |
+| `DueOn` | The day it is due on, as a `date`, and absent where nobody has said when. A day rather than an instant, because what a person owes is owed on a date; a reminder against that date is what carries a time, and it is a separate record |
+| `Origin` | Where the task came from — `Asserted` for one the person entered or accepted, `Proposed` for one read out of mail and not yet committed to — stored as text |
+| `IsCompleted` | Whether the person has done it |
+| `SourceStoredEmailId` | The message the task was read out of, as a plain value carrying no foreign key. Absent where the task cites none, which most do |
+
+**Accepting a proposal moves `Origin` and writes no second row.** That is what keeps a commitment and the suggestion it
+came from one task: whatever already points at the row — a reminder, a citation — still points at it afterwards, and a
+list cannot show the same commitment twice because it was agreed to. Reading the two apart is an equality on that
+column rather than two tables.
+
+**The citation is a value rather than an association, and that is what lets a task outlive the mail it came from.**
+Every association to a stored message's identity cascades but for a reply's own parent, so a task that named one would
+be erased with the message — and a commitment read out of a thread is still a commitment once the thread is gone, so a
+cascade here would quietly delete work somebody still owes. `mailbox_mutation_audit_entries` keeps its own message the
+same way and for the same shape of reason, and the payload of a `jobs` row names a message the same way too. The cost
+is the one those two already carry: nothing constrains the column, so a reader resolving a citation whose message has
+been erased finds nothing under that identity and says so. That is the answer a task wants — *the mail this came from
+is no longer here* — where `notifications`, which only offers to open something, is erased outright by the cascade it
+does carry.
+
+**Completing a task and erasing one are each a single state change.** Completion moves one column, and an erasure takes
+the row rather than marking it gone: a task nobody owes any more is not a record anything is owed about, and keeping
+one would leave every reader of the list having to remember to exclude it. Both are idempotent — asking for a state a
+task already stands in writes nothing, and erasing something already erased is the act the caller wanted.
+
+`ix_tasks_user_due` covers `(UserId, DueOn, Id)`, which is the order the list is both read and drawn in: one person's
+tasks soonest due first, with PostgreSQL's own `NULLS LAST` putting the undated ones at the end and the identifier
+keeping two tasks due on one day in a stable order across reads. That pair is also the keyset a page continues from,
+so a list longer than one page is walked by position rather than by offset — which matters on a list somebody edits
+while they read it, since dating or completing a task between two pages would shift an offset window and repeat or
+skip a row on every page after it. Continuing from a boundary with no day walks the undated block alone, because
+nothing in this order comes after it. The groupings a screen shows — today, this week,
+later — are derived from `DueOn` against the reader's own day rather than stored, so nothing can say one thing in the
+column and another in the group.
+
 ## What a user signs in with
 
 `user_credentials` holds every credential a user authenticates to
@@ -1915,6 +1963,7 @@ account reach these four tables through the same cascade every other table is re
 | `IX_client_sessions_CredentialId` | `(CredentialId)` | The foreign key onto the credential, which is what disabling or deleting one reaches its sessions by rather than scanning |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
+| `ix_tasks_user_due` | `(UserId, DueOn, Id)` | The one order a personal task list is read and drawn in: one person's tasks soonest due first, with PostgreSQL's own `NULLS LAST` leaving the undated ones at the end and the identifier keeping two tasks due on one day in a stable order across reads. Reading the proposals apart from the commitments is an equality on `Origin` within one person's rows, which is a handful of them, so that column earns no place in the key |
 | `ix_mailbox_exports_account_requested` | `(MailboxAccountId, RequestedAt DESC)` | One account's exports newest first, which is the listing an operator asks for and the only order this table is read in |
 | `ix_mailbox_exports_expires_at` | `(ExpiresAt)` where it is not null | The archives the expiry pass has to delete. The filter is what keeps the index the size of the archives that exist rather than of every export the deployment has ever written: one that failed, was cancelled, or has already gone carries no expiry |
 | `IX_stored_content_claims_ExpiresAt` | `(ExpiresAt)` | The sweep every claim statement opens with, which is what keeps the table the size of the payloads currently in flight rather than of every claim a replica ever died holding. Unfiltered, because what an expiry divides the table into changes with the clock rather than with a row |
@@ -1955,7 +2004,7 @@ The derived search document is not a lesser classification of the same data. Bod
 
 `mailbox_mutations` is derived personal data too, and for a reason worth stating plainly: a mutation history says where a person's mail has been and what was done to it. It therefore inherits the retention and deletion obligations of the email it describes rather than outliving it, and the cascade from `stored_emails` is what makes that structural — including where the recorded mutation was the deletion itself.
 
-`mailbox_mutation_audit_entries` is the one table on this page that deliberately does **not** inherit those obligations. It is derived personal data by the same reading — where a person's mail has been, when, and at whose instruction — and the reason it outlives the mail is that an audit of deletions whose entries are erased by the deletions they record holds nothing. What replaces the cascade is a bound of its own: the trail is off unless an account turns it on, each account states how long its entries are kept, and every account run erases what has outlived that window. A data-subject erasure reaches it separately for the same reason, and [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states that path.
+`mailbox_mutation_audit_entries` is one of the two tables on this page that deliberately do **not** inherit those obligations — `tasks` below is the other, for a different reason. It is derived personal data by the same reading — where a person's mail has been, when, and at whose instruction — and the reason it outlives the mail is that an audit of deletions whose entries are erased by the deletions they record holds nothing. What replaces the cascade is a bound of its own: the trail is off unless an account turns it on, each account states how long its entries are kept, and every account run erases what has outlived that window. A data-subject erasure reaches it separately for the same reason, and [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states that path.
 
 `mail_answering_audit_entries` and `mail_answering_audited_emails` are the other table that needs an operator's decision before either holds anything, and the comparison between the two is the whole design. The entry is derived personal data of a different kind — what a person's mail was read for, and when — and it is bounded the same way: off unless an account turns it on, with a stated retention every account run erases against. Where it differs is the cascade, which it keeps: the messages an entry names hang on `stored_emails` and go with them, because recording that mail was *read* survives that mail's erasure no better than the extract itself would. Retention and the cascade therefore both reach it, and neither replaces the other.
 
@@ -2029,6 +2078,23 @@ What the rows naming no message carry instead is a bound of the record's own: th
 swept on each account's own run. Nothing in the table reaches a log, a metric, a trace, or an exception message; the
 user's generated identifier and the account alias are what a failure names, and they are the two values that are not
 personal data.
+
+`tasks` is derived personal data of a kind nothing else on this page holds, and the difference decides its cascade. A
+title may be a sentence read out of a body, so a row is read as mail content wherever MailFathom composed it — but what
+the row *is* is a commitment, and a commitment is not undone by the mail naming it being erased. So it is the second of the two
+tables here that deliberately do not inherit the source message's erasure obligation: the message is cited by a value
+rather than by a foreign key, so erasing it leaves the task standing and holding a sentence derived from mail that no
+longer exists. That is a
+narrower survival than `mailbox_mutation_audit_entries` takes and is justified differently — an audit outlives the mail
+because a trail erased by what it records holds nothing, while a task outlives it because the person still owes the
+thing. The obligation that does reach every row is the person's own: `tasks` cascades from `settings_accounts`, so a
+data-subject erasure takes the whole list without having to name this table, which matters here for the reason it
+matters for `notifications` — the table records no mail account, and the erasure walk enumerates the tables that do.
+There is no retention bound, and that is the list's nature rather than an omission: a task is held until somebody
+completes and erases it, and a deployment sweeping away what a person still owes would be losing their work rather than
+minimizing anything. Nothing in the table reaches a log, a metric, a trace, or an exception message; the task's own
+identifier and the user's generated one are what a failure names, and they are the two values that are not personal
+data.
 
 `spent_client_assertions` is the one table on this page whose classification depends on which credential a row was written under. For a configured key pair the `CredentialKey` column holds the name an operator gave the key, which is MailFathom's own configuration and nobody's data; for a user's registered key it holds that key's 43-character fingerprint, which is a pseudonymous identifier for an identified person and is read as their data. The other two columns are neither in both cases — a value the client minted for one request, and an instant. Nothing cascades into the table, and that is deliberate rather than an omission: the column holds a configured name as readily as a fingerprint and belongs to neither record, so there is nothing for a constraint to point at. What replaces the cascade is the row's own lifetime, which is minutes rather than a retention window somebody has to sweep against — a data-subject erasure is therefore not owed a statement here, because whatever a fingerprint could still identify is gone on its own before such a request could be answered. Neither the fingerprint nor the identifier reaches a log, a metric, a trace, or an error message — a refusal on the user path names the credential's own generated identifier. The configured key name does reach one, in the warnings that say which key presented a replayed or overlong assertion, and it is the column value there as well as in the row; it is MailFathom's own configuration rather than anybody's data, which is why that is the one part of the table a log carries.
 

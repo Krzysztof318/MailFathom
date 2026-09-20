@@ -30,6 +30,7 @@ using MailFathom.Infrastructure.Persistence.Signals.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
 using MailFathom.Infrastructure.Persistence.StoredFiles.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
+using MailFathom.Infrastructure.Persistence.Tasks.Configurations;
 using MailFathom.Infrastructure.Persistence.ThreadStates.Configurations;
 using MailFathom.Infrastructure.Persistence.Users.Configurations;
 using Microsoft.EntityFrameworkCore;
@@ -221,6 +222,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<NotificationEntity> Notifications => this.Set<NotificationEntity>();
 
+    internal DbSet<PersonalTaskEntity> PersonalTasks => this.Set<PersonalTaskEntity>();
+
     /// <inheritdoc />
     /// <remarks>
     /// The order below is the order the configurations are applied in, and it is not alphabetical: a configuration that
@@ -309,5 +312,6 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new JobScheduleConfiguration());
         modelBuilder.ApplyConfiguration(new WorkLeaseConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationConfiguration());
+        modelBuilder.ApplyConfiguration(new PersonalTaskConfiguration());
     }
 }

@@ -109,6 +109,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Application.Tasks;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Accounts;
@@ -157,6 +158,7 @@ using MailFathom.Infrastructure.Persistence.Signals;
 using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.StoredFiles;
 using MailFathom.Infrastructure.Persistence.Synchronization;
+using MailFathom.Infrastructure.Persistence.Tasks;
 using MailFathom.Infrastructure.Persistence.ThreadStates;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Resilience;
@@ -1393,6 +1395,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SynchronizationNotifications>();
         services.AddScoped<NotificationRetention>();
         services.AddScoped<OwnNotifications>();
+        // What a person owes, native to this deployment. Scoped like every other store: a write that has a read to
+        // make first opens a session on the scope's own context, and the erasure, which has none, reaches that same
+        // context directly.
+        services.AddScoped<IPersonalTaskStore, PersistedPersonalTaskStore>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.
