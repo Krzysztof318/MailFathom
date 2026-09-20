@@ -2974,7 +2974,10 @@ a control the last of the allowance has already been paid for, told nothing.
 **Both routes are `mailfathom.mail.ask` rather than the read grant the rest of the list is served under**, for the
 reason [reply drafting](#the-reply-drafting-routes) carries that grant: arranging a day is a provider call charged to
 the same allowance a question is. It is what the call costs that decides the grant here, rather than which of this
-deployment's own records were read to compose it.
+deployment's own records were read to compose it. **`POST` asks for `mailfathom.mail.read` beneath it as well**, for
+the reason [the contact card](#the-contact-relationship-route) asks for the grants its correlation needs: the tasks and
+the calendar it reads to compose the turn are that grant's own records, so a caller holding the asking grant alone is
+refused naming the one they are missing. `GET` reads neither and answers on the asking grant alone.
 
 ### The calendar routes
 

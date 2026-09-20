@@ -40,11 +40,20 @@ namespace MailFathom.Host.Api;
 /// told apart only by the word a screen puts on the button.
 /// </para>
 /// <para>
-/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the five writes included.</b> A task is this
-/// deployment's own record of what one person owes: nothing here reaches a mail server, nothing moves in a mailbox,
-/// and the citation a task carries is a value rather than a reading of mail. It is the notification centre's reasoning
-/// rather than the mutation routes' — a person whose mail accounts an administrator maintains does not hold a write
-/// grant and still has to be able to keep their own list.
+/// <b>Every route that reads or writes the list is <see cref="MailFathomPermission.MailRead" />, the five writes
+/// included.</b> A task is this deployment's own record of what one person owes: nothing here reaches a mail server,
+/// nothing moves in a mailbox, and the citation a task carries is a value rather than a reading of mail. It is the
+/// notification centre's reasoning rather than the mutation routes' — a person whose mail accounts an administrator
+/// maintains does not hold a write grant and still has to be able to keep their own list.
+/// </para>
+/// <para>
+/// <b>The day-layout pair is <see cref="MailFathomPermission.MailAsk" /> instead, and the arrangement asks
+/// <see cref="MailFathomPermission.MailRead" /> beneath it.</b> What the published grant follows is where the lines
+/// go: arranging a day leaves this deployment for a chat provider and is charged to the same allowance a question is.
+/// What the arrangement then reads to compose that turn is this list and the day's calendar, both of them the reading
+/// grant's own records, so the use case beneath asks for it on its own and a caller holding the asking grant alone is
+/// refused naming the one they are missing — the shape the contact card already stands in. The route that only says
+/// whether a day is arranged at all reads neither, and answers on the asking grant alone.
 /// </para>
 /// </remarks>
 internal static class ClientTaskEndpoints
@@ -137,7 +146,9 @@ internal static class ClientTaskEndpoints
 
         // The two routes of the arrangement, under the grant that governs asking rather than the one the list is read
         // under: laying out a day is a provider call charged to the same allowance a question is, which is what
-        // decides the grant here rather than which records are read to compose it.
+        // decides the grant here rather than which records are read to compose it. The use case beneath the
+        // arrangement asks for the reading grant as well, since the list and the calendar it reads are that grant's
+        // own records, so a caller holding this one alone is refused naming the one it is missing.
         api.MapGet(TodayLayoutRoute, ArrangesDays)
             .RequirePermission(MailFathomPermission.MailAsk);
 

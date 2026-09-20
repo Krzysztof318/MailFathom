@@ -20,10 +20,10 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Api;
 
 /// <summary>
-/// Covers the eight routes a person reads and writes their own task list over. What is decided here rather than in the
-/// use case beneath is the transport half: what a request has to state before it is a task at all, which refusals name
-/// a rule rather than echo a value, and that a task this person does not hold is answered as one that does not exist
-/// whichever route named it.
+/// Covers the ten routes a person reads and writes their own task list over, the day-layout pair that arranges what it
+/// holds included. What is decided here rather than in the use case beneath is the transport half: what a request has
+/// to state before it is a task at all, which refusals name a rule rather than echo a value, and that a task this
+/// person does not hold is answered as one that does not exist whichever route named it.
 /// </summary>
 public sealed class ClientTaskEndpointsTests
 {

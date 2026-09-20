@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Calendar;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Tasks;
@@ -217,6 +218,22 @@ public sealed class TodayLayoutTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>The grant the routes are published under does not reach the records an arrangement is composed from, so the asking grant alone is refused.</summary>
+    [Fact]
+    public async Task SuggestAsync_ACallerGrantedOnlyAsking_IsRefused()
+    {
+        // Arrange
+        var layout = Compose(
+            PlannerAnswering(_ => DayLayoutDerivation.Settled(new DayLayoutSuggestion([], []))),
+            owed: [Owed("Answer the supplier", Day)],
+            committed: [],
+            authorization: AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailAsk));
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => layout.SuggestAsync(DayStart, DayEnd, TestContext.Current.CancellationToken));
+    }
+
     private static IDayLayoutPlanner PlannerAnswering(Func<DayLayoutQuestion, DayLayoutDerivation> answer)
     {
         var planner = Substitute.For<IDayLayoutPlanner>();
@@ -268,10 +285,11 @@ public sealed class TodayLayoutTests
         IReadOnlyList<PersonalTask> owed,
         IReadOnlyList<CalendarEvent> committed,
         IPersonalTaskStore? taskStore = null,
-        ICalendarEventStore? calendarStore = null)
+        ICalendarEventStore? calendarStore = null,
+        AccessAuthorization? authorization = null)
     {
         var clock = new FakeTimeProvider(DayStart);
-        var authorization = AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead);
+        authorization ??= AccessAuthorizations.ForUserGranted(Person, MailFathomPermission.MailRead);
         var tasks = taskStore ?? TaskStoreHolding(owed);
         var events = calendarStore ?? Substitute.For<ICalendarEventStore>();
 
