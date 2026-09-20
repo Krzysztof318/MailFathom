@@ -6,10 +6,11 @@ import type { ReactNode } from 'react';
 import { understoodPlanSchemaVersion } from '@mailfathom/client-backend';
 import { Containment } from '../containment/Containment';
 import { Icon } from '../controls/Icon';
+import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from './AnswerBlockCard';
-import { answerBlockRenderers, type AnswerBlockRenderers } from './answerBlocks';
-import type { ArrivedAnswerBlock } from './followedRun';
+import { answerBlockRenderers, type AnswerBlockState, type AnswerBlockRenderers } from './answerBlocks';
+import type { ArrivedAnswerBlock, RunReadFailure } from './followedRun';
 
 // Where a presentation plan becomes a screen. It is a host rather than a switch statement, and three properties are
 // why.
@@ -27,14 +28,26 @@ import type { ArrivedAnswerBlock } from './followedRun';
 // newer plan is drawn as far as it goes rather than refused. That is what makes a deployment updatable without
 // breaking the clients in front of it, which is why it is drawn rather than assumed.
 
+// What each way of failing to read the run becomes at the end of the answer. A failure is drawn as the state it
+// actually is — one deployment out of reach, three things wrong with this client's standing or with what came back —
+// and it carries its own sentence, because what somebody does next differs in each: sign in again, say the grant is
+// missing, wait for the deployment, report a defect.
+const readFailures: Readonly<Record<RunReadFailure, { readonly state: AnswerBlockState; readonly note: MessageKey }>> =
+    {
+        unauthenticated: { state: 'error', note: 'answerBlock.unauthenticated' },
+        unauthorized: { state: 'error', note: 'answerBlock.unauthorized' },
+        unavailable: { state: 'offline', note: 'answerBlock.offline' },
+        unreadable: { state: 'error', note: 'answerBlock.unreadable' },
+    };
+
 /**
  * A presentation plan as far as it has been composed.
  *
  * @param blocks The blocks the run has published, in the order it published them.
  * @param running Whether more is still coming, which is what the place held at the end of the list stands for.
  * @param planSchemaVersion The revision the run's plan was written against, and `null` before the run has said.
- * @param unreachable Whether the last read of the run did not answer, which is what turns the place still coming into
- * the offline state instead of leaving it waiting for ever.
+ * @param failure Why the last read of the run did not answer, which is what the place still coming says instead of
+ * waiting for ever, and `null` where it answered.
  * @param onRetry What reading the run again does, and nothing where the surface offers no way to.
  * @param renderers Which component draws which block type, which is the build's own registry unless a caller says
  * otherwise.
@@ -44,7 +57,7 @@ export function AnswerCanvas({
     blocks,
     running,
     planSchemaVersion,
-    unreachable = false,
+    failure = null,
     onRetry,
     renderers = answerBlockRenderers,
     evidence,
@@ -52,7 +65,7 @@ export function AnswerCanvas({
     readonly blocks: readonly ArrivedAnswerBlock[];
     readonly running: boolean;
     readonly planSchemaVersion: number | null;
-    readonly unreachable?: boolean;
+    readonly failure?: RunReadFailure | null;
     readonly onRetry?: (() => void) | undefined;
     readonly renderers?: AnswerBlockRenderers;
     readonly evidence?: ReactNode;
@@ -60,6 +73,7 @@ export function AnswerCanvas({
     const { translate } = useLocalization();
 
     const ahead = planSchemaVersion !== null && planSchemaVersion > understoodPlanSchemaVersion;
+    const unread = failure === null ? undefined : readFailures[failure];
 
     return (
         <div className="flex flex-col gap-5.5 desktop:grid desktop:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] desktop:items-start">
@@ -96,10 +110,15 @@ export function AnswerCanvas({
 
                         {running ? (
                             <li>
+                                {/* Reading again is the way out of exactly one of the four, for the reason
+                                    `shell/ConnectionSummary.tsx` gives: a refused credential, a missing grant and an
+                                    answer this client cannot parse each repeat identically on a second attempt, so
+                                    offering the button there hands somebody an action that cannot work. */}
                                 <AnswerBlockCard
                                     label={translate('answerCanvas.stillComing')}
-                                    state={unreachable ? 'offline' : 'loading'}
-                                    onRetry={unreachable ? onRetry : undefined}
+                                    note={unread === undefined ? undefined : translate(unread.note)}
+                                    state={unread?.state ?? 'loading'}
+                                    onRetry={failure === 'unavailable' ? onRetry : undefined}
                                 />
                             </li>
                         ) : null}

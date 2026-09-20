@@ -12,7 +12,7 @@ function answering(events: readonly DiscoveryRunEvent[], running = false): Clien
 
 describe('nothingRead', () => {
     it('is a run still working, so a screen says so while the first read is out', () => {
-        expect(nothingRead).toEqual({ blocks: [], running: true, planSchemaVersion: null, unreachable: false });
+        expect(nothingRead).toEqual({ blocks: [], running: true, planSchemaVersion: null, failure: null });
     });
 });
 
@@ -68,7 +68,17 @@ describe('answerAfter', () => {
 
         const second = answerAfter(first, { outcome: 'failed', failure: { reason: 'unavailable', status: null } });
 
-        expect(second).toEqual({ ...first, unreachable: true });
+        expect(second).toEqual({ ...first, failure: 'unavailable' });
+    });
+
+    it('carries which way the read failed rather than one flag for all four', () => {
+        const reasons = ['unauthenticated', 'unauthorized', 'unavailable', 'unreadable'] as const;
+
+        const carried = reasons.map(
+            (reason) => answerAfter(nothingRead, { outcome: 'failed', failure: { reason, status: null } }).failure,
+        );
+
+        expect(carried).toEqual([...reasons]);
     });
 
     it('stops waiting on a run this person does not hold', () => {
@@ -77,9 +87,9 @@ describe('answerAfter', () => {
         expect(answer).toEqual({ ...nothingRead, running: false });
     });
 
-    it('takes back an unreachable deployment once a read answers again', () => {
+    it('takes back a failed read once a read answers again', () => {
         const lost = answerAfter(nothingRead, { outcome: 'failed', failure: { reason: 'unavailable', status: null } });
 
-        expect(answerAfter(lost, answering([], true)).unreachable).toBe(false);
+        expect(answerAfter(lost, answering([], true)).failure).toBeNull();
     });
 });

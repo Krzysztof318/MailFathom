@@ -12,10 +12,10 @@ const label = 'Fact table';
 
 const body = 'Two rows and a citation on each';
 
-function renderCard(state: AnswerBlockState, onRetry?: () => void) {
+function renderCard(state: AnswerBlockState, onRetry?: () => void, note?: string) {
     return render(
         <LocalizationProvider>
-            <AnswerBlockCard label={label} meta="2 rows" state={state} onRetry={onRetry}>
+            <AnswerBlockCard label={label} meta="2 rows" note={note} state={state} onRetry={onRetry}>
                 <p>{body}</p>
             </AnswerBlockCard>
         </LocalizationProvider>,
@@ -82,6 +82,13 @@ describe('AnswerBlockCard', () => {
         renderCard('offline');
 
         expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
+    });
+
+    it('says what the caller knows about the failure in place of the sentence the state carries', () => {
+        renderCard('offline', undefined, 'The session ended while this answer was being read.');
+
+        expect(screen.getByText('The session ended while this answer was being read.')).toBeDefined();
+        expect(screen.queryByText('No connection to the server — this block cannot be loaded.')).toBeNull();
     });
 
     it('offers the way out of a failure', () => {

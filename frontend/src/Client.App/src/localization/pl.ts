@@ -36,6 +36,11 @@ export const pl: Catalogue = {
     'answerBlock.empty': 'Nie było czym wypełnić tego bloku.',
     'answerBlock.error': 'Nie udało się zbudować tego bloku.',
     'answerBlock.offline': 'Brak połączenia z serwerem — tego bloku nie można wczytać.',
+    'answerBlock.unauthenticated':
+        'Sesja zakończyła się w trakcie odczytu tej odpowiedzi. Zaloguj się ponownie, aby zobaczyć resztę.',
+    'answerBlock.unauthorized': 'To konto nie ma uprawnień do odczytania tej odpowiedzi.',
+    'answerBlock.unreadable':
+        'Dalsza część tej odpowiedzi przyszła w postaci, której ten klient nie potrafi odczytać — to usterka warta zgłoszenia.',
     'answerBlock.unrecognised': 'Nieznany blok',
     'answerBlock.unrecognisedType': 'typ: {named}',
     'answerBlock.unrecognisedBody':

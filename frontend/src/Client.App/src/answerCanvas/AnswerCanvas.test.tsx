@@ -102,18 +102,36 @@ describe('AnswerCanvas', () => {
     });
 
     it('says the deployment is out of reach rather than waiting on it in silence', () => {
-        renderCanvas([arrival(1, 'answer')], { running: true, unreachable: true });
+        renderCanvas([arrival(1, 'answer')], { running: true, failure: 'unavailable' });
 
         expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
     });
 
+    it('says which way the read failed rather than reporting all four as no connection', () => {
+        renderCanvas([], { running: true, failure: 'unauthenticated' });
+
+        expect(
+            screen.getByText('The session ended while this answer was being read. Sign in again to see the rest.'),
+        ).toBeDefined();
+    });
+
     it('offers reading the run again when it could not be reached', () => {
         const retry = vi.fn();
-        renderCanvas([], { running: true, unreachable: true, onRetry: retry });
+        renderCanvas([], { running: true, failure: 'unavailable', onRetry: retry });
 
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
         expect(retry).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no second attempt at a failure that would repeat identically', () => {
+        for (const failure of ['unauthenticated', 'unauthorized', 'unreadable'] as const) {
+            const { unmount } = renderCanvas([], { running: true, failure, onRetry: vi.fn() });
+
+            expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+
+            unmount();
+        }
     });
 
     it('says a plan written against a newer revision was drawn as far as it went', () => {

@@ -38,6 +38,8 @@ const stateIcons: Readonly<Record<'empty' | 'error' | 'offline', IconName>> = {
  * @param label What this block is called, already in the reader's language.
  * @param meta What the block says about itself beside its name — how much it holds, or that it is still working.
  * @param state What the block is doing, which decides everything below the name.
+ * @param note What the failing or empty state says, where the caller knows more about it than the state does, and
+ * nothing where the state's own sentence is the whole of it.
  * @param onRetry What the way out of a failure does, and nothing where this block has none to offer.
  * @param children The body, which is drawn for a block that is ready and for one that is partly so.
  */
@@ -45,12 +47,14 @@ export function AnswerBlockCard({
     label,
     meta,
     state,
+    note,
     onRetry,
     children,
 }: {
     readonly label: string;
     readonly meta?: string | undefined;
     readonly state: AnswerBlockState;
+    readonly note?: string | undefined;
     readonly onRetry?: (() => void) | undefined;
     readonly children?: ReactNode;
 }) {
@@ -86,13 +90,14 @@ export function AnswerBlockCard({
                     />
 
                     <p className="max-w-95 text-sm text-text-soft text-pretty">
-                        {translate(
-                            state === 'empty'
-                                ? 'answerBlock.empty'
-                                : state === 'error'
-                                  ? 'answerBlock.error'
-                                  : 'answerBlock.offline',
-                        )}
+                        {note ??
+                            translate(
+                                state === 'empty'
+                                    ? 'answerBlock.empty'
+                                    : state === 'error'
+                                      ? 'answerBlock.error'
+                                      : 'answerBlock.offline',
+                            )}
                     </p>
 
                     {onRetry === undefined ? null : (

@@ -37,6 +37,10 @@ export const en = {
     'answerBlock.empty': 'There was nothing to put in this block.',
     'answerBlock.error': 'Could not build this block.',
     'answerBlock.offline': 'No connection to the server — this block cannot be loaded.',
+    'answerBlock.unauthenticated': 'The session ended while this answer was being read. Sign in again to see the rest.',
+    'answerBlock.unauthorized': 'This account is not allowed to read this answer.',
+    'answerBlock.unreadable':
+        'The rest of this answer arrived in a form this client could not read, which is a defect worth reporting.',
     'answerBlock.unrecognised': 'Unknown block',
     'answerBlock.unrecognisedType': 'type: {named}',
     'answerBlock.unrecognisedBody':

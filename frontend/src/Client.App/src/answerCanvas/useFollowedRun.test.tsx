@@ -192,7 +192,7 @@ describe('useFollowedRun', () => {
         const { result } = following(transport, hearing().changes);
 
         await waitFor(() => {
-            expect(result.current.unreachable).toBe(true);
+            expect(result.current.failure).toBe('unavailable');
         });
 
         expect(result.current.running).toBe(true);

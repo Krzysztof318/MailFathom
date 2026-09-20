@@ -2,7 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { AnswerBlock, ClientResult, DiscoveryRunEvent, RunTail } from '@mailfathom/client-backend';
+import type {
+    AnswerBlock,
+    ClientFailureReason,
+    ClientResult,
+    DiscoveryRunEvent,
+    RunTail,
+} from '@mailfathom/client-backend';
 
 // What a run being followed amounts to on the screen, and how one read of it moves that on. It is a value and a
 // function over it rather than part of the hook below, because what a read does to an answer is ordinary logic: the
@@ -17,6 +23,15 @@ export interface ArrivedAnswerBlock {
     readonly block: AnswerBlock;
 }
 
+/**
+ * Why the last read of a run did not answer.
+ *
+ * It is the failure model minus the one reason that ends the following rather than interrupting it: a run the
+ * deployment does not hold is an answer, and the four left each leave the run where it was and are told apart on the
+ * screen because the way out of each of them is different.
+ */
+export type RunReadFailure = Exclude<ClientFailureReason, 'missing'>;
+
 /** A run as far as the client has read it. */
 export interface FollowedAnswer {
     /** The blocks that have arrived, in the order the run published them. */
@@ -28,8 +43,8 @@ export interface FollowedAnswer {
     /** The revision the run's plan was written against, and `null` before the run has said. */
     readonly planSchemaVersion: number | null;
 
-    /** Whether the last read did not answer, which is what a screen says instead of waiting in silence. */
-    readonly unreachable: boolean;
+    /** Why the last read did not answer, and `null` where it did, which is what a screen says instead of waiting in silence. */
+    readonly failure: RunReadFailure | null;
 }
 
 /**
@@ -42,7 +57,7 @@ export const nothingRead: FollowedAnswer = {
     blocks: [],
     running: true,
     planSchemaVersion: null,
-    unreachable: false,
+    failure: null,
 };
 
 /**
@@ -56,10 +71,12 @@ export function answerAfter(before: FollowedAnswer, tail: ClientResult<RunTail<D
     if (tail.outcome === 'failed') {
         // A run the deployment does not hold for this person is not a run to wait on: asking again reaches the same
         // answer for ever, so what has arrived is the whole of the answer. Every other failure leaves the run where it
-        // was and says the deployment is out of reach, which the next read may undo.
+        // was and is carried as itself rather than as one flag, because a session that expired, a grant that is
+        // missing, a deployment out of reach and an answer this client could not read send somebody four different
+        // ways — and a screen handed one boolean can only offer one of them.
         return tail.failure.reason === 'missing'
-            ? { ...before, running: false, unreachable: false }
-            : { ...before, unreachable: true };
+            ? { ...before, running: false, failure: null }
+            : { ...before, failure: tail.failure.reason };
     }
 
     const blocks = [...before.blocks];
@@ -73,5 +90,5 @@ export function answerAfter(before: FollowedAnswer, tail: ClientResult<RunTail<D
         }
     }
 
-    return { blocks, running: tail.value.running, planSchemaVersion, unreachable: false };
+    return { blocks, running: tail.value.running, planSchemaVersion, failure: null };
 }
