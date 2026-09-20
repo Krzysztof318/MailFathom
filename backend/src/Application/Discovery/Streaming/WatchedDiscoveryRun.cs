@@ -139,7 +139,7 @@ public sealed class WatchedDiscoveryRun
 
             await journal.AppendAsync(
                 new DiscoveryRunCompleted(
-                    await PresentAsync(result, journal),
+                    await PresentAsync(result, journal, bounded.Token),
                     result.Presentation.Coverage,
                     this.ledger.Read()),
                 CancellationToken.None);
@@ -191,13 +191,14 @@ public sealed class WatchedDiscoveryRun
     /// </remarks>
     private static async Task<IReadOnlyList<PresentationLimitation>> PresentAsync(
         DiscoveryRunResult result,
-        DiscoveryRunJournal journal)
+        DiscoveryRunJournal journal,
+        CancellationToken stopping)
     {
         foreach (var citation in result.Presentation.Citations)
         {
             if (!await journal.AppendAsync(new DiscoveryCitationDeclared(citation), CancellationToken.None))
             {
-                return [PresentationLimitation.BlocksOmitted];
+                return Refused(stopping);
             }
         }
 
@@ -205,11 +206,29 @@ public sealed class WatchedDiscoveryRun
         {
             if (!await journal.AppendAsync(new DiscoveryBlockComposed(block), CancellationToken.None))
             {
-                return [PresentationLimitation.BlocksOmitted];
+                return Refused(stopping);
             }
         }
 
         return result.Presentation.Limitations;
+    }
+
+    /// <summary>Answers a journal that would not take what this run had already composed.</summary>
+    /// <remarks>
+    /// A stop is the only reason reachable here, which is why it is raised as the cancellation it is rather than
+    /// reported as an answer that finished with something missing: <see cref="DiscoveryRunBounds.MaximumEvents" /> is
+    /// derived from what a presentation may hold, so the event ceiling cannot refuse a citation or a block the plan was
+    /// allowed to compose, and the two windows that forget a run are both longer than a run may live. A stop reaches
+    /// this replica as a refused write whichever replica recorded it, and the journal has cancelled its own token by
+    /// the time the refusal is returned — so the ending says the person stopped their run. A refusal that leaves the
+    /// token uncancelled is one nothing here anticipated, and the run then ends as an answer missing its blocks, which
+    /// is what it is.
+    /// </remarks>
+    private static IReadOnlyList<PresentationLimitation> Refused(CancellationToken stopping)
+    {
+        stopping.ThrowIfCancellationRequested();
+
+        return [PresentationLimitation.BlocksOmitted];
     }
 
     /// <summary>Ends the run on a stated failure, with what it had spent by the time it reached it.</summary>

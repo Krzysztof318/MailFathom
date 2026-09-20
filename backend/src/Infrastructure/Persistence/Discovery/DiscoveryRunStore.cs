@@ -146,6 +146,11 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
     /// nobody can hold such a value honestly, so it belongs to some other run, and replaying costs a few events where
     /// honouring it would hand back a run missing everything before the number.
     /// </para>
+    /// <para>
+    /// The sequence is selected beside the payload because it is not in the payload: an event is serialized before the
+    /// insert derives its place, so the row is the only place a run's order is recorded and the caller stamps it back
+    /// onto what it read.
+    /// </para>
     /// </remarks>
     private const string ReadRunStatement = $"""
         WITH used AS (
@@ -159,7 +164,7 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
             FROM "{DiscoveryRunEventEntity.TableName}"
             WHERE "{DiscoveryRunEventEntity.RunIdColumnName}" = @id
         )
-        SELECT u.ended IS NULL, e."{DiscoveryRunEventEntity.PayloadColumnName}"
+        SELECT u.ended IS NULL, e."{DiscoveryRunEventEntity.PayloadColumnName}", e."{DiscoveryRunEventEntity.SequenceColumnName}"
         FROM used u
         CROSS JOIN reach c
         LEFT JOIN "{DiscoveryRunEventEntity.TableName}" e
@@ -284,7 +289,11 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
 
             if (!await reader.IsDBNullAsync(1, cancellationToken))
             {
-                events.Add(Read(reader.GetString(1)));
+                // Stamped from the row rather than read out of the payload: the sequence is derived inside the insert,
+                // so the event was serialized before there was one to serialize and the payload's own copy of both
+                // members is a default by construction. The columns are where a run's order actually lives, which is
+                // what the cursor a client holds addresses.
+                events.Add(Read(reader.GetString(1)) with { RunId = id, Sequence = reader.GetInt64(2) });
             }
         }
 

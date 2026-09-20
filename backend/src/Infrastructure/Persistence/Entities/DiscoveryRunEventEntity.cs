@@ -49,7 +49,7 @@ internal sealed class DiscoveryRunEventEntity
     internal const string WrittenAtColumnName = "WrittenAt";
 
     /// <summary>The longest kind the column takes.</summary>
-    /// <remarks>A bound on the row rather than a statement of the format: what is written is one of the event contract's own published names, the longest of which is eleven characters, and the column is given room past that so the names stay the contract's to choose.</remarks>
+    /// <remarks>A bound on the row rather than a statement of the format: what is written is one of the event contract's own published names, the longest of which is nine characters, and the column is given room past that so the names stay the contract's to choose.</remarks>
     internal const int KindLengthLimit = 64;
 
     /// <summary>Gets or sets the run this event belongs to.</summary>

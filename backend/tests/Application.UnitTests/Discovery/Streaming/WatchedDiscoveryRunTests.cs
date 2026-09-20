@@ -11,6 +11,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -310,6 +311,29 @@ public sealed class WatchedDiscoveryRunTests
         Assert.Empty(this.Written(journal).OfType<DiscoveryBlockComposed>());
     }
 
+    /// <summary>A stop landing while the run is publishing what it composed ends it as cancelled, not as completed.</summary>
+    /// <remarks>
+    /// The stop is recorded elsewhere, so this execution meets it as a refused write rather than as a cancelled token.
+    /// Reporting that as an answer that merely lost its blocks would tell somebody who stopped their run that it
+    /// finished, which is the one thing the ending is read for.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ARunStoppedWhileItPublishesWhatItComposed_EndsTheRunAsCancelled()
+    {
+        // Arrange
+        var stoppedElsewhere = new StoppedAsItStartsPublishing(this.store, SyntheticMailUser.Deployment);
+        using var journal = await this.NewJournalAsync(stoppedElsewhere);
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
+            .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.Cancelled, this.Failure(journal));
+        Assert.Empty(this.Written(journal).OfType<DiscoveryRunCompleted>());
+    }
+
     /// <summary>What a stopped run had already published stays published, since none of it becomes cheaper by being discarded.</summary>
     [Fact]
     public async Task RunAsync_ARunStoppedAfterReportingProgress_KeepsWhatItHadAlreadyPublished()
@@ -500,10 +524,13 @@ public sealed class WatchedDiscoveryRunTests
             Endpoint);
 
     /// <summary>Opens a run in the store and hands back the journal the execution writes it through.</summary>
-    private async Task<DiscoveryRunJournal> NewJournalAsync()
+    private Task<DiscoveryRunJournal> NewJournalAsync() => this.NewJournalAsync(this.store);
+
+    /// <summary>Opens a run and writes it through a store of the caller's choosing.</summary>
+    private async Task<DiscoveryRunJournal> NewJournalAsync(IDiscoveryRunStore store)
     {
         var id = DiscoveryRunId.New();
-        await this.store.TryOpenAsync(
+        await store.TryOpenAsync(
             id,
             SyntheticMailUser.Deployment,
             DiscoveryRuns.Now,
@@ -512,7 +539,7 @@ public sealed class WatchedDiscoveryRunTests
         return new DiscoveryRunJournal(
             id,
             SyntheticMailUser.Deployment,
-            this.store,
+            store,
             ClientSignalPublishers.ReachingNobody,
             this.clock);
     }
@@ -521,4 +548,35 @@ public sealed class WatchedDiscoveryRunTests
         Assert.IsType<DiscoveryRunFailed>(this.Written(journal)[^1]).Failure;
 
     private IReadOnlyList<DiscoveryRunEvent> Written(DiscoveryRunJournal journal) => this.store.Written(journal.Id);
+
+    /// <summary>Stands for another replica recording a stop the moment this one starts publishing what it composed.</summary>
+    /// <remarks>
+    /// The stop is written into the store rather than raised on the journal, because a run stopped elsewhere is exactly
+    /// the case this execution cannot see coming: nothing local is cancelled, the retrieval finishes, and the first
+    /// thing to know about it is the refused write.
+    /// </remarks>
+    private sealed class StoppedAsItStartsPublishing(InMemoryDiscoveryRunStore store, MailUserId user) : IDiscoveryRunStore
+    {
+        public Task<bool> TryOpenAsync(DiscoveryRunId id, MailUserId opening, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.TryOpenAsync(id, opening, now, cancellationToken);
+
+        public async Task<long?> AppendAsync(DiscoveryRunId id, DiscoveryRunEvent written, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            if (written is DiscoveryCitationDeclared or DiscoveryBlockComposed)
+            {
+                await store.TryRequestStopAsync(id, user, now, cancellationToken);
+            }
+
+            return await store.AppendAsync(id, written, now, cancellationToken);
+        }
+
+        public Task<DiscoveryRunReading?> ReadAsync(DiscoveryRunId id, MailUserId reading, long afterSequence, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.ReadAsync(id, reading, afterSequence, now, cancellationToken);
+
+        public Task<bool> TryRequestStopAsync(DiscoveryRunId id, MailUserId stopping, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.TryRequestStopAsync(id, stopping, now, cancellationToken);
+
+        public Task<int> RemoveForgottenAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.RemoveForgottenAsync(now, cancellationToken);
+    }
 }
