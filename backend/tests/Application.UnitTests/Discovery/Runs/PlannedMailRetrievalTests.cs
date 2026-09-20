@@ -147,7 +147,7 @@ public sealed class PlannedMailRetrievalTests
         await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
-            reported.Add,
+            Recording(reported),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -238,7 +238,7 @@ public sealed class PlannedMailRetrievalTests
         await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice"),
-            reported.Add,
+            Recording(reported),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -296,6 +296,15 @@ public sealed class PlannedMailRetrievalTests
 
         Assert.Equal(["invoice"], search.Lookups.Select(lookup => lookup.QueryText));
     }
+
+    /// <summary>Records each report the retrieval awaits, which is what a run's journal does with one.</summary>
+    private static Func<DiscoveryRetrievalProgress, Task> Recording(List<DiscoveryRetrievalProgress> reported) =>
+        progress =>
+        {
+            reported.Add(progress);
+
+            return Task.CompletedTask;
+        };
 
     private static MailQuestion Question(MailboxScope scope) =>
         new(MailQuestionText.Create("was the invoice attached"), scope);

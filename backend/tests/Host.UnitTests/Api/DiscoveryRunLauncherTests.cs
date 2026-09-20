@@ -22,10 +22,11 @@ namespace MailFathom.Host.UnitTests.Api;
 /// <summary>Covers what becomes of a run this process could not execute at all, which nothing else would report.</summary>
 /// <remarks>
 /// The launcher's own contract is the handler around the run rather than the run itself. Nothing in a request awaits the
-/// task it starts, so a fault escaping it would be observed by nobody and would leave a client watching a run that never
-/// ends — and the use case deliberately publishes only the endings it can name, because <c>Application</c> has no logger
-/// to write the rest down in. What is asserted here is the other half of that arrangement: the fault is written down,
-/// the run is ended on it, and the registry is told, whichever of those the fault happened before.
+/// task it starts, so a fault escaping it would be observed by nobody and would leave a client re-reading a run that
+/// never ends — and the use case deliberately writes only the endings it can name, because <c>Application</c> has no
+/// logger to write the rest down in. What is asserted here is the other half of that arrangement: the fault is written
+/// down, the run is ended in its journal, and the replica stops holding it, whichever of those the fault happened
+/// before.
 /// </remarks>
 public sealed class DiscoveryRunLauncherTests
 {
@@ -35,23 +36,24 @@ public sealed class DiscoveryRunLauncherTests
         MailQuestionText.Create("which supplier quoted least"),
         MailboxScope.Create([], []));
 
-    private readonly FakeTimeProvider clock = new(Now);
-
-    /// <summary>A scope this process could not compose ends the run, rather than leaving a client watching one that never ends.</summary>
+    /// <summary>A scope this process could not compose ends the run, rather than leaving a client re-reading one that never ends.</summary>
     [Fact]
     public async Task Start_AScopeThisProcessCannotCompose_EndsTheRunAsFailed()
     {
         // Arrange
-        var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await OpenedAsync(store);
 
         // Act
-        await LauncherOver(registry, new RecordingLogger<DiscoveryRunLauncher>()).Start(Question, journal, Caller);
+        await LauncherOver(store, new ExecutingDiscoveryRuns(), NoLogger).Start(
+            Question,
+            id,
+            SyntheticMailUser.Deployment,
+            Caller);
 
         // Assert
-        var published = await Published(journal);
-        Assert.Equal(DiscoveryRunFailure.Failed, Assert.IsType<DiscoveryRunFailed>(published[^1]).Failure);
+        var written = store.Written(id);
+        Assert.Equal(DiscoveryRunFailure.Failed, Assert.IsType<DiscoveryRunFailed>(written[^1]).Failure);
     }
 
     /// <summary>The failure the client is told nothing about is the one the operator reads, and it carries none of the question.</summary>
@@ -64,13 +66,16 @@ public sealed class DiscoveryRunLauncherTests
     public async Task Start_AScopeThisProcessCannotCompose_WritesTheFaultDownWithoutTheQuestion()
     {
         // Arrange
-        var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await OpenedAsync(store);
         var logger = new RecordingLogger<DiscoveryRunLauncher>();
 
         // Act
-        await LauncherOver(registry, logger).Start(Question, journal, Caller);
+        await LauncherOver(store, new ExecutingDiscoveryRuns(), logger).Start(
+            Question,
+            id,
+            SyntheticMailUser.Deployment,
+            Caller);
 
         // Assert
         var written = Assert.Single(logger.Messages);
@@ -78,27 +83,65 @@ public sealed class DiscoveryRunLauncherTests
         Assert.DoesNotContain("supplier", written, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>A run whose execution ended is held for its retention window from that moment, not from when it was opened.</summary>
+    /// <summary>A run this replica is no longer executing is no longer held, whichever way its execution ended.</summary>
     /// <remarks>
-    /// Telling the registry is what starts that window, and it happens whichever way the run ended. So the clock is moved
-    /// a whole window forward before the run is started: without that record the sweep on the next lookup would find a
-    /// run last touched when it was opened and forget it, and a client reconnecting a second after a failure would be
-    /// told there had never been such a run.
+    /// The run outlives the execution — it is read from the record afterwards, by any replica — so what is released here
+    /// is only the token a stop landing on this replica would have reached it through. Holding it past the ending would
+    /// grow without bound on a process that answers questions all day.
     /// </remarks>
     [Fact]
-    public async Task Start_ARunThatFailed_IsStillHeldForItsWholeRetentionWindowAfterwards()
+    public async Task Start_ARunWhoseExecutionEnded_StopsHoldingItOnThisReplica()
     {
         // Arrange
-        var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        this.clock.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await OpenedAsync(store);
+        var executing = new ExecutingDiscoveryRuns();
 
         // Act
-        await LauncherOver(registry, new RecordingLogger<DiscoveryRunLauncher>()).Start(Question, journal, Caller);
+        await LauncherOver(store, executing, NoLogger).Start(
+            Question,
+            id,
+            SyntheticMailUser.Deployment,
+            Caller);
 
         // Assert
-        Assert.True(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _));
+        Assert.Equal(0, executing.Count);
+    }
+
+    /// <summary>An execution that stopped without reaching an ending leaves the run ended, rather than pending until its ceiling.</summary>
+    /// <remarks>
+    /// This is the defensive half of the arrangement above, and the one a client cannot recover from on its own: a run
+    /// left pending is re-read forever by whoever asked the question, and only the wider retention ceiling would
+    /// eventually forget it. So the store is made to fail the ending the handler writes, which is the shape of the
+    /// deployment coming apart mid-run, and what has to be left behind is still an ending.
+    /// </remarks>
+    [Fact]
+    public async Task Start_AnExecutionThatStoppedWithoutEndingTheRun_EndsItAsStopped()
+    {
+        // Arrange
+        var written = new List<DiscoveryRunEvent>();
+        var store = Substitute.For<IDiscoveryRunStore>();
+        store
+            .AppendAsync(
+                Arg.Any<DiscoveryRunId>(),
+                Arg.Do<DiscoveryRunEvent>(written.Add),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => throw new InvalidOperationException("the record could not be written"),
+                _ => Task.FromResult<long?>(1));
+
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => LauncherOver(store, new ExecutingDiscoveryRuns(), NoLogger).Start(
+                Question,
+                DiscoveryRunId.New(),
+                SyntheticMailUser.Deployment,
+                Caller));
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.Stopped, Assert.IsType<DiscoveryRunFailed>(written[^1]).Failure);
     }
 
     private static AuthorizedPrincipal Caller =>
@@ -107,8 +150,19 @@ public sealed class DiscoveryRunLauncherTests
             "test-caller",
             [MailFathomPermission.MailAsk]);
 
+    private static ILogger<DiscoveryRunLauncher> NoLogger => new RecordingLogger<DiscoveryRunLauncher>();
+
+    private static async Task<DiscoveryRunId> OpenedAsync(InMemoryDiscoveryRunStore store)
+    {
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
     private static DiscoveryRunLauncher LauncherOver(
-        DiscoveryRunRegistry registry,
+        IDiscoveryRunStore store,
+        ExecutingDiscoveryRuns executing,
         ILogger<DiscoveryRunLauncher> logger)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
@@ -116,20 +170,11 @@ public sealed class DiscoveryRunLauncherTests
 
         return new DiscoveryRunLauncher(
             scopeFactory,
-            registry,
+            store,
+            ClientSignalPublishers.ReachingNobody,
+            executing,
             Substitute.For<IHostApplicationLifetime>(),
+            new FakeTimeProvider(Now),
             logger);
-    }
-
-    private static async Task<DiscoveryRunEvent[]> Published(DiscoveryRunJournal journal)
-    {
-        List<DiscoveryRunEvent> published = [];
-
-        await foreach (var @event in journal.ReadFromAsync(afterSequence: 0, TestContext.Current.CancellationToken))
-        {
-            published.Add(@event);
-        }
-
-        return [.. published];
     }
 }

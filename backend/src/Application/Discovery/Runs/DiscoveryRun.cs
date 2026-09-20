@@ -14,7 +14,7 @@ namespace MailFathom.Application.Discovery.Runs;
 /// <summary>Answers one question by deriving what it asks for and retrieving what the answer rests on.</summary>
 /// <remarks>
 /// <para>
-/// The whole of a Discover run bar the streaming: the deployment is asked whether it answers questions at all, the
+/// The whole of a Discover run bar the writing down: the deployment is asked whether it answers questions at all, the
 /// question is read once into a plan, that plan is run against the mail its scope admits, and what it found is composed
 /// into the typed result a client draws. How that result reaches a client as it happens is the child that follows.
 /// </para>
@@ -100,7 +100,7 @@ public sealed class DiscoveryRun
     /// </remarks>
     public async Task<DiscoveryRunResult> RunAsync(
         MailQuestion question,
-        Action<DiscoveryRetrievalProgress>? progress,
+        Func<DiscoveryRetrievalProgress, Task>? progress,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
@@ -169,7 +169,7 @@ public sealed class DiscoveryRun
         PlannedMailRetrieval retrieval,
         DiscoveryCoverageReader coverageReader,
         IDiscoveryResultComposer composer,
-        Action<DiscoveryRetrievalProgress>? progress,
+        Func<DiscoveryRetrievalProgress, Task>? progress,
         CancellationToken cancellationToken)
     {
         var plan = await planner.DerivePlanAsync(question, cancellationToken);

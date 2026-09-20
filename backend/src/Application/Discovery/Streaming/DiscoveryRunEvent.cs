@@ -13,13 +13,15 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// declared beside it are the whole of it and a client that handles those six handles every run this build produces.
 /// </para>
 /// <para>
-/// <strong>Every event names its run and its place in it.</strong> The sequence is assigned where the event is
-/// published rather than by whatever composed it, starts at one, and increases by one — so a client renders in arrival
-/// order without sorting, and a client that reconnects asks for everything after the last sequence it saw. That is the
-/// whole of the resumption contract: no event is republished with a different number and none is skipped.
+/// <strong>Every event names its run and its place in it.</strong> The sequence is assigned where the event is written
+/// rather than by whatever composed it, starts at one, and increases by one — so a client renders in arrival order
+/// without sorting, and a client holding a cursor asks for everything after the last sequence it read. That is the
+/// whole of the resumption contract: no event is written a second time under a different number and none is skipped.
+/// It is exact from any replica, because what the cursor addresses is rows rather than a buffer in the process that
+/// composed them.
 /// </para>
 /// <para>
-/// <strong>The stream is the plan, delivered as it becomes ready.</strong> The start says which revision of the
+/// <strong>The run is the plan, written as it becomes ready.</strong> The start says which revision of the
 /// presentation contract the run writes; each source is declared before the block that names it; and the ending says
 /// what the run knows about its own reach. A client assembling those has what a whole
 /// <see cref="Presentation.PresentationPlan" /> would have carried, and a run that failed after two blocks leaves those
@@ -27,8 +29,9 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// </para>
 /// <para>
 /// A block and a citation are composed from somebody's correspondence and are sensitive throughout. They belong in the
-/// response that streams them and nowhere else — never in a log line, a span attribute, or an exception message. The
-/// four other events carry counts and closed values alone, which is what makes a run observable without any of it.
+/// run's own rows and in the response that reads them back, and nowhere else — never in a log line, a span attribute,
+/// an exception message, or the signal that says a run advanced. The four other events carry counts and closed values
+/// alone, which is what makes a run observable without any of it.
 /// </para>
 /// </remarks>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "event")]
@@ -58,8 +61,8 @@ public abstract record DiscoveryRunEvent
     /// <summary>Gets the name this event is published under, which is the value the type discriminator carries.</summary>
     /// <remarks>
     /// <para>
-    /// Declared here so a transport naming an event — a Server-Sent Events <c>event</c> field, say — uses the same word
-    /// the JSON discriminator does rather than a second mapping that can disagree with it.
+    /// Declared here so anything naming an event — a row's own kind column, say — uses the same word the JSON
+    /// discriminator does rather than a second mapping that can disagree with it.
     /// </para>
     /// <para>
     /// <strong>Every override carries <see cref="JsonIgnoreAttribute" /> again.</strong> The serializer reads the

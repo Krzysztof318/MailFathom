@@ -1018,6 +1018,24 @@
         ],
         "type": "object"
       },
+      "ClientDiscoveryRunReadResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveryRunEvent"
+            },
+            "type": "array"
+          },
+          "running": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "running",
+          "events"
+        ],
+        "type": "object"
+      },
       "ClientDiscoveryRunRequest": {
         "properties": {
           "accounts": {
@@ -9276,33 +9294,6 @@
         ],
         "type": "object"
       },
-      "SseItemOfDiscoveryRunEvent": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DiscoveryRunEvent"
-          },
-          "eventId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "eventType": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "reconnectionInterval": {
-            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
       "StoredEmailId": {
         "properties": {
           "value": {
@@ -14391,9 +14382,7 @@
         "tags": [
           "Client"
         ]
-      }
-    },
-    "/api/client/discovery/runs/{runId}/events": {
+      },
       "get": {
         "parameters": [
           {
@@ -14404,14 +14393,26 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "schema": {
+              "format": "int64",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
-              "text/event-stream": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SseItemOfDiscoveryRunEvent"
+                  "$ref": "#/components/schemas/ClientDiscoveryRunReadResponse"
                 }
               }
             },

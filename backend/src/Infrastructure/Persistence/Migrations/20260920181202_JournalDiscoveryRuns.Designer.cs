@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260920181202_JournalDiscoveryRuns")]
+    partial class JournalDiscoveryRuns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -108,9 +111,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
-                    b.Property<bool>("IsAllDay")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Origin")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -144,29 +144,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_calendar_events_user_starts_at_id");
 
                     b.ToTable("calendar_events", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.CalendarEventReminderEntity", b =>
-                {
-                    b.Property<Guid>("CalendarEventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("MinutesBefore")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("DueAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("RaisedForDueAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("CalendarEventId", "MinutesBefore");
-
-                    b.HasIndex("DueAt")
-                        .HasDatabaseName("ix_calendar_event_reminders_due_at")
-                        .HasFilter("\"RaisedForDueAt\" IS NULL");
-
-                    b.ToTable("calendar_event_reminders", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ClientPreferencesEntity", b =>
@@ -2403,9 +2380,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<Guid?>("TargetCalendarEventId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("TargetKind")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2427,8 +2401,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("TargetCalendarEventId");
 
                     b.HasIndex("TargetStoredEmailId");
 
@@ -3677,17 +3649,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.CalendarEventReminderEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.CalendarEventEntity", "CalendarEvent")
-                        .WithMany("Reminders")
-                        .HasForeignKey("CalendarEventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CalendarEvent");
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ClientPreferencesEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
@@ -4132,11 +4093,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.NotificationEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.CalendarEventEntity", "TargetCalendarEvent")
-                        .WithMany()
-                        .HasForeignKey("TargetCalendarEventId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "TargetStoredEmail")
                         .WithMany()
                         .HasForeignKey("TargetStoredEmailId")
@@ -4147,8 +4103,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("TargetCalendarEvent");
 
                     b.Navigation("TargetStoredEmail");
                 });
@@ -4301,11 +4255,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.CalendarEventEntity", b =>
-                {
-                    b.Navigation("Reminders");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", b =>

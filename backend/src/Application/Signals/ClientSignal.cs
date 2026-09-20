@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -22,9 +23,11 @@ namespace MailFathom.Application.Signals;
 /// it.
 /// </para>
 /// <para>
-/// <b>No mail crosses.</b> A count, an account alias, a folder alias, a stored identity, a server flag, and a state are
-/// the whole vocabulary; no subject, address, body fragment, filename, attachment name, or snippet reaches a signal at
-/// any size.
+/// <b>No mail crosses.</b> A count, an account alias, a folder alias, a stored identity, a server flag, a state, and a
+/// run with the sequence it has reached are the whole vocabulary; no subject, address, body fragment, filename,
+/// attachment name, or snippet reaches a signal at any size. <see cref="ClientSignalKind.DiscoveryRunAdvanced" /> is
+/// the kind whose subject is mail-derived and which therefore carries none of it: a run identifier and a number, with
+/// the answer read back over the run's own route.
 /// The one exception is <see cref="Headline" /> and <see cref="SecondLine" /> on
 /// <see cref="ClientSignalKind.NotificationRaised" />, which are the notification record's own already-derived text and
 /// reach a client that is entitled to read that record over its own route.
@@ -55,7 +58,9 @@ public sealed class ClientSignal
         IReadOnlyList<SignalledEmailFlags> flags,
         NotificationKind? notificationKind,
         string? headline,
-        string? secondLine)
+        string? secondLine,
+        DiscoveryRunId? run,
+        long sequence)
     {
         this.Kind = kind;
         this.User = user;
@@ -67,9 +72,11 @@ public sealed class ClientSignal
         this.NotificationKind = notificationKind;
         this.Headline = headline;
         this.SecondLine = secondLine;
+        this.Run = run;
+        this.Sequence = sequence;
     }
 
-    /// <summary>Gets which of the six kinds this is.</summary>
+    /// <summary>Gets which of the seven kinds this is.</summary>
     public ClientSignalKind Kind { get; }
 
     /// <summary>Gets the user whose connections this reaches, or nothing when the account decides who it reaches.</summary>
@@ -105,8 +112,15 @@ public sealed class ClientSignal
     /// <summary>Gets the notification's own second line, and nothing for every other kind.</summary>
     public string? SecondLine { get; }
 
+    /// <summary>Gets the Discover run the change is in, where the kind names one.</summary>
+    public DiscoveryRunId? Run { get; }
+
+    /// <summary>Gets how far that run has got, counted the way its own events are, and zero for every other kind.</summary>
+    /// <remarks>A place in the run rather than a quantity of anything, which is why it is not the count above: a client holds it as the cursor it reads the tail from.</remarks>
+    public long Sequence { get; }
+
     /// <summary>Gets the scope two signals must share before one folds into the other.</summary>
-    internal ClientSignalScope Scope => new(this.User, this.Kind, this.Account, this.Folder);
+    internal ClientSignalScope Scope => new(this.User, this.Kind, this.Account, this.Folder, this.Run);
 
     /// <summary>States that a synchronization run committed mail into one folder.</summary>
     /// <param name="account">The account the run was over.</param>
@@ -128,7 +142,9 @@ public sealed class ClientSignal
             flags: [],
             notificationKind: null,
             headline: null,
-            secondLine: null);
+            secondLine: null,
+            run: null,
+            sequence: 0);
     }
 
     /// <summary>States that stored mail in one folder is no longer what a client last read.</summary>
@@ -154,7 +170,9 @@ public sealed class ClientSignal
             flags: [],
             notificationKind: null,
             headline: null,
-            secondLine: null);
+            secondLine: null,
+            run: null,
+            sequence: 0);
     }
 
     /// <summary>States where the <c>\Seen</c> and <c>\Flagged</c> flags of one folder's mail now stand, nothing else about it having moved.</summary>
@@ -201,7 +219,9 @@ public sealed class ClientSignal
             stated,
             notificationKind: null,
             headline: null,
-            secondLine: null);
+            secondLine: null,
+            run: null,
+            sequence: 0);
     }
 
     /// <summary>States that the set of folders an account mirrors has moved.</summary>
@@ -218,7 +238,9 @@ public sealed class ClientSignal
             flags: [],
             notificationKind: null,
             headline: null,
-            secondLine: null);
+            secondLine: null,
+            run: null,
+            sequence: 0);
 
     /// <summary>States that a notification record was written for one person.</summary>
     /// <param name="notification">The row that was written, whose user and already-derived text this carries.</param>
@@ -242,7 +264,9 @@ public sealed class ClientSignal
             flags: [],
             notification.Kind,
             notification.Title,
-            notification.Body);
+            notification.Body,
+            run: null,
+            sequence: 0);
     }
 
     /// <summary>States that an account's synchronization run finished, so what the client says about it is out of date.</summary>
@@ -265,7 +289,42 @@ public sealed class ClientSignal
             flags: [],
             notificationKind: null,
             headline: null,
-            secondLine: null);
+            secondLine: null,
+            run: null,
+            sequence: 0);
+
+    /// <summary>States that a Discover run has written more of its answer, and how far it has got.</summary>
+    /// <param name="user">Whose run it is, which is whose connections are told — every one that person holds rather than only the one that asked.</param>
+    /// <param name="run">The run that advanced, which is the run the client re-reads.</param>
+    /// <param name="sequence">The sequence the run has reached, which is the cursor a client already past reads nothing from.</param>
+    /// <returns>The signal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="sequence" /> is not positive, a run having reached nothing being no advance.</exception>
+    /// <remarks>
+    /// <b>It carries no part of the answer</b>, and that is the whole shape of it: no block, no citation, no retrieval
+    /// count, no spend figure, no model name, and no alias. An answer quotes mail by construction, and this is the one
+    /// signal whose subject is mail-derived — so what crosses is a run identifier and a number, and the answer is read
+    /// back over the run's own route. Widening it is what
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
+    /// refuses, because the backplane this crosses may be a service the deployment does not run.
+    /// </remarks>
+    public static ClientSignal DiscoveryRunAdvanced(MailUserId user, DiscoveryRunId run, long sequence)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sequence);
+
+        return new ClientSignal(
+            ClientSignalKind.DiscoveryRunAdvanced,
+            user,
+            account: null,
+            folder: null,
+            count: 0,
+            emails: [],
+            flags: [],
+            notificationKind: null,
+            headline: null,
+            secondLine: null,
+            run,
+            sequence);
+    }
 
     /// <summary>Folds a later signal of the same scope into this one, so a window produces one statement rather than many.</summary>
     /// <param name="later">The signal raised after this one, in the same scope.</param>
@@ -301,7 +360,9 @@ public sealed class ClientSignal
             FoldedFlags(this.Flags, later.Flags),
             later.NotificationKind,
             later.Headline,
-            later.SecondLine);
+            later.SecondLine,
+            this.Run,
+            later.Sequence);
     }
 
     /// <summary>Joins two windows' flag statements, one entry per email, bounded like every other list a signal carries.</summary>
@@ -328,12 +389,14 @@ public sealed class ClientSignal
 
 /// <summary>What two signals must share before one folds into the other: whose it is, what kind it is, and where it happened.</summary>
 /// <param name="User">Whose the statement is, where it is one person's rather than one mailbox's.</param>
-/// <param name="Kind">Which of the six kinds it is.</param>
+/// <param name="Kind">Which of the seven kinds it is.</param>
 /// <param name="Account">The account it names, where the kind names one.</param>
 /// <param name="Folder">The folder it names, where the kind names one.</param>
-/// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look.</remarks>
+/// <param name="Run">The Discover run it names, where the kind names one.</param>
+/// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look, and folding two of one person's runs into one would leave a client told to re-read a run at a sequence the other one reached.</remarks>
 internal readonly record struct ClientSignalScope(
     MailUserId? User,
     ClientSignalKind Kind,
     MailAccountId? Account,
-    MailFolderAlias? Folder);
+    MailFolderAlias? Folder,
+    DiscoveryRunId? Run);

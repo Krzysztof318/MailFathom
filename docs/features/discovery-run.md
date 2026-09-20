@@ -9,8 +9,8 @@ says is composed into the answer. This page describes how those decisions are ma
 composition may and may not say, and what a deployment does when it cannot do any of it.
 
 What a run produces is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in. The
-plan does not cross the wire whole — a run publishes its parts as they become ready, which is
-[what a client watches](#a-run-is-watched-rather-than-waited-for).
+plan does not cross the wire whole — a run writes its parts down as they become ready, which is
+[what a client reads](#a-run-is-watched-rather-than-waited-for).
 
 ---
 
@@ -193,27 +193,43 @@ Two refusals come before any of the above, and neither is a fallback.
 
 ## A run is watched rather than waited for
 
-A run takes as long as a model and a mailbox take, and what it produces becomes readable in pieces — so it is delivered
-as it happens rather than as one answer at the end. Two routes do that, both under the
-[client endpoint](../operations/client-endpoint.md) and both published under the same grant that governs asking a
-question anywhere else:
+A run takes as long as a model and a mailbox take, and what it produces becomes readable in pieces — so it is written
+down as it happens rather than composed into one answer at the end. **The run is a row in PostgreSQL and its events are
+rows beside it**, written as each one is produced, which is what
+[ADR 0035](../decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
+settles. Three routes read and write it, all under the [client endpoint](../operations/client-endpoint.md) and all
+published under the same grant that governs asking a question anywhere else:
 
 | Route | What it does |
 |---|---|
-| `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address its events are read at, as soon as the question and its scope are known to be answerable. |
-| `GET /api/client/discovery/runs/{runId}/events` | Reads that run, from its beginning or from wherever a dropped connection left off. |
-| `DELETE /api/client/discovery/runs/{runId}` | Stops that run. Answers `204` once the run has been told to stop, and `404` for a run this user did not start or this process no longer holds. |
+| `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address it is read at, as soon as the question and its scope are known to be answerable. |
+| `GET /api/client/discovery/runs/{runId}?since=<sequence>` | Reads that run: whether it is still running, and every event after the sequence the client already holds. |
+| `DELETE /api/client/discovery/runs/{runId}` | Stops that run. Answers `204` once the stop has been recorded, and `404` for a run this user did not start. |
+
+**Every one of the three is answered by any replica**, because what each of them reads or writes is the run's own rows
+rather than anything held beside the connection that asked. That is the whole point of the arrangement: a deployment
+running more than one replica puts a load balancer in front of them, so the request that asks the question, the requests
+that read the answer, and the request that stops the run routinely land on three different processes.
 
 Several routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
-loses its reading connection and nothing else: the run goes on executing, and the client comes back to the reading route
-and is given what it missed. A single route that streamed the answer over the connection that asked would lose the whole
-run instead, which is exactly the case this surface exists for.
+loses nothing: the run goes on executing on whichever replica started it, and the client comes back to the reading route
+with the sequence it holds and is given what it missed.
+
+A client is told when to come back rather than polling for it. Each write raises a
+[client signal](../operations/client-endpoint.md#the-signal-channel) naming the run and the sequence it reached — and nothing else, no part
+of the answer — which reaches whichever replica holds that person's connection over the
+[signal backplane](../operations/configuration-runtime.md). What a client does with it is read from its own cursor. A client
+that received no signal, because it was offline or because the deployment serves no hub, reads the same route on an
+interval and sees the same thing.
 
 That is also why stopping is a route rather than a closed connection. A client that stops reading has said nothing about
-the run, which goes on calling the provider and drawing mail out of the mailbox for nobody — so **closing the stream is
-looking away and the `DELETE` is stopping**, and only the second one stops the spending. A run that finished a moment
-before the request arrives answers `204` as well, because whoever asked could not have known it ended and reporting that
-as a failure would make a control that worked look broken.
+the run, which goes on calling the provider and drawing mail out of the mailbox for nobody — so **stopping reading is
+looking away and the `DELETE` is stopping**, and only the second one stops the spending. The stop is recorded against
+the run, and the replica executing it meets that record as the first write the store refuses and ends the run where it
+stands; the ending is written by that replica rather than by the one that took the request, because what a run spent is
+known only where it was spent. A run that finished a moment before the request arrives answers `204` as well, because
+whoever asked could not have known it ended and reporting that as a failure would make a control that worked look
+broken.
 
 ### What a client is told, and in what order
 
@@ -278,29 +294,34 @@ arrived stay exactly where they were, and the failure is one more event behind t
 A run belongs to the user who asked for it. Reading somebody else's is answered as **no such run** rather than as a
 refusal, so an identifier says nothing about whether it exists.
 
-### Resuming a dropped connection
+### Coming back to a run
 
-Resumption is the protocol's own: each event goes out under its sequence as the event id, and a client reattaching
-sends the last one it holds back in `Last-Event-ID`. A browser's `EventSource` does that by itself, so a client that
-never wrote the reconnection gets the resumption too.
+A client holds one number per run — the sequence it has read up to — and sends it as `since`. What comes back is
+everything after it, so a burst of writes costs one read and a client that has just reconnected costs the same read.
+Holding a cursor is what makes this cheap rather than a poll that re-reads an answer already drawn.
 
-A header that is absent, blank, or names a place this run never reached reads as the beginning. That is the safe
-direction: no client can hold such a value honestly — a sequence is only ever learned by being sent it — so what it
-means is a client whose state belongs to some other run, and replaying costs it a few events it already has rather than
-an answer it never receives.
+A `since` that is absent, zero, negative, or names a place this run never reached reads as the beginning. That is the
+safe direction: no client can hold such a value honestly — a sequence is only ever learned by being given it — so what
+it means is a client whose state belongs to some other run, and re-reading costs it a few events it already has rather
+than an answer it never receives.
 
-### Why Server-Sent Events, and why not SignalR
+### Why a record and a re-read, and why not a stream
 
-A run is one-directional, its events are small JSON documents, and the resumption above is already in the protocol. So
-what a plain chunked HTTP stream would need built by hand — framing, event names, an identifier per event, a
-reconnection that says where it left off — is what this gets from the browser's own `EventSource` and from
-`TypedResults.ServerSentEvents` on the server.
+The run used to be streamed over Server-Sent Events, held in memory on the replica that composed it. That works for
+exactly one replica: a client routed to any other asks for a run that process has never heard of and is told there is no
+such run, so the feature stopped working at the replica count an operator is
+[told they may raise](../operations/deployment-kubernetes.md#running-more-than-one-replica). The record is what removes
+that, and it removes two other things with it — a run survives the process that composed it, and a person reading on a
+phone and on a laptop reads the same run from both.
 
-SignalR would carry it too, and is deliberately not introduced. What it adds over this is multi-directional messaging
-and a connection lifecycle of its own, and a run has no use for either: nothing is sent back up the stream, and the run
-is addressed by an identifier rather than by a connection. Nothing about the events depends on the choice, which is the
-point — the contract is the sequence, so a deployment that ever needed a different transport would serve the same events
-over it.
+What replaces the stream's own resumption is the cursor above, and what replaces its liveness is the signal: the client
+endpoint already carries a hub every screen in this client is already listening on, so a run's advance is one more kind
+of statement over a connection that exists rather than a second long-lived connection per run. A client with no hub is
+not shut out, because the read route is the contract and an interval reaches the same answer.
+
+A streaming transport is not ruled out by any of this, and would be an addition rather than a replacement: the record is
+what a client reads either way, so a deployment that served the same events over a stream would serve exactly what the
+route serves.
 
 ### What bounds a run
 
@@ -315,7 +336,7 @@ with the first.
 |---|---|---|
 | The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `TimedOut` |
 | Events one run may publish | Two hundred and twenty-eight — one opening, six lookups, two hundred sources, twenty blocks, one ending | Nothing further is published, and the run still ends: it completes stating `BlocksOmitted` |
-| Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
+| Runs one person may have executing at once | Eight, across the whole deployment | The asking route answers `429` rather than opening a ninth |
 | How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
 | What one run may draw out of the mailbox | The deployment's own per-run character ceiling | Retrieval is trimmed to whole passages that fit and the run answers from them, stating `RetrievalTruncated` |
 | What one run may call and consume | The deployment's own per-run call and token ceilings | The next call is refused before it is sent, and the run ends as `failed` with `RunSpent` |
@@ -326,39 +347,50 @@ answerable and the model is told there is no more. Everything a spend ceiling st
 the one exception the ledger states: a token ceiling can only be checked against what earlier calls reported, so the call
 that crosses it is paid for.
 
-Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
-is one whose execution never reported at all: a task that never ran, or a fault between the run being opened and being
-started. Without that ceiling such a run would spend one of the eight slots until the process was restarted, and eight
-of them would leave a deployment answering `429` to every question.
+The eight is one person's across the deployment rather than one replica's, and it is counted by the statement that
+opens a run rather than by anything a process holds — so what the `429` says is what a person is actually held to,
+whichever replica answers them and however many replicas there are.
 
-The buffer is bounded and **never evicts**, which is what makes resumption exact rather than best-effort: there is no
-state in which a client asks for what it missed and is told the run has moved on. The last slot is reserved for the
-ending, so a run that filled its buffer still says so instead of leaving a reader waiting.
+Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
+is one whose execution never reported at all: a replica that stopped between the run being opened and being started, or
+a task that never ran. Without that ceiling such a run would hold one of the eight slots indefinitely, and eight of them
+would leave a person answered `429` to every question they asked.
+
+The record is bounded and **never evicts**, which is what makes coming back exact rather than best-effort: there is no
+state in which a client asks for what it missed and is told the run has moved on. The last place is reserved for the
+ending, so a run that filled its record still says so instead of leaving a reader waiting.
 
 The two windows are not the same window, and which one a run is held on is decided by whether it has ended. **A run
 that has ended is held for the retention window**, measured from the last time anything read or wrote it, so a client
-that is reading is never cut off mid-stream and one that never came back is dropped rather than kept for the life of
-the process. **A run that is still executing is held on the wider ceiling above instead**, so a slow run is never
-forgotten out from under a client reconnecting to it while its provider call is still outstanding. A healthy run never
-meets that ceiling: it is stopped at the five-minute mark and ends there, which starts its own retention window well
-before the wider one could elapse.
+that is reading is never cut off and one that never came back is dropped rather than kept indefinitely. **A run that is
+still executing is held on the wider ceiling above instead**, so a slow run is never forgotten out from under a client
+coming back to it while its provider call is still outstanding. A healthy run never meets that ceiling: it is stopped at
+the five-minute mark and ends there, which starts its own retention window well before the wider one could elapse.
 
-### What the stream publishes is the composition, not a second one
+Both windows are swept by a worker on every replica, once per retention window, as one conditional statement — so a
+deployment where the questions stopped still forgets what it held, which is the whole reason the sweep is not left to
+the next run being opened.
 
-The plan a run publishes is the one [the composition produced](#composing-the-answer-and-what-it-may-not-say), part by
-part. Nothing about it is decided by the stream: the citations are the plan's citations, the blocks are the plan's
-blocks, and the limitations and the coverage on the ending are the plan's own. What the stream decides is the order they
-go out in, which is what lets a client draw a block the moment it arrives instead of holding everything until the run
-closes.
+### What the run writes down is the composition, not a second one
 
-That also fixes what a client holds at the end. A client that read the whole stream holds every part of the plan — its
+The plan a run writes down is the one [the composition produced](#composing-the-answer-and-what-it-may-not-say), part by
+part. Nothing about it is decided by the record: the citations are the plan's citations, the blocks are the plan's
+blocks, and the limitations and the coverage on the ending are the plan's own. What the record decides is the order they
+are written in, which is what lets a client draw a block the moment it reads it instead of holding everything until the
+run closes.
+
+That also fixes what a client holds at the end. A client that read the whole run holds every part of the plan — its
 blocks, its sources, what made the answer narrower than the question, and what the run read of each account — so the
-stream is a delivery of the plan rather than a summary of one.
+record is a delivery of the plan rather than a summary of one.
 
 ### None of it reaches a log
 
-Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these
-routes and nowhere else. The events that describe how a run is *going* carry counts and closed values alone, which is
+Everything a run writes about the mail — a source, a quoted fragment, a subject — reaches the caller over these routes
+and nowhere else. It is in the database as well, which the
+[stored-email schema](../architecture/stored-email-schema.md#a-discover-run-and-what-it-composed) classifies as mail
+content and holds to the run's own retention. **The signal that says a run advanced carries the run and the sequence
+and nothing else**, because it travels over a hub and, on a deployment that configured one, through a backplane the
+deployment does not own. The events that describe how a run is *going* carry counts and closed values alone, which is
 what makes a run observable without any of the mail: a failure names one of nine words, retrieval progress names four
 numbers, and what a run spent is four more. **No cost record carries mail content, a query, or an address** — a spend is
 a count of characters and messages rather than of which ones, so nothing about what a run cost says what it read.

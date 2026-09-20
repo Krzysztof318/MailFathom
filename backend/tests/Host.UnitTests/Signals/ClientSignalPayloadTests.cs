@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -14,12 +15,12 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Signals;
 
-/// <summary>Covers what each of the six kinds puts on the wire, and proves that no mail travels with any of them.</summary>
+/// <summary>Covers what each of the seven kinds puts on the wire, and proves that no mail travels with any of them.</summary>
 /// <remarks>
 /// <para>
 /// One test per kind, and each asserts the payload as a whole rather than field by field, because the claim is about
 /// what does <em>not</em> cross as much as about what does: a member added later that carried a subject, an address, a
-/// body fragment, or an attachment name would leave all six failing rather than passing beside it.
+/// body fragment, or an attachment name would leave all seven failing rather than passing beside it.
 /// </para>
 /// <para>
 /// Each arrangement then hands the composition the mail-shaped text a raise site has in hand where the kind has
@@ -56,7 +57,9 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], [], null, null, null), payload);
+        AssertPayloadIs(
+            new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], [], null, null, null, null, 0),
+            payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
@@ -82,7 +85,9 @@ public sealed class ClientSignalPayloadTests
                 [],
                 null,
                 null,
-                null),
+                null,
+                null,
+                0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -112,7 +117,9 @@ public sealed class ClientSignalPayloadTests
                 [new ClientSignalFlagsPayload(email.Value.ToString(), IsSeen: true, IsFlagged: null)],
                 null,
                 null,
-                null),
+                null,
+                null,
+                0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -128,7 +135,9 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("folders.changed", "work", null, 0, [], [], null, null, null), payload);
+        AssertPayloadIs(
+            new ClientSignalPayload("folders.changed", "work", null, 0, [], [], null, null, null, null, 0),
+            payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
@@ -165,7 +174,9 @@ public sealed class ClientSignalPayloadTests
                 [],
                 nameof(NotificationKind.Mail),
                 "Mail arrived",
-                "Four messages arrived in work."),
+                "Four messages arrived in work.",
+                null,
+                0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -181,7 +192,43 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("account.state", "work", null, 0, [], [], null, null, null), payload);
+        AssertPayloadIs(
+            new ClientSignalPayload("account.state", "work", null, 0, [], [], null, null, null, null, 0),
+            payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
+    }
+
+    /// <summary>An advancing run names the run and how far it has got, and no part of the answer it is composing.</summary>
+    /// <remarks>
+    /// This is the one kind whose subject is mail the deployment composed rather than mail it received, so the rule it
+    /// has to keep is the same one stated the other way round: the client is told where to read, and reads the answer
+    /// over the endpoint that authenticates it.
+    /// </remarks>
+    [Fact]
+    public void For_DiscoveryRunAdvanced_RendersTheRunAndHowFarItGotAndNothingElse()
+    {
+        // Arrange
+        var run = DiscoveryRunId.New();
+        var signal = ClientSignal.DiscoveryRunAdvanced(SyntheticMailUser.Deployment, run, sequence: 7);
+
+        // Act
+        var payload = ClientSignalPayload.For(signal);
+
+        // Assert
+        AssertPayloadIs(
+            new ClientSignalPayload(
+                "discovery.run.advanced",
+                null,
+                null,
+                0,
+                [],
+                [],
+                null,
+                null,
+                null,
+                run.Value.ToString(),
+                7),
+            payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 

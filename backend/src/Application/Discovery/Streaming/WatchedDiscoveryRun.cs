@@ -10,10 +10,10 @@ using MailFathom.Application.Retrieval.AskMail;
 
 namespace MailFathom.Application.Discovery.Streaming;
 
-/// <summary>Runs one question and publishes what happens as it happens, including what it is spending while it spends it.</summary>
+/// <summary>Runs one question and writes down what happens as it happens, including what it is spending while it spends it.</summary>
 /// <remarks>
 /// <para>
-/// The use case a streamed Discover run is performed through. It decides nothing about the question — that is
+/// The use case a watched Discover run is performed through. It decides nothing about the question — that is
 /// <see cref="DiscoveryRun" />'s, unchanged — and owns one thing instead: that a person watching sees the run working,
 /// reads a block before the rest arrives, keeps what arrived when the run ends badly, and can read what the run cost
 /// while it is still running.
@@ -21,24 +21,29 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// <para>
 /// <strong>Every failure this type can name becomes the run's own ending</strong>, because by the time this executes the
 /// request that asked the question has already been answered and there is nobody left to throw at. Which failure it was
-/// is published as a closed value carrying nothing about the question or the mail. A failure it cannot name is left to
+/// is written as a closed value carrying nothing about the question or the mail. A failure it cannot name is left to
 /// propagate deliberately: naming it would need a log to name it in, this layer has no logger by construction, and a
 /// caller that records it is the only place <see cref="DiscoveryRunFailure.Failed" /> becomes readable to an operator.
 /// </para>
 /// <para>
-/// A run publishes its sources before the blocks that name them, so a client can render a block the moment it arrives
+/// A run writes its sources before the blocks that name them, so a client can render a block the moment it reads it
 /// rather than holding it until a plan closes. That ordering is this type's, and it is the reason the composition hands
 /// citations and blocks over separately.
 /// </para>
 /// <para>
-/// <strong>What it publishes about cost is the run's own consumption and never a price.</strong> The three counts and
+/// <strong>It is the one writer of its own record</strong>, which is what makes the sequence a client reads by mean
+/// what it says. Every write here is awaited before the next is made — including the retrieval's own progress
+/// reports — so nothing about a run's order depends on which write reached the database first.
+/// </para>
+/// <para>
+/// <strong>What it records about cost is the run's own consumption and never a price.</strong> The three counts and
 /// the ceilings they are read against are what
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
-/// settles on: the envelope goes out with the start, the counts accrue on the events the run already publishes, and the
+/// settles on: the envelope goes out with the start, the counts accrue on the events the run already writes, and the
 /// final ones stay with the ending whichever ending it was. Every one of them is a number or a name an operator chose.
 /// </para>
 /// </remarks>
-public sealed class StreamedDiscoveryRun
+public sealed class WatchedDiscoveryRun
 {
     private readonly DiscoveryRun run;
     private readonly MailAnsweringRunLedger ledger;
@@ -46,14 +51,14 @@ public sealed class StreamedDiscoveryRun
     private readonly TimeProvider timeProvider;
     private readonly AnsweringEndpointIdentity? endpoint;
 
-    /// <summary>Initializes the use case one streamed run is performed through.</summary>
+    /// <summary>Initializes the use case one watched run is performed through.</summary>
     /// <param name="run">The run itself, which decides what to retrieve and retrieves it.</param>
     /// <param name="ledger">Counts what this run spends, which is one instance per run because the scope is the run.</param>
     /// <param name="periodBounds">What the runs of one period may add up to, read for the instant a refused period turns over.</param>
     /// <param name="timeProvider">Measures the longest a run may take, and places a refusal in its period.</param>
     /// <param name="endpoint">How the answering endpoint is named to the person who asked, absent on a deployment that answers no questions.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument but <paramref name="endpoint" /> is <see langword="null" />.</exception>
-    public StreamedDiscoveryRun(
+    public WatchedDiscoveryRun(
         DiscoveryRun run,
         MailAnsweringRunLedger ledger,
         MailAnsweringPeriodBounds periodBounds,
@@ -72,30 +77,32 @@ public sealed class StreamedDiscoveryRun
         this.endpoint = endpoint;
     }
 
-    /// <summary>Runs the question and publishes the run to its stream, ending it however it ends.</summary>
+    /// <summary>Runs the question and writes the run into its journal, ending it however it ends.</summary>
     /// <param name="question">The question and the scope bounding what may be read to answer it.</param>
-    /// <param name="journal">Where the run publishes, which is what a client reads, reattaches to, and stops it through.</param>
+    /// <param name="journal">Where the run writes, which is what a client reads, comes back to, and stops it through.</param>
     /// <param name="cancellationToken">Stops the run where it stands, which is how the deployment shutting down reaches it.</param>
-    /// <returns>A task that completes once the run has published its ending.</returns>
+    /// <returns>A task that completes once the run has written its ending.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="question" /> or <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
     /// Cancellation ends the run as a stated failure rather than as a cancelled task, because the caller is a background
-    /// worker with nowhere to report one and because a client watching a run that was stopped has to be told that rather
-    /// than left on a connection that closes silently.
+    /// worker with nowhere to report one and because a client watching a run that was stopped has to read that rather
+    /// than be left reading a run that never finishes.
     /// </para>
     /// <para>
-    /// <strong>Which cancellation it was is part of what the client is told</strong>, and there are three of them. The
-    /// person stopped the run, which ends it as <see cref="DiscoveryRunFailure.Cancelled" />; the run spent the longest
-    /// a run may take, which ends it as <see cref="DiscoveryRunFailure.TimedOut" />; or the deployment stopped mid-run,
-    /// which ends it as <see cref="DiscoveryRunFailure.Stopped" />. Each is a different fact for the person reading it —
+    /// <strong>Which cancellation it was is part of what the client reads</strong>, and there are three of them. The
+    /// person stopped the run — on this replica or on any other, a stop recorded elsewhere reaching the execution as the
+    /// first write the store refuses — which ends it as <see cref="DiscoveryRunFailure.Cancelled" />; the run spent the
+    /// longest a run may take, which ends it as <see cref="DiscoveryRunFailure.TimedOut" />; or the deployment stopped
+    /// mid-run, which ends it as <see cref="DiscoveryRunFailure.Stopped" />. Each is a different fact for the person reading it —
     /// I stopped this, this question was more than one run could answer, and nothing about the question at all — so each
     /// gets a source of its own rather than being collapsed into whichever the caller happened to name.
     /// </para>
     /// <para>
     /// A stop reaches the provider call and the retrieval because it cancels the token those run under, which is the
-    /// difference between stopping the spending and stopping the watching. What had already been published stays, and
-    /// what had already been spent stays spent.
+    /// difference between stopping the spending and stopping the watching. What had already been written stays, and
+    /// what had already been spent stays spent — the ending carries this execution's own counts, which is why a stop
+    /// recorded on another replica is turned into an ending here rather than written there.
     /// </para>
     /// </remarks>
     public async Task RunAsync(
@@ -106,13 +113,6 @@ public sealed class StreamedDiscoveryRun
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(journal);
 
-        journal.Append(new DiscoveryRunStarted
-        {
-            Bounds = this.ledger.Bounds,
-            EndpointAlias = this.endpoint?.Alias ?? string.Empty,
-            PublishedModel = this.endpoint?.PublishedModel ?? string.Empty,
-        });
-
         using var budget = new CancellationTokenSource(DiscoveryRunBounds.MaximumDuration, this.timeProvider);
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -121,37 +121,50 @@ public sealed class StreamedDiscoveryRun
 
         try
         {
-            var result = await this.run.RunAsync(
-                question,
-                progress => journal.Append(new DiscoveryRetrievalProgressed(progress, this.ledger.Read())),
+            await journal.AppendAsync(
+                new DiscoveryRunStarted
+                {
+                    Bounds = this.ledger.Bounds,
+                    EndpointAlias = this.endpoint?.Alias ?? string.Empty,
+                    PublishedModel = this.endpoint?.PublishedModel ?? string.Empty,
+                },
                 bounded.Token);
 
-            journal.Append(new DiscoveryRunCompleted(
-                Present(result, journal),
-                result.Presentation.Coverage,
-                this.ledger.Read()));
+            var result = await this.run.RunAsync(
+                question,
+                progress => journal.AppendAsync(
+                    new DiscoveryRetrievalProgressed(progress, this.ledger.Read()),
+                    CancellationToken.None),
+                bounded.Token);
+
+            await journal.AppendAsync(
+                new DiscoveryRunCompleted(
+                    await PresentAsync(result, journal),
+                    result.Presentation.Coverage,
+                    this.ledger.Read()),
+                CancellationToken.None);
         }
         catch (OperationCanceledException) when (journal.Stopping.IsCancellationRequested)
         {
             // Read before the deployment's own stopping token, because somebody stopping their run is a fact about
             // their question and a shutdown that arrives in the same moment says nothing about it.
-            this.End(journal, DiscoveryRunFailure.Cancelled);
+            await this.EndAsync(journal, DiscoveryRunFailure.Cancelled);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            this.End(journal, DiscoveryRunFailure.Stopped);
+            await this.EndAsync(journal, DiscoveryRunFailure.Stopped);
         }
         catch (OperationCanceledException) when (budget.IsCancellationRequested)
         {
-            this.End(journal, DiscoveryRunFailure.TimedOut);
+            await this.EndAsync(journal, DiscoveryRunFailure.TimedOut);
         }
         catch (MailAnsweringBudgetExhaustedException spent)
         {
-            this.EndOnCeiling(journal, spent);
+            await this.EndOnCeilingAsync(journal, spent);
         }
         catch (MailAnsweringUnavailableException unavailable)
         {
-            this.End(
+            await this.EndAsync(
                 journal,
                 unavailable.Availability is MailAnsweringAvailability.Inactive
                     ? DiscoveryRunFailure.Unavailable
@@ -159,30 +172,30 @@ public sealed class StreamedDiscoveryRun
         }
         catch (MailboxQueryFilterInvalidException)
         {
-            this.End(journal, DiscoveryRunFailure.RetrievalRefused);
+            await this.EndAsync(journal, DiscoveryRunFailure.RetrievalRefused);
         }
     }
 
-    /// <summary>Publishes the composed plan a part at a time, source by source and then block by block.</summary>
+    /// <summary>Writes the composed plan a part at a time, source by source and then block by block.</summary>
     /// <remarks>
     /// <para>
     /// The plan is the run's own, composed by <see cref="DiscoveryRun" /> out of what it retrieved. Nothing is decided
-    /// here beyond the order it goes out in: what a client assembles is exactly the plan the run produced, and a client
-    /// that read the whole stream holds every part of it.
+    /// here beyond the order it is written in: what a client assembles is exactly the plan the run produced, and a
+    /// client that read the whole run holds every part of it.
     /// </para>
     /// <para>
-    /// A source refused by the stream's own bound takes the blocks resting on it with it, because a block naming a
-    /// citation nobody declared is the one way a citation contract fails quietly. So the run stops at the first refusal
-    /// and states that it published less than it composed, rather than publishing a block whose sources went missing.
+    /// A source the journal refuses takes the blocks resting on it with it, because a block naming a citation nobody
+    /// declared is the one way a citation contract fails quietly. So the run stops at the first refusal and states that
+    /// it wrote less than it composed, rather than writing a block whose sources went missing.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<PresentationLimitation> Present(
+    private static async Task<IReadOnlyList<PresentationLimitation>> PresentAsync(
         DiscoveryRunResult result,
         DiscoveryRunJournal journal)
     {
         foreach (var citation in result.Presentation.Citations)
         {
-            if (!journal.Append(new DiscoveryCitationDeclared(citation)))
+            if (!await journal.AppendAsync(new DiscoveryCitationDeclared(citation), CancellationToken.None))
             {
                 return [PresentationLimitation.BlocksOmitted];
             }
@@ -190,7 +203,7 @@ public sealed class StreamedDiscoveryRun
 
         foreach (var block in result.Presentation.Blocks)
         {
-            if (!journal.Append(new DiscoveryBlockComposed(block)))
+            if (!await journal.AppendAsync(new DiscoveryBlockComposed(block), CancellationToken.None))
             {
                 return [PresentationLimitation.BlocksOmitted];
             }
@@ -200,8 +213,9 @@ public sealed class StreamedDiscoveryRun
     }
 
     /// <summary>Ends the run on a stated failure, with what it had spent by the time it reached it.</summary>
-    private void End(DiscoveryRunJournal journal, DiscoveryRunFailure failure) =>
-        journal.Append(new DiscoveryRunFailed(failure, this.ledger.Read()));
+    /// <remarks>Written with no cancellation of its own, because an ending a stopping deployment cut short would leave a client watching a run that had already finished.</remarks>
+    private Task<bool> EndAsync(DiscoveryRunJournal journal, DiscoveryRunFailure failure) =>
+        journal.AppendAsync(new DiscoveryRunFailed(failure, this.ledger.Read()), CancellationToken.None);
 
     /// <summary>Ends a run one of the two spend ceilings refused, as the state that ceiling is.</summary>
     /// <remarks>
@@ -213,11 +227,13 @@ public sealed class StreamedDiscoveryRun
     /// gives: on a deployment serving several users the remaining allowance is a report of what the others have been
     /// doing.
     /// </remarks>
-    private void EndOnCeiling(DiscoveryRunJournal journal, MailAnsweringBudgetExhaustedException spent) =>
-        journal.Append(spent.Scope is MailAnsweringBudgetScope.Period
-            ? new DiscoveryRunFailed(DiscoveryRunFailure.PeriodSpent, this.ledger.Read())
-            {
-                RetryAt = this.periodBounds.PeriodEndAt(this.timeProvider.GetUtcNow()),
-            }
-            : new DiscoveryRunFailed(DiscoveryRunFailure.RunSpent, this.ledger.Read()));
+    private Task<bool> EndOnCeilingAsync(DiscoveryRunJournal journal, MailAnsweringBudgetExhaustedException spent) =>
+        journal.AppendAsync(
+            spent.Scope is MailAnsweringBudgetScope.Period
+                ? new DiscoveryRunFailed(DiscoveryRunFailure.PeriodSpent, this.ledger.Read())
+                {
+                    RetryAt = this.periodBounds.PeriodEndAt(this.timeProvider.GetUtcNow()),
+                }
+                : new DiscoveryRunFailed(DiscoveryRunFailure.RunSpent, this.ledger.Read()),
+            CancellationToken.None);
 }

@@ -180,6 +180,7 @@ public sealed class ClientSignalTests
         Assert.Equal(
             [
                 "account.state",
+                "discovery.run.advanced",
                 "folders.changed",
                 "mail.arrived",
                 "mail.changed",
@@ -189,7 +190,7 @@ public sealed class ClientSignalTests
             [.. names.Order(StringComparer.Ordinal)]);
     }
 
-    /// <summary>A kind nobody named is not one of the six, so a value that reached a channel by accident says so.</summary>
+    /// <summary>A kind nobody named is not one of the seven, so a value that reached a channel by accident says so.</summary>
     [Fact]
     public void IsSpecified_ForTheStructDefault_ReportsThatNoKindWasNamed() =>
         Assert.False(default(ClientSignalKind).IsSpecified);

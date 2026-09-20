@@ -7,11 +7,12 @@ using MailFathom.Application.Discovery.Presentation;
 
 namespace MailFathom.Application.Discovery.Streaming;
 
-/// <summary>What one streamed run may take, hold, and leave behind, and what happens at each of those points.</summary>
+/// <summary>What one watched run may take, hold, and leave behind, and what happens at each of those points.</summary>
 /// <remarks>
 /// <para>
-/// A streamed run outlives the request that started it, so every one of these is a bound on memory or on a provider
-/// that nothing else would apply: the request has already been answered by the time any of them is reached.
+/// A run outlives the request that started it, so every one of these is a bound on what a run may write, on
+/// what it may cost a provider, or on how long its answer is kept: the request has already been answered by the time
+/// any of them is reached.
 /// </para>
 /// <para>
 /// They are constants rather than settings. Each is a property of what the contract can express — how many events a run
@@ -42,14 +43,23 @@ public static class DiscoveryRunBounds
         + PresentationPlan.MaxBlocks
         + 1;
 
-    /// <summary>The greatest number of runs this process holds at once, whether executing or waiting to be read.</summary>
+    /// <summary>The greatest number of runs one person has executing at once, across the whole deployment.</summary>
     /// <remarks>
+    /// <para>
     /// A run is one person's question rather than a request being served, and a person does not ask eight at a time — so
-    /// this bounds what a client looping over the start route can make this process hold, and a start beyond it is
-    /// refused rather than queued. A refusal is the honest answer: queueing would leave somebody watching a run that has
-    /// not begun, which is the spinner the whole surface exists to remove.
+    /// this bounds what a client looping over the start route can make a deployment do on that person's behalf, and a
+    /// start beyond it is refused rather than queued. A refusal is the honest answer: queueing would leave somebody
+    /// watching a run that has not begun, which is the spinner the whole surface exists to remove.
+    /// </para>
+    /// <para>
+    /// <strong>It is one person's and the deployment's, rather than one process's.</strong> It is counted in the same
+    /// statement that opens the run, so raising the replica count does not multiply it and what somebody may start does
+    /// not depend on which replica their request reached — which is what lets the number a client is told mean
+    /// something. A run that has ended is not one of them: what this bounds is work in flight, and an answer waiting to
+    /// be read costs rows rather than a provider.
+    /// </para>
     /// </remarks>
-    public const int MaximumConcurrentRuns = 8;
+    public const int MaximumConcurrentRunsPerUser = 8;
 
     /// <summary>The longest one run may take before it is stopped where it stands.</summary>
     /// <remarks>
@@ -58,7 +68,7 @@ public static class DiscoveryRunBounds
     /// client is eventually ended by, and it ends the run as <see cref="DiscoveryRunFailure.TimedOut" /> with whatever
     /// it had already published still readable.
     /// <para>
-    /// <see cref="StreamedDiscoveryRun" /> applies it, over a cancellation source of its own rather than over the token
+    /// <see cref="WatchedDiscoveryRun" /> applies it, over a cancellation source of its own rather than over the token
     /// its caller passes, which is what keeps a run that spent this bound distinguishable from one a stopping
     /// deployment cut short.
     /// </para>
@@ -68,8 +78,9 @@ public static class DiscoveryRunBounds
     /// <summary>How long a run that has ended stays readable before it is forgotten.</summary>
     /// <remarks>
     /// The window a dropped connection is recovered inside. It runs from the last time anything read or wrote the run,
-    /// so a client that is reading is never cut off mid-stream and one that never came back is dropped rather than kept
-    /// for the life of the process.
+    /// so a client that is reading is never cut off mid-read and one that never came back is dropped rather than kept
+    /// indefinitely. It is also the storage limitation on what a run wrote, which is mail-derived throughout: the
+    /// removal is what makes a run's answer stop existing rather than a decision anybody has to take.
     /// </remarks>
     public static TimeSpan RetentionAfterLastUse { get; } = TimeSpan.FromMinutes(5);
 }
