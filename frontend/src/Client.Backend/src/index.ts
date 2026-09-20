@@ -89,6 +89,15 @@ export {
     type CitedPassage,
     type CitedPassageOutcome,
 } from './citedPassages';
+export {
+    answerBlockTypes,
+    discoveryRunRoute,
+    readDiscoveryRunTail,
+    understoodPlanSchemaVersion,
+    type AnswerBlock,
+    type AnswerBlockType,
+    type DiscoveryRunEvent,
+} from './discoveryRun';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
 export {
     type MailEnrichment,
