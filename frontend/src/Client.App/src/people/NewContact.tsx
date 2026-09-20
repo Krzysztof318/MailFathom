@@ -5,6 +5,7 @@
 import { useId, useState, type RefObject } from 'react';
 import { looksLikeAnAddress } from '../composer/composition';
 import { mannerDrawn } from '../confirmation/wayOutShapes';
+import { dialogField, dialogFieldLabel } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
@@ -27,11 +28,6 @@ import { useLocalization } from '../localization/useLocalization';
 // The dialog is the platform's own, so the page behind it is inert, focus moves into it and is held there, Escape
 // leaves it, and leaving it puts focus back on the control that opened it. Whether it is open is therefore the
 // element's state rather than a second copy of it, which is why the caller hands over the reference.
-
-const field =
-    'w-full rounded-lg border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
-
-const fieldLabel = 'text-2xs tracking-widest text-muted uppercase';
 
 /** What a person has typed into the form, which is the whole of what a record this client writes carries. */
 export interface ContactDraft {
@@ -114,7 +110,7 @@ export function NewContact({
 
                 <div className="flex flex-col gap-3.5 px-4.5 py-4.5">
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor={names} className={fieldLabel}>
+                        <label htmlFor={names} className={dialogFieldLabel}>
                             {translate('people.contactName')}
                         </label>
 
@@ -123,7 +119,7 @@ export function NewContact({
                             type="text"
                             autoFocus
                             value={draft.displayName}
-                            className={field}
+                            className={dialogField}
                             onChange={(typing) => {
                                 setDraft({ ...draft, displayName: typing.target.value });
                             }}
@@ -131,7 +127,7 @@ export function NewContact({
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor={addresses} className={fieldLabel}>
+                        <label htmlFor={addresses} className={dialogFieldLabel}>
                             {translate('people.contactAddress')}
                         </label>
 
@@ -139,7 +135,7 @@ export function NewContact({
                             id={addresses}
                             type="email"
                             value={draft.address}
-                            className={field}
+                            className={dialogField}
                             onChange={(typing) => {
                                 setDraft({ ...draft, address: typing.target.value });
                             }}

@@ -93,9 +93,9 @@ one enrichment call already paid for on the message the pass stopped at.
 
 ## Reading a typed sentence
 
-The typed half is served over two routes, and nothing in this repository calls them yet — the screen that will is
-[#1566](https://github.com/Krzysztof318/MailFathom/issues/1566)'s work. What exists is the contract, and it is shaped
-for a caller that draws a form.
+The typed half is served over two routes, and the client's Calendar screen is what calls them: the first decides
+whether the description field is drawn at all, and the second fills the form from the sentence somebody typed into it.
+The contract below is what that form is shaped against.
 
 One route says whether this deployment reads a description at all, so a caller can ask once and leave the field out
 where nothing would answer it. A deployment that reads none answers that the same way one whose provider is

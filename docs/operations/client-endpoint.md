@@ -2514,9 +2514,9 @@ Content-Type: application/json
 
 **What comes back is fields rather than a calendar entry.** Nothing on this route writes an event, and nothing is
 stored: the answer is a reading of the sentence, which a caller presents for whoever typed it to correct and submit
-through [`POST /api/client/calendar`](#the-calendar-routes), the route that writes one. No client in this repository
-calls either route yet; the screen that will is
-[#1566](https://github.com/Krzysztof318/MailFathom/issues/1566)'s work.
+through [`POST /api/client/calendar`](#the-calendar-routes), the route that writes one. The client's Calendar screen
+is the caller: what it reads out of a sentence goes into the fields of the dialog that writes the event, and nothing is
+written until somebody saves it there.
 
 **The read says whether this deployment reads a description at all**, so a caller can ask once and leave the field
 out where nothing would answer it. It resolves a registration and calls no provider, so the answer is cheap and stable

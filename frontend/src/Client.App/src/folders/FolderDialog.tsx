@@ -5,6 +5,7 @@
 import type { MailFolderRole, ManagedMailFolder } from '@mailfathom/client-backend';
 import { useId, type RefObject } from 'react';
 import { mannerDrawn } from '../confirmation/wayOutShapes';
+import { dialogField, dialogFieldLabel } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import type { MessageKey } from '../localization/en';
@@ -62,11 +63,6 @@ const roleSaid: Readonly<Partial<Record<MailFolderRole, MessageKey>>> = {
     Junk: 'folders.role.junk',
     Trash: 'folders.role.trash',
 };
-
-const field =
-    'w-full rounded-lg border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
-
-const fieldLabel = 'text-2xs tracking-widest text-muted uppercase';
 
 export function FolderDialog({
     asked,
@@ -180,14 +176,14 @@ export function FolderDialog({
                     <div className="flex flex-col gap-3.5 px-4.5 py-4.5">
                         {roles.length === 0 ? null : (
                             <div className="flex flex-col gap-1.5">
-                                <label htmlFor={kinds} className={fieldLabel}>
+                                <label htmlFor={kinds} className={dialogFieldLabel}>
                                     {translate('folders.kind')}
                                 </label>
 
                                 <select
                                     id={kinds}
                                     value={draft.role ?? ''}
-                                    className={field}
+                                    className={dialogField}
                                     onChange={(choosing) => {
                                         const chosen = choosing.target.value;
 
@@ -209,7 +205,7 @@ export function FolderDialog({
 
                         {!naming ? null : (
                             <div className="flex flex-col gap-1.5">
-                                <label htmlFor={names} className={fieldLabel}>
+                                <label htmlFor={names} className={dialogFieldLabel}>
                                     {translate('folders.name')}
                                 </label>
 
@@ -222,7 +218,7 @@ export function FolderDialog({
                                     autoFocus
                                     value={draft.name}
                                     placeholder={translate('folders.namePlaceholder')}
-                                    className={field}
+                                    className={dialogField}
                                     onChange={(typing) => {
                                         onDraft(withName(draft, typing.target.value));
                                     }}
@@ -232,14 +228,14 @@ export function FolderDialog({
 
                         {!placing ? null : (
                             <div className="flex flex-col gap-1.5">
-                                <label htmlFor={parents} className={fieldLabel}>
+                                <label htmlFor={parents} className={dialogFieldLabel}>
                                     {translate('folders.parent')}
                                 </label>
 
                                 <select
                                     id={parents}
                                     value={draft.parentId ?? ''}
-                                    className={field}
+                                    className={dialogField}
                                     onChange={(choosing) => {
                                         const chosen = choosing.target.value;
 

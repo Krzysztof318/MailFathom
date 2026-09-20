@@ -34,11 +34,27 @@ import { writeKeptSession } from './signIn/keptSession';
 
 resetsBetweenTests();
 
+/**
+ * The calendar window one of these lists holds, which the Calendar space asks for as soon as it is mounted.
+ *
+ * The span is the week the reader is standing in, so it is matched rather than spelled out: a literal would name one
+ * week of one year and the list would stop holding the day after it was written. What these lists are about is which
+ * deployment each request went to, and `calendar/calendarSpan.test.ts` is where the span itself is proven.
+ */
+function calendarWindowAt(deployment: string): unknown {
+    const origin = deployment.replaceAll('.', '\\.');
+    const asked = `^${origin}/api/client/calendar\\?from=[^&]+&until=[^&]+&count=200$`;
+
+    return expect.stringMatching(new RegExp(asked, 'u'));
+}
+
 describe('App deployment', () => {
     // The folder tree, the inbox's first page and the phrasing the search row offers are in every one of these lists
     // although the client opens on Discover: the Mail space is drawn behind whichever space is in front, so it reads on
     // landing rather than on the first visit to it. `shell/Space.tsx` holds why it is kept there, and these three reads
-    // are what that costs — made once, against a return to Mail that reads nothing and draws no skeleton.
+    // are what that costs — made once, against a return to Mail that reads nothing and draws no skeleton. The calendar
+    // window and the question of whether this deployment reads a typed description are the Calendar space paying the
+    // same price for the same reason.
     it('reads from the deployment it was pointed at, rather than from one written into the client', async () => {
         renderApp(chose('https://elsewhere.example.invalid'));
         await framed();
@@ -50,6 +66,8 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/folders',
                 'https://elsewhere.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://elsewhere.example.invalid/api/client/emails/search/phrasing',
+                calendarWindowAt('https://elsewhere.example.invalid'),
+                'https://elsewhere.example.invalid/api/client/calendar/drafts',
                 'https://elsewhere.example.invalid/api/client/replies/drafting',
                 'https://elsewhere.example.invalid/api/client/preferences',
                 'https://elsewhere.example.invalid/api/client/display-name',
@@ -134,6 +152,8 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/folders',
                 'https://mail.example.test/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://mail.example.test/api/client/emails/search/phrasing',
+                calendarWindowAt('https://mail.example.test'),
+                'https://mail.example.test/api/client/calendar/drafts',
                 'https://mail.example.test/api/client/replies/drafting',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
@@ -321,6 +341,8 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/folders',
                 'https://first.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://first.example.invalid/api/client/emails/search/phrasing',
+                calendarWindowAt('https://first.example.invalid'),
+                'https://first.example.invalid/api/client/calendar/drafts',
                 'https://first.example.invalid/api/client/replies/drafting',
                 'https://first.example.invalid/api/client/preferences',
                 'https://first.example.invalid/api/client/display-name',
@@ -339,6 +361,8 @@ describe('App deployment', () => {
                 'https://second.example.invalid/api/client/folders',
                 'https://second.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://second.example.invalid/api/client/emails/search/phrasing',
+                calendarWindowAt('https://second.example.invalid'),
+                'https://second.example.invalid/api/client/calendar/drafts',
                 'https://second.example.invalid/api/client/replies/drafting',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',

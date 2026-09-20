@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
+import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
@@ -68,6 +69,7 @@ const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/notifications/unread-count', notifications.unreadNotificationCount],
     ['/mutations', changes.mutationRecords],
     ['/replies/drafting', drafts.draftsReplies],
+    ['/calendar/drafts', calendar.calendarDescriptionsRead],
     ['/contacts', contacts.assertedContactPage],
     ['/contacts/collected', contacts.collectedContactPage],
     [`/contacts/${contacts.assertedContact.id}/correspondence`, contacts.contactCorrespondence],
@@ -85,6 +87,8 @@ const writtenRoutes: readonly (readonly [string, unknown])[] = [
     ['/drafts', drafts.savedDraft],
     [`/drafts/${drafts.draftId}/send`, drafts.queuedSend],
     ['/replies/drafting', drafts.draftedReply],
+    ['/calendar', calendar.calendarEventWritten],
+    ['/calendar/drafts', calendar.calendarEventDrafted],
     ['/contacts', contacts.contactWritten],
     [`/contacts/${contacts.collectedContact.id}/promotion`, contacts.contactPromoted],
 ];
@@ -167,6 +171,46 @@ describe('fixtureAnswer', () => {
         expect(stated(answered(`/contacts/${contacts.assertedContact.id}`, {}, 1, 'DELETE'))).toStrictEqual(
             contacts.contactErased,
         );
+    });
+
+    // A calendar is read as the span somebody is standing in, so the corpus places its entries against the window that
+    // was asked for. What proves it is the same read asked for two different weeks: a fixed set of dates would answer
+    // both with the same instants, and the screen would be empty in one of them.
+    it('places what the calendar answers against the span that was asked for', () => {
+        const week = new Date(2026, 8, 21);
+        const next = new Date(2026, 8, 28);
+
+        const asking = (from: Date) =>
+            `/calendar?from=${encodeURIComponent(from.toISOString())}&until=${encodeURIComponent(
+                new Date(from.getFullYear(), from.getMonth(), from.getDate() + 7).toISOString(),
+            )}&count=200`;
+
+        expect(stated(answered(asking(week)))).toStrictEqual(
+            calendar.calendarWindow(week.toISOString(), next.toISOString()),
+        );
+        expect(stated(answered(asking(next)))).not.toStrictEqual(
+            calendar.calendarWindow(week.toISOString(), next.toISOString()),
+        );
+    });
+
+    it('answers an empty calendar where the deployment is set to hold nothing', () => {
+        expect(
+            stated(
+                answered('/calendar?from=2026-09-21T00:00:00Z&until=2026-09-28T00:00:00Z', { emptyCollections: true }),
+            ),
+        ).toStrictEqual(calendar.emptyCalendarWindow);
+    });
+
+    it('answers deleting one event with nothing, which is what leaving the calendar states', () => {
+        const gone = answered('/calendar/calendar-1', {}, 1, 'DELETE');
+
+        expect(gone.status).toBe(204);
+        expect(gone.body).toBe('');
+    });
+
+    it('answers one event and taking a proposed one onto the calendar with the event the write left behind', () => {
+        expect(stated(answered('/calendar/calendar-1'))).toStrictEqual(calendar.calendarEventWritten);
+        expect(stated(posted('/calendar/calendar-1/acceptance'))).toStrictEqual(calendar.calendarEventWritten);
     });
 
     it('answers a route the corpus states nothing for as nothing being there', () => {

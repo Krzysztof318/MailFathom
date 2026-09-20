@@ -15,6 +15,7 @@ import { Space } from './Space';
 const handedToMail = 'The mail this space was handed.';
 const handedTheFolders = 'The folder tree this space was handed.';
 const handedTheTabs = 'The tab strip this space was handed.';
+const handedToTheCalendar = 'the calendar handed to the frame';
 const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
@@ -49,6 +50,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                             mail={<p>{handedToMail}</p>}
                             tabs={<p>{handedTheTabs}</p>}
                             people={<p>{handedToPeople}</p>}
+                            calendar={<p>{handedToTheCalendar}</p>}
                             person="reader"
                         />
                     </ComposingContext>
@@ -174,6 +176,30 @@ describe('Space', () => {
         expect(
             within(screen.getByRole('main', { name: 'People' })).queryByText(/This space is not built yet\./),
         ).toBeNull();
+    });
+
+    it('draws the Calendar without a heading either, and names its landmark the same way', () => {
+        render(inStrictMode('calendar'));
+
+        expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+        expect(screen.getByRole('main', { name: 'Calendar' })).toBeDefined();
+    });
+
+    it('shows what the frame composed for the Calendar in the Calendar space', () => {
+        render(inStrictMode('calendar'));
+
+        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedToTheCalendar)).toBeDefined();
+    });
+
+    it('hands the question and the connection to the Calendar when it is in front, and to nothing when it is not', () => {
+        const { rerender } = render(inStrictMode('calendar'));
+
+        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedTheIntent)).toBeDefined();
+
+        rerender(inStrictMode('cases'));
+
+        expect(within(screen.getByLabelText('Calendar')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('Calendar')).getByText(handedToTheCalendar)).toBeDefined();
     });
 
     it('shows the scope the Mail space is drawn against beside what it is drawn from', () => {

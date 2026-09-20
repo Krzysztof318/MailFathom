@@ -251,6 +251,17 @@
        own page narrower for no reading gained. */
     --spacing-contact-list: 18.75rem;
 
+    /* How wide the column of dates the calendar read out of somebody's mail stands where the window has room for it
+       beside the views, which is the width the design project draws it at. Fixed for the reason the address book's
+       column is: a card there holds a title and a range, and a column that grew with the window would take the room
+       the week's own seven columns need. */
+    --spacing-calendar-side: 17.5rem;
+
+    /* How tall a cell of the month grid stands before what is in it decides. It is a floor rather than a height: a day
+       with four events grows past it, and a month whose cells were all as tall as their busiest day would be a grid
+       mostly of blank space. The value is the design project's own cell, which holds its date and two entries. */
+    --spacing-month-cell: 5.75rem;
+
     /* How much of the frame the strip saying what this credential may not do may take before it scrolls instead of
        growing. A credential holding one grant is withheld most of them, so at the narrowest width that strip is
        several sentences of several lines each — and a strip that went on growing would leave the space under it no

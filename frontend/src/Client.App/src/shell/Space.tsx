@@ -21,6 +21,7 @@ export function Space({
     mail,
     tabs,
     people,
+    calendar,
     person,
 }: {
     /** Every space this deployment offers, which is every space that is mounted. */
@@ -43,6 +44,9 @@ export function Space({
 
     /** The address book and whoever is open from it, which is the People space and nothing else. */
     readonly people: ReactNode;
+
+    /** The calendar and what mail proposed for it, which is the Calendar space and nothing else. */
+    readonly calendar: ReactNode;
 
     /** Who is signed in, which the Mail space keeps its own division of the width under. */
     readonly person: string | null;
@@ -96,9 +100,14 @@ export function Space({
                 const isMail = name === 'mail';
                 const isPeople = name === 'people';
 
-                // Which spaces compose their own height rather than scrolling a column of prose. Both built spaces do,
-                // and a placeholder does not — what it holds is a title and a sentence.
-                const composed = isMail || isPeople;
+                // The two spaces that compose one shape: their own columns with the frame's two regions at the foot.
+                // Picking the node here rather than branching on the name twice in the markup is what keeps the choice
+                // below readable as three cases instead of four.
+                const ownColumns = isPeople ? people : name === 'calendar' ? calendar : null;
+
+                // Which spaces compose their own height rather than scrolling a column of prose. Every built space
+                // does, and a placeholder does not — what it holds is a title and a sentence.
+                const composed = isMail || ownColumns !== null;
 
                 return (
                     <main
@@ -114,9 +123,9 @@ export function Space({
                                 : 'overflow-y-auto px-4 py-6 workspace:px-8'
                         } ${inFront ? 'flex-1' : 'invisible absolute inset-0'}`}
                     >
-                        {/* Neither built space carries a title, which is how the design project draws both: the columns
-                            are what each of them is, and a heading over them would be a word above the thing the word
-                            names. Every region still carries its name, because a landmark a reader moves to is
+                        {/* No built space carries a title, which is how the design project draws each of them: the
+                            columns are what the space is, and a heading over them would be a word above the thing the
+                            word names. Every region still carries its name, because a landmark a reader moves to is
                             announced by it. */}
                         {isMail ? (
                             /* The question and the connection are the two the frame composes for every space, so they
@@ -133,16 +142,7 @@ export function Space({
                                 status={inFront ? status : null}
                                 person={person}
                             />
-                        ) : isPeople ? (
-                            /* The People space draws no title either, for the reason Mail does not: the book and the
-                               person are what it is. The two regions the frame composes for every space stand at its
-                               foot and are handed to the one in front alone, exactly as they are to Mail. */
-                            <div className="flex min-h-0 flex-1 flex-col">
-                                {people}
-                                {inFront ? status : null}
-                                {inFront ? intent : null}
-                            </div>
-                        ) : (
+                        ) : ownColumns === null ? (
                             <div className="flex max-w-3xl flex-col gap-3">
                                 <h1 className="text-4xl font-semibold tracking-tight">
                                     {translate(spaceLabels[name])}
@@ -150,12 +150,21 @@ export function Space({
 
                                 {inFront ? status : null}
 
-                                {/* The note belongs to a space that holds nothing, which is every space but Mail
-                                    today. */}
+                                {/* The note belongs to a space that holds nothing, which is every space no issue has
+                                    built yet. */}
                                 {implementedSpaces.includes(name) ? null : (
                                     <p className="text-base text-muted">{translate('space.pending')}</p>
                                 )}
 
+                                {inFront ? intent : null}
+                            </div>
+                        ) : (
+                            /* A space that composes its own columns, which is People and Calendar. The two regions the
+                               frame composes for every space stand at its foot and are handed to the one in front
+                               alone, exactly as they are to Mail. */
+                            <div className="flex min-h-0 flex-1 flex-col">
+                                {ownColumns}
+                                {inFront ? status : null}
                                 {inFront ? intent : null}
                             </div>
                         )}

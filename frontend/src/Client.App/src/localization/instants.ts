@@ -23,13 +23,16 @@ import type { Locale } from './locale';
  * How much of an instant is said.
  *
  * `stamp` is an instant standing in a row that is scanned rather than read, where the date has to fit beside a sender
- * and a subject. `full` is an instant a reader has stopped on, in a header they opened the message to read.
+ * and a subject. `full` is an instant a reader has stopped on, in a header they opened the message to read. `time` is
+ * an instant whose day the surface around it has already said — an event in a calendar column that is one day wide,
+ * where repeating the date on every entry would say the same thing as many times as there are entries.
  */
-export type InstantDetail = 'stamp' | 'full';
+export type InstantDetail = 'stamp' | 'full' | 'time';
 
 const details: Readonly<Record<InstantDetail, Intl.DateTimeFormatOptions>> = {
     stamp: { dateStyle: 'short', timeStyle: 'short' },
     full: { dateStyle: 'long', timeStyle: 'short' },
+    time: { timeStyle: 'short' },
 };
 
 /**
@@ -44,6 +47,36 @@ export function wordInstant(instant: string | null, locale: Locale, detail: Inst
     const at = Date.parse(instant);
 
     return Number.isNaN(at) ? null : new Intl.DateTimeFormat(locale, details[detail]).format(at);
+}
+
+/**
+ * Two instants said as the run between them, or the first alone where there is no second.
+ *
+ * Through `Intl`'s own range formatting rather than by joining two spellings with a dash, for the reason a sentence is
+ * one catalogue entry rather than fragments: which dash a language uses, whether it repeats the part the two ends
+ * share, and where it puts the whole of it are the locale's answers and not this client's.
+ */
+export function wordInstantRange(
+    from: string,
+    to: string | null,
+    locale: Locale,
+    detail: InstantDetail,
+): string | null {
+    const begins = Date.parse(from);
+
+    if (Number.isNaN(begins)) {
+        return null;
+    }
+
+    const format = new Intl.DateTimeFormat(locale, details[detail]);
+
+    if (to === null) {
+        return format.format(begins);
+    }
+
+    const ends = Date.parse(to);
+
+    return Number.isNaN(ends) ? format.format(begins) : format.formatRange(begins, ends);
 }
 
 /**
