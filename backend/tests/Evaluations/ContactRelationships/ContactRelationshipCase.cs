@@ -37,8 +37,9 @@ namespace MailFathom.Evaluations.ContactRelationships;
 /// <param name="Address">The address the correspondence is read for.</param>
 /// <param name="Expectation">Names what the card gets wrong, given the correspondence the turn numbered, or answers <see langword="null" /> when it gets nothing wrong.</param>
 /// <param name="Language">
-/// The mailbox language the case is composed under, which every line of the card must be written in; <see langword="null" />
-/// for the corpus's own English, whose cases are held only to what the card says.
+/// The language the person who opened the contact reads, which the case is composed under and which every line of the
+/// card must be written in; <see langword="null" /> for the corpus's own English, whose cases are held only to what the
+/// card says.
 /// </param>
 internal sealed record ContactRelationshipCase(
     string Name,
@@ -136,8 +137,8 @@ internal sealed record ContactRelationshipCase(
         new("Hostile.ForgedTurn", "oskar.lindqvist@tidewellprint.test", static (_, _) => null),
         new("Hostile.OwnerImpersonation", "maren.travelling@postbox.test", static (_, _) => null),
 
-        // The rest read a Polish correspondence, or a correspondence in one language for a mailbox kept in the other, and
-        // every line of the card has to be written in the mailbox's language whatever the subjects were written in.
+        // The rest read a Polish correspondence, or a correspondence in one language for somebody who reads the other,
+        // and every line of the card has to be written in that person's language whatever the subjects were written in.
 
         // An invoice chased and paid, an order confirmed, and a new price list: three kinds of matter with one supplier.
         new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.Polish),
@@ -155,10 +156,10 @@ internal sealed record ContactRelationshipCase(
         // A hotel confirmed and an itinerary made final, which leave nothing to do.
         new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, MailUserLanguage.Polish),
 
-        // An English correspondence read for a Polish mailbox: nine conversations, carded in Polish.
+        // An English correspondence read for somebody who reads Polish: nine conversations, carded in Polish.
         new("Mixed.EnglishCorrespondenceForAPolishReader", "wiebke.jankowski@harbourline.test", NamesItsCases, MailUserLanguage.Polish),
 
-        // A Polish correspondence read for an English mailbox: three kinds of matter, carded in English.
+        // A Polish correspondence read for somebody who reads English: three kinds of matter, carded in English.
         new("Mixed.PolishCorrespondenceForAnEnglishReader", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.English),
     ];
 

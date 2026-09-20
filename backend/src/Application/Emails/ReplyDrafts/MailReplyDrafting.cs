@@ -24,8 +24,8 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// second use case: the permission, the ledger, the egress guard, and the bounds are all the same decisions, and
 /// splitting it would leave two places for a deployment to be turned on. What differs is only that nothing is read —
 /// no conversation, no participants, no sent mail — so the instruction its author typed is the whole of the request
-/// and is required, and the language is taken from the first mailbox this caller is assigned rather than from the
-/// mailbox an answered message would have named.
+/// and is required, and the language is the acting user's own — a message answering nothing has no correspondence to
+/// read a language out of, and no mailbox is involved on either branch.
 /// </para>
 /// <para>
 /// The correspondence is read under the same scope the conversation screen reads it under — every account this user

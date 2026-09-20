@@ -18,7 +18,7 @@ public sealed class ContactRelationshipInstructionsTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A card is read beside a mailbox, so it is written in the language that mailbox is read in.</summary>
+    /// <summary>A card is read by the person who opened the contact, so it is written in the language they read.</summary>
     [Theory]
     [InlineData(MailUserLanguage.English)]
     [InlineData(MailUserLanguage.Polish)]

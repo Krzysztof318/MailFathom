@@ -344,7 +344,7 @@ public sealed class ClientReplyDraftingEndpointTests
             derivesStyleFromSentMail: true);
     }
 
-    /// <summary>Answers one language for whichever mailbox is asked about, which the endpoint never states itself.</summary>
+    /// <summary>Answers one language for whoever is asked about, which the endpoint never states itself.</summary>
     private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
     {
         var languages = Substitute.For<IMailUserLanguages>();
