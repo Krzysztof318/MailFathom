@@ -1376,6 +1376,37 @@ The preferred address is deliberately **not** a foreign key onto the address row
 and a key pointing back would make inserting either of them first impossible without deferring the constraint; that the
 named address is one the contact holds is enforced by the domain when the record is written and again when it is read.
 
+## The calendar
+
+`calendar_events` holds one row per event this deployment knows about. **The calendar is a person's rather than a
+mailbox's**, which is the one place it diverges from the contact book above: somebody assigned two accounts has one
+day, so the row keys onto `settings_accounts` and cascades from it, and no mail account appears on it at all. Nothing
+here is synchronized against an external calendar server; [calendar events](../features/calendar-events.md) holds what
+that decision covers and the rules every writer obeys.
+
+| Column | What it records |
+|---|---|
+| `Id` | MailFathom's own UUID, minted when the event is recorded and kept through every acceptance and amendment |
+| `UserId` | Whose calendar holds it, keyed onto `settings_accounts` and cascading from it, so erasing a person takes the days they had planned. It never changes: accepting a proposal leaves the event on the calendar it was proposed to |
+| `Title` | What the event is called, as whoever wrote it down wrote it |
+| `StartsAt`, `EndsAt` | When it begins, and when it ends where anything said so. A duration is derived from the pair rather than stored beside it, because an end and a duration are one fact; the domain refuses an end that is not after the start |
+| `Origin` | `Asserted` where somebody put the event on their calendar, `Proposed` where a reading of their mail offered it and nobody has agreed. Held as its own name for the reason every bounded value on this page is, and **accepting a proposal changes this column rather than writing a second row**, which is what keeps the message it cites pointing at the event the person holds |
+| `SourceStoredEmailId` | The message a date was found in, or null. A pointer rather than a copy: nothing of the message is on this row |
+| `ImportedUid` | The `UID` the `.ics` entry it was imported under named itself by, or null on an event a person typed or a reading proposed. Compared exactly as written, RFC 5545 giving it no property but equality |
+| `RecordedAt`, `AmendedAt` | When the event was written here, and when it was last amended or accepted |
+| `ConcurrencyVersion` | The `xmin` token, because an event is amended in place. What it settles above all is an amendment racing a deletion, which then writes nothing rather than putting the event back |
+
+**The message key clears rather than cascades, and it is the only reference from another table that does.** Every other
+table recording something about a message is a record of an act and goes with the mail it was about — a reply becoming
+a root is a self-reference rather than a second such table. An event somebody accepted is their own plan, so erasing
+the message a date was found in takes the pointer and leaves the meeting on their calendar. That is not only about
+erasure: a message deleted in the mailbox in the ordinary way removes the same row, and deleting mail is not something
+anybody expects to change what their day holds. What a reader loses is the ability to open the thread from the event,
+which is the honest consequence of the mail being gone.
+
+Deleting an event removes the row. There is no state a deleted event is in and nothing restores one, which is also how
+a proposal nobody wanted is dismissed.
+
 ## Durable background work
 
 `jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. A [rule's schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) is what enqueues into it today, and the handler that runs one records a whole-mailbox rule run for an account; this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-runtime.md#jobs) configuration section.
@@ -1946,6 +1977,9 @@ account reach these four tables through the same cascade every other table is re
 | `ix_contacts_book_holder_display_name_sort_key_id` | `(BookHolderId, DisplayNameSortKey, Id)` | The one order a contact book is listed in and the one a keyset page continues from. The holder leads it because a page is read over a handful of named books, so each is reached by a seek rather than the table scanned and narrowed, and the identity settles two people whose names compare equal, which is what makes the order total within a book and the walk terminate |
 | `ix_contact_addresses_book_holder_normalized_address` | `(BookHolderId, NormalizedAddress)`, unique | One address in one person's hands within one book. It is also what the lookup from an address to a person is served from, rather than a scan, and leading with the holder is what lets that lookup seek into each of the books a reader holds |
 | `IX_contact_addresses_ContactId_BookHolderId` | `(ContactId, BookHolderId)` | The foreign key back to the person, which is what erasing one reaches their addresses by. It carries the book because the key does |
+| `ix_calendar_events_user_starts_at_id` | `(UserId, StartsAt, Id)` | The window every view over a calendar is read as. The owner leads it because a read is always one person's, the start follows because a window is a range over it, and the identity settles two events beginning at the same instant, which is what makes the order total and a window answer the same way twice |
+| `ix_calendar_events_user_imported_uid` | `(UserId, ImportedUid)`, unique, over the rows carrying one | One calendar holds an imported entry once, which is the whole of what makes importing a file twice create nothing the second time — two imports running together both read nothing, so only the constraint closes that window. The filter is what keeps the index the size of what was imported rather than of the calendar, nearly every event carrying no such identifier. Two calendars holding one identifier is ordinary rather than a conflict, which is why the owner leads it |
+| `IX_calendar_events_SourceStoredEmailId` | `(SourceStoredEmailId)` | The key back to the message an event cites, which is what erasing one reaches the events citing it by — to clear the pointer rather than to remove them |
 | `ix_jobs_identity` | `(JobType, IdempotencyKey)`, unique | A job's idempotency identity, which is what makes the same execution enqueued twice one job. It spans terminal rows deliberately: a row that succeeded is what stops the same trigger asking again |
 | `ix_jobs_claimable` | `(JobType, TurnAt)` where the state is `Pending` or `Claimed` | Both of the queries this table runs at any volume: the claim, and the queue-depth check every enqueue makes. The second column is the order the claim drains the queue in, which is what the fairness across users is. The filter keeps the index the size of the backlog rather than of the queue's whole history, and the claim repeats that same membership in its own predicate so PostgreSQL can prove the index applies to it rather than having to derive it through a disjunction. It names the two claimable states rather than excluding the terminal ones, so a job that reaches a terminal state leaves the index whichever one it reaches. The depth check reads the same leading column and rechecks `Pending` against the heap, because the index carries both claimable states rather than that one; what keeps that cheap is the bound on the read rather than the index |
 | `ix_jobs_account` | `(MailboxAccountId, EnqueuedAt)` | An account's queued work, which is what erasure and any per-account bound reach a job by |
@@ -2034,6 +2068,14 @@ trace, or an error message.
 `mail_rederivation_positions` and `mail_rederivation_runs` hold no personal data either, and for the same reason `job_schedules` does not: an account alias, a folder alias, the local identifier of the last message a batch read, counts, and instants say how far an operator's refresh has come, and none of them is anything a message supplied. Nothing cascades into either, which is deliberate rather than an omission — a walk's position is about work an operator started, and erasing the mail behind that position leaves a cursor that the next batch simply steps past and counts that still describe work that was really done.
 
 `contacts` and `contact_addresses` are the most concentrated personal data on this page: a name, the addresses somebody uses, and a note about them are an assembled record about an identified third party rather than mail that arrived. An asserted row is derived from nothing at all; a collected one is derived from a message, and still nothing cascades into either, because what a collected row holds is a claim that the mailbox corresponds with somebody rather than a copy of the message that named them — erasing that message says nothing about whether it still does. That is also why neither has a retention window: a contact is held until somebody erases it, and erasing one removes the person and every address row through the cascade above rather than marking either. What the collected half adds is an erasure of its own, and it is per mail account: it takes every row of that account's book and leaves what any user asserted, and what any other account collected, exactly where it was. **Each half leaves with its own holder.** Erasing the user takes their own book, because `contacts` keys onto `settings_accounts` on the asserted half and `contact_addresses` keys onto `contacts`, so the addresses are reached through the person holding them; what their mailboxes collected stays, for whoever else is assigned those mailboxes, until the last user of one is erased and the account goes with them. Nothing in either table reaches a log, a metric, a trace, or an error message; the contact identifier and the book holder's are what a failure names, and they are the two columns that are not personal data.
+
+`calendar_events` is personal data about the person whose calendar it is rather than about a third party: a title says
+who somebody is meeting and the two instants say when they are not somewhere else. Every column but the identity, the
+owner, and the origin is therefore sensitive, and none of them reaches a log, a metric, a trace, or an error message —
+the event's identifier is what a failure names. It has no retention window: an event is held until somebody deletes it,
+and a deletion removes the row rather than marking it. Erasing the user takes the whole calendar through the cascade
+onto `settings_accounts`, and erasing a message clears the pointer to it and leaves the event, for the reason [the
+calendar](#the-calendar) gives.
 
 `outgoing_emails`, `outgoing_email_recipients`, and `outgoing_email_contents` are derived personal data of a kind
 nothing else on this page holds: an outgoing record says who this mailbox's user wrote to and when, and the recipients

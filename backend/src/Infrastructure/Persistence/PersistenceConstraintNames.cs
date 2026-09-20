@@ -346,6 +346,23 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string ContactBookHolderCheckConstraintName = "ck_contacts_book_holder";
 
+    /// <summary>The order one person's calendar is read in, and what a window over it is answered from.</summary>
+    /// <remarks>
+    /// The owner leads it because a read is always one person's, and the identity closes it so that two events
+    /// beginning at the same instant have an order at all. Stated rather than left to the convention because an index
+    /// over an owner and a start is what a second question about the calendar would also want, and two of them
+    /// identified by the columns they cover are two nobody can tell apart in a plan.
+    /// </remarks>
+    internal const string CalendarEventWindowIndexName = "ix_calendar_events_user_starts_at_id";
+
+    /// <summary>The constraint that keeps one calendar from holding an imported entry twice.</summary>
+    /// <remarks>
+    /// The whole of what makes importing one file a second time create nothing: the entry's own identifier is what
+    /// says the calendar already holds it, and two imports running together both read nothing, so only this closes
+    /// that window. It is partial, because nearly every event carries no such identifier at all.
+    /// </remarks>
+    internal const string CalendarEventImportedUidUniqueIndexName = "ix_calendar_events_user_imported_uid";
+
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// It is the mutation identity's case with the consequence raised. Two callers asking for the same send reach the
