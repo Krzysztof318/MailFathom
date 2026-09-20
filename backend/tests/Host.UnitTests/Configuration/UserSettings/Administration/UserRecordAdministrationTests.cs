@@ -72,7 +72,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
-            $$"""{"Portrait":"{{foreign:D}}"}""",
+            $$"""{"Language":"English", "Portrait":"{{foreign:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -99,7 +99,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
-            $$"""{"Portrait":"{{own:D}}"}""",
+            $$"""{"Language":"English", "Portrait":"{{own:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -167,7 +167,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         await harness.Records.ApplyOwnRecordAsync(
-            $$"""{"Portrait":"{{own:D}}"}""",
+            $$"""{"Language":"English", "Portrait":"{{own:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -219,6 +219,58 @@ public sealed class UserRecordAdministrationTests
             Arg.Any<MailUserEndpointAccess>(),
             5,
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A record being rewritten names the language this deployment writes for that person in. The document is the one
+    /// in front of whoever is saving, so the absence is a line to add rather than a rule they cannot act on, and the
+    /// refusal names the key and both values it takes.
+    /// </summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordStatingNoLanguage_IsRefusedNamingBothItTakes()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            $$"""{"Portrait":"{{OwnPortrait:D}}"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        var refusal = Assert.Single(outcome.Messages);
+        Assert.Contains("Language is not stated", refusal, StringComparison.Ordinal);
+        Assert.Contains("'English'", refusal, StringComparison.Ordinal);
+        Assert.Contains("'Polish'", refusal, StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A language this build does not write in is a value to correct, and the sentence says so rather than reporting an absence.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordStatingALanguageThisBuildDoesNotWriteIn_IsRefused()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            """{"Language":"German"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "not a language MailFathom writes in",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
     }
 
     /// <summary>A record committed before a language was required still takes a portrait, because the link is all that changes.</summary>
@@ -467,7 +519,7 @@ public sealed class UserRecordAdministrationTests
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
             SyntheticMailUser.Deployment,
-            """{"EndpointAccess":{"ClientEndpoint":false}}""",
+            """{"Language":"English", "EndpointAccess":{"ClientEndpoint":false}}""",
             expectedVersion: 5,
             TestContext.Current.CancellationToken);
 
@@ -517,7 +569,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
-            "{}",
+            """{"Language":"English"}""",
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
 
@@ -543,7 +595,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
-            $$"""{ "Portrait": "{{OwnPortrait:D}}", "EndpointAccess": { "McpEndpoint": "false" } }""",
+            $$"""{ "Language":"English", "Portrait": "{{OwnPortrait:D}}", "EndpointAccess": { "McpEndpoint": "false" } }""",
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
 
@@ -627,7 +679,7 @@ public sealed class UserRecordAdministrationTests
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
             SyntheticMailUser.Deployment,
-            $$"""{"Portrait":"{{OwnPortrait:D}}"}""",
+            $$"""{"Language":"English", "Portrait":"{{OwnPortrait:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -685,7 +737,7 @@ public sealed class UserRecordAdministrationTests
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
             SyntheticMailUser.Deployment,
-            $$"""{"Portrait":"{{OwnPortrait:D}}"}""",
+            $$"""{"Language":"English", "Portrait":"{{OwnPortrait:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 

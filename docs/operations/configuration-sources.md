@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON or YAML configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -167,18 +167,55 @@ At most **256** users may be recorded. A roster that long was generated rather t
 
 ### What a user's own record carries
 
-`mfctl user add` provisions the record stating nothing at all, so a user is recorded and served without anybody
-writing a line of it. What it can carry is one key, and everything else about how their mail is read belongs to the
-mail accounts they are assigned:
+`mfctl user add` provisions the record naming the language and nothing else, so a user is recorded and served without
+anybody writing a line of it. What it can carry is two keys, and everything else about how their mail is read belongs
+to the mail accounts they are assigned:
 
 | Key | Required | What it is |
 | --- | --- | --- |
+| `Language` | Yes, of a record being written | `English` or `Polish`, read however it was capitalized. The language this deployment writes **for this person** in; [the language this person reads](#the-language-this-person-reads--language) holds the rule and both refusals |
 | `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
 
-**The language is the mailbox's rather than the person's.** [The language this mailbox is read
-in](configuration-mail.md#the-language-this-mailbox-is-read-in--language) holds the key, both refusals, and what an
-account recorded before the property existed reads as. A user's record naming `Language` binds nothing and is refused
-as a property nothing binds, exactly as any other unknown setting is.
+### The language this person reads — `Language`
+
+`Language` is the language of what this deployment composes **for somebody** rather than of what it derives **from a
+mailbox**. Two things read it today: the [card beside an opened contact](../features/contact-relationship.md), and a
+[reply draft](../features/reply-drafting.md) for a message that answers no correspondence. Both are made on the asking,
+for one person, and read by nobody else, which is what makes the value theirs.
+
+**It is not the language a mailbox is read in, and neither replaces the other.** [The language this mailbox is read
+in](configuration-mail.md#the-language-this-mailbox-is-read-in--language) is a key on each mail account and decides the
+mark on a message row and the statement about a conversation — one copy that every user assigned the mailbox reads. A
+record and an account therefore both carry a `Language`, and a person whose mailbox is read in Polish may read English
+themselves. It is not the client's language either: that is a choice kept on the device, and a derivation composed for
+somebody with no client open could not read it.
+
+```json
+{
+  "Language": "Polish"
+}
+```
+
+`mfctl user add` provisions `English`, and [`mfctl user edit`](admin-endpoint.md#users-and-their-records) is where it is
+changed — one line, and the next card and the next blank-composer draft come out in it. Two refusals, and the next act
+differs between them:
+
+```
+Language is not stated, and every user record names the language MailFathom writes for that person in — the card
+beside a contact of theirs, a message that answers no correspondence. State 'English' or 'Polish'.
+```
+
+```
+Language states 'German', which is not a language MailFathom writes in. It takes 'English' or 'Polish'.
+```
+
+**A record committed before this release states none, and reads as `English` until it is edited.** The key binds
+strictly, so nobody could have written one in advance, and refusing those records at the next start would refuse the
+start itself — for every user, through the surface the line would have been added from. So the requirement is asked
+where a record is rewritten and of no other write: a held record naming no language is served in English, an
+administrator keeping somebody off an endpoint and a person changing their portrait are not refused over it, and the
+first save of the whole record states it. The operator's action after upgrading is a single `mfctl user edit` per
+person.
 
 ### A configuration still declaring users
 

@@ -11,6 +11,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <param name="User">The identity every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by.</param>
 /// <param name="MailAccounts">The mail accounts assigned to this user, each carrying its own settings.</param>
+/// <param name="Language">The language this deployment writes for them in; a record held from before the property existed states none and reads as English.</param>
 /// <remarks>
 /// One source reaches a user, and it is their own record, so everything here is bound out of that document rather than
 /// out of a section. What is about a mailbox rather than about the person is not here at all: how its mail is
@@ -20,4 +21,5 @@ namespace MailFathom.Host.Configuration.UserSettings;
 internal sealed record ServedMailUser(
     MailUserId User,
     string DisplayName,
-    IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts);
+    IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts,
+    MailUserLanguage Language = MailUserLanguage.English);

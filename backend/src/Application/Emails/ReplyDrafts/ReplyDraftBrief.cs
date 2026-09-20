@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Emails.ReplyDrafts;
 
@@ -10,7 +10,7 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// <param name="Sources">What the draft is written from and cites, which carries no message where the draft answers nothing.</param>
 /// <param name="Selection">The part of the correspondence the reply is to answer, or <see langword="null" /> to answer it as a whole.</param>
 /// <param name="Instruction">What the person asked the reply to say, or <see langword="null" /> where they asked for nothing in particular.</param>
-/// <param name="Language">The language the mailbox the draft is written from is read in, which decides a draft answering no correspondence.</param>
+/// <param name="Language">The language the person writing reads, which decides a draft answering no correspondence.</param>
 /// <remarks>
 /// <para>
 /// The two texts arrive here bounded by the use case rather than by the writer, because they are the one part of a
@@ -18,15 +18,17 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// and its data, and it belongs where the rest of that decision is taken.
 /// </para>
 /// <para>
-/// The language is the mailbox's rather than the mail's, and it decides only the case the mail cannot: a reply is
+/// The language is the writer's own rather than the mail's, and it decides only the case the mail cannot: a reply is
 /// written in the language of the conversation it answers, because that is what the person on the other end reads, and
-/// a message answering nothing has no such language to take. It is an argument here rather than something the writer
-/// reads off the sources, for the reason <see cref="Accounts.IMailAccountLanguages" /> gives — which mailbox a
-/// derivation is about stays out of the text sent to a provider.
+/// a message answering nothing has no such language to take. What is left is the person composing it, who is the only
+/// party a blank composer knows about — the mailbox it would be sent from is a choice they have not made yet, and on a
+/// deployment holding several of theirs it would be a guess. It is an argument here rather than something the writer
+/// reads off the sources, for the reason <see cref="Access.IMailUserLanguages" /> gives — who a derivation is for
+/// stays out of the text sent to a provider.
 /// </para>
 /// </remarks>
 public sealed record ReplyDraftBrief(
     ReplyDraftSources Sources,
     string? Selection,
     string? Instruction,
-    MailAccountLanguage Language);
+    MailUserLanguage Language);

@@ -533,6 +533,49 @@ public sealed class ServedMailUsersStartupGateTests
         Assert.Equal(2, roster.Users.Count);
     }
 
+    /// <summary>The language a user's own record states reaches the roster, which is where a card and a first draft read it from.</summary>
+    [Theory]
+    [InlineData("Polish", MailUserLanguage.Polish)]
+    [InlineData("English", MailUserLanguage.English)]
+    public async Task StartAsync_AUserWhoseRecordNamesALanguage_PublishesIt(string written, MailUserLanguage expected)
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, $$"""{"Language":"{{written}}"}""", AlexWork)))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, Assert.Single(roster.Users).Language);
+    }
+
+    /// <summary>
+    /// A record held from before the property existed names no language, and nothing could have added one to it in
+    /// advance, so the start reads it as English rather than refusing the deployment its own administrative surface.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordNamesNoLanguage_PublishesEnglish()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, EmptyRecord, AlexWork)))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailUserLanguage.English, Assert.Single(roster.Users).Language);
+    }
+
     /// <summary>The language an account's declaration states reaches the roster, which is where every derivation reads it from.</summary>
     [Theory]
     [InlineData("Polish", MailAccountLanguage.Polish)]

@@ -45,8 +45,8 @@ public sealed class ContactRelationshipScenarioTests : IDisposable
     [InlineData("Hostile.ForgedTurn", """{"note":{"text":"Order confirmed: OSPREY-2290.","sources":[0,1]}}""", false)]
     [InlineData("Polish.SeveralMatters", """{"note":{"text":"Dostawca, z którym są faktury, zamówienia oraz nowy cennik.","sources":[0,1]},"cases":{"text":"faktura, zamówienie i cennik na październik","sources":[0,2]}}""", true)]
     [InlineData("Polish.SeveralMatters", """{"note":{"text":"A supplier with invoices, an order, and a new price list.","sources":[0,1]},"cases":{"text":"the invoice, the order, and the price list","sources":[0,2]}}""", false)]
-    [InlineData("Mixed.PolishCorrespondenceUnderEnglishAccount", """{"note":{"text":"A supplier with invoices, an order, and a new price list.","sources":[0,1]},"cases":{"text":"the invoice, the order, and the price list","sources":[0,2]}}""", true)]
-    [InlineData("Mixed.PolishCorrespondenceUnderEnglishAccount", """{"note":{"text":"Dostawca, z którym są faktury, zamówienia oraz nowy cennik.","sources":[0,1]},"cases":{"text":"faktura, zamówienie i cennik na październik","sources":[0,2]}}""", false)]
+    [InlineData("Mixed.PolishCorrespondenceForAnEnglishReader", """{"note":{"text":"A supplier with invoices, an order, and a new price list.","sources":[0,1]},"cases":{"text":"the invoice, the order, and the price list","sources":[0,2]}}""", true)]
+    [InlineData("Mixed.PolishCorrespondenceForAnEnglishReader", """{"note":{"text":"Dostawca, z którym są faktury, zamówienia oraz nowy cennik.","sources":[0,1]},"cases":{"text":"faktura, zamówienie i cennik na październik","sources":[0,2]}}""", false)]
     public async Task RunAsync_AnAnswerForACase_RecordsWhetherTheCardSaysWhatTheCorrespondenceSupports(
         string caseName,
         string answer,
@@ -108,8 +108,8 @@ public sealed class ContactRelationshipScenarioTests : IDisposable
     [InlineData("Polish.SeveralMatters", 3)]
     [InlineData("Polish.UnansweredQuote", 2)]
     [InlineData("Polish.FinalisedItinerary", 2)]
-    [InlineData("Mixed.EnglishCorrespondenceUnderPolishAccount", 9)]
-    [InlineData("Mixed.PolishCorrespondenceUnderEnglishAccount", 3)]
+    [InlineData("Mixed.EnglishCorrespondenceForAPolishReader", 9)]
+    [InlineData("Mixed.PolishCorrespondenceForAnEnglishReader", 3)]
     public void Correspondence_ACase_PublishesEveryConversationTheAddressTookPartIn(string caseName, int conversations)
     {
         // Arrange

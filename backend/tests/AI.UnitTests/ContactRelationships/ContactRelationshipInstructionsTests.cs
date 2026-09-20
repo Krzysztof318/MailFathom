@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.ContactRelationships;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ContactRelationships;
@@ -18,11 +18,11 @@ public sealed class ContactRelationshipInstructionsTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A card is read beside a mailbox, so it is written in the language that mailbox is read in.</summary>
+    /// <summary>A card is read by the person who opened the contact, so it is written in the language they read.</summary>
     [Theory]
-    [InlineData(MailAccountLanguage.English)]
-    [InlineData(MailAccountLanguage.Polish)]
-    public void TextFor_EachLanguage_NamesItAsTheOneEveryValueIsWrittenIn(MailAccountLanguage language) =>
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public void TextFor_EachLanguage_NamesItAsTheOneEveryValueIsWrittenIn(MailUserLanguage language) =>
         AssertSays($"Write every value in {language}.", language);
 
     /// <summary>The one bound the turn cannot enforce is what a model may infer from it, so the instruction states it.</summary>
@@ -50,7 +50,7 @@ public sealed class ContactRelationshipInstructionsTests
     [Fact]
     public void TextFor_ALanguageThisDeploymentDoesNotWriteIn_IsRefused() =>
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => ContactRelationshipInstructions.TextFor((MailAccountLanguage)97));
+            () => ContactRelationshipInstructions.TextFor((MailUserLanguage)97));
 
     /// <summary>One numbering across both lists, so a document is cited by a number no conversation already holds.</summary>
     [Fact]
@@ -104,7 +104,7 @@ public sealed class ContactRelationshipInstructionsTests
         Assert.Throws<ArgumentNullException>(() => ContactRelationshipInstructions.ComposeRelationshipTurn(null!));
 
     /// <summary>Reads the instruction as one run of words, so a sentence the text happens to wrap is still one sentence.</summary>
-    private static void AssertSays(string sentence, MailAccountLanguage language = MailAccountLanguage.English) =>
+    private static void AssertSays(string sentence, MailUserLanguage language = MailUserLanguage.English) =>
         Assert.Contains(
             sentence,
             string.Join(

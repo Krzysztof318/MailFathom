@@ -15,7 +15,7 @@ using MailFathom.Application.Contacts.Relationship;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -190,7 +190,7 @@ public sealed class ContactRelationshipAgentTests
     private static ContactRelationshipBrief Brief(
         string subject = "the addendum",
         string fileName = "addendum.pdf",
-        MailAccountLanguage language = MailAccountLanguage.English) =>
+        MailUserLanguage language = MailUserLanguage.English) =>
         new(
             new ContactCorrespondence(
                 [new CorrespondingThread(TheThread, TheMessage, subject, FirstJuly)],

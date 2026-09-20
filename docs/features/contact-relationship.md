@@ -60,9 +60,10 @@ the same written about *them* as about a name, and the name is the one value in 
 somebody outside the exchange.
 
 The card is written in
-[the language the mailbox is read in](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language).
-A correlation spans every account the caller is assigned, so no single mailbox is the contact's; the first assigned
-account decides, which is deterministic rather than arbitrary.
+[the language the person who opened the contact reads](../operations/configuration-sources.md#the-language-this-person-reads--language),
+which their own record names. It is not a mailbox's language and could not be: a correlation spans every account the
+caller is assigned, so no single mailbox is the contact's — and the contact is that person's own, the card is composed
+on their opening, and nobody else ever reads the one they were shown.
 
 ## What reaches the provider, and what does not
 

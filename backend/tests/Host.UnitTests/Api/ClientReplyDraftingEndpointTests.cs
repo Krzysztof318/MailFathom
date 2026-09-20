@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.ReplyDrafts;
@@ -303,7 +304,6 @@ public sealed class ClientReplyDraftingEndpointTests
                 Arg.Any<CancellationToken>())
             .Returns(holdsTheMessage
                 ? new ReplyDraftSources(
-                    Account,
                     "The racking quotation",
                     [
                         new ReplyDraftMessage(
@@ -340,15 +340,15 @@ public sealed class ClientReplyDraftingEndpointTests
             scopeResolver,
             SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
-            LanguagesAnswering(MailAccountLanguage.English),
+            LanguagesAnswering(MailUserLanguage.English),
             derivesStyleFromSentMail: true);
     }
 
-    /// <summary>Answers one language for whichever mailbox is asked about, which the endpoint never states itself.</summary>
-    private static IMailAccountLanguages LanguagesAnswering(MailAccountLanguage language)
+    /// <summary>Answers one language for whoever is asked about, which the endpoint never states itself.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
     {
-        var languages = Substitute.For<IMailAccountLanguages>();
-        languages.LanguageOf(Arg.Any<MailAccountId>()).Returns(language);
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(language);
 
         return languages;
     }

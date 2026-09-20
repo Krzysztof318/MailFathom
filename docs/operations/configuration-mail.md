@@ -313,11 +313,12 @@ mailbox two people are assigned is enriched once, and the sentence written onto 
 them read, so a value held on the person would have to pick one of them at derivation time and would then be wrong for
 the other.
 
-It settles one thing that is not a derivation: a [reply draft](../features/reply-drafting.md) written for a message
-that answers none. A draft answering a message takes the language of the correspondence it answers, because what
-decides that is who will read it — but a composer opened with nothing in front of it has no correspondence to read,
-and the mailbox it is being written from is the only thing anything is known about. An instruction naming a language
-outranks either.
+It settles nothing outside those derivations, and one case that looks as though it should belongs to the person
+instead. A [reply draft](../features/reply-drafting.md) answering a message takes the language of the correspondence it
+answers, because what decides that is who will read it; one answering nothing has no correspondence to read, and what
+it is written in is then [the language the person writing it
+reads](configuration-sources.md#the-language-this-person-reads--language), from their own user record rather than from
+whichever mailbox the composer was opened beside. An instruction naming a language outranks either.
 
 ```json
 {

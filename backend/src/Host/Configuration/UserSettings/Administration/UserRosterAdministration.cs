@@ -49,14 +49,22 @@ internal sealed partial class UserRosterAdministration(
     ConfigurationChangeAnnouncements announcements,
     ILogger<UserRosterAdministration> logger)
 {
-    /// <summary>The record a user is provisioned with, which declares nothing until they ask for something.</summary>
+    /// <summary>The language a user is provisioned reading, which is the one the client also opens in.</summary>
     /// <remarks>
-    /// Empty rather than seeded with a default, because nothing in a user's own document is required: everything a
-    /// person asks for is absent until they ask for it, and the one setting that has no absence — the language a
-    /// derivation comes out in — is the mailbox's rather than theirs, so it is named when their first mail account is
-    /// declared.
+    /// A provisioning states no language, so one is chosen here rather than asked for: a record being written is
+    /// required to name one, and provisioning the empty record instead would hand back a user whose own record could
+    /// not be committed again until somebody guessed which line to add. English is the same answer the client reaches
+    /// when it can read no preference, and whoever records that user changes it in the same session.
     /// </remarks>
-    private const string ProvisionedRecord = "{}";
+    private const string ProvisionedLanguage = nameof(MailUserLanguage.English);
+
+    /// <summary>The record a user is provisioned with, which names their language and declares nothing else until they ask for something.</summary>
+    /// <remarks>
+    /// The language is the one value here that has no absence: everything else a person asks for is absent until they
+    /// ask for it, while text composed for them comes out in some language whether or not anybody chose it. What their
+    /// mail is read into is not this value and is named when each of their mail accounts is declared.
+    /// </remarks>
+    private const string ProvisionedRecord = $$"""{"Language":"{{ProvisionedLanguage}}"}""";
 
     /// <summary>The version a freshly provisioned row stands at, which the record's first commit is composed over.</summary>
     private const long ProvisionedVersion = 1;
@@ -176,9 +184,13 @@ internal sealed partial class UserRosterAdministration(
                 "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
         }
 
-        // The committed record declares nothing, so the user it publishes holds no mailbox, classifies nothing, and
-        // reads the deployment's own scanning posture until an account is declared for them.
-        servedUsers.UserDocumentPublished(user, label, new UserAccountOptions(), committed);
+        // The committed record names a language and declares nothing else, so the user it publishes holds no mailbox,
+        // classifies nothing, and reads the deployment's own scanning posture until an account is declared for them.
+        servedUsers.UserDocumentPublished(
+            user,
+            label,
+            new UserAccountOptions { Language = ProvisionedLanguage },
+            committed);
 
         this.LogUserProvisioned(label);
 

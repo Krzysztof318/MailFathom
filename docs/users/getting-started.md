@@ -282,6 +282,12 @@ The mailbox file written in [step 2](#2-write-down-the-mailbox) names the langua
 mailbox's mail in — the reading on a message row, the statement about a conversation. `mfctl account edit` is where it
 becomes something else, and [the language this mailbox is read in](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language) is the whole of it.
 
+`mfctl user add` records the person reading English, which is a second language and a different question: it is what
+MailFathom writes **for them** rather than about a mailbox — the card beside a contact, a message answering no
+correspondence. `mfctl user edit` changes it, and [the language this person
+reads](../operations/configuration-sources.md#the-language-this-person-reads--language) is the whole of that one. A
+person whose mailbox is read in Polish may read English themselves, and the two are set apart.
+
 **The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
 running roster, so the next synchronization run is this account's first one — and the same holds for every user
 recorded later.

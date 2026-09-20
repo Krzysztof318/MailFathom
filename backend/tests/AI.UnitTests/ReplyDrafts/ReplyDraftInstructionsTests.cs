@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.ReplyDrafts;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ReplyDrafts;
@@ -19,9 +19,9 @@ public sealed class ReplyDraftInstructionsTests
 {
     /// <summary>A reply is read by the person it is sent to, so the conversation decides its language rather than the sender's record.</summary>
     [Theory]
-    [InlineData(MailAccountLanguage.English)]
-    [InlineData(MailAccountLanguage.Polish)]
-    public void TextFor_AnyLanguage_StillWritesAReplyInTheConversationsOwnLanguage(MailAccountLanguage language)
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public void TextFor_AnyLanguage_StillWritesAReplyInTheConversationsOwnLanguage(MailUserLanguage language)
     {
         // Act
         var text = ReplyDraftInstructions.TextFor(language);
@@ -32,9 +32,9 @@ public sealed class ReplyDraftInstructionsTests
 
     /// <summary>A message answering nothing has no conversation to take a language from, so the person's own is named.</summary>
     [Theory]
-    [InlineData(MailAccountLanguage.English)]
-    [InlineData(MailAccountLanguage.Polish)]
-    public void TextFor_EachLanguage_NamesItForATurnCarryingNoConversation(MailAccountLanguage language)
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public void TextFor_EachLanguage_NamesItForATurnCarryingNoConversation(MailUserLanguage language)
     {
         // Act
         var text = ReplyDraftInstructions.TextFor(language);
@@ -48,7 +48,7 @@ public sealed class ReplyDraftInstructionsTests
     public void TextFor_TheInstruction_LetsWhatThePersonAskedForOutrankBothLanguageRules()
     {
         // Act
-        var text = ReplyDraftInstructions.TextFor(MailAccountLanguage.English);
+        var text = ReplyDraftInstructions.TextFor(MailUserLanguage.English);
 
         // Assert
         Assert.Contains("an instruction asking for a particular language", text, StringComparison.Ordinal);
@@ -58,14 +58,14 @@ public sealed class ReplyDraftInstructionsTests
     /// <summary>A language this deployment does not write in is a composition mistake rather than a value to fall back from.</summary>
     [Fact]
     public void TextFor_ALanguageThisDeploymentDoesNotWriteIn_IsRefused() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => ReplyDraftInstructions.TextFor((MailAccountLanguage)97));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ReplyDraftInstructions.TextFor((MailUserLanguage)97));
 
     /// <summary>Somebody starting a message is told what to do with the two arrays a conversation would have filled.</summary>
     [Fact]
     public void TextFor_TheInstruction_SaysWhatATurnWithNoConversationIs()
     {
         // Act
-        var text = ReplyDraftInstructions.TextFor(MailAccountLanguage.English);
+        var text = ReplyDraftInstructions.TextFor(MailUserLanguage.English);
 
         // Assert
         Assert.Contains("The turn may carry no conversation at all", text, StringComparison.Ordinal);

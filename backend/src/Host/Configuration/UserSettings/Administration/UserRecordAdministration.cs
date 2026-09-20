@@ -228,6 +228,7 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             UserRecordAuthority.Administrator,
+            rewritesTheWholeRecord: false,
             cancellationToken);
 
         return outcome is null
@@ -287,6 +288,7 @@ internal sealed class UserRecordAdministration(
                 inForce,
                 SettingsDocumentPatch.Apply(inForce.Json, [edit]),
                 UserRecordAuthority.User,
+                rewritesTheWholeRecord: false,
                 cancellationToken);
 
             if (outcome is null)
@@ -396,6 +398,7 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             authority,
+            rewritesTheWholeRecord: true,
             cancellationToken);
     }
 
@@ -437,6 +440,7 @@ internal sealed class UserRecordAdministration(
         UserSettingsDocument inForce,
         string candidateJson,
         UserRecordAuthority authority,
+        bool rewritesTheWholeRecord,
         CancellationToken cancellationToken)
     {
         // Judged with the accounts assigned to the user composed back in, because that is the record a start serves them
@@ -455,6 +459,20 @@ internal sealed class UserRecordAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
                 binding.Refusals);
+        }
+
+        // Asked of a record being rewritten and of no other write, because the document is then the one in front of
+        // whoever is saving and the line is theirs to add. A start and a convergence read records committed before the
+        // property existed, and refusing those would refuse the start itself through the surface the line would be
+        // added from; a switch or a portrait link is the deployment changing one value on such a record, and refusing
+        // that would keep a user off an endpoint over a rule that arrived after their record was accepted.
+        if (rewritesTheWholeRecord
+            && bound.FindMissingLanguageError().FirstOrDefault()?.ErrorMessage is { } missingLanguage)
+        {
+            return UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                [missingLanguage]);
         }
 
         // Which endpoints somebody is served on is the deployment's decision about them, so a user saving their own

@@ -272,11 +272,11 @@ public sealed class ClientContactRelationshipEndpointTests
         return readTelemetry;
     }
 
-    private static IMailAccountLanguages LanguagesAnsweringEnglish()
+    private static IMailUserLanguages LanguagesAnsweringEnglish()
     {
-        var languages = Substitute.For<IMailAccountLanguages>();
+        var languages = Substitute.For<IMailUserLanguages>();
 
-        languages.LanguageOf(Arg.Any<MailAccountId>()).Returns(MailAccountLanguage.English);
+        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(MailUserLanguage.English);
 
         return languages;
     }
