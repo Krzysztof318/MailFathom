@@ -95,7 +95,7 @@ describe('SpaceOverflow', () => {
     it('says in a placeholder row’s own name that there is nothing behind it yet', () => {
         renderOverflow();
 
-        expect(screen.getByRole('link', { name: 'Tasks — not built yet', hidden: true })).toBeDefined();
+        expect(screen.getByRole('link', { name: 'Cases — not built yet', hidden: true })).toBeDefined();
     });
 
     it('marks the row the reader is on, so the sheet says where they are rather than only where they may go', () => {

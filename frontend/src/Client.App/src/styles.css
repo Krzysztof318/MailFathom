@@ -262,6 +262,12 @@
        mostly of blank space. The value is the design project's own cell, which holds its date and two entries. */
     --spacing-month-cell: 5.75rem;
 
+    /* How wide the Tasks screen's sidebar stands where the composition has room for it beside the list, which is the
+       width the design project draws it at. Fixed for the address book column's reason: what stands in it is a day's
+       events and a sentence about the day, and a column that grew with the window would take that width off the list
+       without either panel reading better for it. */
+    --spacing-tasks-side: 21.75rem;
+
     /* How much of the frame the strip saying what this credential may not do may take before it scrolls instead of
        growing. A credential holding one grant is withheld most of them, so at the narrowest width that strip is
        several sentences of several lines each — and a strip that went on growing would leave the space under it no

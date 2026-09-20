@@ -57,6 +57,7 @@ import { NotificationCentre } from './notifications/NotificationCentre';
 import { usePanelSwipe } from './notifications/usePanelSwipe';
 import { useNotificationCentre } from './notifications/useNotificationCentre';
 import { PeopleSpace } from './people/PeopleSpace';
+import { TasksSpace } from './tasks/TasksSpace';
 import { PendingChangesProvider } from './pendingChanges/PendingChanges';
 import { AiFiltersShownContext } from './preferences/aiFilters';
 import { MessageViewContext } from './preferences/messageView';
@@ -1045,6 +1046,41 @@ export function App({
                                                                                             onOpen={openTabs.openMail}
                                                                                         />
                                                                                     </MailSearch>
+                                                                                )
+                                                                            }
+                                                                            tasks={
+                                                                                session === null ||
+                                                                                !readsMail ? null : (
+                                                                                    <TasksSpace
+                                                                                        session={session}
+                                                                                        transport={readMail}
+                                                                                        // Whether the day may be
+                                                                                        // arranged at all is two
+                                                                                        // questions: whether this
+                                                                                        // credential may ask, which is
+                                                                                        // this, and whether the
+                                                                                        // deployment arranges one,
+                                                                                        // which the screen asks the
+                                                                                        // capability route.
+                                                                                        asksDeployment={asksMail}
+                                                                                        onOpenMessage={(messageId) => {
+                                                                                            // A task cites a message
+                                                                                            // and mail is read in the
+                                                                                            // Mail space, so it is
+                                                                                            // opened there and the
+                                                                                            // address follows it —
+                                                                                            // exactly as a person's
+                                                                                            // page cites one. It is
+                                                                                            // opened with no subject,
+                                                                                            // a task carrying none.
+                                                                                            openTabs.openMail(
+                                                                                                messageId,
+                                                                                                null,
+                                                                                            );
+                                                                                            window.location.hash =
+                                                                                                addressOf('mail');
+                                                                                        }}
+                                                                                    />
                                                                                 )
                                                                             }
                                                                             people={

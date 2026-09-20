@@ -52,7 +52,7 @@ export const spaceLabels: Readonly<Record<Space, MessageKey>> = {
 };
 
 /** Which spaces have something behind them. Everything else is drawn as a placeholder that says so. */
-export const implementedSpaces: readonly Space[] = ['mail', 'calendar', 'people'];
+export const implementedSpaces: readonly Space[] = ['mail', 'tasks', 'calendar', 'people'];
 
 export function isSpace(value: unknown): value is Space {
     return typeof value === 'string' && (spaces as readonly string[]).includes(value);

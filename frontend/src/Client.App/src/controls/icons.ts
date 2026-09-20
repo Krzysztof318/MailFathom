@@ -19,6 +19,7 @@
 export const iconNames = [
     'add',
     'add_a_photo',
+    'add_task',
     'all_inbox',
     'archive',
     'arrow_back',
@@ -89,6 +90,7 @@ export const iconNames = [
     'person',
     'person_add',
     'progress_activity',
+    'radio_button_unchecked',
     'refresh',
     'reply',
     'reply_all',

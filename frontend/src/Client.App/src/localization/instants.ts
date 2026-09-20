@@ -119,6 +119,41 @@ export function wordRecentInstant(instant: string | null, locale: Locale, now: n
     return new Intl.DateTimeFormat(locale, { dateStyle: 'short' }).format(at);
 }
 
+/**
+ * The day a task is due, as the design project words one on a row of the list.
+ *
+ * It is the calendar day of {@link wordCalendarDay} written short: the language's own word for the day the reader is
+ * on, the day and the month for anything else this year, and the short date for anything further out. The design
+ * writes it beside the title in the space of two words, which a long date does not fit and which is why this is a
+ * function of its own rather than a second option on that one — and what carries the meaning a bare date loses is the
+ * sentence the row states to a screen reader, not a longer spelling drawn for everybody.
+ *
+ * Only the reader's own day is worded relatively. The design draws every other day as a number, and a client that
+ * also said *tomorrow* would be inventing a wording rather than following one.
+ *
+ * @param day The calendar day, read as local midnight for {@link wordCalendarDay}'s reason.
+ * @param now The reader's own clock, passed rather than read so a test pins it beside the zone it pins.
+ */
+export function wordDueDay(day: string, locale: Locale, now: number): string {
+    const at = new Date(`${day}T00:00:00`);
+
+    if (Number.isNaN(at.getTime())) {
+        return day;
+    }
+
+    const today = new Date(now);
+
+    if (sameDay(at, today)) {
+        return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day');
+    }
+
+    if (at.getFullYear() === today.getFullYear()) {
+        return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' }).format(at);
+    }
+
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'short' }).format(at);
+}
+
 function sameDay(one: Date, other: Date): boolean {
     return (
         one.getFullYear() === other.getFullYear() &&

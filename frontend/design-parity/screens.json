@@ -326,6 +326,21 @@
       "compositions": ["telefon", "fold", "tablet", "desktop"]
     },
     {
+      "id": "tasks",
+      "route": "/#/tasks",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "button",
+            "name": "New task",
+            "exact": true
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
       "id": "composer",
       "route": "/#/mail",
       "signIn": true,

@@ -66,6 +66,17 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/folders',
                 'https://elsewhere.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://elsewhere.example.invalid/api/client/emails/search/phrasing',
+
+                // The Tasks space reads on landing for the reason the Mail space does, and what it reads is the two halves of
+                // the list, the reader's own day, and whether this deployment arranges one at all. The day is two instants
+                // rather than a constant, so the window is asserted by its shape: which two they are is `tasks/dayInstants.ts`'s
+                // and has a test of its own.
+                'https://elsewhere.example.invalid/api/client/tasks?pageSize=50',
+                'https://elsewhere.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/elsewhere\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://elsewhere.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://elsewhere.example.invalid'),
                 'https://elsewhere.example.invalid/api/client/calendar/drafts',
                 'https://elsewhere.example.invalid/api/client/replies/drafting',
@@ -152,6 +163,12 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/folders',
                 'https://mail.example.test/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://mail.example.test/api/client/emails/search/phrasing',
+                'https://mail.example.test/api/client/tasks?pageSize=50',
+                'https://mail.example.test/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/mail\.example\.test\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://mail.example.test/api/client/tasks/today/layout',
                 calendarWindowAt('https://mail.example.test'),
                 'https://mail.example.test/api/client/calendar/drafts',
                 'https://mail.example.test/api/client/replies/drafting',
@@ -341,6 +358,12 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/folders',
                 'https://first.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://first.example.invalid/api/client/emails/search/phrasing',
+                'https://first.example.invalid/api/client/tasks?pageSize=50',
+                'https://first.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/first\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://first.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://first.example.invalid'),
                 'https://first.example.invalid/api/client/calendar/drafts',
                 'https://first.example.invalid/api/client/replies/drafting',
@@ -361,6 +384,12 @@ describe('App deployment', () => {
                 'https://second.example.invalid/api/client/folders',
                 'https://second.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://second.example.invalid/api/client/emails/search/phrasing',
+                'https://second.example.invalid/api/client/tasks?pageSize=50',
+                'https://second.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/second\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://second.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://second.example.invalid'),
                 'https://second.example.invalid/api/client/calendar/drafts',
                 'https://second.example.invalid/api/client/replies/drafting',

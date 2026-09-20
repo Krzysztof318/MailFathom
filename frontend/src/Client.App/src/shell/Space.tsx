@@ -20,6 +20,7 @@ export function Space({
     list,
     mail,
     tabs,
+    tasks,
     people,
     calendar,
     person,
@@ -41,6 +42,9 @@ export function Space({
 
     /** The strip naming everything the Mail space has open, which only that space has anywhere to put. */
     readonly tabs: ReactNode;
+
+    /** The task list and the day beside it, which is the Tasks space and nothing else. */
+    readonly tasks: ReactNode;
 
     /** The address book and whoever is open from it, which is the People space and nothing else. */
     readonly people: ReactNode;
@@ -98,12 +102,13 @@ export function Space({
             {offered.map((name) => {
                 const inFront = name === space;
                 const isMail = name === 'mail';
+                const isTasks = name === 'tasks';
                 const isPeople = name === 'people';
 
-                // The two spaces that compose one shape: their own columns with the frame's two regions at the foot.
-                // Picking the node here rather than branching on the name twice in the markup is what keeps the choice
-                // below readable as three cases instead of four.
-                const ownColumns = isPeople ? people : name === 'calendar' ? calendar : null;
+                // The three spaces that compose one shape: their own columns with the frame's two regions at the
+                // foot. Picking the node here rather than branching on the name three times in the markup is what
+                // keeps the choice below readable as three cases instead of five.
+                const ownColumns = isTasks ? tasks : isPeople ? people : name === 'calendar' ? calendar : null;
 
                 // Which spaces compose their own height rather than scrolling a column of prose. Every built space
                 // does, and a placeholder does not — what it holds is a title and a sentence.
@@ -159,9 +164,9 @@ export function Space({
                                 {inFront ? intent : null}
                             </div>
                         ) : (
-                            /* A space that composes its own columns, which is People and Calendar. The two regions the
-                               frame composes for every space stand at its foot and are handed to the one in front
-                               alone, exactly as they are to Mail. */
+                            /* A space that composes its own columns, which is Tasks, People and Calendar. The two
+                               regions the frame composes for every space stand at its foot and are handed to the one
+                               in front alone, exactly as they are to Mail. */
                             <div className="flex min-h-0 flex-1 flex-col">
                                 {ownColumns}
                                 {inFront ? status : null}

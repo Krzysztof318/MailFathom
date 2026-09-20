@@ -74,7 +74,7 @@ describe('SpaceNavigation', () => {
         atWorkspaceWidth(true);
         renderNavigation();
 
-        expect(screen.getByRole('link', { name: 'Tasks — not built yet' })).toBeDefined();
+        expect(screen.getByRole('link', { name: 'Cases — not built yet' })).toBeDefined();
     });
 
     it('leaves a space that is built to be named by what it is, with nothing appended', () => {

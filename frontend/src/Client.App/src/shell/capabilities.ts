@@ -54,13 +54,15 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
 // from a credential that may not ask rather than offered as placeholders somebody's grant would never let become a
 // screen. `people` is no longer one of either group: it is a screen, and reading the address book is what it is, and
 // `calendar` is the same — what it reads and writes is the deployment's calendar, which is reached under reading mail
-// rather than under a grant of its own.
+// rather than under a grant of its own. So is `tasks`: a task list is read and written over the mail grant, and the
+// arranged day it offers is asked for under the asking one, which the screen asks about for itself rather than being
+// reached under.
 const spaceCapabilities: Readonly<Record<Space, ClientCapability | null>> = {
     discover: 'askMail',
     mail: 'readMail',
     cases: null,
     agent: 'askMail',
-    tasks: null,
+    tasks: 'readMail',
     calendar: 'readMail',
     people: 'readContacts',
 };

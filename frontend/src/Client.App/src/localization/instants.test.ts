@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { wordCalendarDay, wordInstant, wordInstantRange, wordRecentInstant } from './instants';
+import { wordCalendarDay, wordDueDay, wordInstant, wordInstantRange, wordRecentInstant } from './instants';
 
 // The zone is pinned rather than compared against a formatter built the same way, which is the whole point of this
 // file: an assertion written as `expect(shown).toBe(new Intl.DateTimeFormat(locale, options).format(at))` passes for a
@@ -177,5 +177,51 @@ describe('wordCalendarDay', () => {
 
     it('shows a day it cannot read as the value it was given rather than as an invalid date', () => {
         expect(wordCalendarDay('sometime in August', 'en')).toBe('sometime in August');
+    });
+});
+
+describe('wordDueDay', () => {
+    // A Monday morning in Warsaw, which is where the reader is for all of these.
+    const readingAt = Date.parse('2026-09-21T09:00:00+02:00');
+
+    it('words the reader’s own day rather than numbering it', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordDueDay('2026-09-21', 'en', readingAt)).toBe('today');
+        expect(wordDueDay('2026-09-21', 'pl', readingAt)).toBe('dzisiaj');
+    });
+
+    // The one thing this wording has to get right: which day is the reader's is a question about their own zone, so
+    // one instant is two different days for two readers — just past midnight in Warsaw is still the afternoon before
+    // in Los Angeles, and a task due on the 21st is not yet due today for the second of them.
+    it('answers one instant differently for two readers on two different days', () => {
+        const justPastMidnight = Date.parse('2026-09-21T00:30:00+02:00');
+
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordDueDay('2026-09-21', 'en', justPastMidnight)).toBe('today');
+
+        process.env['TZ'] = 'America/Los_Angeles';
+
+        expect(wordDueDay('2026-09-21', 'en', justPastMidnight)).not.toBe('today');
+    });
+
+    // Each language numbers a day its own way, which is the whole reason this asks `Intl` rather than composing the
+    // two parts itself.
+    it('numbers any other day of the reader’s own year', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordDueDay('2026-09-24', 'en', readingAt)).toBe('09/24');
+        expect(wordDueDay('2026-09-24', 'pl', readingAt)).toBe('24.09');
+    });
+
+    it('writes a day in another year as a whole short date', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        expect(wordDueDay('2027-01-04', 'en', readingAt)).toBe('1/4/27');
+    });
+
+    it('shows a day it cannot read as the value it was given rather than as an invalid date', () => {
+        expect(wordDueDay('sometime in August', 'en', readingAt)).toBe('sometime in August');
     });
 });

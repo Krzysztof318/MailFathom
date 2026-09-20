@@ -2,7 +2,20 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-export { isStatableReminderLead, isStatableReminderSet, longestReminderLead, mostRemindersOnAnEvent } from './calendar';
+export {
+    calendarRoute,
+    createCalendarEvent,
+    isCalendarEventOrigin,
+    isStatableReminderLead,
+    isStatableReminderSet,
+    longestReminderLead,
+    mostEventsInAWindow,
+    mostRemindersOnAnEvent,
+    readCalendarWindow,
+    type CalendarEvent,
+    type CalendarEventOrigin,
+    type CalendarEventRecord,
+} from './calendar';
 export {
     acceptCalendarEvent,
     amendCalendarEvent,
@@ -428,6 +441,35 @@ export {
     type ClientEventRecord,
     type DeploymentTelemetryLevel,
 } from './telemetry';
+export {
+    acceptTask,
+    arrangesDays,
+    eraseTask,
+    isTaskOrigin,
+    layOutToday,
+    longestTaskTitle,
+    mostTasksPerPage,
+    parseTask,
+    proposedTasksRoute,
+    readOwnTasks,
+    readProposedTasks,
+    recordTask,
+    setTaskCompletion,
+    taskAcceptanceRoute,
+    taskCompletionRoute,
+    taskRoute,
+    tasksPerPage,
+    tasksRoute,
+    todayLayoutRoute,
+    type DayLayout,
+    type DayLayoutOutcome,
+    type DayLayoutPlacement,
+    type PersonalTask,
+    type PersonalTaskErasure,
+    type PersonalTaskOrigin,
+    type PersonalTaskPage,
+    type PersonalTaskRecord,
+} from './tasks';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export {
     longestSignInMethodsAnswer,
