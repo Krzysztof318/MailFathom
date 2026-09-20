@@ -77,6 +77,20 @@ somebody else already took, and answering it as done would move the record of wh
 **Dismissing a proposal deletes it.** A date nobody wanted is not a fact worth keeping, so it is the same operation
 as deleting an event.
 
+## Amending an event
+
+**An amendment states the event as it is to stand rather than the difference from the one held.** Retitling a meeting,
+moving it, and dropping its end are therefore one operation instead of three that each pass through a shape the rules
+above refuse — and a caller that sends only what changed is sending a record that is missing the rest.
+
+What an amendment may change is the title, the start, and the end. What it always keeps is the identity, the origin,
+the message the event cites, and the identifier it was imported under: an amendment is not how a proposal becomes a
+calendar entry, not how an event moves to another calendar, and not how the record of where it came from is edited.
+The instant it happened is what the event then reports as its last amendment.
+
+Everything a composition is held to, an amendment is held to again — an end that is not after the start is refused
+here exactly as it is when the event is first written, rather than being checked once and trusted afterwards.
+
 ## Deleting an event
 
 A deletion removes the row. There is no state a deleted event is in, nothing restores one, and a calendar that
