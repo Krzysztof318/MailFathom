@@ -1402,6 +1402,7 @@ public static class ServiceCollectionExtensions
         // make first opens a session on the scope's own context, and the erasure, which has none, reaches that same
         // context directly.
         services.AddScoped<IPersonalTaskStore, PersistedPersonalTaskStore>();
+        services.AddScoped<OwnTasks>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.

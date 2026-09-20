@@ -225,4 +225,74 @@ public sealed class PersonalTaskTests
         // Assert
         Assert.Throws<ArgumentOutOfRangeException>(restoring);
     }
+
+    /// <summary>An edit is about the line and the day, and the rest of the record is not the editor's to state.</summary>
+    [Fact]
+    public void Revise_ATaskAPersonEdited_WritesTheLineAndTheDayAndKeepsEverythingElse()
+    {
+        // Arrange
+        var cited = StoredEmailId.Create(Guid.NewGuid());
+        var proposed = PersonalTask.Restore(
+            Identifier,
+            User,
+            "Reply to the tender",
+            new DateOnly(2026, 9, 27),
+            PersonalTaskOrigin.Proposed,
+            cited,
+            isCompleted: true);
+
+        // Act
+        var revised = proposed.Revise("  Reply to the tender by Friday  ", dueOn: null);
+
+        // Assert
+        Assert.Equal("Reply to the tender by Friday", revised.Title);
+        Assert.Null(revised.DueOn);
+        Assert.Equal(Identifier, revised.Id);
+        Assert.Equal(User, revised.User);
+        Assert.Equal(PersonalTaskOrigin.Proposed, revised.Origin);
+        Assert.Equal(cited, revised.SourceMessage);
+        Assert.True(revised.IsCompleted);
+    }
+
+    /// <summary>The title is held to what composing holds it to, because an edit is where a person's own text arrives.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Revise_ATitleStatingNothing_IsRefused(string title)
+    {
+        // Arrange
+        var task = PersonalTask.Compose(
+            Identifier,
+            User,
+            "Sign the NDA",
+            dueOn: null,
+            PersonalTaskOrigin.Asserted,
+            sourceMessage: null);
+
+        // Act
+        var revising = () => task.Revise(title, dueOn: null);
+
+        // Assert
+        Assert.Throws<ArgumentException>(revising);
+    }
+
+    /// <summary>The stored bound holds however the text arrives, so an edit cannot write a title a row could not be restored from.</summary>
+    [Fact]
+    public void Revise_ATitlePastTheStoredBound_IsRefused()
+    {
+        // Arrange
+        var task = PersonalTask.Compose(
+            Identifier,
+            User,
+            "Sign the NDA",
+            dueOn: null,
+            PersonalTaskOrigin.Asserted,
+            sourceMessage: null);
+
+        // Act
+        var revising = () => task.Revise(new string('x', PersonalTask.MaximumTitleLength + 1), dueOn: null);
+
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(revising);
+    }
 }

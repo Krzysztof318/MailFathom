@@ -73,6 +73,13 @@ namespace MailFathom.Host.Api;
 /// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
 /// </para>
 /// <para>
+/// The task routes, which <see cref="ClientTaskEndpoints" /> describes, are the person's own list of what they owe.
+/// They stand beside the notification routes rather than among the mail ones for the same reason those do: what they
+/// serve is a record native to this deployment rather than a mailbox, and every act on one is admitted under the
+/// reading grant because none of them reaches a mail server. The list is read as two — what the person committed to
+/// and what mail proposed — because those are two things to somebody looking at a screen.
+/// </para>
+/// <para>
 /// The contact correlation route, which <see cref="ClientContactCorrespondenceEndpoint" /> describes, is what an opened
 /// contact is drawn beside: the conversations one person's addresses appear in and the documents they sent, computed
 /// from the mail index on the read rather than held anywhere. It sits among the mail routes because that is what it
@@ -184,6 +191,7 @@ internal static class ClientApiEndpoints
         api.MapClientOutbox();
         api.MapClientContacts();
         api.MapClientNotifications();
+        api.MapClientTasks();
         api.MapClientSignalTicket();
         api.MapClientTelemetry();
 

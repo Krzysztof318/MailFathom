@@ -104,6 +104,52 @@ internal sealed class PersistedPersonalTaskStore(
 
     /// <inheritdoc />
     /// <remarks>
+    /// A read joins no transaction and takes no session, so it runs on the scoped context, and the user is inside the
+    /// predicate rather than checked after it.
+    /// </remarks>
+    public async Task<PersonalTask?> FindAsync(
+        MailUserId user,
+        PersonalTaskId task,
+        CancellationToken cancellationToken)
+    {
+        var userValue = user.Value;
+        var identifier = task.Value;
+
+        var stored = await readContext.PersonalTasks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                candidate => candidate.UserId == userValue && candidate.Id == identifier,
+                cancellationToken);
+
+        return stored is null ? null : PersonalTaskMapping.ToPersonalTask(stored);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Two columns rather than one, which is the only way this differs from the two state changes below it: the
+    /// addressing, the session, and the commit policy are the same, and the revision supplies the row it is written
+    /// against rather than being looked up from a second identity.
+    /// </remarks>
+    public Task<PersonalTaskChangeOutcome> ReviseAsync(PersonalTask revision, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+
+        return commitPolicy.CommitAsync(
+            (session, token) => StageAsync(
+                session,
+                revision.User,
+                revision.Id,
+                stored =>
+                {
+                    stored.Title = revision.Title;
+                    stored.DueOn = revision.DueOn;
+                },
+                token),
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// Accepting is one column moving on the row that already exists, which is what keeps a proposal and the
     /// commitment it became one task. A task already asserted is left alone and reported as applied, so accepting
     /// twice writes once.
