@@ -696,4 +696,12 @@ internal static class PersistenceConstraintNames
     /// exists has an expiry at all.
     /// </remarks>
     internal const string MailboxExportExpiryIndexName = "ix_mailbox_exports_expires_at";
+
+    /// <summary>The order one person's task list is both read and drawn in.</summary>
+    /// <remarks>
+    /// Stated because the name a convention would compose says nothing about the ordering being the point: the list is
+    /// one person's tasks soonest due first, which PostgreSQL leaves the undated ones at the end of, and the identifier
+    /// is what keeps two tasks due on one day in a stable order across reads.
+    /// </remarks>
+    internal const string PersonalTaskDueOrderIndexName = "ix_tasks_user_due";
 }
