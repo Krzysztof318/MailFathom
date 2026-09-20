@@ -72,6 +72,7 @@ export function WeekView({
                                     event={event}
                                     shape="column"
                                     selected={acts.selected.includes(event.id)}
+                                    picking={acts.selected.length > 0}
                                     onOpen={() => {
                                         acts.onOpen(event);
                                     }}

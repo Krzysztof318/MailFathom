@@ -81,9 +81,9 @@ export function EventDialog({
         const changed = { ...draft, reminders };
         setDraft(changed);
 
-        // Outside the fields there is no *Save* to press, so what the panel answered is written as it is answered: the
-        // route takes the whole record, and what the reader saw on leaving the panel is what the calendar then holds.
-        const written = amending ? null : recordOf(changed);
+        // There is no *Save* behind the panel, so what it answered is written as it is answered: the route takes the
+        // whole record, and what the reader saw on leaving the panel is what the calendar then holds.
+        const written = recordOf(changed);
 
         if (written !== null) {
             onAmend(written);

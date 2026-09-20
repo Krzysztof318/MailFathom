@@ -78,7 +78,6 @@ export const calendarDescriptionsRead = { readsDescriptions: true };
 /** One typed sentence read into the event it describes, which is what the field answers with. */
 export const calendarEventDrafted = {
     drafted: true,
-    spent: false,
     title: 'Lunch with Anna',
     start: '2026-09-24T13:00:00+02:00',
     end: '2026-09-24T14:00:00+02:00',

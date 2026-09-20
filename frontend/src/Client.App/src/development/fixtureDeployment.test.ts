@@ -201,6 +201,18 @@ describe('fixtureAnswer', () => {
         ).toStrictEqual(calendar.emptyCalendarWindow);
     });
 
+    it('answers deleting one event with nothing, which is what leaving the calendar states', () => {
+        const gone = answered('/calendar/calendar-1', {}, 1, 'DELETE');
+
+        expect(gone.status).toBe(204);
+        expect(gone.body).toBe('');
+    });
+
+    it('answers one event and taking a proposed one onto the calendar with the event the write left behind', () => {
+        expect(stated(answered('/calendar/calendar-1'))).toStrictEqual(calendar.calendarEventWritten);
+        expect(stated(posted('/calendar/calendar-1/acceptance'))).toStrictEqual(calendar.calendarEventWritten);
+    });
+
     it('answers a route the corpus states nothing for as nothing being there', () => {
         expect(answered('/cases').status).toBe(404);
     });

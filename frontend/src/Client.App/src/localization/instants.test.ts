@@ -52,6 +52,14 @@ describe('wordInstant', () => {
     });
 });
 
+// One character of a range's spelling is the runtime's rather than the client's: ICU writes the space before `AM`
+// and `PM` as a narrow no-break one from version 72, and the pipeline's Node and a developer's need not carry the same
+// ICU. So that one character is read as an ordinary space and every other part of the spelling stays literal — which
+// is what keeps the zone, the order, and the dash asserted rather than waved through.
+function spelled(said: string | null): string | null {
+    return said === null ? said : said.replaceAll('\u202f', ' ');
+}
+
 describe('wordInstantRange', () => {
     // A meeting on one morning in Warsaw, which is the shape a calendar entry has: two instants an hour and a half
     // apart on one day.
@@ -61,7 +69,7 @@ describe('wordInstantRange', () => {
     it('says the run between two instants with the dash and the spacing the language uses', () => {
         process.env['TZ'] = 'Europe/Warsaw';
 
-        expect(wordInstantRange(opens, closes, 'en', 'time')).toBe('9:00\u2009\u2013\u200910:30 AM');
+        expect(spelled(wordInstantRange(opens, closes, 'en', 'time'))).toBe('9:00\u2009\u2013\u200910:30 AM');
     });
 
     it('says the same run the way the other language says one, rather than in English order', () => {
@@ -73,13 +81,13 @@ describe('wordInstantRange', () => {
     it('places the run in the zone the reader is actually in', () => {
         process.env['TZ'] = 'America/Los_Angeles';
 
-        expect(wordInstantRange(opens, closes, 'en', 'time')).toBe('12:00\u2009\u2013\u20091:30 AM');
+        expect(spelled(wordInstantRange(opens, closes, 'en', 'time'))).toBe('12:00\u2009\u2013\u20091:30 AM');
     });
 
     it('says the whole of both ends where a reader has stopped on them', () => {
         process.env['TZ'] = 'Europe/Warsaw';
 
-        expect(wordInstantRange(opens, closes, 'en', 'full')).toBe(
+        expect(spelled(wordInstantRange(opens, closes, 'en', 'full'))).toBe(
             'September 24, 2026, 9:00\u2009\u2013\u200910:30 AM',
         );
     });

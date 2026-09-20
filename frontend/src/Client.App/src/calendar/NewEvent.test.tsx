@@ -82,6 +82,7 @@ function Asking({
                 session={session}
                 transport={transport}
                 on={standing}
+                now={() => standing}
                 readsDescriptions={readsDescriptions}
                 onSave={onSave}
             />
@@ -203,8 +204,10 @@ describe('NewEvent', () => {
             expect(sent()).toHaveLength(1);
         });
 
+        // The literal instant rather than its shape: the offset is what makes *tomorrow at nine* the reader's own
+        // tomorrow, and an assertion on the format alone would pass for a client that sent somebody else's.
         const written = JSON.parse(sent()[0]?.body ?? '{}') as { writtenAt?: string };
-        expect(written.writtenAt).toMatch(/[+-]\d{2}:\d{2}$/u);
+        expect(written.writtenAt).toBe('2026-09-24T10:00:00+02:00');
     });
 
     it('says a sentence it could read nothing out of rather than filling the fields with a guess', async () => {

@@ -38,6 +38,7 @@ export function NewEvent({
     session,
     transport,
     on,
+    now,
     readsDescriptions,
     onSave,
 }: {
@@ -49,6 +50,9 @@ export function NewEvent({
 
     /** The day the reader is standing on, which the date field opens on rather than on nothing. */
     readonly on: Date;
+
+    /** What the clock says, which every relative day in a typed sentence is read against and a test decides itself. */
+    readonly now: () => Date;
 
     /** Whether this deployment turns a typed description into an event at all. */
     readonly readsDescriptions: boolean;
@@ -92,7 +96,7 @@ export function NewEvent({
 
         void draftCalendarEvent(session, transport, {
             description: sentence,
-            writtenAt: describedAt(new Date()),
+            writtenAt: describedAt(now()),
         }).then((answer) => {
             if (asking !== latest.current) {
                 return;

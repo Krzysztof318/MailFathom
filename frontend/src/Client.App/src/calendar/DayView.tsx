@@ -51,6 +51,7 @@ export function DayView({
                                 event={event}
                                 shape="hour"
                                 selected={acts.selected.includes(event.id)}
+                                picking={acts.selected.length > 0}
                                 onOpen={() => {
                                     acts.onOpen(event);
                                 }}

@@ -66,6 +66,7 @@ export function AgendaView({
                                 event={event}
                                 shape="agenda"
                                 selected={acts.selected.includes(event.id)}
+                                picking={acts.selected.length > 0}
                                 onOpen={() => {
                                     acts.onOpen(event);
                                 }}

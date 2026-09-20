@@ -9740,7 +9740,7 @@ FAKE_MAGICK
 client_answer_bindings() {
   cat <<'BINDINGS'
 calendar.ts calendarWindow GET /api/client/calendar
-calendar.ts placed GET /api/client/calendar
+calendar.ts placed - -
 calendar.ts emptyCalendarWindow GET /api/client/calendar
 calendar.ts calendarEventWritten POST /api/client/calendar
 calendar.ts calendarDescriptionsRead GET /api/client/calendar/drafts

@@ -88,6 +88,7 @@ export function MonthView({
                                         event={event}
                                         shape="cell"
                                         selected={acts.selected.includes(event.id)}
+                                        picking={acts.selected.length > 0}
                                         onOpen={() => {
                                             acts.onOpen(event);
                                         }}

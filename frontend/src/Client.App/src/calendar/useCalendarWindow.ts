@@ -92,11 +92,25 @@ export function useCalendarWindow(
             return;
         }
 
-        setHeld(
-            answer.outcome === 'failed'
-                ? { from, until, session, events: [], reading: false, failure: answer.failure.reason }
-                : { from, until, session, events: answer.value.events, reading: false, failure: null },
-        );
+        setHeld((standing) => {
+            if (answer.outcome !== 'failed') {
+                return { from, until, session, events: answer.value.events, reading: false, failure: null };
+            }
+
+            // A read that failed says nothing about what was already drawn, so a span already on the screen stays
+            // there behind the failure rather than emptying under it — which is the partial state § UX asks for, and
+            // the case a re-read after a write is in.
+            const drawn = standing.from === from && standing.until === until && standing.session === session;
+
+            return {
+                from,
+                until,
+                session,
+                events: drawn ? standing.events : [],
+                reading: false,
+                failure: answer.failure.reason,
+            };
+        });
     }, [from, session, transport, until]);
 
     // The read itself, which is a request going out and therefore the one thing an effect is for. It runs again when

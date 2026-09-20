@@ -28,6 +28,7 @@ export function EventEntry({
     event,
     shape,
     selected,
+    picking,
     onOpen,
     onToggle,
     onPress,
@@ -39,6 +40,9 @@ export function EventEntry({
 
     /** Whether this entry is one of those picked out. */
     readonly selected: boolean;
+
+    /** Whether the screen is holding a selection at all, which is what makes a plain press pick an entry out. */
+    readonly picking: boolean;
 
     readonly onOpen: () => void;
 
@@ -72,7 +76,7 @@ export function EventEntry({
                     return;
                 }
 
-                if (clicking.ctrlKey || clicking.metaKey || clicking.shiftKey) {
+                if (clicking.ctrlKey || clicking.metaKey || clicking.shiftKey || picking) {
                     onToggle();
 
                     return;
@@ -90,7 +94,7 @@ export function EventEntry({
                 // The same two gestures the pointer has, said with the keyboard: a modifier held picks the entry out,
                 // and pressing one plainly while a selection is held picks it out as well — which is the whole of how
                 // a selection is worked without a mouse.
-                if (typing.ctrlKey || typing.metaKey || typing.shiftKey) {
+                if (typing.ctrlKey || typing.metaKey || typing.shiftKey || picking) {
                     onToggle();
 
                     return;
@@ -99,7 +103,9 @@ export function EventEntry({
                 onOpen();
             }}
         >
-            {timeShown(shape) && when !== null ? <span className="text-2xs text-muted">{when}</span> : null}
+            {timeShown(shape) && !event.isAllDay && when !== null ? (
+                <span className="text-2xs text-muted">{when}</span>
+            ) : null}
 
             <span className={`truncate ${shape === 'cell' ? 'text-2xs' : 'text-sm'} text-pretty`}>{event.title}</span>
 

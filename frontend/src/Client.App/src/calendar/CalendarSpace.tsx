@@ -463,6 +463,7 @@ export function CalendarSpace({
                     session={session}
                     transport={transport}
                     on={anchor}
+                    now={now}
                     readsDescriptions={readsDescriptions}
                     onSave={record}
                 />

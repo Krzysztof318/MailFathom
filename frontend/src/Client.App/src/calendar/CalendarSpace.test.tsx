@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -270,6 +270,54 @@ describe('CalendarSpace', () => {
                 sent().some((request) => request.method === 'DELETE' && request.path.endsWith('/calendar/proposed')),
             ).toBe(true);
         });
+    });
+
+    it('draws the span the reader moved to, even where the span they left answers after it', async () => {
+        // The two reads are held rather than answered, so the test decides which one arrives first: the ordering of
+        // two requests in flight is not guaranteed, and last week's events under this week's heading would read as a
+        // rendering defect rather than as the race it is.
+        const held: ((answer: ClientResponse) => void)[] = [];
+
+        const transport: MailFathomTransport = (request) =>
+            request.path.includes('/calendar/drafts')
+                ? Promise.resolve({ ...answered, body: JSON.stringify({ readsDescriptions: false }) })
+                : new Promise((answer) => {
+                      held.push(answer);
+                  });
+
+        drawSpace(transport);
+
+        await waitFor(() => {
+            expect(held).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+
+        await waitFor(() => {
+            expect(held).toHaveLength(2);
+        });
+
+        const arrived = eventCalled('handover', 'Warehouse handover', '2026-09-30T09:00:00+02:00');
+        const late = eventCalled('carrier', 'Carrier review', '2026-09-30T14:00:00+02:00');
+
+        held[1]?.({ ...answered, body: JSON.stringify({ events: [arrived] }) });
+
+        expect(await screen.findByRole('option', { name: /Warehouse handover/u })).toBeDefined();
+
+        // The week that was left answers last, and with an event inside the span now on the screen — so an answer
+        // applied whatever it was asked for would be visible here rather than merely out of view. It is resolved
+        // inside `act` because what is being asserted is that nothing follows it: an absence cannot be waited for, so
+        // the render it would have caused is driven to completion first and read afterwards.
+        await act(async () => {
+            held[0]?.({ ...answered, body: JSON.stringify({ events: [late] }) });
+
+            // The answer is an already-resolved promise, so one turn of the microtask queue is the whole of what
+            // *after it arrived* means — and the render it would have caused has happened by the time `act` returns.
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('option', { name: /Warehouse handover/u })).toBeDefined();
+        expect(screen.queryByRole('option', { name: /Carrier review/u })).toBeNull();
     });
 
     it('picks an entry out on a modifier-held press and says how many are held', async () => {

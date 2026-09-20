@@ -178,6 +178,30 @@ describe('Space', () => {
         ).toBeNull();
     });
 
+    it('draws the Calendar without a heading either, and names its landmark the same way', () => {
+        render(inStrictMode('calendar'));
+
+        expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+        expect(screen.getByRole('main', { name: 'Calendar' })).toBeDefined();
+    });
+
+    it('shows what the frame composed for the Calendar in the Calendar space', () => {
+        render(inStrictMode('calendar'));
+
+        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedToTheCalendar)).toBeDefined();
+    });
+
+    it('hands the question and the connection to the Calendar when it is in front, and to nothing when it is not', () => {
+        const { rerender } = render(inStrictMode('calendar'));
+
+        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedTheIntent)).toBeDefined();
+
+        rerender(inStrictMode('cases'));
+
+        expect(within(screen.getByLabelText('Calendar')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('Calendar')).getByText(handedToTheCalendar)).toBeDefined();
+    });
+
     it('shows the scope the Mail space is drawn against beside what it is drawn from', () => {
         render(inStrictMode('mail'));
 
