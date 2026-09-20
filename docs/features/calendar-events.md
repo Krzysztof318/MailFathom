@@ -13,9 +13,11 @@ a calendar somebody else owns is a second protocol with its own consent, conflic
 deployment answers none of them. Reading an `.ics` file a person chooses is neither of those things and is separate
 work; a file read once subscribes to nothing and writes nothing back.
 
-**No surface serves this store yet.** It is the store alone: nothing over the client endpoint, no MCP tool, and no
-command reads or writes an event today, and nothing proposes one from mail. What exists is the record, its rules, and
-the table beneath it.
+**One surface serves this store: the client endpoint.** [Its calendar routes](../operations/client-endpoint.md#the-calendar-routes)
+are where the signed-in person reads a window of their own calendar, reads one event, puts one there, amends one,
+accepts a date their mail proposed, and removes one. No MCP tool and no command reaches an event, and nothing proposes
+one from mail yet — what a proposal is and what accepting one does are recorded here, and what produces one is still to
+come.
 
 ## What an event is
 
