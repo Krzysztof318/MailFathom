@@ -9,6 +9,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Tasks;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
@@ -202,6 +203,14 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.ExchangeRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.RevocationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.ProposedTasksRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskAcceptanceRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskCompletionRoute}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
                         $"{ClientEndpointOptions.RoutePrefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route}")
@@ -254,6 +263,7 @@ public sealed class ClientApiEndpointsTests
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
@@ -283,6 +293,9 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
+                $"GET {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.ProposedTasksRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -322,12 +335,16 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientSessionTokenEndpoints.ExchangeRoute} -> none",
                 $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TaskAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TaskCompletionRoute} -> {MailFathomPermission.MailRead.Name}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
                 $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"PUT {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
@@ -392,6 +409,7 @@ public sealed class ClientApiEndpointsTests
                         || WritesTheCallersOwnPreferences(endpoint)
                         || WritesTheCallersOwnPortrait(endpoint)
                         || ChangesTheCallersOwnNotificationCentre(endpoint)
+                        || ChangesTheCallersOwnTaskList(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
@@ -455,6 +473,24 @@ public sealed class ClientApiEndpointsTests
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.DeletionsRoute}");
+
+    /// <summary>Reports whether a route changes the caller's own task list, by the four routes its five writes are served at.</summary>
+    /// <remarks>
+    /// The routes rather than the grant, for the reason the notification centre's writes are named that way. A task is
+    /// this deployment's own record of what one person owes: nothing here reaches a mail server, nothing moves in a
+    /// mailbox, and the message a task cites is a value it carries rather than mail this route reads. The erasure is
+    /// carried by that same reasoning — <see cref="MailFathomPermission.MailDelete" /> is the power to remove
+    /// somebody's mail, and what leaves here is a commitment about a message that stays exactly where it was. Naming
+    /// the five keeps the claim narrow — a sixth write published under the read grant fails this rather than joining
+    /// it.
+    /// </remarks>
+    private static bool ChangesTheCallersOwnTaskList(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
+        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskCompletionRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskAcceptanceRoute}");
 
     /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
     /// <remarks>
@@ -785,6 +821,10 @@ public sealed class ClientApiEndpointsTests
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
         services.AddSingleton(Options.Create(new MailDeliveryOptions()));
         services.AddScoped(_ => UnreachedFreshnessReader(granted));
+        services.AddScoped(_ => new OwnTasks(
+            granted,
+            Substitute.For<IPersonalTaskStore>(),
+            new FakeTimeProvider()));
         services.AddScoped(_ => new MailFolderDirectoryReader(
             UnreachedFreshnessReader(granted),
             UnreachedScopeResolver(),

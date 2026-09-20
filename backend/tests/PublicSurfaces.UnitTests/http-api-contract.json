@@ -3558,6 +3558,124 @@
         ],
         "type": "object"
       },
+      "ClientTaskCompletionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "completed"
+        ],
+        "type": "object"
+      },
+      "ClientTaskErasureResponse": {
+        "properties": {
+          "erased": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "erased"
+        ],
+        "type": "object"
+      },
+      "ClientTaskPageResponse": {
+        "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ClientTaskResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "ClientTaskRecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dueOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceMessageId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "dueOn",
+          "sourceMessageId"
+        ],
+        "type": "object"
+      },
+      "ClientTaskResponse": {
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "dueOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "sourceMessageId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "dueOn",
+          "origin",
+          "completed",
+          "sourceMessageId"
+        ],
+        "type": "object"
+      },
       "ClientUnreadNotificationCountResponse": {
         "properties": {
           "unreadCount": {
@@ -16017,6 +16135,343 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientTaskRecordRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks/proposed": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks/{taskId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientTaskRecordRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks/{taskId}/acceptance": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks/{taskId}/completion": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientTaskCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTaskResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

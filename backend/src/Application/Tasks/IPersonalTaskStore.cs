@@ -46,6 +46,30 @@ public interface IPersonalTaskStore
         int limit,
         CancellationToken cancellationToken);
 
+    /// <summary>Reads one of a person's tasks by the identity it was addressed under.</summary>
+    /// <param name="user">The person whose task is read, which is what scopes the read.</param>
+    /// <param name="task">The task to read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The task, or <see langword="null" /> when this user holds none under that identity.</returns>
+    /// <remarks>
+    /// The user is part of the addressing rather than a filter applied after a lookup, exactly as it is on every write
+    /// here, so a task another person holds is not found rather than found and refused. That is what keeps this from
+    /// reporting whose tasks exist beside the caller's own.
+    /// </remarks>
+    Task<PersonalTask?> FindAsync(MailUserId user, PersonalTaskId task, CancellationToken cancellationToken);
+
+    /// <summary>Writes what a person edited about one of their tasks.</summary>
+    /// <param name="revision">The task as it is to stand, which is what <see cref="PersonalTask.Revise" /> produced.</param>
+    /// <param name="cancellationToken">Cancels the read and the write.</param>
+    /// <returns>What became of the request.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="revision" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It writes the title and the day and nothing else, and it addresses the row by the revision's own user and
+    /// identity. The rest of the record moves through the acts that own it — accepting a proposal, completing a task —
+    /// so a revision that carried a stale origin or completion beside the edited text could not undo either of them.
+    /// </remarks>
+    Task<PersonalTaskChangeOutcome> ReviseAsync(PersonalTask revision, CancellationToken cancellationToken);
+
     /// <summary>Turns one of a person's proposals into a task they owe.</summary>
     /// <param name="user">The person whose task is accepted, which is what scopes the write.</param>
     /// <param name="task">The task to accept.</param>

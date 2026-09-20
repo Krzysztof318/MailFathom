@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -126,6 +126,14 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.mail.read` |
 | `POST /api/client/notifications/read` | `mailfathom.mail.read` |
 | `POST /api/client/notifications/deletions` | `mailfathom.mail.read` |
+| `GET /api/client/tasks` | `mailfathom.mail.read` |
+| `GET /api/client/tasks/proposed` | `mailfathom.mail.read` |
+| `GET /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
+| `POST /api/client/tasks` | `mailfathom.mail.read` |
+| `PUT /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
+| `POST /api/client/tasks/{taskId}/completion` | `mailfathom.mail.read` |
+| `POST /api/client/tasks/{taskId}/acceptance` | `mailfathom.mail.read` |
+| `DELETE /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
@@ -2773,6 +2781,85 @@ stays.
 **A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
 rather than lost anything.
+
+### The task routes
+
+These are the signed-in person's own list of what they owe: what they have committed to, what mail proposed and
+nobody has agreed to yet, and the six acts they perform on one task. What they serve is a list native to this
+deployment — no external task-management protocol is spoken here, and a task is a row in the same database as
+everything else.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/tasks` | Reads one page of what this person has committed to, soonest due first |
+| `GET /api/client/tasks/proposed` | Reads one page of what mail proposed and nobody has accepted |
+| `GET /api/client/tasks/{taskId}` | Reads one of them |
+| `POST /api/client/tasks` | Records a task this person has just committed to |
+| `PUT /api/client/tasks/{taskId}` | Writes the line and the day they edited |
+| `POST /api/client/tasks/{taskId}/completion` | Puts one task into the completion state the body states |
+| `POST /api/client/tasks/{taskId}/acceptance` | Takes on a proposed task, so it becomes one this person owes |
+| `DELETE /api/client/tasks/{taskId}` | Erases one task, which is also how a proposal is dismissed |
+
+**The list is read as two, because it is two.** What somebody has committed to and what mail suggested are different
+things on a screen — one is a list of what is owed, the other an offer — so each is its own paginated route rather than
+one listing with a filter a client has to know to send. Both walk the same order, and **a cursor is refused in the half
+it was not issued for**, which is what stops a walk of the proposals continuing into the commitments halfway down a
+screen. The order is the day ascending with the undated tasks last and the identifier breaking a tie, which is also the
+order a list is drawn in; grouping those days into *today*, *this week*, and the rest is the screen's own work.
+
+**A page is clamped rather than refused.** A request naming no `pageSize` is served 50, one naming more than 200 is
+served 200, and one naming zero or a negative number is served the default — [the notification routes](#the-notification-routes)'
+answer rather than [the mail list](#the-mail-list-route)'s, because this serves a panel asking for as much as it can
+draw. The `cursor` is the one thing here that is refused, because a boundary this deployment never issued names no
+page. Paging is keyset rather than offset, so a task dated, completed, or accepted while somebody is reading neither
+shifts the window nor repeats a row; the walk ends when `nextCursor` is absent rather than when a page comes back
+short.
+
+**Completed tasks are served with the outstanding ones**, carrying `completed`, because whether a list shows what is
+done is the screen's decision: a route that hid them would leave a person no way to see what they did today, and one
+that filtered them would need a second route to get them back.
+
+**No route names a user.** The person is the one the credential authenticated, exactly as on
+[the record routes](#the-record-routes), so a reading of somebody else's list cannot be composed. **A task another
+person holds answers `404` exactly as one nobody holds** — so nothing here reports whether such a task exists.
+
+**A row carries what a list draws and stops there**: the identifier, the line, the day, where the task came from,
+whether it is done, and the message it cites. No subject, no body, no address, and no attachment reaches these answers
+at any size. The citation is an identity rather than a reading of the message, so a client that draws the link follows
+it over [the message route](#the-message-route) under the grant that publishes reading mail — and a task whose message
+has since been erased finds nothing there, because what a person owes does not stop being owed when the mail naming it
+goes.
+
+**A write states the line and the day, and nothing else.** `{"title": "...", "dueOn": "2026-09-21"}` is the whole of
+what a creation and a revision carry, beside the optional `sourceMessageId` a creation may cite; a day is written
+`yyyy-mm-dd` and absent where nobody has said when. A key nothing here binds fails the bind rather than being ignored,
+so a client that tried to state an origin or a completion is told rather than having its request read as a rename that
+dropped the rest. **Where a task came from and whether it is done each move through the act that owns them**, which is
+what stops a rename turning a proposal into a commitment. A creation is always asserted: what a person types into their
+own client is something they owe, and a proposal arrives through the extraction that read the mail.
+
+**Refusals name the rule rather than the value.** A missing or blank title, a title past 200 characters, and a day that
+is not `yyyy-mm-dd` are each answered `400` naming the bound, and none of them echoes what was sent — a task's title is
+a line a person wrote about their own correspondence, and a problem document is the part of an answer a proxy log
+keeps.
+
+**Dismissing a proposal is the erasure rather than a route of its own.** Declining what mail suggested and deleting
+something a person owes leave the same list behind, so a second path would be two names for one act told apart only by
+the word a screen puts on the button. The erasure answers `200` with `erased` either way: **a task already gone and one
+another person holds are the same answer**, and neither is an error.
+
+**Accepting twice, and completing something already completed, are answered as done.** A state a task already stands in
+is the state the caller asked for, so a repeated press is a no-op rather than an error — and accepting moves the row
+that already exists, so a commitment keeps the identity it was proposed under and whatever already points at it still
+points at it.
+
+**Every route here is `mailfathom.mail.read`, the five writes included.** A task is this deployment's own record of
+what one person owes: nothing here reaches a mail server, nothing moves in a mailbox, and the message a task cites is a
+value it carries rather than mail these routes read. It is [the notification routes](#the-notification-routes)'
+reasoning rather than [the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator
+maintains does not hold a write grant and still has to be able to keep their own list. `mailfathom.mail.delete` is the
+power to remove somebody's mail and is not what the erasure asks for: what leaves is a commitment about a message that
+stays.
 
 ### The Discover routes
 

@@ -151,6 +151,28 @@ public sealed record PersonalTask
             isCompleted);
     }
 
+    /// <summary>States the task as the person has just edited it.</summary>
+    /// <param name="title">The line the list is to be drawn with from now on.</param>
+    /// <param name="dueOn">The day it is due on, or <see langword="null" /> where the person took the date off it.</param>
+    /// <returns>The task as it now stands.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />.</exception>
+    /// <remarks>
+    /// Only the two values an edit is about, because the rest of the record is not the editor's to state: the identity
+    /// and the person are what address the task, the origin moves by accepting a proposal rather than by typing, the
+    /// completion moves by doing the thing, and the citation records where the task came from rather than what it is
+    /// now about. An edit that could rewrite any of those would let a person turn a proposal into a commitment, or
+    /// point one at a message it was never read out of, through the route that renames it.
+    /// </remarks>
+    public PersonalTask Revise(string title, DateOnly? dueOn) => new(
+        this.Id,
+        this.User,
+        Bounded(title, nameof(title)),
+        dueOn,
+        this.Origin,
+        this.SourceMessage,
+        this.IsCompleted);
+
     /// <summary>Refuses the identities and the origin that no task can be built from, whether composed or restored.</summary>
     private static void Validate(PersonalTaskId id, MailUserId user, PersonalTaskOrigin origin)
     {
