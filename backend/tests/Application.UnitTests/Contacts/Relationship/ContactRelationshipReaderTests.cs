@@ -30,6 +30,8 @@ public sealed class ContactRelationshipReaderTests
 
     private static readonly MailAccountId TheAccount = MailAccountId.Create("work");
 
+    private static readonly MailUserId TheUser = MailUserId.Create(Guid.CreateVersion7());
+
     /// <summary>A run reads the one contact's own correlation and nothing else, which is what keeps opening one person off everybody else's mail.</summary>
     [Fact]
     public async Task ReadAsync_AContactTheMailKnows_ScopesTheDerivationToThatContactsOwnCorrespondence()
@@ -109,21 +111,21 @@ public sealed class ContactRelationshipReaderTests
         Assert.DoesNotContain(Marker, card.Note?.Text, StringComparison.Ordinal);
     }
 
-    /// <summary>The card is written in the language the caller's own mailbox is read in, which is the language everything derived about that mail comes out in.</summary>
+    /// <summary>The card is the acting person's own, composed on their opening and read by nobody else, so it comes out in the language they read rather than in a mailbox's.</summary>
     [Fact]
-    public async Task ReadAsync_AContactTheMailKnows_DerivesTheCardInTheMailboxesOwnLanguage()
+    public async Task ReadAsync_AContactTheMailKnows_DerivesTheCardInTheActingUsersOwnLanguage()
     {
         // Arrange
         var message = StoredEmailId.Create(Guid.CreateVersion7());
         var index = new InMemoryContactCorrespondenceIndex().WithThreads(ConversationOn(message, "the addendum"));
         var deriver = new RecordingContactRelationshipDeriver();
-        var reader = ReaderOver(index, deriver, language: MailAccountLanguage.Polish);
+        var reader = ReaderOver(index, deriver, language: MailUserLanguage.Polish);
 
         // Act
         await reader.ReadAsync(ContactOf("anna@example.com"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailAccountLanguage.Polish, Assert.Single(deriver.Briefs).Language);
+        Assert.Equal(MailUserLanguage.Polish, Assert.Single(deriver.Briefs).Language);
     }
 
     /// <summary>The grant is the one that puts mail in front of a provider, asked here rather than at the transport, so an entrypoint added later meets the same refusal.</summary>
@@ -149,7 +151,7 @@ public sealed class ContactRelationshipReaderTests
         IContactRelationshipDeriver deriver,
         SensitiveContentEgressGuard? egressGuard = null,
         AccessAuthorization? authorization = null,
-        MailAccountLanguage language = MailAccountLanguage.English)
+        MailUserLanguage language = MailUserLanguage.English)
     {
         var guard = egressGuard ?? SensitiveContentEgressGuards.Inactive();
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(
@@ -197,11 +199,12 @@ public sealed class ContactRelationshipReaderTests
         subject,
         FirstJuly);
 
-    /// <summary>Answers one language for whichever mailbox is asked about, which is what a card over one caller's accounts needs.</summary>
-    private static IMailAccountLanguages LanguagesAnswering(MailAccountLanguage language)
+    /// <summary>Answers that language for the acting user alone, so a card composed for anybody else would read English and fail the assertion.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
     {
-        var languages = Substitute.For<IMailAccountLanguages>();
-        languages.LanguageOf(Arg.Any<MailAccountId>()).Returns(language);
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(MailUserLanguage.English);
+        languages.LanguageOf(TheUser).Returns(language);
 
         return languages;
     }
@@ -210,6 +213,7 @@ public sealed class ContactRelationshipReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.User.Returns(TheUser);
         catalog.AssignedAccounts.Returns(
         [
             .. servedAccountIds

@@ -233,7 +233,11 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
             if (!this.publishedDocumentVersions.TryGetValue(user, out var publishedVersion)
                 || version > publishedVersion)
             {
-                var published = new ServedMailUser(user, displayName, [.. record.MailAccounts]);
+                var published = new ServedMailUser(
+                    user,
+                    displayName,
+                    [.. record.MailAccounts],
+                    record.ReadingLanguage ?? MailUserLanguage.English);
 
                 this.resolvedUsers = users.Any(candidate => candidate.User == user)
                     ? [.. users.Select(candidate => candidate.User == user ? published : candidate)]

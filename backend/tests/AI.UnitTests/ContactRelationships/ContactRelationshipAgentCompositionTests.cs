@@ -5,7 +5,7 @@
 using MailFathom.AI.ContactRelationships;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.UnitTests.TestDoubles;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -46,10 +46,10 @@ public sealed class ContactRelationshipAgentCompositionTests
     /// than something only the pure instruction tests would have noticed.
     /// </summary>
     [Theory]
-    [InlineData(MailAccountLanguage.English)]
-    [InlineData(MailAccountLanguage.Polish)]
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
     public async Task Compose_TheRelationshipAgent_CarriesItsOwnInstructionInsideTheEnvelope(
-        MailAccountLanguage language)
+        MailUserLanguage language)
     {
         // Arrange
         using var chatClient = ScriptedChatClient.Answering(Answer);
@@ -85,7 +85,7 @@ public sealed class ContactRelationshipAgentCompositionTests
 
     private static ChatClientAgent AgentOver(
         ScriptedChatClient chatClient,
-        MailAccountLanguage language = MailAccountLanguage.English) =>
+        MailUserLanguage language = MailUserLanguage.English) =>
         ContactRelationshipAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),

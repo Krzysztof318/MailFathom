@@ -13,7 +13,7 @@ using MailFathom.Application.Contacts.Relationship;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -234,7 +234,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     /// </remarks>
     private async Task<ChatModelAnswer?> AskAsync(
         string turn,
-        MailAccountLanguage language,
+        MailUserLanguage language,
         CancellationToken cancellationToken)
     {
         try
@@ -262,7 +262,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailAccountLanguage language,
+        MailUserLanguage language,
         CancellationToken cancellationToken)
     {
         // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower

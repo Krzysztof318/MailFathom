@@ -79,7 +79,6 @@ internal sealed class ReplyDraftSourceStore(
         var conversation = recent.Reverse().ToArray();
 
         return new ReplyDraftSources(
-            MailAccountId.Create(answered.MailboxAccountId),
             conversation.Length > 0 ? conversation[^1].Subject : null,
             [
                 .. conversation.Select(static (row, position) => new ReplyDraftMessage(

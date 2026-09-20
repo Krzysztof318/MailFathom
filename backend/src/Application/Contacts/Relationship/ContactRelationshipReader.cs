@@ -3,13 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts.Correspondence;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 
 namespace MailFathom.Application.Contacts.Relationship;
@@ -46,15 +44,15 @@ public sealed class ContactRelationshipReader
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
-    private readonly IMailAccountLanguages languages;
+    private readonly IMailUserLanguages languages;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="correspondenceReader">Correlates the contact with the mail this caller may read, which is what the derivation is scoped to.</param>
     /// <param name="deriver">Derives the card, which is the one part of this that reaches a provider.</param>
-    /// <param name="scopeResolver">Answers whose mail is being read, and which mailbox's language the card is written in.</param>
+    /// <param name="scopeResolver">Answers whose mail is being read, which is also whose language the card is written in.</param>
     /// <param name="egressGuard">Scans what the card publishes to a client, where this deployment scans anything.</param>
     /// <param name="authorization">Enforces the grant this derivation is behind.</param>
-    /// <param name="languages">Answers which language a mailbox is read in, which is the language the card comes out in.</param>
+    /// <param name="languages">Answers which language this deployment writes for a person in, which is the language the card comes out in.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public ContactRelationshipReader(
         ContactCorrespondenceReader correspondenceReader,
@@ -62,7 +60,7 @@ public sealed class ContactRelationshipReader
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
-        IMailAccountLanguages languages)
+        IMailUserLanguages languages)
     {
         ArgumentNullException.ThrowIfNull(correspondenceReader);
         ArgumentNullException.ThrowIfNull(deriver);
@@ -106,22 +104,11 @@ public sealed class ContactRelationshipReader
             return ContactRelationship.Nothing;
         }
 
-        var brief = new ContactRelationshipBrief(correspondence, this.languages.LanguageOf(this.WrittenFor()));
+        var brief = new ContactRelationshipBrief(correspondence, this.languages.LanguageOf(this.scopeResolver.User));
         var card = await this.deriver.DeriveAsync(brief, cancellationToken);
 
         return card.WasDerived ? await this.GuardedAsync(card, cancellationToken) : card;
     }
-
-    /// <summary>Finds the mailbox the card is written for, which is what decides the language it comes out in.</summary>
-    /// <remarks>
-    /// A correlation spans every account this caller is assigned, so no one mailbox is the contact's; the first
-    /// assigned account is taken, which is deterministic rather than arbitrary because the catalog answers in a fixed
-    /// order. A caller assigned none never reaches here — the correlation above answered with nothing — and the unset
-    /// identity the expression would then produce is read by the port as an account this deployment does not serve,
-    /// which is English.
-    /// </remarks>
-    private MailAccountId WrittenFor() =>
-        this.scopeResolver.AssignedAccounts is [var first, ..] ? first : default;
 
     /// <summary>Scans everything the card would publish, under the point an opened contact's card is read on.</summary>
     /// <remarks>

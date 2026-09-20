@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.SensitiveContent;
@@ -162,6 +163,91 @@ public sealed class UserAccountDocumentBinderTests
         Assert.True(binding.IsBound);
         var account = Assert.Single(binding.User!.MailAccounts);
         Assert.Equal(expected, account.ReadingLanguage);
+    }
+
+    /// <summary>The record states the language this deployment writes for the person in, which is a value of its own beside the one each of their mailboxes states.</summary>
+    [Fact]
+    public void Bind_ARecordNamingALanguage_BindsThatLanguageOntoTheRecord()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language": "Polish"}""", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal(MailUserLanguage.Polish, binding.User!.ReadingLanguage);
+    }
+
+    /// <summary>
+    /// A record committed before the property existed states none and could not have stated one, so every reading
+    /// binds it and reads it as English. What refuses an absence is the write that rewrites the record, where the
+    /// document is in front of whoever is saving it.
+    /// </summary>
+    [Fact]
+    public void Bind_ARecordBeingWrittenNamingNoLanguage_BindsAndIsReadAsEnglish() =>
+        AssertBindsWithNoLanguage(UserRecordArrival.BeingWritten);
+
+    /// <summary>A record already held states none whenever it was committed before the property existed, which every start reads.</summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingNoLanguage_BindsAndIsReadAsEnglish() =>
+        AssertBindsWithNoLanguage(UserRecordArrival.AlreadyHeld);
+
+    /// <summary>A language this build does not write in was never committed through this binder, so it is refused whichever direction the record arrived from.</summary>
+    [Fact]
+    public void Bind_ARecordBeingWrittenNamingALanguageThisBuildDoesNotWriteIn_IsRefused() =>
+        AssertRefusesTheUnwritableLanguage(UserRecordArrival.BeingWritten);
+
+    /// <summary>No release ever accepted the value, so a stored record carrying one was never committed through this binder either.</summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingALanguageThisBuildDoesNotWriteIn_IsRefused() =>
+        AssertRefusesTheUnwritableLanguage(UserRecordArrival.AlreadyHeld);
+
+    /// <summary>The name is written by hand in a record too, so it is read the way it was typed.</summary>
+    [Theory]
+    [InlineData("polish", MailUserLanguage.Polish)]
+    [InlineData("ENGLISH", MailUserLanguage.English)]
+    public void Bind_ARecordLanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, MailUserLanguage expected)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind($$"""{"Language": "{{written}}"}""", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal(expected, binding.User!.ReadingLanguage);
+    }
+
+    private static void AssertBindsWithNoLanguage(UserRecordArrival arrival)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("{}", arrival);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Null(binding.User!.ReadingLanguage);
+    }
+
+    private static void AssertRefusesTheUnwritableLanguage(UserRecordArrival arrival)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language": "German"}""", arrival);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("not a language MailFathom writes in", refusal, StringComparison.Ordinal);
+        Assert.Contains("'English'", refusal, StringComparison.Ordinal);
+        Assert.Contains("'Polish'", refusal, StringComparison.Ordinal);
     }
 
     /// <summary>A declaration in the record is the same declaration a file carried, bound by the same type.</summary>

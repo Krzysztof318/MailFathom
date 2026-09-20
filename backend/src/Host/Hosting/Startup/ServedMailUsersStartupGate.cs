@@ -210,7 +210,11 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
         this.PublishHeldBack(record.User, heldBack);
 
-        var served = new ServedMailUser(record.User, record.DisplayName, usable);
+        var served = new ServedMailUser(
+            record.User,
+            record.DisplayName,
+            usable,
+            bound.ReadingLanguage ?? MailUserLanguage.English);
 
         return (served, document.Version);
     }

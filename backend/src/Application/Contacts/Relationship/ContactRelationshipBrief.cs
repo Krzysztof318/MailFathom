@@ -3,13 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Contacts.Correspondence;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Contacts.Relationship;
 
 /// <summary>Everything one relationship derivation is scoped to.</summary>
 /// <param name="Correspondence">The conversations naming this person and the documents they sent, as the correlation just read them.</param>
-/// <param name="Language">The language the card is written in, which is the language the caller's own mailbox is read in.</param>
+/// <param name="Language">The language the card is written in, which is the language the person who opened the contact reads.</param>
 /// <remarks>
 /// <para>
 /// The correlation and nothing else. A derivation is about one person the caller opened, so what it may read is what
@@ -24,4 +24,4 @@ namespace MailFathom.Application.Contacts.Relationship;
 /// </remarks>
 public sealed record ContactRelationshipBrief(
     ContactCorrespondence Correspondence,
-    MailAccountLanguage Language);
+    MailUserLanguage Language);

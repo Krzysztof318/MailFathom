@@ -5,6 +5,7 @@
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Evaluations.Languages;
@@ -72,6 +73,23 @@ internal static partial class WrittenLanguage
         null when WordsOf(text).Count < FewestWordsToDecide => null,
         null => $"what it wrote reads as neither English nor Polish throughout, where {expected} was expected.",
     };
+
+    /// <summary>Names how a text misses the language a person should have been written for.</summary>
+    /// <param name="text">What a model wrote.</param>
+    /// <param name="expected">The language the person reads.</param>
+    /// <returns>What is wrong, or <see langword="null" /> where the text is in that language or too short to tell.</returns>
+    /// <remarks>
+    /// The measurement is about the text rather than about whose language was asked for, so the two enumerations meet
+    /// here and nowhere else: a mailbox's language and a person's name the same two languages and answer different
+    /// questions, and this is the one place an evaluation holds a written text against either of them.
+    /// </remarks>
+    public static string? Shortfall(string? text, MailUserLanguage expected) => Shortfall(
+        text,
+        expected switch
+        {
+            MailUserLanguage.Polish => MailAccountLanguage.Polish,
+            _ => MailAccountLanguage.English,
+        });
 
     private static List<string> WordsOf(string? text) =>
         [.. Word().Matches(text ?? string.Empty).Select(static match => match.Value)];

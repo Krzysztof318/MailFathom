@@ -8,7 +8,7 @@ using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ReplyDrafts;
 using MailFathom.Application.Emails.ReplyDrafts;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
@@ -59,8 +59,8 @@ internal sealed partial record ReplyDraftScenario(
     string Manner,
     bool AsksForWhatNothingSupports,
     int MinimumTaskAdherence,
-    MailAccountLanguage Account = MailAccountLanguage.English,
-    MailAccountLanguage? WritesIn = null)
+    MailUserLanguage Account = MailUserLanguage.English,
+    MailUserLanguage? WritesIn = null)
 {
     /// <summary>The check that the answer read as a draft.</summary>
     public const string ReadAsADraftMetricName = "Read as a draft";
@@ -225,8 +225,8 @@ internal sealed partial record ReplyDraftScenario(
             "Krótko i uprzejmie.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.Polish,
-            MailAccountLanguage.Polish),
+            MailUserLanguage.Polish,
+            MailUserLanguage.Polish),
         new(
             "ReplyDraft.Polish.AfterACorrection",
             PolishCorpus.ConversationUpTo(position: 12),
@@ -234,8 +234,8 @@ internal sealed partial record ReplyDraftScenario(
             "Dwa zdania.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.Polish,
-            MailAccountLanguage.Polish),
+            MailUserLanguage.Polish,
+            MailUserLanguage.Polish),
         new(
             "ReplyDraft.Polish.AssertsWhatTheConversationDoesNot",
             PolishCorpus.ConversationUpTo(position: 2),
@@ -243,8 +243,8 @@ internal sealed partial record ReplyDraftScenario(
             "Krótko.",
             AsksForWhatNothingSupports: true,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.Polish,
-            MailAccountLanguage.Polish),
+            MailUserLanguage.Polish,
+            MailUserLanguage.Polish),
         new(
             "ReplyDraft.Mixed.PolishAskOnAnEnglishConversation",
             CorpusMessage.ConversationUpTo(position: 22),
@@ -252,8 +252,8 @@ internal sealed partial record ReplyDraftScenario(
             "Dwa lub trzy zdania, ciepło, ale rzeczowo.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.Polish,
-            MailAccountLanguage.English),
+            MailUserLanguage.Polish,
+            MailUserLanguage.English),
         new(
             "ReplyDraft.Mixed.EnglishAskOnAPolishConversation",
             PolishCorpus.ConversationUpTo(position: 2),
@@ -261,8 +261,8 @@ internal sealed partial record ReplyDraftScenario(
             "Short and polite.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.English,
-            MailAccountLanguage.Polish),
+            MailUserLanguage.English,
+            MailUserLanguage.Polish),
         new(
             "ReplyDraft.Mixed.AskedForPolishOnAnEnglishConversation",
             CorpusMessage.ConversationUpTo(position: 22),
@@ -270,8 +270,8 @@ internal sealed partial record ReplyDraftScenario(
             "Two or three sentences.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailAccountLanguage.English,
-            MailAccountLanguage.Polish),
+            MailUserLanguage.English,
+            MailUserLanguage.Polish),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>
@@ -292,7 +292,6 @@ internal sealed partial record ReplyDraftScenario(
         ];
 
         return new ReplyDraftSources(
-            MailAccountId.Create("owner"),
             conversation[^1].Subject,
             [
                 .. conversation.Select(static (message, position) => new ReplyDraftMessage(

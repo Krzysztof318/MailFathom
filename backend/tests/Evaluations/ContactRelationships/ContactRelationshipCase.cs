@@ -4,7 +4,7 @@
 
 using MailFathom.Application.Contacts.Correspondence;
 using MailFathom.Application.Contacts.Relationship;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Languages;
@@ -44,7 +44,7 @@ internal sealed record ContactRelationshipCase(
     string Name,
     string Address,
     Func<ContactRelationship, ContactCorrespondence, string?> Expectation,
-    MailAccountLanguage? Language = null)
+    MailUserLanguage? Language = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<ContactRelationshipCase> All { get; } =
@@ -140,7 +140,7 @@ internal sealed record ContactRelationshipCase(
         // every line of the card has to be written in the mailbox's language whatever the subjects were written in.
 
         // An invoice chased and paid, an order confirmed, and a new price list: three kinds of matter with one supplier.
-        new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailAccountLanguage.Polish),
+        new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.Polish),
 
         // A catalogue, then a quotation asked for, promised, and chased by the owner in the same conversation.
         new(
@@ -150,16 +150,16 @@ internal sealed record ContactRelationshipCase(
                 thread.Subject?.Contains("krzeseł", StringComparison.OrdinalIgnoreCase) is true))
                 ? null
                 : "neither a next action nor an open item rests on the conversation asking for the chair quotation.",
-            MailAccountLanguage.Polish),
+            MailUserLanguage.Polish),
 
         // A hotel confirmed and an itinerary made final, which leave nothing to do.
-        new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, MailAccountLanguage.Polish),
+        new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, MailUserLanguage.Polish),
 
         // An English correspondence read for a Polish mailbox: nine conversations, carded in Polish.
-        new("Mixed.EnglishCorrespondenceUnderPolishAccount", "wiebke.jankowski@harbourline.test", NamesItsCases, MailAccountLanguage.Polish),
+        new("Mixed.EnglishCorrespondenceForAPolishReader", "wiebke.jankowski@harbourline.test", NamesItsCases, MailUserLanguage.Polish),
 
         // A Polish correspondence read for an English mailbox: three kinds of matter, carded in English.
-        new("Mixed.PolishCorrespondenceUnderEnglishAccount", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailAccountLanguage.English),
+        new("Mixed.PolishCorrespondenceForAnEnglishReader", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.English),
     ];
 
     /// <summary>Gets every conversation the mailbox holds: the corpus's first, then the written ones, the hostile ones, and the Polish ones.</summary>

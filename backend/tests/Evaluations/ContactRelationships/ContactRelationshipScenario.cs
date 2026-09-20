@@ -4,7 +4,7 @@
 
 using MailFathom.AI.ContactRelationships;
 using MailFathom.AI.Orchestration;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +33,7 @@ internal static class ContactRelationshipScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var correspondence = scenario.Correspondence;
-        var language = scenario.Language ?? MailAccountLanguage.English;
+        var language = scenario.Language ?? MailUserLanguage.English;
         var instruction = ContactRelationshipInstructions.TextFor(language);
 
         var turn = new GuardedRelationshipTurn(
