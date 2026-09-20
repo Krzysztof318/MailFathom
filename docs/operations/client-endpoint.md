@@ -108,8 +108,6 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/drafts/{draftId}/send` | `mailfathom.mail.send` |
 | `GET /api/client/replies/drafting` | `mailfathom.mail.ask` |
 | `POST /api/client/replies/drafting` | `mailfathom.mail.ask` |
-| `GET /api/client/calendar/drafts` | `mailfathom.mail.ask` |
-| `POST /api/client/calendar/drafts` | `mailfathom.mail.ask` |
 | `GET /api/client/outbox` | `mailfathom.mail.send` |
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
@@ -142,6 +140,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `PUT /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
 | `POST /api/client/calendar/{eventId}/acceptance` | `mailfathom.mail.read` |
 | `DELETE /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
+| `GET /api/client/calendar/drafts` | `mailfathom.mail.ask` |
+| `POST /api/client/calendar/drafts` | `mailfathom.mail.ask` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
@@ -2511,7 +2511,8 @@ Content-Type: application/json
 ```
 
 **What comes back fills a dialog rather than a calendar.** Nothing on this route writes an event, and nothing is
-stored: the fields arrive in the dialog somebody opened, who edits them and submits the event themselves.
+stored: the fields arrive in the dialog somebody opened, who edits them and submits the event themselves — through
+[`POST /api/client/calendar`](#the-calendar-routes), which is the route that writes one.
 
 **The read says whether this deployment reads a description at all**, so a dialog offers the field only where
 something answers it. It resolves a registration and calls no provider, so a client asks it once and holds the answer.
