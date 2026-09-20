@@ -133,6 +133,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
@@ -273,6 +275,7 @@ public sealed class ClientApiEndpointsTests
                 $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
@@ -308,6 +311,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
@@ -564,7 +568,7 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}";
 
-    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search, or drafts a reply, by the four routes they are served at.</summary>
+    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search, drafts a reply, or reads a description into a calendar event, by the five routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the writes above are named that way — but the grant is what
     /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.mail.ask</c> is what sends mail to a
@@ -580,7 +584,10 @@ public sealed class ClientApiEndpointsTests
     /// Drafting a reply is the fourth and changes nothing either: what it answers with is text in the composer, which
     /// its author edits, discards, or saves through the drafting routes that do carry a write grant, and it is a
     /// <c>POST</c> for that same first reason — what somebody asks a reply to say is as revealing as the
-    /// correspondence it answers. Naming the four keeps the claim narrow.
+    /// correspondence it answers. Reading a typed description into a calendar event is the fifth and belongs here on
+    /// every one of those readings at once: it changes nothing, since what it answers with is the fields of a dialog
+    /// its author submits themselves, and it is a <c>POST</c> because what somebody is arranging and with whom is as
+    /// revealing as the mail that arranged it. Naming the five keeps the claim narrow.
     /// </remarks>
     private static bool AsksAQuestionOfTheCallersOwnMail(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
@@ -588,6 +595,7 @@ public sealed class ClientApiEndpointsTests
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}");
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>

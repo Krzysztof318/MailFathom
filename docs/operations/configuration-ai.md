@@ -762,6 +762,7 @@ its own. Every one of them may, and each takes the same two keys as `Chat:MainMo
 | `Chat:RelevanceFilter:Model` | [Judging a retrieval's candidates](#relevance-filter--chatrelevancefilter) |
 | `Chat:ImageDescription:Model` | Describing an image attachment, which `Embeddings:ImageDescription:Enabled` turns on |
 | `Chat:BodyCleanup:Model` | [Cleaning a message body](#cleaning-a-message-body--chatbodycleanup) |
+| `Chat:CalendarEventExtraction:Model` | [Reading a calendar event out of text](#reading-a-calendar-event-out-of-text--chatcalendareventextraction) |
 
 Routing them separately is the point of the keys: the per-message derivations and the per-candidate judgement are
 cheap judgements a small fast model makes well, answering and drafting are rare and worth the best model an operator
@@ -786,13 +787,14 @@ Declaring a further model, renaming one, and moving which alias a capability nam
 a resilience circuit are both looked up by whatever the declaration in force calls a model. A run already in flight
 keeps the declaration it began with, so a reload landing mid-question changes the next question and not that one. A
 candidate that breaks any rule in the tables above is refused whole, logged with the key to fix, and leaves the previous
-declaration answering; the process stays up either way. What stays a restart is the seven settings that decide which
+declaration answering; the process stays up either way. What stays a restart is the eight settings that decide which
 services this deployment registered at all: whether `Chat:Models` declares a model at all — the first one, or the
 removal of the last — whether `Chat:RelevanceFilter:Enabled` turns the second pass on, whether
 `Chat:Enrichment:Enabled` turns the arrival derivation on, whether `Chat:ThreadState:Enabled` turns the conversation
 derivation on, whether `Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, whether
-`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on, and whether `Chat:ContactRelationship:Enabled` turns the
-relationship card on. The third rendering of a message body is not among them
+`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on, whether `Chat:ContactRelationship:Enabled` turns the
+relationship card on, and whether `Chat:CalendarEventExtraction:Enabled` turns the reading of text into calendar
+events on. The third rendering of a message body is not among them
 because it has no switch of its own: a declared model is the whole of what registers it, and which readers want it is
 their own preference rather than a key an operator writes. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for a
 reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
@@ -873,6 +875,33 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 | --- | --- | --- | --- | --- |
 | `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared model | restart |
 | `Chat:ThreadState:Model` | block | *(empty)* | which declared model reads a conversation into a state, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten reads it with `Chat:MainModel` | reload |
+
+### Reading a calendar event out of text — `Chat:CalendarEventExtraction`
+
+Reading the occasions a text names into events: an arriving message into proposals on the calendars of everyone the
+account is assigned to, and a sentence somebody typed into the fields an event is composed from. One
+switch covers both halves, because both are one agent reading one kind of words. A block inside `Chat` for the reason
+the blocks above are: it reads with that endpoint and has nothing to send a text to without one.
+
+Off by default, and off is a supported deployment: nothing proposes an event from mail, the drafting route answers
+that this deployment reads no description, and a person writes every event by hand exactly as they did before. Turning it on is a spend
+decision above all — the mail half is a **second** provider call on every message that arrives, running beside the
+enrichment call rather than instead of it, so an account whose mail is being derived costs twice as much to take in.
+
+**It competes with questions for one allowance**, exactly as the blocks above do: every reading is admitted against
+and charged to the same `MailAnswering` period ceilings a question is. A refused admission withholds the reading and
+leaves the message outstanding for the next period; on the typed half it refuses the drafting with a `429` rather
+than answering empty, so a caller is told the allowance is gone instead of reading it as a sentence naming nothing.
+
+**Nothing it produces reaches a calendar on its own.** A proposal is a row somebody still has to accept and a drafted
+event is fields somebody still has to submit, which is what bounds what a wrong reading can cost.
+[Reading a calendar event out of text](../features/calendar-event-extraction.md) describes what counts as an event,
+why a deadline is not one, which clock an hour is resolved in, and what reaches the provider.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:CalendarEventExtraction:Enabled` | bool | `false` | turning it on requires a declared model | restart |
+| `Chat:CalendarEventExtraction:Model` | block | *(empty)* | which declared model reads a text into events, as [any capability's reference](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it). Unwritten reads it with `Chat:MainModel`; a call per arriving message is the case a cheap model is declared for | reload |
 
 ### Drafting a reply — `Chat:ReplyDrafting`
 

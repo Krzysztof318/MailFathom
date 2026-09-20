@@ -414,6 +414,72 @@
         ],
         "type": "object"
       },
+      "ClientCalendarEventDraftRequest": {
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "writtenAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "description",
+          "writtenAt"
+        ],
+        "type": "object"
+      },
+      "ClientCalendarEventDraftResponse": {
+        "properties": {
+          "drafted": {
+            "type": "boolean"
+          },
+          "end": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "start": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "drafted",
+          "title",
+          "start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "ClientCalendarEventDraftingResponse": {
+        "properties": {
+          "readsDescriptions": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "readsDescriptions"
+        ],
+        "type": "object"
+      },
       "ClientCitationRequest": {
         "properties": {
           "attachmentPosition": {
@@ -13465,6 +13531,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CalendarEventResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/calendar/drafts": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCalendarEventDraftingResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientCalendarEventDraftRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCalendarEventDraftResponse"
                 }
               }
             },

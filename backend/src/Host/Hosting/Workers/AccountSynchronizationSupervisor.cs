@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Chunking;
@@ -1036,7 +1037,9 @@ internal sealed partial class AccountSynchronizationSupervisor
                     this.account.Value,
                     report.DerivedEmailCount,
                     report.MarkedEmailCount,
+                    report.ProposedEventCount,
                     report.StoppedBy,
+                    report.ProposalsStoppedBy,
                     report.EmailsRemain);
             }
         }
@@ -1836,15 +1839,17 @@ internal sealed partial class AccountSynchronizationSupervisor
         AttachmentDerivationStep derivationStep,
         AttachmentDerivationBound reachedBound);
 
-    /// <summary>Reports one account's derivations in counts alone; no mark, reason, or passage may reach a log.</summary>
+    /// <summary>Reports one account's derivations in counts alone; no mark, reason, passage, or event may reach a log.</summary>
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Derived marks for {DerivedEmailCount} messages of account {AccountId}, {MarkedEmailCount} of which carry at least one; what stopped the pass early was {StoppedBy}, empty where it ran to its own bound, and messages remain: {EmailsRemain}.")]
+        Message = "Derived marks for {DerivedEmailCount} messages of account {AccountId}, {MarkedEmailCount} of which carry at least one, and proposed {ProposedEventCount} calendar events from them; what stopped the marks early was {StoppedBy} and the proposals {ProposalsStoppedBy}, each empty where that half ran to the pass's own bound, and messages remain: {EmailsRemain}.")]
     private partial void LogMarksDerived(
         string accountId,
         int derivedEmailCount,
         int markedEmailCount,
+        int proposedEventCount,
         EmailEnrichmentWithholding? stoppedBy,
+        CalendarEventExtractionWithholding? proposalsStoppedBy,
         bool emailsRemain);
 
     [LoggerMessage(

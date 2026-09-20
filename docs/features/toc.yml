@@ -79,6 +79,9 @@
 - name: Calendar events
   href: calendar-events.md
   description: What an event this deployment holds is made of, the difference between one somebody put on their calendar and one their mail proposed, and what accepting, amending, or deleting one does.
+- name: Reading a calendar event out of text
+  href: calendar-event-extraction.md
+  description: Which occasions MailFathom reads out of an arriving message and out of a sentence somebody types, why a deadline is not one of them, which clock an hour is resolved in, and what the reading costs.
 - name: The Discover run
   href: discovery-run.md
   description: How a question and its scope become a retrieval plan and a block composition, what the model decides and what the code derives, and what a run does when no plan can be read.

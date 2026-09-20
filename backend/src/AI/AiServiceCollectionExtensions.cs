@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.BodyCleanup;
+using MailFathom.AI.CalendarEvents;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.ContactRelationships;
@@ -19,6 +20,7 @@ using MailFathom.AI.Search;
 using MailFathom.AI.ThreadStates;
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Contacts.Relationship;
 using MailFathom.Application.Discovery.Planning;
@@ -323,6 +325,43 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IThreadStateDeriver, ThreadStateAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the one way text becomes calendar events, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="isActivated">Whether the deployment declared a chat endpoint and asked for text to be read into events.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Registered on the same terms as enrichment beside it, and for the same reason: both of this port's callers need
+    /// a reason rather than an absence — the arrival pass records why a message proposed nothing, and the new-event
+    /// screen draws a form somebody fills in themselves rather than a field that fails.
+    /// </para>
+    /// <para>
+    /// One registration serves both halves, because they are one reading put to two inputs. Which of the two states is
+    /// registered is decided once, at composition, so an instance that did not ask for this never resolves a chat
+    /// client and never composes a turn out of somebody's mail or out of what they typed.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddCalendarEventExtractionAgent(
+        this IServiceCollection services,
+        bool isActivated)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (!isActivated)
+        {
+            services.AddSingleton<ICalendarEventExtractor>(InactiveCalendarEventExtractor.Instance);
+
+            return services;
+        }
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<ICalendarEventExtractor, CalendarEventExtractionAgent>();
 
         return services;
     }

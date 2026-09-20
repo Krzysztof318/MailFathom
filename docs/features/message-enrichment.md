@@ -87,6 +87,14 @@ repeats nothing and skips nothing. That is also the whole of how an existing mai
 turns enrichment on drains its stored mail over successive runs, eight messages at a time, and each run reports how far
 it got and whether more remains. There is no sweep of its own, because there is no mail the account run does not reach.
 
+**A second reading rides along where an operator turned it on.** A message this pass derives is also read into the
+calendar events it names, by the agent
+[Reading a calendar event out of text](calendar-event-extraction.md) describes, and the proposals it produced are
+stored in the same commit as the enrichment record — so a message is never listed as derived while the dates it named
+were lost. That reading is a second provider call per message and is off unless `Chat:CalendarEventExtraction:Enabled`
+says otherwise; when the provider could not answer it, the pass ends for that run and leaves the remaining messages
+outstanding rather than recording them as derived with nothing read out of them.
+
 ## What is written down and what is not
 
 Two outcomes are possible for one message, and everything downstream turns on telling them apart.

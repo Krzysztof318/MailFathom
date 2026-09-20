@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.BodyCleanup;
+using MailFathom.AI.CalendarEvents;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
@@ -13,6 +14,7 @@ using MailFathom.AI.Providers;
 using MailFathom.AI.ThreadStates;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
@@ -386,6 +388,66 @@ public sealed class AiServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => AiServiceCollectionExtensions.AddEmailEnrichmentAgent(null!, isActivated: false));
+    }
+
+    /// <summary>
+    /// The same arrangement again, and for the same reason twice over: the arrival pass needs a reason it can report,
+    /// and the new-event screen needs to know whether to offer the field at all. One registration serves both halves,
+    /// because they are one reading put to two inputs.
+    /// </summary>
+    [Fact]
+    public void AddCalendarEventExtractionAgent_NotActivated_ResolvesTheExtractorThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddCalendarEventExtractionAgent(isActivated: false);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveCalendarEventExtractor>(provider.GetRequiredService<ICalendarEventExtractor>());
+    }
+
+    /// <summary>Scoped where it is active, because each reading opens its own credential, transport, and client.</summary>
+    [Fact]
+    public void AddCalendarEventExtractionAgent_Activated_ResolvesTheAgentOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        ChatDeclarations.AddPlans(services);
+        services.AddScoped(_ => MailAnsweringRunBounds.Default);
+        services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddScoped(_ => Substitute.For<IHttpClientFactory>());
+        services.AddScoped(_ => Substitute.For<IOutboundOperationRunner>());
+        services.AddScoped(_ => Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped(_ => SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddCalendarEventExtractionAgent(isActivated: true);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var extractor = scope.ServiceProvider.GetRequiredService<ICalendarEventExtractor>();
+
+        Assert.IsType<CalendarEventExtractionAgent>(extractor);
+        Assert.Same(extractor, scope.ServiceProvider.GetRequiredService<ICalendarEventExtractor>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(extractor, second.ServiceProvider.GetRequiredService<ICalendarEventExtractor>());
+    }
+
+    [Fact]
+    public void AddCalendarEventExtractionAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddCalendarEventExtractionAgent(null!, isActivated: false));
     }
 
     /// <summary>

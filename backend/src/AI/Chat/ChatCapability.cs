@@ -52,4 +52,7 @@ public enum ChatCapability
 
     /// <summary>Deciding which blocks of a message body the third rendering keeps.</summary>
     BodyCleanup = 10,
+
+    /// <summary>Reading text into the calendar events it names, whether a message named them or somebody typed one.</summary>
+    CalendarEventExtraction = 11,
 }

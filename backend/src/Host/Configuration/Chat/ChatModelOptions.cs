@@ -102,6 +102,10 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and on is the default for the reason reply drafting is — the block itself says why, and what turning it off leaves is the contact page every deployment drew before this existed.</remarks>
     public ContactRelationshipOptions ContactRelationship { get; set; } = new();
 
+    /// <summary>Gets or sets whether text is read into the calendar events it names.</summary>
+    /// <remarks>Present rather than nullable for the reason the blocks above are, and off by default as enrichment is — the block itself says why, and what turning it off leaves is a calendar holding exactly what somebody put on it.</remarks>
+    public CalendarEventExtractionOptions CalendarEventExtraction { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the declared models and the main model together: a section declaring models nobody chose between answers no question, and a section declaring none has nothing to choose from.</remarks>
     public bool IsConfigured => this.FindMainModel() is not null;
@@ -165,6 +169,7 @@ internal sealed class ChatModelOptions : IValidatableObject
         ChatCapability.RelevanceFilter => this.RelevanceFilter.Model,
         ChatCapability.ImageDescription => this.ImageDescription.Model,
         ChatCapability.BodyCleanup => this.BodyCleanup.Model,
+        ChatCapability.CalendarEventExtraction => this.CalendarEventExtraction.Model,
         _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, "The section declares no model reference for this capability."),
     };
 
@@ -199,6 +204,7 @@ internal sealed class ChatModelOptions : IValidatableObject
                 || this.RelevanceFilter.Enabled
                 || this.Enrichment.Enabled
                 || this.ThreadState.Enabled
+                || this.CalendarEventExtraction.Enabled
                 || Enum.GetValues<ChatCapability>().Any(capability => this.ReferenceFor(capability).NamesModel))
             {
                 yield return new ValidationResult(

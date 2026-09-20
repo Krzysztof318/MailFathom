@@ -183,6 +183,12 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.SearchPhrasing)}:{nameof(MailSearchPhrasingOptions.Enabled)} — whether a typed sentence is read into filters decides whether the reader is registered at all, which is what a search screen reads to know whether to offer a description, so turning it on or off needs a restart rather than a configuration reload.");
         }
 
+        if (candidate.CalendarEventExtraction.Enabled != composed.CalendarEventExtraction.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.CalendarEventExtraction)}:{nameof(CalendarEventExtractionOptions.Enabled)} — whether text is read into calendar events decides which extractor the arrival pass and the drafting route resolve, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
         return errors;
     }
 

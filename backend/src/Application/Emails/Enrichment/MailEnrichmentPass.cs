@@ -3,13 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Enrichment;
 
-/// <summary>Derives what the account's newly cut mail is about, once per message, and writes it down.</summary>
+/// <summary>Derives what the account's newly cut mail is about and which dates it names, once per message, and writes both down.</summary>
 /// <remarks>
 /// <para>
 /// The last stage of the arrival pipeline, behind the cut, and behind it because a mark cites passages: a message
@@ -37,6 +38,20 @@ namespace MailFathom.Application.Emails.Enrichment;
 /// it on, a spent allowance, an unreachable provider — outlives one message. Asking again per remaining message would
 /// buy the same answer while the account run waits.
 /// </para>
+/// <para>
+/// <b>Reading the dates a message names runs here too</b>, on a deployment that turned it on, because it wants exactly
+/// what this pass already selected: the subject, the arrival instant, and the opening passages of mail that has been
+/// cut and settled. Running it as a pass of its own would mean a second selection over the same rows and a second
+/// record of which messages it had reached, and would make proposing events a second category of unattended spend
+/// rather than one more thing derived from a message this run already pays to read. It is admitted against the same
+/// period ceilings and counted by the same ledgers, so it declares no bound of its own.
+/// </para>
+/// <para>
+/// The two are committed together and a withheld reading ends the pass exactly as a withheld derivation does. That
+/// costs the one derivation already paid for on the message the withholding landed on, which is the honest price of
+/// the alternative being worse: a commit carrying the enrichment alone takes the message out of the selection forever,
+/// and the dates it named would never be offered to anybody.
+/// </para>
 /// </remarks>
 public sealed class MailEnrichmentPass
 {
@@ -61,14 +76,16 @@ public sealed class MailEnrichmentPass
 
     private readonly IStoredEmailEnrichmentStore enrichmentStore;
     private readonly IEmailEnricher enricher;
+    private readonly MailCalendarProposals calendarProposals;
     private readonly IMailAccountLanguages accountLanguages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
+    /// <summary>Initializes the pass from the state it walks and the two readings it asks.</summary>
     /// <param name="enrichmentStore">Reads what is awaiting a derivation and writes down what one produced.</param>
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
+    /// <param name="calendarProposals">Reads the dates one message names and writes them onto the calendars the mailbox serves.</param>
     /// <param name="accountLanguages">Answers which language the account's mail is read in.</param>
     /// <param name="egressGuard">Holds the posture the passages are scanned under while the pass runs.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
@@ -77,6 +94,7 @@ public sealed class MailEnrichmentPass
     public MailEnrichmentPass(
         IStoredEmailEnrichmentStore enrichmentStore,
         IEmailEnricher enricher,
+        MailCalendarProposals calendarProposals,
         IMailAccountLanguages accountLanguages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
@@ -84,6 +102,7 @@ public sealed class MailEnrichmentPass
     {
         ArgumentNullException.ThrowIfNull(enrichmentStore);
         ArgumentNullException.ThrowIfNull(enricher);
+        ArgumentNullException.ThrowIfNull(calendarProposals);
         ArgumentNullException.ThrowIfNull(accountLanguages);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
@@ -91,6 +110,7 @@ public sealed class MailEnrichmentPass
 
         this.enrichmentStore = enrichmentStore;
         this.enricher = enricher;
+        this.calendarProposals = calendarProposals;
         this.accountLanguages = accountLanguages;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
@@ -118,7 +138,9 @@ public sealed class MailEnrichmentPass
             return new MailEnrichmentPassReport(
                 DerivedEmailCount: 0,
                 MarkedEmailCount: 0,
+                ProposedEventCount: 0,
                 StoppedBy: EmailEnrichmentWithholding.NotActivated,
+                ProposalsStoppedBy: null,
                 EmailsRemain: false);
         }
 
@@ -138,6 +160,7 @@ public sealed class MailEnrichmentPass
 
         var derivedCount = 0;
         var markedCount = 0;
+        var proposedCount = 0;
 
         foreach (var email in batch)
         {
@@ -148,7 +171,22 @@ public sealed class MailEnrichmentPass
                 return new MailEnrichmentPassReport(
                     derivedCount,
                     markedCount,
+                    proposedCount,
                     withholding,
+                    ProposalsStoppedBy: null,
+                    EmailsRemain: true);
+            }
+
+            var proposal = await this.ReadProposalsAsync(email, cancellationToken);
+
+            if (proposal.Withheld is { } proposalWithholding)
+            {
+                return new MailEnrichmentPassReport(
+                    derivedCount,
+                    markedCount,
+                    proposedCount,
+                    StoppedBy: null,
+                    proposalWithholding,
                     EmailsRemain: true);
             }
 
@@ -159,12 +197,20 @@ public sealed class MailEnrichmentPass
 
             // Committed one message at a time rather than one batch at a time, because a derivation that is settled has
             // already been paid for: holding it until the last of the batch had answered would lose every one of them
-            // to a provider that stopped answering half way through.
-            await this.commitPolicy.CommitAsync(
-                (session, attemptCancellationToken) => this.enrichmentStore.SaveAsync(
-                    session,
-                    enrichment,
-                    attemptCancellationToken),
+            // to a provider that stopped answering half way through. The proposals join the same statement, so the
+            // record saying this message has been read and the dates it named become durable together.
+            proposedCount += await this.commitPolicy.CommitAsync(
+                async (session, attemptCancellationToken) =>
+                {
+                    await this.enrichmentStore.SaveAsync(session, enrichment, attemptCancellationToken);
+
+                    return await this.calendarProposals.StageAsync(
+                        session,
+                        account,
+                        email.StoredEmailId,
+                        proposal.Events,
+                        attemptCancellationToken);
+                },
                 cancellationToken);
 
             derivedCount++;
@@ -178,7 +224,22 @@ public sealed class MailEnrichmentPass
         return new MailEnrichmentPassReport(
             derivedCount,
             markedCount,
+            proposedCount,
             StoppedBy: null,
+            ProposalsStoppedBy: null,
             EmailsRemain: batch.Count == MaximumEmailsPerPass);
     }
+
+    /// <summary>Reads the dates one message names, where this deployment reads them at all.</summary>
+    /// <remarks>
+    /// The switch is honoured here rather than by letting the port answer, so that a deployment enriching mail without
+    /// proposing events composes no turn for the second reading and its pass is never stopped by a withholding it can
+    /// do nothing about.
+    /// </remarks>
+    private Task<CalendarEventExtraction> ReadProposalsAsync(
+        EnrichableEmail email,
+        CancellationToken cancellationToken) =>
+        this.calendarProposals.IsActive
+            ? this.calendarProposals.ReadAsync(email, cancellationToken)
+            : Task.FromResult(CalendarEventExtraction.Settled([]));
 }
