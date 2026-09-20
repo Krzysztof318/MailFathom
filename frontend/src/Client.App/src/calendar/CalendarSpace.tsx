@@ -170,9 +170,12 @@ export function CalendarSpace({
 
     // The dialog is the platform's own, so opening it is an imperative call on an element that has to exist first —
     // which is the other thing an effect is for. It runs when the opened event changes rather than on every commit.
+    // A dialog already open is never opened again: `showModal` on one throws rather than doing nothing, and an
+    // amendment written from inside it — a saved field, a reminder turned on — replaces the event it is drawing
+    // without closing it, so this runs on the way in and on nothing else.
     useEffect(() => {
-        if (opened !== null) {
-            opening.current?.showModal();
+        if (opened !== null && opening.current?.open === false) {
+            opening.current.showModal();
         }
     }, [opened]);
 

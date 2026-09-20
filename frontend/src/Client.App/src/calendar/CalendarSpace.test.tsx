@@ -410,6 +410,23 @@ describe('CalendarSpace', () => {
         expect(await screen.findByRole('dialog', { name: 'Reminders' })).toBeDefined();
     });
 
+    it('amends the event inside the dialog already drawing it, rather than opening that dialog a second time', async () => {
+        const { transport } = deployment();
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('option', { name: /Review with Anna/u }));
+
+        const opened = within(await screen.findByRole('dialog', { name: 'Review with Anna' }));
+
+        fireEvent.click(opened.getByRole('button', { name: 'Edit' }));
+        fireEvent.change(opened.getByLabelText('Title'), { target: { value: 'Review with Celina' } });
+        fireEvent.click(opened.getByRole('button', { name: 'Save' }));
+
+        // The write replaces the event the dialog is drawing while it stays open, which is what asking the platform to
+        // open it again would refuse to do.
+        expect(await screen.findByText('Saved.')).toBeDefined();
+    });
+
     it('opens a new event on the day the reader walked to, not on the one the screen was drawn on', async () => {
         const { transport } = deployment();
         drawSpace(transport);
