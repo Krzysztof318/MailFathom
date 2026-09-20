@@ -6,145 +6,206 @@ using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Signals;
+using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Discovery.Streaming;
 
-/// <summary>Covers the ordering, the bound, and the resumption a client renders one run from.</summary>
+/// <summary>Covers what one run writes down, what the hub is told about it, and what refusing a write does to the run.</summary>
 /// <remarks>
-/// What is asserted here is the contract a reconnecting client depends on: that a sequence starts at one and never
-/// skips, that reading from a stated point hands back exactly what came after it, and that a run reaching its bound
-/// still publishes an ending rather than leaving a reader waiting.
+/// What is asserted here is the contract a client depends on: that a sequence starts at one and never skips, that every
+/// write is announced as a place to read from and never as the answer, and that a run whose write is refused stops
+/// itself rather than composing into a record nobody will read.
 /// </remarks>
 public sealed class DiscoveryRunJournalTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly FakeTimeProvider clock = new(Now);
+
     /// <summary>Every event names its run and its place in it, because a client renders in arrival order without sorting.</summary>
     [Fact]
-    public void Append_SeveralEvents_StampsEachWithTheRunAndTheNextSequence()
+    public async Task AppendAsync_SeveralEvents_StampsEachWithTheRunAndTheNextSequence()
     {
         // Arrange
-        var journal = NewJournal();
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = await this.OpenedAsync(store, signals);
 
         // Act
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        await journal.AppendAsync(new DiscoveryRunStarted(), TestContext.Current.CancellationToken);
+        await journal.AppendAsync(Progressed(1), TestContext.Current.CancellationToken);
+        await journal.AppendAsync(Completed(), TestContext.Current.CancellationToken);
 
         // Assert
-        var published = Published(journal);
-        Assert.Equal([1, 2, 3], published.Select(@event => @event.Sequence));
-        Assert.All(published, @event => Assert.Equal(journal.Id, @event.RunId));
+        var written = store.Written(journal.Id);
+        Assert.Equal([1, 2, 3], written.Select(@event => @event.Sequence));
+        Assert.All(written, @event => Assert.Equal(journal.Id, @event.RunId));
     }
 
-    /// <summary>An ending is the last thing a run publishes, so a late report cannot appear after it.</summary>
+    /// <summary>A write is announced as a run and a place to read from, and never as any part of what the run composed.</summary>
     [Fact]
-    public void Append_AfterTheRunHasEnded_PublishesNothingFurther()
+    public async Task AppendAsync_ABlockComposedFromMail_AnnouncesOnlyTheRunAndTheSequenceItReached()
     {
         // Arrange
-        var journal = NewJournal();
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out var channel);
+        using var journal = await this.OpenedAsync(store, signals);
+        await journal.AppendAsync(new DiscoveryRunStarted(), TestContext.Current.CancellationToken);
 
         // Act
-        var accepted = journal.Append(Progressed(1));
+        await journal.AppendAsync(
+            new DiscoveryBlockComposed(PresentationPlanExample.EveryBlock()[0]),
+            TestContext.Current.CancellationToken);
+        this.clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var announced = Assert.Single(channel.Published, signal => signal.Sequence == 2);
+        Assert.Equal(ClientSignalKind.DiscoveryRunAdvanced, announced.Kind);
+        Assert.Equal(journal.Id, announced.Run);
+        Assert.Equal(SyntheticMailUser.Deployment, announced.User);
+        Assert.Equal(0, announced.Count);
+        Assert.Empty(announced.Emails);
+        Assert.Empty(announced.Flags);
+        Assert.Null(announced.Headline);
+        Assert.Null(announced.SecondLine);
+        Assert.Null(announced.NotificationKind);
+        Assert.Null(announced.Account);
+        Assert.Null(announced.Folder);
+    }
+
+    /// <summary>An ending is the last thing a run writes, so a late report cannot appear after it.</summary>
+    [Fact]
+    public async Task AppendAsync_AfterTheRunHasEnded_WritesNothingFurther()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = await this.OpenedAsync(store, signals);
+        await journal.AppendAsync(Completed(), TestContext.Current.CancellationToken);
+
+        // Act
+        var accepted = await journal.AppendAsync(Progressed(1), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(accepted);
-        Assert.Equal(1, journal.PublishedCount);
+        Assert.Single(store.Written(journal.Id));
         Assert.True(journal.HasEnded);
     }
 
-    /// <summary>A run that reached the bound stops composing, and the ending it reserves room for still reaches the client.</summary>
+    /// <summary>A run that reached the bound stops composing, and the ending it reserves room for is still written.</summary>
     [Fact]
-    public void Append_PastTheEventBound_RefusesEverythingButTheEnding()
+    public async Task AppendAsync_PastTheEventBound_RefusesEverythingButTheEnding()
     {
         // Arrange
-        var journal = NewJournal();
-        Enumerable.Range(0, DiscoveryRunBounds.MaximumEvents - 1)
-            .ToList()
-            .ForEach(lookup => journal.Append(Progressed(lookup)));
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = await this.OpenedAsync(store, signals);
+
+        for (var lookup = 0; lookup < DiscoveryRunBounds.MaximumEvents - 1; lookup++)
+        {
+            await journal.AppendAsync(Progressed(lookup), TestContext.Current.CancellationToken);
+        }
 
         // Act
-        var refused = journal.Append(Progressed(DiscoveryRunBounds.MaximumEvents));
-        var ending = journal.Append(new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted], [], MailAnsweringRunSpend.Nothing));
+        var refused = await journal.AppendAsync(
+            Progressed(DiscoveryRunBounds.MaximumEvents),
+            TestContext.Current.CancellationToken);
+        var ending = await journal.AppendAsync(
+            new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted], [], MailAnsweringRunSpend.Nothing),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(refused);
         Assert.True(ending);
-        Assert.Equal(DiscoveryRunBounds.MaximumEvents, journal.PublishedCount);
+        Assert.Equal(DiscoveryRunBounds.MaximumEvents, store.Written(journal.Id).Count);
     }
 
-    /// <summary>Reading from where a dropped connection left off hands back exactly what it missed, which is the whole of resumption.</summary>
+    /// <summary>A stop recorded on another replica reaches this execution as a refused write, which is what stops the spending.</summary>
     [Fact]
-    public async Task ReadFromAsync_FromAStatedPoint_ReplaysOnlyWhatCameAfterIt()
+    public async Task AppendAsync_AfterAnotherReplicaRecordedAStop_RefusesTheWriteAndStopsTheRun()
     {
         // Arrange
-        var journal = NewJournal();
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = await this.OpenedAsync(store, signals);
+        await journal.AppendAsync(new DiscoveryRunStarted(), TestContext.Current.CancellationToken);
+        await store.TryRequestStopAsync(
+            journal.Id,
+            SyntheticMailUser.Deployment,
+            Now,
+            TestContext.Current.CancellationToken);
 
         // Act
-        var resumed = await journal
-            .ReadFromAsync(afterSequence: 1, TestContext.Current.CancellationToken)
-            .ToListAsync(TestContext.Current.CancellationToken);
+        var accepted = await journal.AppendAsync(Progressed(1), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([2, 3], resumed.Select(@event => @event.Sequence));
-    }
-
-    /// <summary>A place this run never reached belongs to some other run, so the client is given this one from its beginning.</summary>
-    [Fact]
-    public async Task ReadFromAsync_APointTheRunNeverReached_ReadsTheRunFromItsBeginning()
-    {
-        // Arrange
-        var journal = NewJournal();
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
-
-        // Act
-        var resumed = await journal
-            .ReadFromAsync(afterSequence: 9, TestContext.Current.CancellationToken)
-            .ToListAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal([1, 2], resumed.Select(@event => @event.Sequence));
-    }
-
-    /// <summary>A reader attached while the run is executing is handed each event as it is published rather than at the end.</summary>
-    [Fact]
-    public async Task ReadFromAsync_WhileTheRunIsExecuting_YieldsAnEventBeforeTheRunEnds()
-    {
-        // Arrange
-        var journal = NewJournal();
-        var reader = journal
-            .ReadFromAsync(afterSequence: 0, TestContext.Current.CancellationToken)
-            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
-
-        // Act
-        journal.Append(new DiscoveryRunStarted());
-        var arrived = await reader.MoveNextAsync();
-
-        // Assert
-        Assert.True(arrived);
-        Assert.IsType<DiscoveryRunStarted>(reader.Current);
+        Assert.False(accepted);
+        Assert.True(journal.Stopping.IsCancellationRequested);
         Assert.False(journal.HasEnded);
-
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
-        await reader.DisposeAsync();
     }
 
-    private static DiscoveryRunJournal NewJournal() =>
-        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment);
+    /// <summary>A stop that lands on this replica reaches the execution directly rather than a provider call later.</summary>
+    [Fact]
+    public async Task RequestStop_OnTheReplicaExecutingTheRun_CancelsWhatTheRunIsWaitingOn()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = await this.OpenedAsync(store, signals);
+
+        // Act
+        journal.RequestStop();
+
+        // Assert
+        Assert.True(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>A run the deployment has forgotten is one nothing can be written to, and the execution stops rather than composing on.</summary>
+    [Fact]
+    public async Task AppendAsync_ForARunTheDeploymentHasForgotten_RefusesTheWriteAndStopsTheRun()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        await using var signals = this.Signals(out _);
+        using var journal = new DiscoveryRunJournal(
+            DiscoveryRunId.New(),
+            SyntheticMailUser.Deployment,
+            store,
+            signals,
+            this.clock);
+
+        // Act
+        var accepted = await journal.AppendAsync(new DiscoveryRunStarted(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(accepted);
+        Assert.True(journal.Stopping.IsCancellationRequested);
+    }
+
+    private async Task<DiscoveryRunJournal> OpenedAsync(InMemoryDiscoveryRunStore store, ClientSignals signals)
+    {
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+
+        return new DiscoveryRunJournal(id, SyntheticMailUser.Deployment, store, signals, this.clock);
+    }
+
+    private ClientSignals Signals(out RecordingClientSignalChannel channel)
+    {
+        channel = new RecordingClientSignalChannel();
+
+        return new ClientSignals([channel], this.clock);
+    }
 
     private static DiscoveryRetrievalProgressed Progressed(int lookupsRun) =>
         new(
             new DiscoveryRetrievalProgress(lookupsRun, LookupsRefused: 0, LookupsPlanned: 6, PassagesFound: 0),
             MailAnsweringRunSpend.Nothing);
 
-    private static DiscoveryRunEvent[] Published(DiscoveryRunJournal journal) =>
-        [
-            .. journal.ReadFromAsync(afterSequence: 0, TestContext.Current.CancellationToken)
-                .ToBlockingEnumerable(TestContext.Current.CancellationToken),
-        ];
+    private static DiscoveryRunCompleted Completed() => new([], [], MailAnsweringRunSpend.Nothing);
 }

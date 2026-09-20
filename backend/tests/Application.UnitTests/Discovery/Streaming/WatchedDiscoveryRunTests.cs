@@ -11,6 +11,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -18,8 +19,13 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Discovery.Streaming;
 
-/// <summary>Covers what a watched run publishes, in what order, and what it publishes instead when it ends badly.</summary>
-public sealed class StreamedDiscoveryRunTests
+/// <summary>Covers what a watched run writes, in what order, and what it writes instead when it ends badly.</summary>
+/// <remarks>
+/// One store stands for one deployment rather than one replica, which is what lets a run be read back after the
+/// execution that wrote it is over. What reaches a client alongside it is a signal naming where to read, and that
+/// signal's own contract is the journal's rather than this use case's, so the hub here reaches nobody.
+/// </remarks>
+public sealed class WatchedDiscoveryRunTests
 {
     private const int SufficientPassages = 5;
 
@@ -31,12 +37,15 @@ public sealed class StreamedDiscoveryRunTests
 
     private readonly FakeTimeProvider clock = new(DiscoveryRuns.Now);
 
+    private readonly InMemoryDiscoveryRunStore store = new();
+
+
     /// <summary>A person watching sees the run open, work, declare its sources, and only then read a block.</summary>
     [Fact]
     public async Task RunAsync_ARunThatRetrievedMail_PublishesTheOpeningTheProgressTheSourcesAndThenTheBlocks()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
@@ -44,7 +53,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var published = Published(journal);
+        var published = this.Written(journal);
         Assert.Equal(
             [
                 DiscoveryRunStarted.Kind,
@@ -64,7 +73,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatRetrievedMail_DeclaresEverySourceBeforeTheBlockNamingIt()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
@@ -72,7 +81,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var published = Published(journal);
+        var published = this.Written(journal);
         var declared = published.OfType<DiscoveryCitationDeclared>().ToArray();
         var composed = published.OfType<DiscoveryBlockComposed>().ToArray();
         Assert.True(declared.Max(@event => @event.Sequence) < composed.Min(@event => @event.Sequence));
@@ -87,7 +96,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_APlanOfSeveralLookups_ReportsRetrievalAsEachOfThemSettles()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch()
                 .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation"))
@@ -99,7 +108,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var reported = Published(journal).OfType<DiscoveryRetrievalProgressed>().Select(@event => @event.Progress);
+        var reported = this.Written(journal).OfType<DiscoveryRetrievalProgressed>().Select(@event => @event.Progress);
         Assert.Equal([1, 2], reported.Select(progress => progress.LookupsRun));
         Assert.Equal([1, 2], reported.Select(progress => progress.PassagesFound));
     }
@@ -109,7 +118,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatStoppedAtEnough_StatesThatItReadNoFurther()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch().Returning(
                 "quotation",
@@ -122,7 +131,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var completed = Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
+        var completed = Assert.IsType<DiscoveryRunCompleted>(this.Written(journal)[^1]);
         Assert.Equal([PresentationLimitation.RetrievalTruncated], completed.Limitations);
     }
 
@@ -136,15 +145,15 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatRetrievedNothing_StillCompletesWithWhatTheCompositionMadeOfIt()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch());
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
-        Assert.NotEmpty(Published(journal).OfType<DiscoveryBlockComposed>());
+        Assert.IsType<DiscoveryRunCompleted>(this.Written(journal)[^1]);
+        Assert.NotEmpty(this.Written(journal).OfType<DiscoveryBlockComposed>());
     }
 
     /// <summary>What the run read of its own accounts reaches the client too, so nothing of the plan is lost to the stream.</summary>
@@ -157,7 +166,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatRetrievedMail_EndsCarryingTheCoverageAndTheLimitationsOfItsPlan()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
@@ -166,7 +175,7 @@ public sealed class StreamedDiscoveryRunTests
 
         // Assert
         var composed = PresentationPlanExample.Compose();
-        var completed = Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
+        var completed = Assert.IsType<DiscoveryRunCompleted>(this.Written(journal)[^1]);
         Assert.Equal(composed.Coverage, completed.Coverage);
         Assert.Equal(composed.Limitations, completed.Limitations);
     }
@@ -176,8 +185,8 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ADeploymentThatAnswersNoQuestions_EndsTheRunAsUnavailable()
     {
         // Arrange
-        var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(
+        using var journal = await this.NewJournalAsync();
+        var run = new WatchedDiscoveryRun(
             DiscoveryRuns.Composing(planner: null, new ScriptedEmailKnowledgeSearch()),
             DiscoveryRuns.NewRunLedger(),
             MailAnsweringPeriodBounds.Default,
@@ -188,7 +197,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.Unavailable, Failure(journal));
+        Assert.Equal(DiscoveryRunFailure.Unavailable, this.Failure(journal));
     }
 
     /// <summary>A provider refusing right now is told apart from a deployment that answers nothing, on the stream too.</summary>
@@ -196,8 +205,8 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_AChatProviderRefusingRecently_EndsTheRunAsTemporarilyUnavailable()
     {
         // Arrange
-        var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(
+        using var journal = await this.NewJournalAsync();
+        var run = new WatchedDiscoveryRun(
             DiscoveryRuns.Composing(
                 DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
                 new ScriptedEmailKnowledgeSearch(),
@@ -211,7 +220,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.TemporarilyUnavailable, Failure(journal));
+        Assert.Equal(DiscoveryRunFailure.TemporarilyUnavailable, this.Failure(journal));
     }
 
     /// <summary>A plan the deployment refused every lookup of ends as a refusal rather than as an empty answer.</summary>
@@ -219,14 +228,14 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_EveryLookupRefused_EndsTheRunAsRefusedRetrieval()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch().Refusing("quotation"));
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.RetrievalRefused, Failure(journal));
+        Assert.Equal(DiscoveryRunFailure.RetrievalRefused, this.Failure(journal));
     }
 
     /// <summary>What the run published before it failed stays published, which is the whole of keeping what came before.</summary>
@@ -234,7 +243,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatFailedAfterReportingProgress_KeepsWhatItHadAlreadyPublished()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch().Refusing("quotation").Refusing("oferta"),
             "quotation",
@@ -246,7 +255,7 @@ public sealed class StreamedDiscoveryRunTests
         // Assert
         Assert.Equal(
             [DiscoveryRunStarted.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRunFailed.Kind],
-            Published(journal).Select(@event => @event.EventName));
+            this.Written(journal).Select(@event => @event.EventName));
     }
 
     /// <summary>A deployment stopping mid-run says so, rather than leaving a client on a connection that closes.</summary>
@@ -254,7 +263,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ADeploymentStoppingMidRun_EndsTheRunAsStopped()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new StoppedEmailKnowledgeSearch());
         using var stopped = new CancellationTokenSource();
         await stopped.CancelAsync();
@@ -263,7 +272,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, stopped.Token);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.Stopped, Failure(journal));
+        Assert.Equal(DiscoveryRunFailure.Stopped, this.Failure(journal));
     }
 
     /// <summary>A run that spent the longest one may take is told apart from one a stopping deployment cut short.</summary>
@@ -271,14 +280,14 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunSpendingTheLongestOneMayTake_EndsTheRunAsTimedOut()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new StoppedEmailKnowledgeSearch(this.clock));
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.TimedOut, Failure(journal));
+        Assert.Equal(DiscoveryRunFailure.TimedOut, this.Failure(journal));
     }
 
     /// <summary>A run somebody stopped ends as cancelled rather than as a failure, and abandons the retrieval it was waiting on.</summary>
@@ -290,17 +299,39 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunSomebodyStopped_EndsTheRunAsCancelledAndComposesNothingFurther()
     {
         // Arrange
-        using var stopping = new CancellationTokenSource();
-        await stopping.CancelAsync();
-        var journal = NewJournalStoppedBy(stopping);
+        using var journal = await this.NewJournalAsync();
+        journal.RequestStop();
         var run = this.RunOver(new StoppedEmailKnowledgeSearch());
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DiscoveryRunFailure.Cancelled, Failure(journal));
-        Assert.Empty(Published(journal).OfType<DiscoveryBlockComposed>());
+        Assert.Equal(DiscoveryRunFailure.Cancelled, this.Failure(journal));
+        Assert.Empty(this.Written(journal).OfType<DiscoveryBlockComposed>());
+    }
+
+    /// <summary>A stop landing while the run is publishing what it composed ends it as cancelled, not as completed.</summary>
+    /// <remarks>
+    /// The stop is recorded elsewhere, so this execution meets it as a refused write rather than as a cancelled token.
+    /// Reporting that as an answer that merely lost its blocks would tell somebody who stopped their run that it
+    /// finished, which is the one thing the ending is read for.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ARunStoppedWhileItPublishesWhatItComposed_EndsTheRunAsCancelled()
+    {
+        // Arrange
+        var stoppedElsewhere = new StoppedAsItStartsPublishing(this.store, SyntheticMailUser.Deployment);
+        using var journal = await this.NewJournalAsync(stoppedElsewhere);
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
+            .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.Cancelled, this.Failure(journal));
+        Assert.Empty(this.Written(journal).OfType<DiscoveryRunCompleted>());
     }
 
     /// <summary>What a stopped run had already published stays published, since none of it becomes cheaper by being discarded.</summary>
@@ -309,7 +340,8 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         using var stopping = new CancellationTokenSource();
-        var journal = NewJournalStoppedBy(stopping);
+        using var journal = await this.NewJournalAsync();
+        using var landing = stopping.Token.Register(journal.RequestStop);
         var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch()
                 .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation"))
@@ -323,7 +355,7 @@ public sealed class StreamedDiscoveryRunTests
         // Assert
         Assert.Equal(
             [DiscoveryRunStarted.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRunFailed.Kind],
-            Published(journal).Select(@event => @event.EventName));
+            this.Written(journal).Select(@event => @event.EventName));
     }
 
     /// <summary>A run states what will stop it and which model is answering, before it has spent anything.</summary>
@@ -331,7 +363,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunOpening_StatesItsCeilingsAndTheModelThatIsAnswering()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var ledger = DiscoveryRuns.NewRunLedger();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch(), ledger);
 
@@ -339,7 +371,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var started = Assert.IsType<DiscoveryRunStarted>(Published(journal)[0]);
+        var started = Assert.IsType<DiscoveryRunStarted>(this.Written(journal)[0]);
         Assert.Equal(ledger.Bounds, started.Bounds);
         Assert.Equal(Endpoint.Alias, started.EndpointAlias);
         Assert.Equal(Endpoint.PublishedModel, started.PublishedModel);
@@ -350,7 +382,7 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatRetrievedMail_ReportsWhatItHasSpentWhileItRunsAndWhenItEnds()
     {
         // Arrange
-        var journal = NewJournal();
+        using var journal = await this.NewJournalAsync();
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
@@ -358,7 +390,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var published = Published(journal);
+        var published = this.Written(journal);
         var reported = Assert.Single(published.OfType<DiscoveryRetrievalProgressed>()).Spend;
         var completed = Assert.IsType<DiscoveryRunCompleted>(published[^1]).Spend;
         Assert.Equal("the quotation".Length, reported.RetrievedCharacters);
@@ -371,8 +403,8 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_APeriodThatHasSpentItsAllowance_EndsAsPeriodSpentNamingWhenItWouldBeAdmittedAgain()
     {
         // Arrange
-        var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(
+        using var journal = await this.NewJournalAsync();
+        var run = new WatchedDiscoveryRun(
             DiscoveryRuns.Composing(
                 DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
                 new ScriptedEmailKnowledgeSearch(),
@@ -386,7 +418,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var failed = Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]);
+        var failed = Assert.IsType<DiscoveryRunFailed>(this.Written(journal)[^1]);
         Assert.Equal(DiscoveryRunFailure.PeriodSpent, failed.Failure);
         Assert.Equal(MailAnsweringPeriodBounds.Default.PeriodEndAt(DiscoveryRuns.Now), failed.RetryAt);
     }
@@ -396,8 +428,8 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunThatSpentItsOwnCeiling_EndsAsRunSpentNamingNothingToWaitFor()
     {
         // Arrange
-        var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(
+        using var journal = await this.NewJournalAsync();
+        var run = new WatchedDiscoveryRun(
             DiscoveryRuns.Composing(
                 DiscoveryRuns.PlannerRefusing(MailAnsweringBudgetExhaustedException.RunSpent()),
                 new ScriptedEmailKnowledgeSearch()),
@@ -410,7 +442,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
-        var failed = Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]);
+        var failed = Assert.IsType<DiscoveryRunFailed>(this.Written(journal)[^1]);
         Assert.Equal(DiscoveryRunFailure.RunSpent, failed.Failure);
         Assert.Null(failed.RetryAt);
     }
@@ -420,8 +452,8 @@ public sealed class StreamedDiscoveryRunTests
     public async Task RunAsync_ARunRefusedByACeiling_ReportsOnlyWhatThisRunItselfSpent()
     {
         // Arrange
-        var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(
+        using var journal = await this.NewJournalAsync();
+        var run = new WatchedDiscoveryRun(
             DiscoveryRuns.Composing(
                 DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
                 new ScriptedEmailKnowledgeSearch(),
@@ -437,7 +469,7 @@ public sealed class StreamedDiscoveryRunTests
         // Assert
         Assert.Equal(
             MailAnsweringRunSpend.Nothing,
-            Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]).Spend);
+            Assert.IsType<DiscoveryRunFailed>(this.Written(journal)[^1]).Spend);
     }
 
     /// <summary>Retrieval as it behaves for a run that has been stopped, whether by a shutdown or by its own bound.</summary>
@@ -461,22 +493,22 @@ public sealed class StreamedDiscoveryRunTests
         }
     }
 
-    private StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search) =>
+    private WatchedDiscoveryRun RunOver(IEmailKnowledgeSearch search) =>
         this.RunOver(search, SufficientPassages, "quotation");
 
-    private StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search, params string[] queries) =>
+    private WatchedDiscoveryRun RunOver(IEmailKnowledgeSearch search, params string[] queries) =>
         this.RunOver(search, SufficientPassages, queries);
 
-    private StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search, MailAnsweringRunLedger ledger) =>
+    private WatchedDiscoveryRun RunOver(IEmailKnowledgeSearch search, MailAnsweringRunLedger ledger) =>
         this.RunOver(search, SufficientPassages, ledger, "quotation");
 
-    private StreamedDiscoveryRun RunOver(
+    private WatchedDiscoveryRun RunOver(
         IEmailKnowledgeSearch search,
         int sufficientPassages,
         params string[] queries) =>
         this.RunOver(search, sufficientPassages, DiscoveryRuns.NewRunLedger(), queries);
 
-    private StreamedDiscoveryRun RunOver(
+    private WatchedDiscoveryRun RunOver(
         IEmailKnowledgeSearch search,
         int sufficientPassages,
         MailAnsweringRunLedger ledger,
@@ -491,18 +523,60 @@ public sealed class StreamedDiscoveryRunTests
             this.clock,
             Endpoint);
 
-    private static DiscoveryRunJournal NewJournal() =>
-        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment);
+    /// <summary>Opens a run in the store and hands back the journal the execution writes it through.</summary>
+    private Task<DiscoveryRunJournal> NewJournalAsync() => this.NewJournalAsync(this.store);
 
-    private static DiscoveryRunJournal NewJournalStoppedBy(CancellationTokenSource stopping) =>
-        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment, stopping.Token);
+    /// <summary>Opens a run and writes it through a store of the caller's choosing.</summary>
+    private async Task<DiscoveryRunJournal> NewJournalAsync(IDiscoveryRunStore store)
+    {
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(
+            id,
+            SyntheticMailUser.Deployment,
+            DiscoveryRuns.Now,
+            TestContext.Current.CancellationToken);
 
-    private static DiscoveryRunFailure Failure(DiscoveryRunJournal journal) =>
-        Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]).Failure;
+        return new DiscoveryRunJournal(
+            id,
+            SyntheticMailUser.Deployment,
+            store,
+            ClientSignalPublishers.ReachingNobody,
+            this.clock);
+    }
 
-    private static DiscoveryRunEvent[] Published(DiscoveryRunJournal journal) =>
-    [
-        .. journal.ReadFromAsync(afterSequence: 0, TestContext.Current.CancellationToken)
-            .ToBlockingEnumerable(TestContext.Current.CancellationToken),
-    ];
+    private DiscoveryRunFailure Failure(DiscoveryRunJournal journal) =>
+        Assert.IsType<DiscoveryRunFailed>(this.Written(journal)[^1]).Failure;
+
+    private IReadOnlyList<DiscoveryRunEvent> Written(DiscoveryRunJournal journal) => this.store.Written(journal.Id);
+
+    /// <summary>Stands for another replica recording a stop the moment this one starts publishing what it composed.</summary>
+    /// <remarks>
+    /// The stop is written into the store rather than raised on the journal, because a run stopped elsewhere is exactly
+    /// the case this execution cannot see coming: nothing local is cancelled, the retrieval finishes, and the first
+    /// thing to know about it is the refused write.
+    /// </remarks>
+    private sealed class StoppedAsItStartsPublishing(InMemoryDiscoveryRunStore store, MailUserId user) : IDiscoveryRunStore
+    {
+        public Task<bool> TryOpenAsync(DiscoveryRunId id, MailUserId opening, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.TryOpenAsync(id, opening, now, cancellationToken);
+
+        public async Task<long?> AppendAsync(DiscoveryRunId id, DiscoveryRunEvent written, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            if (written is DiscoveryCitationDeclared or DiscoveryBlockComposed)
+            {
+                await store.TryRequestStopAsync(id, user, now, cancellationToken);
+            }
+
+            return await store.AppendAsync(id, written, now, cancellationToken);
+        }
+
+        public Task<DiscoveryRunReading?> ReadAsync(DiscoveryRunId id, MailUserId reading, long afterSequence, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.ReadAsync(id, reading, afterSequence, now, cancellationToken);
+
+        public Task<bool> TryRequestStopAsync(DiscoveryRunId id, MailUserId stopping, DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.TryRequestStopAsync(id, stopping, now, cancellationToken);
+
+        public Task<int> RemoveForgottenAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+            store.RemoveForgottenAsync(now, cancellationToken);
+    }
 }

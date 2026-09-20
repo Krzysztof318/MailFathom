@@ -22,11 +22,19 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
 
-/// <summary>Covers what the three Discover routes accept off the wire, what they refuse, and what a reader is streamed.</summary>
+/// <summary>Covers what the three Discover routes accept off the wire, what they refuse, and what a reader is handed back.</summary>
 /// <remarks>
+/// <para>
 /// The run itself is covered where it happens. What is asserted here is the transport: which questions are refused
 /// before a run is opened at all, that a run belongs to the user who asked for it whether it is being read or stopped,
-/// and that a reconnecting client stating where it left off is given what it missed rather than the run over again.
+/// and that a client holding a cursor is given the tail rather than the run over again.
+/// </para>
+/// <para>
+/// <strong>The replica that did not start the run is the shape most of these are written in.</strong> Reading and
+/// stopping are given the store alone, with nothing registered as executing here, which is exactly what a request
+/// routed to any other replica meets — so a route that only worked where the run was composed fails these rather than
+/// passing until somebody raises the replica count.
+/// </para>
 /// </remarks>
 public sealed class ClientDiscoveryRunEndpointTests
 {
@@ -37,28 +45,28 @@ public sealed class ClientDiscoveryRunEndpointTests
     public void DiscoveryRunsRoute_IsThePathAClientComposes() =>
         Assert.Equal("/discovery/runs", ClientDiscoveryRunEndpoints.DiscoveryRunsRoute);
 
-    /// <summary>The reading path is composed by a client too, and a browser's own reconnection re-requests exactly it.</summary>
+    /// <summary>Reading and stopping are one address, which a client composes from a constant of its own.</summary>
     [Fact]
-    public void DiscoveryRunEventsRoute_IsThePathAClientComposes() =>
-        Assert.Equal("/discovery/runs/{runId:guid}/events", ClientDiscoveryRunEndpoints.DiscoveryRunEventsRoute);
+    public void DiscoveryRunRoute_IsThePathAClientComposes() =>
+        Assert.Equal("/discovery/runs/{runId:guid}", ClientDiscoveryRunEndpoints.DiscoveryRunRoute);
 
     /// <summary>A question the user may ask opens a run and answers with where that run is read, which is all a client needs.</summary>
     [Fact]
-    public void Start_AQuestionOverTheUsersOwnMail_OpensARunAndNamesWhereItIsRead()
+    public async Task Start_AQuestionOverTheUsersOwnMail_OpensARunAndNamesWhereItIsRead()
     {
         // Arrange
-        var registry = NewRegistry();
+        var store = new InMemoryDiscoveryRunStore();
 
         // Act
-        var answered = Start(new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null), registry);
+        var answered = await StartAsync(
+            new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
+            store);
 
         // Assert
         var accepted = Assert.IsType<Accepted<ClientDiscoveryRunResponse>>(answered.Result);
         Assert.NotNull(accepted.Value);
-        Assert.Equal(1, registry.HeldCount);
-        Assert.Equal(
-            $"/api/client/discovery/runs/{accepted.Value.RunId}/events",
-            accepted.Location);
+        Assert.Equal(1, store.HeldCount);
+        Assert.Equal($"/api/client/discovery/runs/{accepted.Value.RunId}", accepted.Location);
     }
 
     /// <summary>A question with no text is refused where a person can act on it rather than opening a run that fails at once.</summary>
@@ -66,17 +74,17 @@ public sealed class ClientDiscoveryRunEndpointTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Start_AQuestionCarryingNoText_RefusesItBeforeOpeningARun(string? question)
+    public async Task Start_AQuestionCarryingNoText_RefusesItBeforeOpeningARun(string? question)
     {
         // Arrange
-        var registry = NewRegistry();
+        var store = new InMemoryDiscoveryRunStore();
 
         // Act
-        var answered = Start(new ClientDiscoveryRunRequest(question, null, null, null, null), registry);
+        var answered = await StartAsync(new ClientDiscoveryRunRequest(question, null, null, null, null), store);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
-        Assert.Equal(0, registry.HeldCount);
+        Assert.Equal(0, store.HeldCount);
     }
 
     /// <summary>A role no account maps a folder with is a question to correct, not a fault in the deployment.</summary>
@@ -87,145 +95,208 @@ public sealed class ClientDiscoveryRunEndpointTests
     /// promises it will not answer with.
     /// </remarks>
     [Fact]
-    public void Start_ARoleNoAccountMapsAFolderWith_RefusesTheQuestion()
+    public async Task Start_ARoleNoAccountMapsAFolderWith_RefusesTheQuestion()
     {
         // Arrange
-        var registry = NewRegistry();
+        var store = new InMemoryDiscoveryRunStore();
 
         // Act
-        var answered = Start(
+        var answered = await StartAsync(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, ["role:Junk"], null, null),
-            registry);
+            store);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
-        Assert.Equal(0, registry.HeldCount);
+        Assert.Equal(0, store.HeldCount);
     }
 
     /// <summary>An account this user is not assigned is refused as a request to change rather than narrowed away in silence.</summary>
     [Fact]
-    public void Start_AnAccountThisUserDoesNotOwn_RefusesTheQuestion()
+    public async Task Start_AnAccountThisUserDoesNotOwn_RefusesTheQuestion()
     {
         // Arrange
-        var registry = NewRegistry();
+        var store = new InMemoryDiscoveryRunStore();
 
         // Act
-        var answered = Start(
+        var answered = await StartAsync(
             new ClientDiscoveryRunRequest("which supplier quoted least", ["somebody-elses"], null, null, null),
-            registry);
+            store);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
-        Assert.Equal(0, registry.HeldCount);
+        Assert.Equal(0, store.HeldCount);
     }
 
     /// <summary>A run executes as whoever asked for it, so a request the transport admitted nobody for opens none.</summary>
     [Fact]
-    public void Start_ARequestNoPrincipalWasAdmittedFor_RefusesTheQuestion()
+    public async Task Start_ARequestNoPrincipalWasAdmittedFor_RefusesTheQuestion()
     {
         // Arrange
-        var registry = NewRegistry();
+        var store = new InMemoryDiscoveryRunStore();
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns((AuthorizedPrincipal?)null);
 
         // Act
-        var answered = ClientDiscoveryRunEndpoints.Start(
+        var answered = await ClientDiscoveryRunEndpoints.Start(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
             ResolverFor(SyntheticMailUser.Deployment),
             principals,
-            registry,
-            LauncherOver(registry));
+            store,
+            new FakeTimeProvider(Now),
+            Launcher(),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
-        Assert.Equal(0, registry.HeldCount);
+        Assert.Equal(0, store.HeldCount);
     }
 
-    /// <summary>A client looping over the asking route is told to wait rather than being allowed to fill this process.</summary>
+    /// <summary>A client looping over the asking route is told to wait, and the number it is told is this person's across the deployment.</summary>
     [Fact]
-    public void Start_BeyondWhatThisProcessRunsAtOnce_RefusesWithTooManyRequests()
+    public async Task Start_BeyondWhatOnePersonRunsAtOnce_RefusesWithTooManyRequests()
     {
         // Arrange
-        var registry = NewRegistry();
-        Enumerable.Range(0, DiscoveryRunBounds.MaximumConcurrentRuns)
-            .ToList()
-            .ForEach(run => registry.TryOpen(SyntheticMailUser.Deployment, out _));
+        var store = new InMemoryDiscoveryRunStore();
+
+        for (var run = 0; run < DiscoveryRunBounds.MaximumConcurrentRunsPerUser; run++)
+        {
+            await store.TryOpenAsync(
+                DiscoveryRunId.New(),
+                SyntheticMailUser.Deployment,
+                Now,
+                TestContext.Current.CancellationToken);
+        }
 
         // Act
-        var answered = Start(new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null), registry);
+        var answered = await StartAsync(
+            new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
+            store);
 
         // Assert
-        Assert.Equal(
-            StatusCodes.Status429TooManyRequests,
-            Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
+        var refused = Assert.IsType<ProblemHttpResult>(answered.Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.StatusCode);
+        Assert.Contains(
+            $"{DiscoveryRunBounds.MaximumConcurrentRunsPerUser} questions at once",
+            refused.ProblemDetails.Detail,
+            StringComparison.Ordinal);
     }
 
     /// <summary>An identifier alone says nothing about whether a run exists, so somebody else's reads as no such run.</summary>
     [Fact]
-    public void Watch_ARunAnotherUserStarted_ReportsNoSuchRun()
+    public async Task Read_ARunAnotherUserStarted_ReportsNoSuchRun()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Another, out var journal);
-        Assert.NotNull(journal);
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Another);
 
         // Act
-        var answered = Watch(journal.Id.Value, registry);
+        var answered = await ReadAsync(id.Value, store);
 
         // Assert
         Assert.IsType<NotFound>(answered.Result);
     }
 
-    /// <summary>An identifier no run could carry is answered as no such run rather than reaching the registry at all.</summary>
+    /// <summary>An identifier no run could carry is answered as no such run rather than reaching the store at all.</summary>
     [Fact]
-    public void Watch_AnIdentifierNoRunCouldCarry_ReportsNoSuchRun() =>
-        Assert.IsType<NotFound>(Watch(Guid.Empty, NewRegistry()).Result);
+    public async Task Read_AnIdentifierNoRunCouldCarry_ReportsNoSuchRun() =>
+        Assert.IsType<NotFound>((await ReadAsync(Guid.Empty, new InMemoryDiscoveryRunStore())).Result);
 
-    /// <summary>Each event reaches the client under its own sequence and its own name, which is what a client renders on.</summary>
+    /// <summary>A run is read whole by a replica that never executed it, which is the whole of what a durable run buys.</summary>
     [Fact]
-    public async Task Watch_ARunThisUserHolds_StreamsEveryEventUnderItsSequenceAndItsName()
+    public async Task Read_ByAReplicaThatDidNotStartTheRun_ReturnsEveryEventAndSaysTheRunIsOver()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
 
         // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+        var answered = await ReadAsync(id.Value, store);
 
         // Assert
-        Assert.Contains("id: 1", streamed, StringComparison.Ordinal);
-        Assert.Contains($"event: {DiscoveryRunStarted.Kind}", streamed, StringComparison.Ordinal);
-        Assert.Contains("id: 2", streamed, StringComparison.Ordinal);
-        Assert.Contains($"event: {DiscoveryRunCompleted.Kind}", streamed, StringComparison.Ordinal);
+        var read = Assert.IsType<Ok<ClientDiscoveryRunReadResponse>>(answered.Result);
+        Assert.NotNull(read.Value);
+        Assert.Equal([1L, 2L], read.Value.Events.Select(@event => @event.Sequence));
+        Assert.False(read.Value.Running);
+    }
+
+    /// <summary>A client holding a cursor is given the tail, which is what makes a burst of advances cost one read.</summary>
+    [Fact]
+    public async Task Read_FromACursor_ReturnsOnlyWhatCameAfterIt()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+
+        // Act
+        var answered = await ReadAsync(id.Value, store, since: 1);
+
+        // Assert
+        var read = Assert.IsType<Ok<ClientDiscoveryRunReadResponse>>(answered.Result);
+        Assert.NotNull(read.Value);
+        Assert.Equal([2L], read.Value.Events.Select(@event => @event.Sequence));
+    }
+
+    /// <summary>A run still executing says so, which is what tells a client watching it to expect more.</summary>
+    [Fact]
+    public async Task Read_ARunStillExecuting_SaysItIsStillRunning()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
+
+        // Act
+        var answered = await ReadAsync(id.Value, store);
+
+        // Assert
+        var read = Assert.IsType<Ok<ClientDiscoveryRunReadResponse>>(answered.Result);
+        Assert.NotNull(read.Value);
+        Assert.True(read.Value.Running);
+    }
+
+    /// <summary>A cursor naming a place this run never reached belongs to some other run, so the run is read whole.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(9)]
+    public async Task Read_ACursorNamingNoPlaceInThisRun_ReadsTheRunFromItsBeginning(int? since)
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+
+        // Act
+        var answered = await ReadAsync(id.Value, store, since);
+
+        // Assert
+        var read = Assert.IsType<Ok<ClientDiscoveryRunReadResponse>>(answered.Result);
+        Assert.NotNull(read.Value);
+        Assert.Equal([1L, 2L], read.Value.Events.Select(@event => @event.Sequence));
     }
 
     /// <summary>An event names its kind once and carries nothing of how this process reads the run it belongs to.</summary>
     /// <remarks>
-    /// The name and the ending are read in process — one names the transport's own field, the other stops the journal —
+    /// The name and the ending are read in process — one names a row's own kind column, the other stops the journal —
     /// and neither is part of what a client is told, which the discriminator already carries. The serializer reads the
     /// attribute that keeps them out off the member being written rather than off the one it overrides, so this is what
     /// fails when an event is added without repeating it.
     /// </remarks>
     [Fact]
-    public async Task Watch_ARunThisUserHolds_WritesTheKindOnceAndNothingThisProcessReadsTheRunBy()
+    public async Task Read_ARunThisUserHolds_WritesTheKindOnceAndNothingThisProcessReadsTheRunBy()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
 
         // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+        var body = await ReadBodyAsync(id.Value, store);
 
         // Assert
-        Assert.Contains($"\"event\":\"{DiscoveryRunStarted.Kind}\"", streamed, StringComparison.Ordinal);
-        Assert.DoesNotContain("eventName", streamed, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("endsTheRun", streamed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"\"event\":\"{DiscoveryRunStarted.Kind}\"", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("eventName", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("endsTheRun", body, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Why a run ended crosses the wire as the word a client branches on, which is the enum member's own name.</summary>
@@ -235,200 +306,218 @@ public sealed class ClientDiscoveryRunEndpointTests
     /// matching a differently-cased word would fall through every branch it has and offer nothing.
     /// </remarks>
     [Fact]
-    public async Task Watch_ARunThatEndedBadly_WritesWhyAsTheClosedValuesOwnName()
+    public async Task Read_ARunThatEndedBadly_WritesWhyAsTheClosedValuesOwnName()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut, MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(
+            id,
+            new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut, MailAnsweringRunSpend.Nothing),
+            Now,
+            TestContext.Current.CancellationToken);
 
         // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+        var body = await ReadBodyAsync(id.Value, store);
 
         // Assert
-        Assert.Contains("\"failure\":\"TimedOut\"", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"failure\":\"TimedOut\"", body, StringComparison.Ordinal);
     }
 
     /// <summary>What the run read of each account reaches the client on the ending, under the names the contract gives it.</summary>
     /// <remarks>
     /// Coverage is the part of the plan that never arrives as a block, so a client that ignored the ending would draw an
-    /// answer without saying how current the mail behind it was. The names are asserted against the stream rather than
+    /// answer without saying how current the mail behind it was. The names are asserted against the response rather than
     /// read off the type, because the serializer's own decisions are visible nowhere else.
     /// </remarks>
     [Fact]
-    public async Task Watch_ARunThatCompleted_WritesWhatItReadOfEachAccountOnTheEnding()
+    public async Task Read_ARunThatCompleted_WritesWhatItReadOfEachAccountOnTheEnding()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted(
-            [],
-            [
-                new AccountCoverage(
-                    PresentationText.Create("work"),
-                    PresentationFreshness.CurrentAt(Now),
-                    Now.AddDays(-30),
-                    Now),
-            ],
-            MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(
+            id,
+            new DiscoveryRunCompleted(
+                [],
+                [
+                    new AccountCoverage(
+                        PresentationText.Create("work"),
+                        PresentationFreshness.CurrentAt(Now),
+                        Now.AddDays(-30),
+                        Now),
+                ],
+                MailAnsweringRunSpend.Nothing),
+            Now,
+            TestContext.Current.CancellationToken);
 
         // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+        var body = await ReadBodyAsync(id.Value, store);
 
         // Assert
-        Assert.Contains("\"coverage\":[{", streamed, StringComparison.Ordinal);
-        Assert.Contains("\"account\":\"work\"", streamed, StringComparison.Ordinal);
-        Assert.Contains("\"staleness\":\"Current\"", streamed, StringComparison.Ordinal);
-        Assert.Contains("\"earliestReceivedAt\":", streamed, StringComparison.Ordinal);
-        Assert.Contains("\"latestReceivedAt\":", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"coverage\":[{", body, StringComparison.Ordinal);
+        Assert.Contains("\"account\":\"work\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"staleness\":\"Current\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"earliestReceivedAt\":", body, StringComparison.Ordinal);
+        Assert.Contains("\"latestReceivedAt\":", body, StringComparison.Ordinal);
     }
 
-    /// <summary>A dropped connection is resumed from the place the protocol's own header states, so nothing is sent twice.</summary>
+    /// <summary>A stop landing on the replica executing the run reaches the work as well as the record.</summary>
     [Fact]
-    public async Task Watch_AClientStatingWhereItLeftOff_StreamsOnlyWhatItMissed()
+    public async Task Stop_OnTheReplicaExecutingTheRun_RecordsItAndCancelsWhatTheRunIsWaitingOn()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated], [], MailAnsweringRunSpend.Nothing));
+        var store = new InMemoryDiscoveryRunStore();
+        var executing = new ExecutingDiscoveryRuns();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+
+        using var journal = new DiscoveryRunJournal(
+            id,
+            SyntheticMailUser.Deployment,
+            store,
+            ClientSignalPublishers.ReachingNobody,
+            new FakeTimeProvider(Now));
+        executing.Register(journal);
 
         // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom: "1");
-
-        // Assert
-        Assert.DoesNotContain($"event: {DiscoveryRunStarted.Kind}", streamed, StringComparison.Ordinal);
-        Assert.Contains("id: 2", streamed, StringComparison.Ordinal);
-        Assert.Contains($"event: {DiscoveryRunCompleted.Kind}", streamed, StringComparison.Ordinal);
-    }
-
-    /// <summary>A header naming a place this run never reached belongs to some other run, so the run is streamed whole.</summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("not a sequence")]
-    [InlineData("-1")]
-    [InlineData("9")]
-    public async Task Watch_AHeaderNamingNoPlaceInThisRun_StreamsTheRunFromItsBeginning(string resumedFrom)
-    {
-        // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
-
-        // Act
-        var streamed = await StreamedBody(journal, registry, resumedFrom);
-
-        // Assert
-        Assert.Contains("id: 1", streamed, StringComparison.Ordinal);
-    }
-
-    /// <summary>Stopping is a client-composed path too, and it is the same run address the reading path is built on.</summary>
-    [Fact]
-    public void DiscoveryRunRoute_IsThePathAClientComposes() =>
-        Assert.Equal("/discovery/runs/{runId:guid}", ClientDiscoveryRunEndpoints.DiscoveryRunRoute);
-
-    /// <summary>A run this user started is stopped and answered with nothing, which is all a client that stopped reading needs.</summary>
-    [Fact]
-    public void Stop_ARunThisUserHolds_StopsItAndAnswersWithNoContent()
-    {
-        // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
-        Assert.NotNull(journal);
-
-        // Act
-        var answered = Stop(journal.Id.Value, registry);
+        var answered = await StopAsync(id.Value, store, executing);
 
         // Assert
         Assert.IsType<NoContent>(answered.Result);
+        Assert.True(store.WasAskedToStop(id));
         Assert.True(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>A stop landing on a replica that is executing nothing is still answered, because the record is what reaches the run.</summary>
+    [Fact]
+    public async Task Stop_OnAReplicaThatDidNotStartTheRun_RecordsItAndAnswersWithNoContent()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+
+        // Act
+        var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
+
+        // Assert
+        Assert.IsType<NoContent>(answered.Result);
+        Assert.True(store.WasAskedToStop(id));
+    }
+
+    /// <summary>A run that finished a moment earlier is stopped successfully, because whoever asked could not have known.</summary>
+    [Fact]
+    public async Task Stop_ARunThatHasAlreadyEnded_AnswersWithNoContentAndRecordsNoStop()
+    {
+        // Arrange
+        var store = new InMemoryDiscoveryRunStore();
+        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+
+        // Act
+        var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
+
+        // Assert
+        Assert.IsType<NoContent>(answered.Result);
+        Assert.False(store.WasAskedToStop(id));
     }
 
     /// <summary>An identifier is a bearer value, so stopping somebody else's run reads as no such run and leaves it running.</summary>
     [Fact]
-    public void Stop_ARunAnotherUserStarted_ReportsNoSuchRunAndLeavesItRunning()
+    public async Task Stop_ARunAnotherUserStarted_ReportsNoSuchRunAndLeavesItRunning()
     {
         // Arrange
-        var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailUser.Another, out var journal);
-        Assert.NotNull(journal);
+        var store = new InMemoryDiscoveryRunStore();
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, SyntheticMailUser.Another, Now, TestContext.Current.CancellationToken);
 
         // Act
-        var answered = Stop(journal.Id.Value, registry);
+        var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
 
         // Assert
         Assert.IsType<NotFound>(answered.Result);
-        Assert.False(journal.Stopping.IsCancellationRequested);
+        Assert.False(store.WasAskedToStop(id));
     }
 
-    /// <summary>An identifier no run could carry is answered as no such run rather than reaching the registry at all.</summary>
+    /// <summary>An identifier no run could carry is answered as no such run rather than reaching the store at all.</summary>
     [Fact]
-    public void Stop_AnIdentifierNoRunCouldCarry_ReportsNoSuchRun() =>
-        Assert.IsType<NotFound>(Stop(Guid.Empty, NewRegistry()).Result);
+    public async Task Stop_AnIdentifierNoRunCouldCarry_ReportsNoSuchRun() =>
+        Assert.IsType<NotFound>(
+            (await StopAsync(Guid.Empty, new InMemoryDiscoveryRunStore(), new ExecutingDiscoveryRuns())).Result);
 
-    private static Results<NoContent, NotFound> Stop(Guid runId, DiscoveryRunRegistry registry) =>
-        ClientDiscoveryRunEndpoints.Stop(runId, ResolverFor(SyntheticMailUser.Deployment), registry);
+    private static Task<Results<NoContent, NotFound>> StopAsync(
+        Guid runId,
+        InMemoryDiscoveryRunStore store,
+        ExecutingDiscoveryRuns executing) =>
+        ClientDiscoveryRunEndpoints.Stop(
+            runId,
+            ResolverFor(SyntheticMailUser.Deployment),
+            store,
+            executing,
+            new FakeTimeProvider(Now),
+            TestContext.Current.CancellationToken);
 
-    private static Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult> Start(
+    private static Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> StartAsync(
         ClientDiscoveryRunRequest request,
-        DiscoveryRunRegistry registry) =>
+        InMemoryDiscoveryRunStore store) =>
         ClientDiscoveryRunEndpoints.Start(
             request,
             ResolverFor(SyntheticMailUser.Deployment),
             AdmittedCaller(SyntheticMailUser.Deployment),
-            registry,
-            LauncherOver(registry));
+            store,
+            new FakeTimeProvider(Now),
+            Launcher(),
+            TestContext.Current.CancellationToken);
 
-    private static Results<ServerSentEventsResult<DiscoveryRunEvent>, NotFound> Watch(
+    private static Task<Results<Ok<ClientDiscoveryRunReadResponse>, NotFound>> ReadAsync(
         Guid runId,
-        DiscoveryRunRegistry registry,
-        HttpContext? context = null) =>
-        ClientDiscoveryRunEndpoints.Watch(
+        InMemoryDiscoveryRunStore store,
+        long? since = null) =>
+        ClientDiscoveryRunEndpoints.Read(
             runId,
-            context ?? new DefaultHttpContext(),
+            since,
             ResolverFor(SyntheticMailUser.Deployment),
-            registry);
+            store,
+            new FakeTimeProvider(Now),
+            TestContext.Current.CancellationToken);
 
-    /// <summary>Runs the streaming result against a request stating where the caller left off, and reads what went out.</summary>
+    /// <summary>Runs the read's result against a request and reads what went out.</summary>
     /// <remarks>
-    /// The result is executed rather than inspected, because what a client reads is the protocol's own framing — the
-    /// identifier and the name each event carries — and that exists only once the result has written it.
+    /// The result is executed rather than inspected, because what a client reads is the serializer's own decisions about
+    /// the events inside it, and those exist only once the result has written them.
     /// </remarks>
-    private static async Task<string> StreamedBody(DiscoveryRunJournal journal, DiscoveryRunRegistry registry, string? resumedFrom)
+    private static async Task<string> ReadBodyAsync(Guid runId, InMemoryDiscoveryRunStore store)
     {
+        var answered = await ReadAsync(runId, store);
         var body = new MemoryStream();
-        var context = ReadingContext(resumedFrom);
-        context.Response.Body = body;
-
-        var answered = Watch(journal.Id.Value, registry, context);
-        await Assert.IsType<ServerSentEventsResult<DiscoveryRunEvent>>(answered.Result).ExecuteAsync(context);
-
-        return Encoding.UTF8.GetString(body.ToArray());
-    }
-
-    private static DefaultHttpContext ReadingContext(string? resumedFrom)
-    {
         var context = new DefaultHttpContext
         {
             RequestServices = new ServiceCollection().AddLogging().BuildServiceProvider(),
         };
+        context.Response.Body = body;
 
-        if (resumedFrom is not null)
-        {
-            context.Request.Headers["Last-Event-ID"] = resumedFrom;
-        }
+        await Assert.IsType<Ok<ClientDiscoveryRunReadResponse>>(answered.Result).ExecuteAsync(context);
 
-        return context;
+        return Encoding.UTF8.GetString(body.ToArray());
     }
 
-    private static DiscoveryRunRegistry NewRegistry() => new(new FakeTimeProvider(Now));
+    private static async Task<DiscoveryRunId> WrittenRunAsync(InMemoryDiscoveryRunStore store, MailUserId user)
+    {
+        var id = DiscoveryRunId.New();
+        await store.TryOpenAsync(id, user, Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
+        await store.AppendAsync(
+            id,
+            new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing),
+            Now,
+            TestContext.Current.CancellationToken);
+
+        return id;
+    }
 
     private static IAuthorizedPrincipalSource AdmittedCaller(MailUserId user)
     {
@@ -448,10 +537,20 @@ public sealed class ClientDiscoveryRunEndpointTests
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);
 
-    private static DiscoveryRunLauncher LauncherOver(DiscoveryRunRegistry registry) =>
+    /// <summary>Builds the launcher the asking route hands a run to, over a store of its own.</summary>
+    /// <remarks>
+    /// What these tests assert is what the route answered with, and the execution it starts is nobody's subject here —
+    /// it is covered where it happens. So the launcher is given a store nothing opened the run in, which refuses every
+    /// write it attempts: the run this class is asserting about is left exactly as the route wrote it, rather than
+    /// being written to from a background task while an assertion reads it.
+    /// </remarks>
+    private static DiscoveryRunLauncher Launcher() =>
         new(
             Substitute.For<IServiceScopeFactory>(),
-            registry,
+            new InMemoryDiscoveryRunStore(),
+            ClientSignalPublishers.ReachingNobody,
+            new ExecutingDiscoveryRuns(),
             Substitute.For<IHostApplicationLifetime>(),
+            new FakeTimeProvider(Now),
             NullLogger<DiscoveryRunLauncher>.Instance);
 }

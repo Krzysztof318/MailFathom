@@ -63,17 +63,19 @@ public sealed class PlannedMailRetrieval
     /// than handed an empty result that reads as a mailbox holding nothing.
     /// </para>
     /// <para>
-    /// The progress callback is a plain delegate rather than an <see cref="IProgress{T}" />, and it is called on the
-    /// thread the lookup finished on. That is the whole reason: the standard implementation posts each report to a
+    /// The progress callback is a plain delegate rather than an <see cref="IProgress{T}" />, and each report is awaited
+    /// before the next lookup is issued. That is the whole reason: the standard implementation posts each report to a
     /// synchronization context or to the thread pool, so two reports can be observed in the order they were scheduled
-    /// rather than the order they were made — and a caller turning them into a numbered event stream would publish a
-    /// plan that went backwards. A caller wanting them elsewhere hands over a delegate that puts them there.
+    /// rather than the order they were made — and a caller turning them into a numbered sequence would write a plan
+    /// that went backwards. Awaiting is what extends that property to a caller whose report is a write: two writes
+    /// never overlap, so the run stays the one writer of its own record. A caller wanting them elsewhere hands over a
+    /// delegate that puts them there.
     /// </para>
     /// </remarks>
     public async Task<DiscoveryEvidence> RetrieveAsync(
         MailQuestion question,
         RetrievalPlan plan,
-        Action<DiscoveryRetrievalProgress>? progress,
+        Func<DiscoveryRetrievalProgress, Task>? progress,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
@@ -97,7 +99,7 @@ public sealed class PlannedMailRetrieval
             {
                 lastRefusal = refusal;
                 lookupsRefused++;
-                Report();
+                await ReportAsync();
 
                 continue;
             }
@@ -130,7 +132,7 @@ public sealed class PlannedMailRetrieval
 
             found.AddRange(this.ledger.AdmitPassages(candidates));
 
-            Report();
+            await ReportAsync();
 
             if (found.Count >= plan.SufficientPassages || this.ledger.RetrievalWasTruncated)
             {
@@ -152,10 +154,10 @@ public sealed class PlannedMailRetrieval
             lookupsRefused,
             this.ledger.RetrievalWasTruncated);
 
-        void Report() => progress?.Invoke(new DiscoveryRetrievalProgress(
+        Task ReportAsync() => progress?.Invoke(new DiscoveryRetrievalProgress(
             lookupsRun,
             lookupsRefused,
             plan.Lookups.Count,
-            Math.Min(found.Count, plan.SufficientPassages)));
+            Math.Min(found.Count, plan.SufficientPassages))) ?? Task.CompletedTask;
     }
 }

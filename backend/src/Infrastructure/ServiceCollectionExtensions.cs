@@ -142,6 +142,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Coordination;
 using MailFathom.Infrastructure.Persistence.Delivery;
+using MailFathom.Infrastructure.Persistence.Discovery;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
@@ -1112,17 +1113,18 @@ public static class ServiceCollectionExtensions
         // Built by hand for the reason the run above is: the endpoint's identity is the one dependency a supported
         // deployment may not have, and a run on an instance that declared no chat endpoint has to reach the refusal
         // rather than fail to resolve — which is exactly the run that has nothing to attribute.
-        services.AddScoped(provider => new StreamedDiscoveryRun(
+        services.AddScoped(provider => new WatchedDiscoveryRun(
             provider.GetRequiredService<DiscoveryRun>(),
             provider.GetRequiredService<MailAnsweringRunLedger>(),
             provider.GetRequiredService<MailAnsweringPeriodBounds>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<AnsweringEndpointIdentity>()));
-        // A singleton because a run is held between the request that asks the question and the requests that read the
-        // answer, which is exactly what neither a scope nor a request can hold. Nothing about it is a deployment's
-        // configuration, so it is registered for every one of them: an instance that answers no question opens no run,
-        // and one whose client never comes back forgets it.
-        services.AddSingleton<DiscoveryRunRegistry>();
+        // Singletons because a run is held between the request that asks the question and the requests that read the
+        // answer, which is exactly what neither a scope nor a request can hold. Nothing about either is a deployment's
+        // configuration, so both are registered for every one of them: an instance that answers no question opens no
+        // run, and one whose client never comes back reaches nothing that is still held here.
+        services.AddSingleton<IDiscoveryRunStore, DiscoveryRunStore>();
+        services.AddSingleton<ExecutingDiscoveryRuns>();
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one

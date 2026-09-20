@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -29,6 +30,14 @@ public sealed class ClientSignalTests
     public void MailArrived_WithoutAPositiveCount_IsRefused(int newEmailCount) =>
         Assert.Throws<ArgumentOutOfRangeException>(
             () => ClientSignal.MailArrived(Account, Inbox, newEmailCount));
+
+    /// <summary>A run that has reached nowhere has nothing to say it reached, so composing the statement is refused.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void DiscoveryRunAdvanced_WithoutAPositiveSequence_IsRefused(long sequence) =>
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ClientSignal.DiscoveryRunAdvanced(SyntheticMailUser.Deployment, DiscoveryRunId.New(), sequence));
 
     /// <summary>A window that attributed one occurrence twice names it once, so a client re-reads each row once.</summary>
     [Fact]
@@ -180,6 +189,7 @@ public sealed class ClientSignalTests
         Assert.Equal(
             [
                 "account.state",
+                "discovery.run.advanced",
                 "folders.changed",
                 "mail.arrived",
                 "mail.changed",
@@ -189,7 +199,7 @@ public sealed class ClientSignalTests
             [.. names.Order(StringComparer.Ordinal)]);
     }
 
-    /// <summary>A kind nobody named is not one of the six, so a value that reached a channel by accident says so.</summary>
+    /// <summary>A kind nobody named is not one of the seven, so a value that reached a channel by accident says so.</summary>
     [Fact]
     public void IsSpecified_ForTheStructDefault_ReportsThatNoKindWasNamed() =>
         Assert.False(default(ClientSignalKind).IsSpecified);

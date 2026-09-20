@@ -1220,6 +1220,51 @@ and no query. A record that stored the retrieved passages would be a second copy
 access, export, and erasure obligations — for the sake of a debugging convenience. What the identifier buys instead is
 that the message can be fetched and read whole through the reads that already serve it.
 
+## A Discover run and what it composed
+
+`discovery_runs` holds one row per [Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for)
+somebody asked for, and `discovery_run_events` holds what that run wrote, one row per event. Together they are the
+answer a client reads: the run is opened before the question is dispatched, each event is written as it is produced, and
+the client reads back from the sequence it already holds.
+
+They are tables rather than a buffer in a process because a load balancer places the request that asks the question, the
+requests that read the answer, and the request that stops the run independently, so a run held by the replica composing
+it is readable about one time in the replica count.
+[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
+records that, and records why the answer is not carried over the optional signal backplane instead: what crosses it is
+a statement that something changed, never the thing itself.
+
+| `discovery_runs` column | What it records |
+|---|---|
+| `Id` | The identifier the run is addressed by, which a client is handed and presents back, and the primary key |
+| `UserId` | Whose question it is, which is who may read the run. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way, and it is indexed because the concurrency bound below is counted over it |
+| `StartedAt` | When the run was opened. It is what the wider of the two retention ceilings is measured from, which is what closes a run whose replica went away without reporting anything |
+| `LastUsedAt` | When anything last read or wrote the run. It is what the retention window of an ended run is measured from, so a client that is still reading is never forgotten out from under itself |
+| `EndedAt` | When the run wrote its ending, and null while it is still executing. It is what the read reports as *running*, what refuses a second ending, and what decides which of the two retention windows the row is held on |
+| `StopRequestedAt` | When somebody asked the run to stop, and null where nobody did. It is recorded rather than acted on by the replica that takes the `DELETE`, because what a run spent is the executing replica's ledger to report: that replica meets this column as the next ordinary write the store refuses, and the ending it then writes carries the true counts |
+
+| `discovery_run_events` column | What it records |
+|---|---|
+| `RunId`, `Sequence`, together the primary key | Which run this belongs to and the place it holds in it, counted from one. The sequence is derived inside the insert, from the greatest one the run already holds, so the composite key is what makes a gap and a repeat both impossible rather than a number any replica hands out |
+| `Kind` | The event contract's own published name for this kind of event, at most 64 characters. It is the readable half of the row: an ad-hoc query reports what a run did without deserializing anything |
+| `Payload` | The event itself as `jsonb`, written by the run's own serialization contract. JSON rather than a column per kind because a rolling upgrade runs two builds against one database, so an older build reads a newer build's row rather than failing on a column it does not know about |
+| `WrittenAt` | When the event was written |
+
+**This is mail content, and it is classified as mail content.** A composed block and a declared citation are drawn from
+somebody's correspondence — a subject, an extract, an address — so `Payload` inherits every obligation the message it
+came from carries. The other four kinds hold counts and closed values alone. Nothing here is logged, nothing here
+reaches an instrument, and the row cascades from the user record, so erasing a person takes every run they asked for and
+everything those runs composed.
+
+**It cannot grow without bound, and three things hold it.** A run may write a bounded number of events, the last place
+reserved for the ending. A person may have a bounded number of runs executing at once, counted in the same statement
+that opens one — so it is the deployment's number rather than one each replica finds room under separately, and a run
+past it is refused with `429` rather than admitted. And every row is swept on the two retention windows
+[the run's own bounds](../features/discovery-run.md#what-bounds-a-run) state: five minutes after an ended run was last
+read, and ten minutes after any run was opened. The sweep runs on a worker on every replica once per retention window
+as one conditional statement, and on the path that opens a run as well — the worker rather than the open alone, because
+storage limitation over mail-derived rows cannot depend on somebody asking another question.
+
 ## The whole-mailbox rule run an account has outstanding
 
 `mail_rule_evaluation_runs` holds the one re-evaluation of an account's whole mailbox that somebody has asked for, and how far the account's synchronization runs have carried it. It is keyed by the account, which is what makes "one outstanding run per account" a property of the schema rather than a check somebody has to remember: two requests arriving together collide on the key, and the loser is recognized as the second caller learning the first got there instead of as a failure.

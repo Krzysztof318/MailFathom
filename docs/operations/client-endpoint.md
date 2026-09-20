@@ -150,7 +150,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/portrait` | `mailfathom.mail.read` |
 | `DELETE /api/client/portrait` | `mailfathom.mail.read` |
 | `POST /api/client/discovery/runs` | `mailfathom.mail.ask` |
-| `GET /api/client/discovery/runs/{runId}/events` | `mailfathom.mail.ask` |
+| `GET /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
@@ -3099,7 +3099,7 @@ or not it was open when the reminder fell.
 
 A question about the mailbox takes as long as a model and a mailbox take, so it is asked on one route, read on a second,
 and stopped on a third. The first answers as soon as the question is known to be answerable, with the run's identifier
-and the address its events are read at:
+and the address it is read at:
 
 ```http
 POST /api/client/discovery/runs
@@ -3110,26 +3110,29 @@ Content-Type: application/json
 
 ```http
 202 Accepted
-Location: /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/events
+Location: /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90
 
 { "runId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90" }
 ```
 
-The second is a `text/event-stream`, and each event carries its sequence as the event id and its kind as the event name:
+The second reads the run from wherever the client has got to. `since` is the last sequence it holds, and what comes back
+is whether the run is still going and every event after it:
 
 ```http
-GET /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/events
-Last-Event-ID: 3
+GET /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90?since=3
 ```
 
-```text
-event: block
-id: 4
-data: {"event":"block","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":4,"block":{ … }}
+```http
+200 OK
+Content-Type: application/json
 
-event: completed
-id: 5
-data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[],"coverage":[{ … }],"spend":{ … }}
+{
+  "running": false,
+  "events": [
+    {"event":"block","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":4,"block":{ … }},
+    {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[],"coverage":[{ … }],"spend":{ … }}
+  ]
+}
 ```
 
 The third stops the run, and takes nothing:
@@ -3142,19 +3145,28 @@ DELETE /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90
 204 No Content
 ```
 
-**Closing the stream is looking away; the `DELETE` is stopping.** A client that only stops reading leaves the run
-calling the provider and reading mail for nobody, so a person who has read enough and wants to stop paying for the rest
-sends this. It stops the provider call and the retrieval, the run ends as `failed` with `Cancelled`, and everything it
-had already published stays published. A run that finished a moment earlier answers `204` as well, because whoever asked
-could not have known.
+**A client is told when to read again rather than polling for it.** Every write raises `discovery.run.advanced` over
+[the signal channel](#the-signal-channel), naming the run and the sequence it reached and no part of the answer, so the
+read above is what a client does when it hears that rather than on a timer. A client with no channel reads on its own
+interval and is given exactly the same thing.
 
-A run outlives the connection that asked for it, so a client that lost its network reattaches to the second route with
-`Last-Event-ID` and is given what it missed — which a browser's own `EventSource` sends without being asked to. The run
-belongs to the user who asked for it: somebody else's reads as `404` rather than as a refusal, on the reading route and
-on the stopping one alike. The asking route answers `429` while this process is already running as many as it may, and
+**Stopping reading is looking away; the `DELETE` is stopping.** A client that only stops reading leaves the run calling
+the provider and reading mail for nobody, so a person who has read enough and wants to stop paying for the rest sends
+this. The stop is recorded against the run and the replica executing it meets that record as the next write it is
+refused, so the provider call and the retrieval stop, the run ends as `failed` with `Cancelled`, and everything already
+written stays written. A run that finished a moment earlier answers `204` as well, because whoever asked could not have
+known.
+
+**All three are answered by any replica**, because the run and what it composed are rows rather than state beside the
+connection that asked: the question may be asked of one replica, read from a second, and stopped through a third. A run
+outlives the connection that asked for it too, so a client that lost its network comes back to the second route with the
+sequence it holds and is given what it missed; a `since` that is absent, zero, negative, or names a place this run never
+reached reads the run from its beginning. The run belongs to the user who asked for it: somebody else's reads as `404`
+rather than as a refusal, on the reading route and on the stopping one alike. The asking route answers `429` while this
+person already has as many runs going as they may — eight, counted across the deployment rather than per replica — and
 `400` naming what was wrong with the question or the mail it named.
 [The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each event carries,
-what a run reports having spent, what bounds a run, and why the transport is this one.
+what a run reports having spent, what bounds a run, and why it is delivered this way.
 
 ### The telemetry routes
 
@@ -3284,7 +3296,7 @@ no subject, address, body fragment, filename, or attachment name reaches it at a
 flags `mail.flags.changed` carries, which say where each of those two stands rather than that one moved, for the reason
 the paragraph below the table gives. The second is a raised notification's own headline and second line, which are the
 record's already-derived text and reach a client entitled to read that record over
-[the notification routes](#the-notification-routes). Six things are said:
+[the notification routes](#the-notification-routes). Seven things are said:
 
 | Signal | What it says |
 | --- | --- |
@@ -3294,6 +3306,7 @@ record's already-derived text and reach a client entitled to read that record ov
 | `folders.changed` | The set of folders an account mirrors, or a held account's local folders, has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
+| `discovery.run.advanced` | A [Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) wrote something, naming the run and the sequence it reached and no part of what it composed |
 
 **A flag is the one change stated rather than pointed at.** `mail.flags.changed` carries, per row, the stored identity
 and where each of the two flags now stands, so a client redraws the row it already holds without reading the page it is
@@ -3304,9 +3317,8 @@ else that moved — a message that changed folder, was deleted, or whose keyword
 whole of what a run found, and a client re-reads. A flag a publisher did not observe is left out rather than reported as
 cleared: a reconciliation window states both, and a change this deployment authored states the one it wrote.
 
-**A client that does not know the sixth kind ignores it and catches up on its next refresh**, exactly as it ignores any
-other kind it does not know; the client and the service ship under one version, so this is an addition rather than a
-break.
+**A client that does not know a kind ignores it and catches up on its next refresh**, which is what made the sixth and
+the seventh additions rather than breaks; the client and the service ship under one version.
 
 **A settled move says `mail.changed` twice, once per folder.** A change that files a message somewhere — a move, a copy —
 changes the folder it left and the folder it landed in, so both are named, and a client watching either re-reads when the

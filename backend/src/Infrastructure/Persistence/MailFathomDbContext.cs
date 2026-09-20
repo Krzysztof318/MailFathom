@@ -13,6 +13,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts.Configurations;
 using MailFathom.Infrastructure.Persistence.Coordination.Configurations;
 using MailFathom.Infrastructure.Persistence.Delivery.Configurations;
+using MailFathom.Infrastructure.Persistence.Discovery.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Threads.Configurations;
 using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
@@ -229,6 +230,10 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<PersonalTaskEntity> PersonalTasks => this.Set<PersonalTaskEntity>();
 
+    internal DbSet<DiscoveryRunEntity> DiscoveryRuns => this.Set<DiscoveryRunEntity>();
+
+    internal DbSet<DiscoveryRunEventEntity> DiscoveryRunEvents => this.Set<DiscoveryRunEventEntity>();
+
     /// <inheritdoc />
     /// <remarks>
     /// The order below is the order the configurations are applied in, and it is not alphabetical: a configuration that
@@ -320,5 +325,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new WorkLeaseConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationConfiguration());
         modelBuilder.ApplyConfiguration(new PersonalTaskConfiguration());
+        modelBuilder.ApplyConfiguration(new DiscoveryRunConfiguration());
+        modelBuilder.ApplyConfiguration(new DiscoveryRunEventConfiguration());
     }
 }

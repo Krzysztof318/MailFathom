@@ -1312,6 +1312,10 @@ internal static class HostComposition
         // place.
         builder.Services.AddHostedService<JobWorker>();
         builder.Services.AddHostedService<UnlinkedStoredFileSweepWorker>();
+        // Unconditional for the same reason, and for one of its own: what it removes is composed from somebody's mail,
+        // so how long it is kept is an obligation rather than housekeeping — and a deployment whose client endpoint was
+        // switched off still holds the runs it answered while it was on.
+        builder.Services.AddHostedService<DiscoveryRunRetentionWorker>();
 
         // Registered unconditionally, because a calendar is a store every deployment has rather than a capability an
         // operator switches on, and a deployment whose calendars carry no reminder is answered by an empty pass.

@@ -699,6 +699,15 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string ClientSessionExpiryIndexName = "ix_client_sessions_expires_at";
 
+    /// <summary>The key one event of a Discover run is written under.</summary>
+    /// <remarks>
+    /// Stated because it is the promise rather than the storage: a run's sequence starts at one and never skips, and a
+    /// composite key over the run and the sequence is what makes a second row under one number impossible instead of
+    /// unlikely. It is also the order a read walks — everything of one run after a cursor, in sequence — so the key
+    /// serves the only query this table has.
+    /// </remarks>
+    internal const string DiscoveryRunEventPrimaryKeyConstraintName = "pk_discovery_run_events";
+
     /// <summary>The key one export of a mailbox is written under.</summary>
     internal const string MailboxExportPrimaryKeyConstraintName = "pk_mailbox_exports";
 

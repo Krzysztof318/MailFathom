@@ -14,6 +14,8 @@
     <Compile Include="..\shared\SyntheticImages.cs" Link="SyntheticImages.cs" />
     <Compile Include="..\shared\RecordingClientSignalChannel.cs" Link="RecordingClientSignalChannel.cs" />
     <Compile Include="..\shared\ClientSignalPublishers.cs" Link="ClientSignalPublishers.cs" />
+    <!-- The Discover routes reach a run through the same store the application writes it through, so both suites drive one fake. -->
+    <Compile Include="..\shared\InMemoryDiscoveryRunStore.cs" Link="InMemoryDiscoveryRunStore.cs" />
     <!-- Every property in the repository is sampled through one set of settings, so the wrapper that fixes them is
          linked into each suite holding a property rather than restated per project. -->
     <Compile Include="..\shared\PropertyCheck.cs" Link="PropertyCheck.cs" />
