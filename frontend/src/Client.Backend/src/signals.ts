@@ -65,7 +65,7 @@ export interface SignalledFlags {
 /**
  * One statement that something changed.
  *
- * Six closed shapes rather than one record of optional fields, because what a reader does with a signal is decided
+ * Seven closed shapes rather than one record of optional fields, because what a reader does with a signal is decided
  * entirely by which of them arrived: a folder set that moved and a message that changed are read again from different
  * routes, and a shape carrying both would leave every reader checking which fields happened to be present.
  */
@@ -91,7 +91,8 @@ export type ClientSignal =
           readonly secondLine: string;
           readonly unreadCount: number;
       }
-    | { readonly kind: 'account.state'; readonly account: string };
+    | { readonly kind: 'account.state'; readonly account: string }
+    | { readonly kind: 'discovery.run.advanced'; readonly run: string; readonly sequence: number };
 
 /** The ticket one connection is opened against, and when presenting it stops working. */
 export interface SignalTicket {
@@ -175,7 +176,7 @@ export function readSignalTicket(
 }
 
 /**
- * Reads one payload the deployment sent, refusing anything that is not one of the six statements.
+ * Reads one payload the deployment sent, refusing anything that is not one of the seven statements.
  *
  * @returns The signal, or `null` where the payload is not one this client acts on.
  */
@@ -199,6 +200,8 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
             return parseRaisedNotification(record);
         case 'account.state':
             return isIdentity(record['account']) ? { kind: 'account.state', account: record['account'] } : null;
+        case 'discovery.run.advanced':
+            return parseRunAdvance(record);
         default:
             return null;
     }
@@ -220,7 +223,7 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
  * the level a deployment keeps by default; that is where a proxy silently refusing every upgrade becomes visible as
  * something other than a client that feels slow.
  *
- * @param told Called once per statement, after the payload has been read as one of the six.
+ * @param told Called once per statement, after the payload has been read as one of the seven.
  * @param opened Called each time a connection has opened and stands. Whatever was said while none stood was said to
  * nobody, so this is the moment a caller reads again what it draws — except after the first opening, which only the
  * caller can tell apart, since only it knows whether anything was drawn before it.
@@ -478,6 +481,20 @@ function optionalFlag(value: unknown): boolean | null | undefined {
     }
 
     return typeof value === 'boolean' ? value : undefined;
+}
+
+// The one statement that names no mailbox at all: a run and how far it has got, and no part of what the run composed.
+// A sequence of zero is what an event that was never published carries, so a statement bearing one says nothing this
+// client could read a tail from and is refused with the rest of what it does not act on.
+function parseRunAdvance(record: Readonly<Record<string, unknown>>): ClientSignal | null {
+    const run = record['run'];
+    const sequence = record['sequence'];
+
+    if (!isIdentity(run) || !isCount(sequence) || sequence === 0) {
+        return null;
+    }
+
+    return { kind: 'discovery.run.advanced', run, sequence };
 }
 
 function parseRaisedNotification(record: Readonly<Record<string, unknown>>): ClientSignal | null {
