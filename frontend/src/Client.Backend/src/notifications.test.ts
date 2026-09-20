@@ -159,6 +159,11 @@ describe('readNotifications', () => {
         ['Nothing', { kind: 'Nothing' }, { kind: 'Nothing' }],
         ['Message', { kind: 'Message', messageId: 'm-9' }, { kind: 'Message', storedEmailId: 'm-9' }],
         ['Screen', { kind: 'Screen', screen: 'Settings' }, { kind: 'Screen', screen: 'Settings' }],
+        [
+            'CalendarEvent',
+            { kind: 'CalendarEvent', calendarEventId: 'c-4' },
+            { kind: 'CalendarEvent', calendarEventId: 'c-4' },
+        ],
     ])('reads a %s target as the shape a reader switches on', async (_named, sent, expected) => {
         const answer = await readNotifications(
             session,
@@ -187,6 +192,7 @@ describe('readNotifications', () => {
         ['a kind this client does not have', { ...arrived, kind: 'Weather' }],
         ['a target shape this client does not have', { ...arrived, target: { kind: 'Planet', planet: 'Mars' } }],
         ['a message target naming no message', { ...arrived, target: { kind: 'Message', messageId: '' } }],
+        ['a calendar target naming no event', { ...arrived, target: { kind: 'CalendarEvent', calendarEventId: '' } }],
         [
             'a screen target naming a screen this client does not have',
             {

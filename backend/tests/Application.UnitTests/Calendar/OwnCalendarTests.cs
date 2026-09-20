@@ -144,6 +144,8 @@ public sealed class OwnCalendarTests
             "Standup",
             Monday,
             Monday.AddMinutes(30),
+            isAllDay: false,
+            reminders: [],
             sourceMessage: null,
             TestContext.Current.CancellationToken);
 
@@ -167,6 +169,8 @@ public sealed class OwnCalendarTests
             "Kick-off",
             Monday,
             end: null,
+            isAllDay: false,
+            reminders: [],
             message,
             TestContext.Current.CancellationToken);
 
@@ -186,6 +190,8 @@ public sealed class OwnCalendarTests
             title,
             Monday,
             end: null,
+            isAllDay: false,
+            reminders: [],
             sourceMessage: null,
             TestContext.Current.CancellationToken);
 
@@ -203,6 +209,8 @@ public sealed class OwnCalendarTests
             "Review",
             Monday,
             Monday,
+            isAllDay: false,
+            reminders: [],
             sourceMessage: null,
             TestContext.Current.CancellationToken);
 
@@ -220,6 +228,8 @@ public sealed class OwnCalendarTests
             CalendarEventTitle.Create("Review"),
             Monday,
             Monday.AddHours(1),
+            isAllDay: false,
+            reminders: [],
             CalendarEventOrigin.Proposed,
             message,
             importedUid: null,
@@ -235,6 +245,8 @@ public sealed class OwnCalendarTests
             "Review, moved",
             Monday.AddHours(3),
             end: null,
+            isAllDay: false,
+            reminders: [],
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -263,6 +275,8 @@ public sealed class OwnCalendarTests
             "mine now",
             Monday,
             end: null,
+            isAllDay: false,
+            reminders: [],
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -284,6 +298,8 @@ public sealed class OwnCalendarTests
             "  ",
             Monday,
             end: null,
+            isAllDay: false,
+            reminders: [],
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -399,8 +415,144 @@ public sealed class OwnCalendarTests
                 "Standup",
                 Monday,
                 end: null,
+                isAllDay: false,
+                reminders: [],
                 sourceMessage: null,
                 TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The leads a person set reach their calendar in the calendar's own order, and the instants follow the event.</summary>
+    [Fact]
+    public async Task CreateAsync_AnEventWithReminders_KeepsThemAndSaysWhenEachComesDue()
+    {
+        // Act
+        var written = await this.SignedIn().CreateAsync(
+            "Standup",
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [15, 1440],
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var created = written.Event!;
+        Assert.Equal([1440, 15], created.Reminders.Select(reminder => reminder.MinutesBefore));
+        Assert.Equal(Monday.AddMinutes(-15), created.RemindsAt(CalendarReminder.Create(15)));
+    }
+
+    /// <summary>A day nobody gave an hour to is announced from the morning of it rather than from the night before.</summary>
+    [Fact]
+    public async Task CreateAsync_ADayRatherThanAClockTime_MeasuresItsRemindersFromThatMorning()
+    {
+        // Arrange
+        var theDay = new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero);
+
+        // Act
+        var written = await this.SignedIn().CreateAsync(
+            "Anna's birthday",
+            theDay,
+            end: null,
+            isAllDay: true,
+            reminders: [60],
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var created = written.Event!;
+        Assert.True(created.IsAllDay);
+        Assert.Equal(
+            theDay.AddHours(CalendarEvent.AllDayReminderHour - 1),
+            created.RemindsAt(CalendarReminder.Create(60)));
+    }
+
+    /// <summary>A lead somebody typed is something this surface reports on, rather than a fault the domain raises.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(CalendarReminder.MaximumMinutesBefore + 1)]
+    public async Task CreateAsync_ALeadNoReminderMayState_IsRefusedWithNothingWritten(int minutesBefore)
+    {
+        // Act
+        var written = await this.SignedIn().CreateAsync(
+            "Standup",
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [minutesBefore],
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CalendarEventWriteOutcome.RemindersRefused, written.Outcome);
+        Assert.Null(written.Event);
+    }
+
+    [Fact]
+    public async Task CreateAsync_OneLeadStatedTwice_IsRefused()
+    {
+        // Act
+        var written = await this.SignedIn().CreateAsync(
+            "Standup",
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [15, 15],
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CalendarEventWriteOutcome.RemindersRefused, written.Outcome);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MoreRemindersThanAnEventMayCarry_IsRefused()
+    {
+        // Act
+        var written = await this.SignedIn().CreateAsync(
+            "Standup",
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [.. Enumerable.Range(1, CalendarEvent.MaximumReminderCount + 1)],
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CalendarEventWriteOutcome.RemindersRefused, written.Outcome);
+    }
+
+    /// <summary>An amendment states the event as it is to stand, so turning the last one off is what it says.</summary>
+    [Fact]
+    public async Task AmendAsync_AnEventStatedWithNoReminders_AnnouncesNothingAfterwards()
+    {
+        // Arrange
+        var held = CalendarEvent.Create(
+            CalendarEventId.Create(new Guid("8d7e6f5a-4b3c-4d2e-9f1a-0b9c8d7e6f5a")),
+            CalendarEventTitle.Create("Review"),
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [CalendarReminder.Create(15)],
+            CalendarEventOrigin.Asserted,
+            sourceMessage: null,
+            importedUid: null,
+            Now,
+            Now);
+
+        this.store.Hold(Person, held);
+
+        // Act
+        var written = await this.SignedIn().AmendAsync(
+            held.Id,
+            "Review",
+            Monday,
+            end: null,
+            isAllDay: false,
+            reminders: [],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(written.Event!.Reminders);
     }
 
     private static CalendarEvent EventAt(DateTimeOffset start, string title) =>
@@ -415,6 +567,8 @@ public sealed class OwnCalendarTests
             CalendarEventTitle.Create(title),
             start,
             end: null,
+            isAllDay: false,
+            reminders: [],
             origin,
             sourceMessage: null,
             importedUid: null,

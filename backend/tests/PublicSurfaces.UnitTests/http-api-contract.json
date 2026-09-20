@@ -290,6 +290,23 @@
               "string"
             ]
           },
+          "isAllDay": {
+            "type": "boolean"
+          },
+          "reminders": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "start": {
             "format": "date-time",
             "type": [
@@ -307,7 +324,9 @@
         "required": [
           "title",
           "start",
-          "end"
+          "end",
+          "isAllDay",
+          "reminders"
         ],
         "type": "object"
       },
@@ -318,6 +337,23 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "isAllDay": {
+            "type": "boolean"
+          },
+          "reminders": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "type": [
+              "null",
+              "array"
             ]
           },
           "sourceMessage": {
@@ -345,6 +381,8 @@
           "title",
           "start",
           "end",
+          "isAllDay",
+          "reminders",
           "sourceMessage"
         ],
         "type": "object"
@@ -366,12 +404,33 @@
             "format": "uuid",
             "type": "string"
           },
+          "isAllDay": {
+            "type": "boolean"
+          },
           "origin": {
             "type": "string"
           },
           "recordedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "reminders": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "type": "array"
+          },
+          "remindsAt": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "type": "array"
           },
           "sourceMessage": {
             "format": "uuid",
@@ -393,6 +452,9 @@
           "title",
           "start",
           "end",
+          "isAllDay",
+          "reminders",
+          "remindsAt",
           "origin",
           "sourceMessage",
           "recordedAt",
@@ -3375,6 +3437,13 @@
       },
       "ClientNotificationTargetResponse": {
         "properties": {
+          "calendarEventId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "kind": {
             "type": "string"
           },
@@ -3395,7 +3464,8 @@
         "required": [
           "kind",
           "messageId",
-          "screen"
+          "screen",
+          "calendarEventId"
         ],
         "type": "object"
       },

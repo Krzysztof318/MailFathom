@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
+using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +42,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
 
         var stored = await context.CalendarEvents
             .AsNoTracking()
+            .Include(calendarEvent => calendarEvent.Reminders)
             .FirstOrDefaultAsync(
                 calendarEvent => calendarEvent.Id == eventValue && calendarEvent.UserId == ownerValue,
                 cancellationToken);
@@ -67,6 +69,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
         // opens would be drawn in both of two consecutive windows.
         var window = context.CalendarEvents
             .AsNoTracking()
+            .Include(calendarEvent => calendarEvent.Reminders)
             .Where(calendarEvent => calendarEvent.UserId == ownerValue && calendarEvent.StartsAt < until)
             .Where(calendarEvent =>
                 (calendarEvent.EndsAt == null && calendarEvent.StartsAt >= from)
@@ -121,6 +124,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
         // travels with it: an event deleted between this read and the commit makes the write affect no row, which the
         // session reports as a conflict rather than writing the event back.
         var held = await writeContext.CalendarEvents
+            .Include(stored => stored.Reminders)
             .FirstOrDefaultAsync(
                 stored => stored.Id == eventValue && stored.UserId == ownerValue,
                 cancellationToken);
@@ -133,12 +137,52 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
         held.Title = calendarEvent.Title.Value;
         held.StartsAt = calendarEvent.Start;
         held.EndsAt = calendarEvent.End;
+        held.IsAllDay = calendarEvent.IsAllDay;
         held.Origin = calendarEvent.Origin;
         held.SourceStoredEmailId = calendarEvent.SourceMessage?.Value;
         held.ImportedUid = calendarEvent.ImportedUid?.Value;
         held.AmendedAt = calendarEvent.AmendedAt;
 
+        Reconcile(writeContext, held, calendarEvent);
+
         return true;
+    }
+
+    /// <summary>Brings the held reminder rows to what the amended event states, keeping what each one already announced.</summary>
+    /// <remarks>
+    /// Reconciled rather than replaced, because a row carries the claim that it has already been announced and
+    /// deleting it to write it back would announce every reminder a second time on the next pass. A lead the
+    /// amendment keeps therefore keeps its row, and the claim on that row is cleared exactly when the instant the
+    /// reminder falls at has moved — which is what makes an event moved forward reminded at its new time and an
+    /// event merely retitled stay quiet.
+    /// </remarks>
+    private static void Reconcile(
+        MailFathomDbContext writeContext,
+        CalendarEventEntity held,
+        CalendarEvent calendarEvent)
+    {
+        var stated = calendarEvent.Reminders.Select(reminder => reminder.MinutesBefore).ToHashSet();
+
+        foreach (var dropped in held.Reminders.Where(row => !stated.Contains(row.MinutesBefore)).ToArray())
+        {
+            writeContext.CalendarEventReminders.Remove(dropped);
+        }
+
+        foreach (var reminder in calendarEvent.Reminders)
+        {
+            var dueAt = calendarEvent.RemindsAt(reminder);
+            var row = held.Reminders.FirstOrDefault(row => row.MinutesBefore == reminder.MinutesBefore);
+
+            if (row is null)
+            {
+                held.Reminders.Add(CalendarEventMapping.ToEntity(calendarEvent, reminder));
+            }
+            else if (row.DueAt != dueAt)
+            {
+                row.DueAt = dueAt;
+                row.RaisedForDueAt = null;
+            }
+        }
     }
 
     /// <inheritdoc />

@@ -120,6 +120,8 @@ public sealed class OwnCalendar
     /// <param name="title">What the event is called, as supplied.</param>
     /// <param name="start">When it begins.</param>
     /// <param name="end">When it ends, or <see langword="null" /> to state no end.</param>
+    /// <param name="isAllDay">Whether the event is stated as a day rather than as a clock time.</param>
+    /// <param name="reminders">The leads to announce it at, as stated in minutes before it, or empty to announce nothing.</param>
     /// <param name="sourceMessage">The message it was created from, or <see langword="null" /> where none was open.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event as the calendar holds it, or why it was refused.</returns>
@@ -133,6 +135,8 @@ public sealed class OwnCalendar
         string? title,
         DateTimeOffset start,
         DateTimeOffset? end,
+        bool isAllDay,
+        IReadOnlyCollection<int> reminders,
         StoredEmailId? sourceMessage,
         CancellationToken cancellationToken)
     {
@@ -140,7 +144,7 @@ public sealed class OwnCalendar
 
         var owner = this.authorization.RequireUser();
 
-        if (Refusal(title, start, end) is { } refused)
+        if (Refusal(title, start, end, reminders) is { } refused)
         {
             return refused;
         }
@@ -151,6 +155,8 @@ public sealed class OwnCalendar
             CalendarEventTitle.Create(title),
             start,
             end,
+            isAllDay,
+            Stated(reminders),
             CalendarEventOrigin.Asserted,
             sourceMessage,
             importedUid: null,
@@ -170,6 +176,8 @@ public sealed class OwnCalendar
     /// <param name="title">What it is called afterwards, as supplied.</param>
     /// <param name="start">When it begins afterwards.</param>
     /// <param name="end">When it ends afterwards, or <see langword="null" /> to hold no end.</param>
+    /// <param name="isAllDay">Whether it is stated as a day rather than as a clock time afterwards.</param>
+    /// <param name="reminders">The leads it is announced at afterwards, as stated in minutes before it, or empty to announce nothing.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The event as the calendar holds it, or why it was refused.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
@@ -183,18 +191,21 @@ public sealed class OwnCalendar
         string? title,
         DateTimeOffset start,
         DateTimeOffset? end,
+        bool isAllDay,
+        IReadOnlyCollection<int> reminders,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var owner = this.authorization.RequireUser();
 
-        if (Refusal(title, start, end) is { } refused)
+        if (Refusal(title, start, end, reminders) is { } refused)
         {
             return refused;
         }
 
         var amendedTitle = CalendarEventTitle.Create(title);
+        var amendedReminders = Stated(reminders);
 
         return await this.concurrencyRetryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
@@ -204,7 +215,13 @@ public sealed class OwnCalendar
                     return CalendarEventWriteResult.NotFound;
                 }
 
-                var amended = held.AmendedWith(amendedTitle, start, end, this.timeProvider.GetUtcNow());
+                var amended = held.AmendedWith(
+                    amendedTitle,
+                    start,
+                    end,
+                    isAllDay,
+                    amendedReminders,
+                    this.timeProvider.GetUtcNow());
 
                 return await this.store.ReplaceAsync(session, owner, amended, attemptCancellationToken)
                     ? CalendarEventWriteResult.Written(amended)
@@ -280,13 +297,35 @@ public sealed class OwnCalendar
     /// a person typed is something this surface reports on, and an exception from the record's own constructor would be
     /// a fault in this deployment rather than an answer to them.
     /// </remarks>
-    private static CalendarEventWriteResult? Refusal(string? title, DateTimeOffset start, DateTimeOffset? end)
+    private static CalendarEventWriteResult? Refusal(
+        string? title,
+        DateTimeOffset start,
+        DateTimeOffset? end,
+        IReadOnlyCollection<int> reminders)
     {
+        ArgumentNullException.ThrowIfNull(reminders);
+
         if (!CalendarEventTitle.TryCreate(title, out _))
         {
             return CalendarEventWriteResult.TitleRefused;
         }
 
-        return end is { } stated && stated <= start ? CalendarEventWriteResult.EndNotAfterStart : null;
+        if (end is { } stated && stated <= start)
+        {
+            return CalendarEventWriteResult.EndNotAfterStart;
+        }
+
+        // Asked here rather than caught out of the event's own constructor, for the reason the title and the span are:
+        // a lead somebody typed is something this surface reports on, and the domain raising for it would be a fault
+        // in the deployment rather than an answer to them.
+        return reminders.Count > CalendarEvent.MaximumReminderCount
+            || reminders.Any(minutesBefore => !CalendarReminder.IsStatable(minutesBefore))
+            || reminders.Distinct().Count() != reminders.Count
+            ? CalendarEventWriteResult.RemindersRefused
+            : null;
     }
+
+    /// <summary>Reads the leads a caller stated, which <see cref="Refusal" /> has already held to what an event may carry.</summary>
+    private static IReadOnlyCollection<CalendarReminder> Stated(IReadOnlyCollection<int> reminders) =>
+        [.. reminders.Select(CalendarReminder.Create)];
 }

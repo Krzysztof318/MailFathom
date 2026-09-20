@@ -2770,7 +2770,8 @@ refusal names which. It reaches no mail server and cannot set the remote `\Seen`
 These are the notification centre: what happened to a person while nobody was looking at their screen, how much of it
 they have not read, both ways of marking it read, and taking rows out of it for good. What they serve is a record this
 deployment produced — an [IMAP synchronization](../features/imap-synchronization.md) run writing down that mail arrived
-or that a credential was refused — rather than a second reading of the mailbox.
+or that a credential was refused, a [calendar reminder](../features/calendar-events.md#reminders) coming due — rather
+than a second reading of the mailbox.
 
 | Route | What it does |
 | --- | --- |
@@ -2810,9 +2811,10 @@ re-reads no mail — and no mail body, no address, and no attachment reaches the
 deduplication key is absent: it is the rule's own name for a condition rather than anything a screen renders.
 
 **What a notification says is a condition and its numbers, and the sentence is the client's.** `statement` carries a
-`cause` — `MailArrived`, `SynchronizationIncomplete`, or `CredentialRefused` — beside `counted` and `outOf`, whose
-meaning is the cause's to give: mail counts the messages that arrived, an unfinished run counts the folders that did
-not finish out of the folders it scheduled, and a refused credential counts nothing. A client turns that into a
+`cause` — `MailArrived`, `SynchronizationIncomplete`, `CredentialRefused`, or `CalendarReminderDue` — beside
+`counted` and `outOf`, whose meaning is the cause's to give: mail counts the messages that arrived, an unfinished run
+counts the folders that did not finish out of the folders it scheduled, a due reminder counts the minutes between now
+and the event, and a refused credential counts nothing. A client turns that into a
 sentence in whatever language its reader has, which is why the service sends no sentence of its own for it to
 translate. `title` and `body` beside it are that same statement written out in English, for a reader with no client
 to say it in their own; a client that recognizes the cause draws the statement and ignores them. `statement` is
@@ -2849,6 +2851,15 @@ reasoning rather than [the mutation routes](#the-mutation-routes)' — a person 
 maintains does not hold a write grant and still has to be able to clear their own bell. `mailfathom.mail.delete` is the
 power to remove somebody's mail and is not what the erasure asks for: what leaves is a record about a message that
 stays.
+
+**Where opening one leads is one of four shapes**, and `target` carries the one the producer chose: `Nothing`,
+`Message` with a `messageId`, `Screen` with a `screen`, and `CalendarEvent` with a `calendarEventId` — which is what
+a due reminder names, and how a client reaches the event it is about. A row carrying a shape a client does not
+recognize leads nowhere rather than being drawn as an error.
+
+**A reminder is the one row whose headline names a record.** `title` is what the person called their own event,
+because there is nothing else a reminder is about and no catalogue could hold it, so a client fills it into its own
+sentence rather than replacing it. Everything else about the event stays on the event.
 
 **A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
@@ -2963,6 +2974,9 @@ GET /api/client/calendar?from=2026-09-21T00:00:00Z&until=2026-09-28T00:00:00Z&or
       "title": "Kick-off",
       "start": "2026-09-21T09:00:00+00:00",
       "end": "2026-09-21T10:00:00+00:00",
+      "isAllDay": false,
+      "reminders": [1440, 15],
+      "remindsAt": ["2026-09-20T09:00:00+00:00", "2026-09-21T08:45:00+00:00"],
       "origin": "Asserted",
       "sourceMessage": "0198f2c3-4d5e-7f80-9a1b-2c3d4e5f6071",
       "recordedAt": "2026-09-18T11:04:19.512+00:00",
@@ -2994,8 +3008,9 @@ else's days cannot be composed, and an event another person holds answers `404` 
 all-zero identifier no event carries answers `404` too.
 
 **A write states the whole record rather than the difference from the one held.** Creating an event names its title,
-its start, an optional end, and optionally the message it was created from; amending one names the title, the start,
-and the end it is to stand with, and changes neither the identity, the origin, nor the message it cites. What a person
+its start, an optional end, whether it is stated as a day, what is to announce it, and optionally the message it was
+created from; amending one names the title, the start, the end, the day statement, and the reminders it is to stand
+with, and changes neither the identity, the origin, nor the message it cites. What a person
 types into their own client is on the calendar rather than offered to it, so a created event is always `Asserted` —
 nothing here produces a proposal.
 
@@ -3005,6 +3020,16 @@ where the event is already on the calendar, because a second acceptance is a cal
 already took and answering it as done would move the record of when the event actually reached the calendar. A
 dismissal removes the row, which is the same act as deleting an event somebody typed — a date nobody wanted is not a
 fact worth keeping — so `DELETE` serves both and answers `204`, or `404` where the calendar holds no such event.
+
+**`reminders` is the leads the event is announced at, in whole minutes before it**, and omitting it or sending `[]`
+is an event that announces nothing — which is a statement rather than an omission, so turning the last reminder off
+is an amendment carrying an empty list rather than one leaving the field out. At most 16 leads, each between 0 and
+40320 minutes and each stated once; a set breaking any of those is refused with `400` naming the rule. The answer
+reads them back longest first, with `remindsAt` giving the instant each one currently falls at in the same order — a
+client draws those rather than deriving them, because what an `isAllDay` event's reminders are measured from is this
+deployment's rule. `isAllDay` says the event names a day rather than a clock time: its `start` is still the instant
+the day opens at, and its reminders are measured back from nine in the morning on it.
+[Calendar events](../features/calendar-events.md#reminders) holds why, and what raises one.
 
 **A refusal names the rule rather than the value.** A title that is blank, longer than 200 characters, or carrying a
 character that renders as nothing is refused with `400` stating that rule, and the title itself is never echoed: a
@@ -3018,9 +3043,11 @@ committed: nothing here reaches a mail server, nothing moves in a mailbox, and t
 carries rather than mail these routes read. `mailfathom.mail.delete` is the power to remove somebody's mail and is not
 what the deletion asks for — what leaves is a date about a message that stays.
 
-**What these routes do not serve.** There is no recurrence, no external calendar synchronization, no reminder, and no
-`.ics` import here; [calendar events](../features/calendar-events.md) states which of those are refused as ideas and
-which are simply not part of the record today.
+**What these routes do not serve.** There is no recurrence, no external calendar synchronization, and no `.ics`
+import here; [calendar events](../features/calendar-events.md) states which of those are refused as ideas and which
+are simply not part of the record today. A reminder that has come due is not read here either: it arrives as a
+notification on [the notification routes](#the-notification-routes), which is how a client learns about one whether
+or not it was open when the reminder fell.
 
 ### The Discover routes
 

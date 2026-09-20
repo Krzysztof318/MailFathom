@@ -92,6 +92,8 @@ public sealed class CalendarEventTests
             title,
             Start,
             end: null,
+            isAllDay: false,
+            reminders: [],
             CalendarEventOrigin.Asserted,
             sourceMessage: null,
             importedUid,
@@ -144,7 +146,13 @@ public sealed class CalendarEventTests
         var amendedAt = RecordedAt.AddDays(1);
 
         // Act
-        var amended = held.AmendedWith(CalendarEventTitle.Create("Design review, moved"), movedTo, end: null, amendedAt);
+        var amended = held.AmendedWith(
+            CalendarEventTitle.Create("Design review, moved"),
+            movedTo,
+            end: null,
+            isAllDay: false,
+            reminders: [],
+            amendedAt);
 
         // Assert
         Assert.Equal(held.Id, amended.Id);
@@ -165,22 +173,107 @@ public sealed class CalendarEventTests
 
         // Act
         var refusal = Assert.Throws<ArgumentOutOfRangeException>(() =>
-            held.AmendedWith(held.Title, Start, Start, RecordedAt.AddHours(1)));
+            held.AmendedWith(held.Title, Start, Start, isAllDay: false, reminders: [], RecordedAt.AddHours(1)));
 
         // Assert
         Assert.Equal("end", refusal.ParamName);
     }
 
+    /// <summary>The earliest warning is what a person reads first, and two writers stating one set produce one event.</summary>
+    [Fact]
+    public void Create_RemindersInAnyOrder_KeepsThemLongestLeadFirst()
+    {
+        // Act
+        var held = Compose(reminders: [Reminder(15), Reminder(1440), Reminder(0)]);
+
+        // Assert
+        Assert.Equal([1440, 15, 0], held.Reminders.Select(reminder => reminder.MinutesBefore));
+    }
+
+    /// <summary>A caller stating one reminder twice made a mistake, and answering as though it asked for one hides it.</summary>
+    [Fact]
+    public void Create_OneLeadStatedTwice_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => Compose(reminders: [Reminder(15), Reminder(15)]));
+
+        // Assert
+        Assert.Equal("reminders", refusal.ParamName);
+    }
+
+    /// <summary>Each reminder is a row a run reads and a notification it may write, so the count is bounded.</summary>
+    [Fact]
+    public void Create_MoreRemindersThanAnEventMayCarry_IsRefused()
+    {
+        // Arrange
+        var tooMany = Enumerable
+            .Range(1, CalendarEvent.MaximumReminderCount + 1)
+            .Select(Reminder)
+            .ToArray();
+
+        // Act
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => Compose(reminders: tooMany));
+
+        // Assert
+        Assert.Equal("reminders", refusal.ParamName);
+    }
+
+    /// <summary>An event that names a clock time is announced back from that time and from nothing else.</summary>
+    [Fact]
+    public void RemindsAt_AnEventNamingAClockTime_MeasuresBackFromItsStart()
+    {
+        // Arrange
+        var held = Compose(reminders: [Reminder(15)]);
+
+        // Act, Assert
+        Assert.Equal(Start, held.AnchorsRemindersAt);
+        Assert.Equal(Start.AddMinutes(-15), held.RemindsAt(Reminder(15)));
+    }
+
+    /// <summary>Measuring a day back from midnight announces it in the night before anybody is awake to be told.</summary>
+    [Fact]
+    public void RemindsAt_AnEventStatedAsADay_MeasuresBackFromTheHourTheDesignSettled()
+    {
+        // Arrange
+        var held = Compose(isAllDay: true, reminders: [Reminder(60)]);
+        var morning = new DateTimeOffset(Start.Date.AddHours(CalendarEvent.AllDayReminderHour), Start.Offset);
+
+        // Act, Assert
+        Assert.Equal(morning, held.AnchorsRemindersAt);
+        Assert.Equal(morning.AddHours(-1), held.RemindsAt(Reminder(60)));
+    }
+
+    /// <summary>What announces an event survives somebody agreeing to it, exactly as its identity does.</summary>
+    [Fact]
+    public void Accepted_AProposalCarryingReminders_KeepsThemAndHowTheyAreMeasured()
+    {
+        // Arrange
+        var proposed = Compose(origin: CalendarEventOrigin.Proposed, isAllDay: true, reminders: [Reminder(1440)]);
+
+        // Act
+        var accepted = proposed.Accepted(RecordedAt.AddHours(1));
+
+        // Assert
+        Assert.True(accepted.IsAllDay);
+        Assert.Equal([1440], accepted.Reminders.Select(reminder => reminder.MinutesBefore));
+    }
+
+    private static CalendarReminder Reminder(int minutesBefore) => CalendarReminder.Create(minutesBefore);
+
     private static CalendarEvent Compose(
         DateTimeOffset? end = null,
         CalendarEventOrigin origin = CalendarEventOrigin.Asserted,
         StoredEmailId? sourceMessage = null,
-        ImportedCalendarEventUid? importedUid = null) =>
+        ImportedCalendarEventUid? importedUid = null,
+        bool isAllDay = false,
+        IReadOnlyCollection<CalendarReminder>? reminders = null) =>
         CalendarEvent.Create(
             CalendarEventId.Create(Guid.CreateVersion7()),
             CalendarEventTitle.Create("Design review"),
             Start,
             end,
+            isAllDay,
+            reminders ?? [],
             origin,
             sourceMessage,
             importedUid,

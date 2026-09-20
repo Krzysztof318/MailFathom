@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -11,9 +12,10 @@ namespace MailFathom.Infrastructure.Persistence.Notifications;
 
 /// <summary>Turns a notification into the row it is stored as.</summary>
 /// <remarks>
-/// The target is flattened into its three columns here rather than being modelled as one, because the shape a row
-/// carries is what a reader filters and joins on: a column per shape lets the message be a foreign key, which is what
-/// erases a notification with the mail it leads to, and a serialized target could be neither.
+/// The target is flattened into a column per shape here rather than being modelled as one, because the shape a row
+/// carries is what a reader filters and joins on: a column per shape lets the message and the calendar event each be
+/// a foreign key, which is what erases a notification with the record it leads to, and a serialized target could be
+/// neither.
 /// </remarks>
 internal static class NotificationMapping
 {
@@ -22,9 +24,9 @@ internal static class NotificationMapping
     /// <returns>The notification.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="entity" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The three target columns are read back into the one shape they were flattened from, and a row whose columns
-    /// name no shape this build declares reaches <see cref="NotificationTarget" />'s own refusal rather than being
-    /// interpreted here.
+    /// The target columns are read back into the one shape they were flattened from, and a row whose columns name no
+    /// shape this build declares reaches <see cref="NotificationTarget" />'s own refusal rather than being interpreted
+    /// here.
     /// </remarks>
     public static Notification ToNotification(NotificationEntity entity)
     {
@@ -44,7 +46,7 @@ internal static class NotificationMapping
             entity.IsRead);
     }
 
-    /// <summary>Reads the three target columns back as the one shape they were flattened from.</summary>
+    /// <summary>Reads the target columns back as the one shape they were flattened from.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the row names a shape without the column that shape needs.</exception>
     private static NotificationTarget TargetOf(NotificationEntity entity) => entity.TargetKind switch
     {
@@ -53,6 +55,8 @@ internal static class NotificationMapping
             NotificationTarget.ToMessage(StoredEmailId.Create(message)),
         NotificationTargetKind.Screen when entity.TargetScreen is { } screen =>
             NotificationTarget.ToScreen(screen),
+        NotificationTargetKind.CalendarEvent when entity.TargetCalendarEventId is { } calendarEvent =>
+            NotificationTarget.ToCalendarEvent(CalendarEventId.Create(calendarEvent)),
         _ => throw new ArgumentOutOfRangeException(
             nameof(entity),
             entity.TargetKind,
@@ -81,6 +85,7 @@ internal static class NotificationMapping
             TargetKind = notification.Target.Kind,
             TargetStoredEmailId = notification.Target.Message?.Value,
             TargetScreen = notification.Target.Screen,
+            TargetCalendarEventId = notification.Target.CalendarEvent?.Value,
             DeduplicationKey = notification.DeduplicationKey.Value,
             OccurredAt = notification.OccurredAt,
             IsRead = notification.IsRead,

@@ -55,6 +55,13 @@ internal sealed class CalendarEventEntity
     /// <remarks>An end and a duration are one fact, so the end is stored and the duration is derived from it.</remarks>
     public DateTimeOffset? EndsAt { get; set; }
 
+    /// <summary>Gets or sets whether the event is stated as a day rather than as a clock time.</summary>
+    /// <remarks>
+    /// It changes nothing about when the event is; what it decides is the instant a reminder on it is measured back
+    /// from, because a person who wrote down a day never chose midnight.
+    /// </remarks>
+    public bool IsAllDay { get; set; }
+
     /// <summary>Gets or sets whether the event is on the calendar or offered to it.</summary>
     public CalendarEventOrigin Origin { get; set; }
 
@@ -78,6 +85,14 @@ internal sealed class CalendarEventEntity
 
     /// <summary>Gets or sets when it was last amended or accepted.</summary>
     public DateTimeOffset AmendedAt { get; set; }
+
+    /// <summary>Gets or sets the leads this event is to be announced at, which is empty where nothing announces it.</summary>
+    /// <remarks>
+    /// Rows of their own rather than a column, because the question the producer asks — what has come due across
+    /// every calendar — is answerable from an index only if the instant a reminder falls at is a column. They cascade
+    /// from this row, which is what the delete confirmation promises.
+    /// </remarks>
+    public ICollection<CalendarEventReminderEntity> Reminders { get; } = [];
 
     /// <summary>Gets or sets PostgreSQL's own row version, which is what a write over a row somebody else moved fails on.</summary>
     /// <remarks>

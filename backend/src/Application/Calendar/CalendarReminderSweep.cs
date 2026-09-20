@@ -1,0 +1,177 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Globalization;
+using MailFathom.Application.Access;
+using MailFathom.Application.Coordination;
+using MailFathom.Application.Notifications;
+using MailFathom.Domain.Notifications;
+
+namespace MailFathom.Application.Calendar;
+
+/// <summary>Announces the reminders that have come due, one bounded pass at a time.</summary>
+/// <remarks>
+/// <para>
+/// <b>A reminder is due whether or not anybody has a client open</b>, which is the whole reason the producer is here
+/// rather than in a screen: what raises it is this pass writing a notification record, and every client — the one
+/// that was open, the one opened an hour later, and the second machine — learns about it the way it learns about
+/// everything else. That is also why reminders on a task's due date will reuse this rather than growing a producer of
+/// their own.
+/// </para>
+/// <para>
+/// The pass is one run for the whole deployment, so it runs only under the lease on its own scope, as
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// decides. A replica refused the lease announces nothing and asks again on its next interval.
+/// </para>
+/// <para>
+/// <b>Exactly once, from two rules rather than one.</b> The notification is written first and the claim recorded
+/// after it, so a pass that ends between them announces nothing twice — the record's own deduplication key names the
+/// reminder rather than the occasion, so the repeat is folded into the statement already standing unread — and loses
+/// nothing either, because the reminder is still unclaimed and the next pass reaches it. What the claim is made
+/// against is the instant the reminder currently falls at, which is what makes an event moved forward due again at
+/// its new time and an event moved back onto an announced time stay quiet.
+/// </para>
+/// <para>
+/// <b>Nothing long overdue is announced.</b> A deployment that was off for a day comes back to reminders nobody could
+/// have acted on, about events that have already happened, and delivering them would be a burst of statements in
+/// place of the one thing somebody wanted to be told. <see cref="LongestLateAnnouncement" /> is how late is still
+/// worth saying; anything older is left where it is and announced by nothing.
+/// </para>
+/// </remarks>
+public sealed class CalendarReminderSweep
+{
+    /// <summary>The lease the pass is held under, which is the deployment's as the pass is.</summary>
+    internal static readonly WorkScope SweepScope = WorkScope.Create("calendar-reminders");
+
+    /// <summary>How many reminders one pass announces at most.</summary>
+    /// <remarks>
+    /// Each one is a notification written and a client told, so the bound is what keeps a deployment whose calendars
+    /// all name the same hour from spending a pass on every one of them; what it does not reach is due on the next.
+    /// </remarks>
+    public const int MaximumRemindersPerRun = 200;
+
+    /// <summary>How late a reminder may still be announced, past which it is passed over in silence.</summary>
+    public static readonly TimeSpan LongestLateAnnouncement = TimeSpan.FromHours(1);
+
+    private readonly AccessAuthorization authorization;
+    private readonly ICalendarReminderSchedule schedule;
+    private readonly NotificationRaiser raiser;
+    private readonly IWorkLeaseRunner leases;
+    private readonly TimeProvider timeProvider;
+
+    /// <summary>Initializes the pass.</summary>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
+    /// <param name="schedule">Names what has come due and records what was announced.</param>
+    /// <param name="raiser">Writes each notification and tells whatever the person has open.</param>
+    /// <param name="leases">Holds the pass's scope for the length of one run.</param>
+    /// <param name="timeProvider">Reads the instant a reminder is judged due against.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    public CalendarReminderSweep(
+        AccessAuthorization authorization,
+        ICalendarReminderSchedule schedule,
+        NotificationRaiser raiser,
+        IWorkLeaseRunner leases,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(schedule);
+        ArgumentNullException.ThrowIfNull(raiser);
+        ArgumentNullException.ThrowIfNull(leases);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        this.authorization = authorization;
+        this.schedule = schedule;
+        this.raiser = raiser;
+        this.leases = leases;
+        this.timeProvider = timeProvider;
+    }
+
+    /// <summary>Runs one bounded pass if this replica takes the pass's lease.</summary>
+    /// <param name="cancellationToken">Cancels the claim and the pass.</param>
+    /// <returns>How many reminders the pass announced, or <see langword="null" /> when another replica holds the pass.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
+    public async Task<int?> RunAsync(CancellationToken cancellationToken)
+    {
+        this.authorization.RequireProcessIdentity();
+
+        var announced = 0;
+
+        var ran = await this.leases.TryRunUnderLeaseAsync(
+            SweepScope,
+            async heldToken => announced = await this.AnnounceAsync(heldToken),
+            cancellationToken);
+
+        return ran ? announced : null;
+    }
+
+    private async Task<int> AnnounceAsync(CancellationToken cancellationToken)
+    {
+        var asOf = this.timeProvider.GetUtcNow();
+
+        var due = await this.schedule.ReadDueAsync(
+            asOf,
+            asOf - LongestLateAnnouncement,
+            MaximumRemindersPerRun,
+            cancellationToken);
+
+        var announced = 0;
+
+        foreach (var reminder in due)
+        {
+            await this.raiser.RecordAndAnnounceAsync(Composed(reminder), cancellationToken);
+
+            if (await this.schedule.MarkRaisedAsync(reminder, cancellationToken))
+            {
+                announced++;
+            }
+        }
+
+        return announced;
+    }
+
+    /// <summary>Composes the notification one due reminder is said in.</summary>
+    /// <remarks>
+    /// The headline is what the event is called, because that is what somebody being reminded needs to read first and
+    /// there is nothing else a reminder is about. The two lines are the service's own English, for a reader with no
+    /// client to say it in their own; the statement beside them is the condition and the lead, which is what a client
+    /// draws the row from in the language its reader has.
+    /// </remarks>
+    private static Notification Composed(DueCalendarReminder due) =>
+        Notification.Compose(
+            NotificationId.Create(Guid.CreateVersion7(due.DueAt)),
+            due.Owner,
+            NotificationKind.Calendar,
+            due.Title.Value,
+            Remaining(due.Reminder.MinutesBefore),
+            NotificationStatement.CalendarReminderDue(due.Reminder.MinutesBefore),
+            source: null,
+            NotificationTarget.ToCalendarEvent(due.Event),
+            // The reminder rather than the occasion, so a pass that wrote the row and then ended before recording the
+            // claim folds its repeat into the statement already standing unread instead of saying it twice. Both
+            // halves are MailFathom's own — an identity it issued and a number somebody chose — so the key carries
+            // nothing of what the event is about.
+            NotificationDeduplicationKey.For(
+                "calendar-reminder",
+                string.Create(CultureInfo.InvariantCulture, $"{due.Event.Value}:{due.Reminder.MinutesBefore}")),
+            due.DueAt);
+
+    /// <summary>Says how long is left in the coarsest whole unit that states the lead exactly.</summary>
+    /// <remarks>
+    /// The thresholds are the ones the client's own reminder labels use, so the English fallback and the sentence a
+    /// reader sees in their own language describe the same lead rather than one in minutes and one in days.
+    /// </remarks>
+    private static string Remaining(int minutesBefore) => minutesBefore switch
+    {
+        0 => "Starting now.",
+        < 60 => Counted(minutesBefore, "minute"),
+        < 24 * 60 when minutesBefore % 60 == 0 => Counted(minutesBefore / 60, "hour"),
+        < 24 * 60 => Counted(minutesBefore, "minute"),
+        _ when minutesBefore % (24 * 60) == 0 => Counted(minutesBefore / (24 * 60), "day"),
+        _ => Counted(minutesBefore / 60, "hour"),
+    };
+
+    private static string Counted(int count, string unit) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{count} {unit}{(count == 1 ? string.Empty : "s")} left.");
+}

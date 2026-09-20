@@ -12,8 +12,8 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Notifications;
 
 /// <summary>
 /// Holds the notification row to the two obligations that are the schema's rather than any code path's: that a
-/// notification leaves with the mail it leads to and with the person it happened to, and that one condition standing
-/// unread cannot be said twice.
+/// notification leaves with the record it leads to and with the person it happened to, and that one condition
+/// standing unread cannot be said twice.
 /// </summary>
 /// <remarks>
 /// The model is built in memory by the real PostgreSQL provider and no connection is opened, so what these assertions
@@ -53,6 +53,24 @@ public sealed class NotificationModelTests
         // Assert
         Assert.NotNull(target);
         Assert.True(target.IsNullable);
+    }
+
+    /// <summary>
+    /// A reminder cannot outlive the event it is about either, which is the other half of what the delete
+    /// confirmation promises: the reminders go with the event, and so does the notification one of them raised.
+    /// </summary>
+    [Fact]
+    public void Model_TheCalendarEventANotificationLeadsTo_TakesTheNotificationWithItWhenItIsDeleted()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var foreignKey = ForeignKeyOn(context, nameof(NotificationEntity.TargetCalendarEventId));
+
+        // Assert
+        Assert.Equal(nameof(CalendarEventEntity), foreignKey.PrincipalEntityType.ClrType.Name);
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
     /// <summary>

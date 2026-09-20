@@ -40,6 +40,10 @@ public sealed record CalendarEventWriteResult
     public static CalendarEventWriteResult AlreadyOnTheCalendar { get; } =
         new(CalendarEventWriteOutcome.AlreadyOnTheCalendar, null);
 
+    /// <summary>Gets the result of a write stating reminders the calendar will not hold.</summary>
+    public static CalendarEventWriteResult RemindersRefused { get; } =
+        new(CalendarEventWriteOutcome.RemindersRefused, null);
+
     /// <summary>States that the calendar holds the event as supplied.</summary>
     /// <param name="calendarEvent">The event as it now stands.</param>
     /// <returns>The result.</returns>

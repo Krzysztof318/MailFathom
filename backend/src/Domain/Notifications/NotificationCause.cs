@@ -21,4 +21,7 @@ public enum NotificationCause
 
     /// <summary>The mail server refused the credential MailFathom holds for an account.</summary>
     CredentialRefused = 2,
+
+    /// <summary>A reminder somebody set on one of their own calendar events has come due.</summary>
+    CalendarReminderDue = 3,
 }

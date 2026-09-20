@@ -26,4 +26,7 @@ public enum CalendarEventWriteOutcome
 
     /// <summary>The event is already on the calendar, so there is no proposal left to accept.</summary>
     AlreadyOnTheCalendar = 4,
+
+    /// <summary>The reminders state a lead that is negative, further ahead than one may be set, repeated, or more of them than an event holds.</summary>
+    RemindersRefused = 5,
 }

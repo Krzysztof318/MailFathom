@@ -58,6 +58,16 @@ internal sealed class NotificationEntity
     /// <summary>Gets or sets the screen the notification leads to, and <see langword="null" /> for every other shape.</summary>
     public NotificationScreen? TargetScreen { get; set; }
 
+    /// <summary>Gets or sets the calendar event the notification leads to, which is the association the row is erased through.</summary>
+    /// <remarks>
+    /// A key rather than a plain identifier, for the reason the message is one: a statement about a commitment that
+    /// is gone is not a row to keep, and the person who deleted the event is not owed a reminder about it afterwards.
+    /// </remarks>
+    public Guid? TargetCalendarEventId { get; set; }
+
+    /// <summary>Gets or sets the calendar event the notification leads to.</summary>
+    public CalendarEventEntity? TargetCalendarEvent { get; set; }
+
     /// <summary>Gets or sets the condition this notification was raised for.</summary>
     /// <remarks>
     /// Unique among one user's unread rows, which is what makes a repeated raise idempotent: a condition already

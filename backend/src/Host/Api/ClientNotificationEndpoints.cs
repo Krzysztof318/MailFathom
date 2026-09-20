@@ -381,15 +381,20 @@ internal sealed record ClientNotificationStatementResponse(string Cause, int? Co
 }
 
 /// <summary>Where opening a notification leads.</summary>
-/// <param name="Kind">Which of the three shapes this target is.</param>
+/// <param name="Kind">Which of the four shapes this target is.</param>
 /// <param name="MessageId">The stored message it leads to, or <see langword="null" /> for every other shape.</param>
 /// <param name="Screen">The screen it leads to, or <see langword="null" /> for every other shape.</param>
+/// <param name="CalendarEventId">The calendar event it leads to, or <see langword="null" /> for every other shape.</param>
 /// <remarks>
-/// The shape is reported beside the two values so a client switches on one field rather than inferring the shape from
+/// The shape is reported beside the values so a client switches on one field rather than inferring the shape from
 /// which value happens to be present — which is what keeps a target that leads nowhere distinct from one whose record
 /// this build could not name.
 /// </remarks>
-internal sealed record ClientNotificationTargetResponse(string Kind, Guid? MessageId, string? Screen)
+internal sealed record ClientNotificationTargetResponse(
+    string Kind,
+    Guid? MessageId,
+    string? Screen,
+    Guid? CalendarEventId)
 {
     /// <summary>Describes one target on the wire.</summary>
     /// <param name="target">The target.</param>
@@ -402,7 +407,8 @@ internal sealed record ClientNotificationTargetResponse(string Kind, Guid? Messa
         return new ClientNotificationTargetResponse(
             target.Kind.ToString(),
             target.Message?.Value,
-            target.Screen?.ToString());
+            target.Screen?.ToString(),
+            target.CalendarEvent?.Value);
     }
 }
 

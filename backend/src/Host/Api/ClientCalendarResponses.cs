@@ -10,6 +10,8 @@ namespace MailFathom.Host.Api;
 /// <param name="Title">What the event is called.</param>
 /// <param name="Start">When it begins.</param>
 /// <param name="End">When it ends, or nothing to state no end.</param>
+/// <param name="IsAllDay">Whether the event is stated as a day rather than as a clock time; a request naming nothing states a clock time.</param>
+/// <param name="Reminders">The leads to announce it at, in minutes before it, or nothing to announce nothing.</param>
 /// <param name="SourceMessage">The message it was created from, or nothing where none was open.</param>
 /// <remarks>
 /// It is its own shape rather than the amendment's with one more field, because the message is stated once and never
@@ -19,29 +21,47 @@ internal sealed record CalendarEventCreationRequest(
     string? Title,
     DateTimeOffset? Start,
     DateTimeOffset? End,
+    bool IsAllDay,
+    IReadOnlyList<int>? Reminders,
     Guid? SourceMessage);
 
 /// <summary>The event a caller states one of their own is to stand as.</summary>
 /// <param name="Title">What the event is called afterwards.</param>
 /// <param name="Start">When it begins afterwards.</param>
 /// <param name="End">When it ends afterwards, or nothing to hold no end.</param>
+/// <param name="IsAllDay">Whether it is stated as a day rather than as a clock time afterwards.</param>
+/// <param name="Reminders">The leads it is announced at afterwards, in minutes before it, or nothing to announce nothing.</param>
 /// <remarks>
 /// The whole record rather than the difference from the one held, so a caller sending only what changed is sending a
-/// record that is missing the rest. What it cannot state is the identity, the origin, or the message the event cites:
-/// an amendment changes none of those.
+/// record that is missing the rest. The reminders are part of that record, which is what makes turning the last one
+/// off an event stated with none rather than a field left out. What it cannot state is the identity, the origin, or
+/// the message the event cites: an amendment changes none of those.
 /// </remarks>
-internal sealed record CalendarEventAmendmentRequest(string? Title, DateTimeOffset? Start, DateTimeOffset? End);
+internal sealed record CalendarEventAmendmentRequest(
+    string? Title,
+    DateTimeOffset? Start,
+    DateTimeOffset? End,
+    bool IsAllDay,
+    IReadOnlyList<int>? Reminders);
 
 /// <summary>One event as the calendar holds it.</summary>
 /// <param name="Id">The identity this deployment gave it, which neither an amendment nor an acceptance changes.</param>
 /// <param name="Title">What the event is called, as whoever wrote it down wrote it.</param>
 /// <param name="Start">When it begins.</param>
 /// <param name="End">When it ends, or nothing where nothing said how long it lasts.</param>
+/// <param name="IsAllDay">Whether the event is stated as a day rather than as a clock time.</param>
+/// <param name="Reminders">The leads it is announced at, in minutes before it, longest first, and empty where nothing announces it.</param>
+/// <param name="RemindsAt">The instants those leads fall at, in the same order, which an all-day event measures from nine in the morning rather than from midnight.</param>
 /// <param name="Origin">Whether the event is on the calendar or offered to it, as <c>Asserted</c> or <c>Proposed</c>.</param>
 /// <param name="SourceMessage">The message it came out of, or nothing where no message named it.</param>
 /// <param name="RecordedAt">When it was first written here.</param>
 /// <param name="AmendedAt">When it was last amended or accepted, which equals <paramref name="RecordedAt" /> until one happens.</param>
 /// <remarks>
+/// <para>
+/// The instants the reminders fall at travel beside the leads rather than being left to the client to derive, because
+/// what an all-day event is measured from is a rule this deployment owns: a client computing it would be the second
+/// place that rule is written, and the two would disagree the first time one of them changed.
+/// </para>
 /// <para>
 /// The identifier the event was imported under is deliberately absent. It exists for the one question whoever reads an
 /// <c>.ics</c> file asks — whether an entry is already here — and nothing a client draws reads it, so it stays behind
@@ -58,6 +78,9 @@ internal sealed record CalendarEventResponse(
     string Title,
     DateTimeOffset Start,
     DateTimeOffset? End,
+    bool IsAllDay,
+    IReadOnlyList<int> Reminders,
+    IReadOnlyList<DateTimeOffset> RemindsAt,
     string Origin,
     Guid? SourceMessage,
     DateTimeOffset RecordedAt,
@@ -76,6 +99,9 @@ internal sealed record CalendarEventResponse(
             calendarEvent.Title.Value,
             calendarEvent.Start,
             calendarEvent.End,
+            calendarEvent.IsAllDay,
+            [.. calendarEvent.Reminders.Select(reminder => reminder.MinutesBefore)],
+            [.. calendarEvent.Reminders.Select(calendarEvent.RemindsAt)],
             calendarEvent.Origin.ToString(),
             calendarEvent.SourceMessage?.Value,
             calendarEvent.RecordedAt,

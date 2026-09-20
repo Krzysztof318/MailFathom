@@ -69,6 +69,22 @@ public sealed record NotificationStatement
     public static NotificationStatement CredentialRefused() =>
         new(NotificationCause.CredentialRefused, counted: null, outOf: null);
 
+    /// <summary>States that a reminder on a calendar event has come due, counting how far ahead of it the reminder falls.</summary>
+    /// <param name="minutesBefore">How many minutes before the event the reminder was set, which is zero at the event itself.</param>
+    /// <returns>The statement.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="minutesBefore" /> is negative.</exception>
+    /// <remarks>
+    /// The lead rather than the instant, because what the row says is how long the person has — and an instant would
+    /// restate what the notification already carries as when it occurred. What the event is called is not here and
+    /// never will be: a name belongs in the row's own headline, which is where a reader's language finds it.
+    /// </remarks>
+    public static NotificationStatement CalendarReminderDue(int minutesBefore)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(minutesBefore);
+
+        return new NotificationStatement(NotificationCause.CalendarReminderDue, minutesBefore, outOf: null);
+    }
+
     /// <summary>Restores the statement a stored row holds, or nothing where the row names no cause.</summary>
     /// <param name="cause">The condition the row names, or <see langword="null" /> for a row written before a cause was kept.</param>
     /// <param name="counted">How many the cause counts.</param>

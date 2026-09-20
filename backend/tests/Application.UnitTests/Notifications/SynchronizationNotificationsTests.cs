@@ -260,9 +260,8 @@ public sealed class SynchronizationNotificationsTests
         var store = new InMemoryNotificationStore();
         var outsized = MailAccountId.Create(new string('w', 400));
         var notifications = new SynchronizationNotifications(
-            store,
+            new NotificationRaiser(store, ClientSignalPublishers.ReachingNobody),
             new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, outsized),
-            ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(RunInstant));
 
         // Act
@@ -284,7 +283,7 @@ public sealed class SynchronizationNotificationsTests
         var channel = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider(RunInstant);
         await using var signals = new ClientSignals([channel], clock);
-        var notifications = new SynchronizationNotifications(store, Assignments, signals, clock);
+        var notifications = new SynchronizationNotifications(new NotificationRaiser(store, signals), Assignments, clock);
 
         // Act
         await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
@@ -310,7 +309,7 @@ public sealed class SynchronizationNotificationsTests
         var channel = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider(RunInstant);
         await using var signals = new ClientSignals([channel], clock);
-        var notifications = new SynchronizationNotifications(store, Assignments, signals, clock);
+        var notifications = new SynchronizationNotifications(new NotificationRaiser(store, signals), Assignments, clock);
 
         // Act
         await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
@@ -325,5 +324,8 @@ public sealed class SynchronizationNotificationsTests
     }
 
     private static SynchronizationNotifications CreateNotifications(INotificationStore store) =>
-        new(store, Assignments, ClientSignalPublishers.ReachingNobody, new FakeTimeProvider(RunInstant));
+        new(
+            new NotificationRaiser(store, ClientSignalPublishers.ReachingNobody),
+            Assignments,
+            new FakeTimeProvider(RunInstant));
 }

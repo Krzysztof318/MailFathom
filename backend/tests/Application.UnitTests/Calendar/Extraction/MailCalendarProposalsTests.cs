@@ -60,6 +60,36 @@ public sealed class MailCalendarProposalsTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A reading of mail decides neither of the two things a person sets once they have agreed to the date, so a
+    /// proposal announces nothing and states a clock time. An extraction read as a whole day would move a reminder
+    /// to the morning of a date nobody has accepted yet, and one carrying reminders would announce a commitment
+    /// somebody never made.
+    /// </summary>
+    [Fact]
+    public async Task StageAsync_AMessageNamingADate_ProposesAnEventThatAnnouncesNothingAndStatesAClockTime()
+    {
+        // Arrange
+        var events = Substitute.For<ICalendarEventStore>();
+        var owner = MailUserId.Create(Guid.CreateVersion7());
+        var proposals = ProposalsFor([owner], events);
+
+        // Act
+        await proposals.StageAsync(
+            Substitute.For<IPersistenceSession>(),
+            Account,
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            [Extracted("Racking survey")],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await events.Received(1).AddAsync(
+            Arg.Any<IPersistenceSession>(),
+            owner,
+            Arg.Is<CalendarEvent>(written => !written!.IsAllDay && written.Reminders.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>One reading is paid for and each person then decides for themselves, which is the only answer that works both ways.</summary>
     [Fact]
     public async Task StageAsync_AMailboxTwoPeopleAreAssigned_ProposesToBothCalendars()

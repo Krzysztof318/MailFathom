@@ -17,19 +17,43 @@ namespace MailFathom.Infrastructure.Persistence.Calendar;
 /// </remarks>
 internal static class CalendarEventMapping
 {
-    internal static CalendarEventEntity ToEntity(MailUserId owner, CalendarEvent calendarEvent) =>
-        new()
+    internal static CalendarEventEntity ToEntity(MailUserId owner, CalendarEvent calendarEvent)
+    {
+        var entity = new CalendarEventEntity
         {
             Id = calendarEvent.Id.Value,
             UserId = owner.Value,
             Title = calendarEvent.Title.Value,
             StartsAt = calendarEvent.Start,
             EndsAt = calendarEvent.End,
+            IsAllDay = calendarEvent.IsAllDay,
             Origin = calendarEvent.Origin,
             SourceStoredEmailId = calendarEvent.SourceMessage?.Value,
             ImportedUid = calendarEvent.ImportedUid?.Value,
             RecordedAt = calendarEvent.RecordedAt,
             AmendedAt = calendarEvent.AmendedAt,
+        };
+
+        foreach (var reminder in calendarEvent.Reminders)
+        {
+            entity.Reminders.Add(ToEntity(calendarEvent, reminder));
+        }
+
+        return entity;
+    }
+
+    /// <summary>Builds the row one reminder of an event is stored as, with the instant it currently falls at.</summary>
+    /// <remarks>
+    /// The instant is derived from the event rather than from the reminder, because the anchor an all-day event is
+    /// measured back from is the event's own rule. It is written rather than computed on read so that the pass
+    /// announcing reminders can ask the database which have come due instead of reading every calendar to find out.
+    /// </remarks>
+    internal static CalendarEventReminderEntity ToEntity(CalendarEvent calendarEvent, CalendarReminder reminder) =>
+        new()
+        {
+            CalendarEventId = calendarEvent.Id.Value,
+            MinutesBefore = reminder.MinutesBefore,
+            DueAt = calendarEvent.RemindsAt(reminder),
         };
 
     internal static CalendarEvent ToDomain(CalendarEventEntity stored) =>
@@ -38,6 +62,8 @@ internal static class CalendarEventMapping
             CalendarEventTitle.Create(stored.Title),
             stored.StartsAt,
             stored.EndsAt,
+            stored.IsAllDay,
+            [.. stored.Reminders.Select(reminder => CalendarReminder.Create(reminder.MinutesBefore))],
             stored.Origin,
             stored.SourceStoredEmailId is { } message ? StoredEmailId.Create(message) : null,
             stored.ImportedUid is { } uid ? ImportedCalendarEventUid.Create(uid) : null,
