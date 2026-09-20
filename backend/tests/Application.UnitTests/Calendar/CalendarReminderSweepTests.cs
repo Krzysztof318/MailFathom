@@ -94,9 +94,15 @@ public sealed class CalendarReminderSweepTests
         Assert.True(this.schedule.IsClaimed(Standup, minutesBefore: 15));
     }
 
-    /// <summary>What the claim is made against is the instant, so a reminder on a moved event comes due at the new one.</summary>
+    /// <summary>
+    /// What the claim is made against is the instant, so a reminder on a moved event comes due at the new one — and
+    /// it is said there even where the statement about the old time is still standing unread, which is the case the
+    /// key has to tell apart from a pass repeating itself. A key naming only the event and the lead would fold the
+    /// second statement into the first, write nothing, and then claim the reminder anyway, so the person would never
+    /// be told about the time the event actually moved to.
+    /// </summary>
     [Fact]
-    public async Task RunAsync_AnEventMovedAfterItsReminderWasAnnounced_AnnouncesItAgainAtTheNewTime()
+    public async Task RunAsync_AnEventMovedWhileItsFirstReminderWasStillUnread_AnnouncesItAgainAtTheNewTime()
     {
         // Arrange
         this.schedule.Holding(Due(Now.AddMinutes(-1), minutesBefore: 15));
@@ -104,7 +110,6 @@ public sealed class CalendarReminderSweepTests
         var sweep = this.Sweeping(clock);
 
         await sweep.RunAsync(TestContext.Current.CancellationToken);
-        await this.notifications.MarkAllReadAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Act
         clock.Advance(TimeSpan.FromMinutes(20));
@@ -228,6 +233,7 @@ public sealed class CalendarReminderSweepTests
     [InlineData(24 * 60, "1 day left.")]
     [InlineData(2 * 24 * 60, "2 days left.")]
     [InlineData(36 * 60, "36 hours left.")]
+    [InlineData(24 * 60 + 30, "1470 minutes left.")]
     public async Task RunAsync_AReminderAtEachLead_SaysWhatIsLeftInTheCoarsestWholeUnit(int minutesBefore, string said)
     {
         // Arrange
@@ -259,7 +265,9 @@ public sealed class CalendarReminderSweepTests
         NotificationTarget.ToCalendarEvent(due.Event),
         NotificationDeduplicationKey.For(
             "calendar-reminder",
-            string.Create(CultureInfo.InvariantCulture, $"{due.Event.Value}:{due.Reminder.MinutesBefore}")),
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{due.Event.Value}:{due.Reminder.MinutesBefore}:{due.DueAt:O}")),
         due.DueAt);
 
     private CalendarReminderSweep Sweeping(

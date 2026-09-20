@@ -86,10 +86,13 @@ later, and the second machine.
 
 **Exactly once comes from two rules rather than one.** The notification is written first and the claim recorded
 after it, so a pass that ends between them says nothing twice — the notification's own deduplication names the
-reminder rather than the occasion, so the repeat folds into the statement already standing unread — and loses
-nothing either, the reminder still being unclaimed when the next pass reaches it. What the claim is recorded against
-is the instant the reminder currently falls at, which is what makes an event moved forward due again at its new time
-and an event moved back onto an announced time stay quiet.
+reminder and the instant it falls at, so the repeat folds into the statement already standing unread — and loses
+nothing either, the reminder still being unclaimed when the next pass reaches it. **The instant is half of that name
+rather than a detail of it**: a reminder that has become due at a new time is a different thing to be told, so it is
+said even where the statement about the old time has not been read yet, and a deduplication naming only the event
+and the lead would swallow it and then claim the reminder anyway. What the claim is recorded against is that same
+instant, which is what makes an event moved forward due again at its new time and an event moved back onto an
+announced time stay quiet.
 
 **Nothing long overdue is announced.** A deployment that was off for a day comes back to reminders nobody could have
 acted on, about events that have already happened, and delivering them would be a burst of statements in place of the

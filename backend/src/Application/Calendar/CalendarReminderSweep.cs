@@ -27,10 +27,11 @@ namespace MailFathom.Application.Calendar;
 /// <para>
 /// <b>Exactly once, from two rules rather than one.</b> The notification is written first and the claim recorded
 /// after it, so a pass that ends between them announces nothing twice — the record's own deduplication key names the
-/// reminder rather than the occasion, so the repeat is folded into the statement already standing unread — and loses
-/// nothing either, because the reminder is still unclaimed and the next pass reaches it. What the claim is made
-/// against is the instant the reminder currently falls at, which is what makes an event moved forward due again at
-/// its new time and an event moved back onto an announced time stay quiet.
+/// reminder and the instant it falls at, so the repeat is folded into the statement already standing unread while a
+/// reminder that has become due at a new instant is a condition of its own and is said — and loses nothing either,
+/// because the reminder is still unclaimed and the next pass reaches it. What the claim is made against is that same
+/// instant, which is what makes an event moved forward due again at its new time and an event moved back onto an
+/// announced time stay quiet.
 /// </para>
 /// <para>
 /// <b>Nothing long overdue is announced.</b> A deployment that was off for a day comes back to reminders nobody could
@@ -147,28 +148,34 @@ public sealed class CalendarReminderSweep
             NotificationStatement.CalendarReminderDue(due.Reminder.MinutesBefore),
             source: null,
             NotificationTarget.ToCalendarEvent(due.Event),
-            // The reminder rather than the occasion, so a pass that wrote the row and then ended before recording the
-            // claim folds its repeat into the statement already standing unread instead of saying it twice. Both
-            // halves are MailFathom's own — an identity it issued and a number somebody chose — so the key carries
-            // nothing of what the event is about.
+            // The reminder *at the instant it falls at*, which is what makes the key fold the repeat it is for and
+            // nothing else: a pass that wrote the row and then ended before recording the claim comes back to the
+            // same instant and folds into the statement already standing unread, while a reminder the event's move
+            // made due again is a different condition and is said at the new time even where the old statement has
+            // not been read. Leaving the instant out would claim that second reminder against a row nothing wrote,
+            // and the person would never be told. All three halves are MailFathom's own — an identity it issued, a
+            // number somebody chose, and an instant it derived — so the key carries nothing of what the event is
+            // about.
             NotificationDeduplicationKey.For(
                 "calendar-reminder",
-                string.Create(CultureInfo.InvariantCulture, $"{due.Event.Value}:{due.Reminder.MinutesBefore}")),
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{due.Event.Value}:{due.Reminder.MinutesBefore}:{due.DueAt:O}")),
             due.DueAt);
 
     /// <summary>Says how long is left in the coarsest whole unit that states the lead exactly.</summary>
     /// <remarks>
-    /// The thresholds are the ones the client's own reminder labels use, so the English fallback and the sentence a
-    /// reader sees in their own language describe the same lead rather than one in minutes and one in days.
+    /// The same reading the client's own reminder labels take, so the English fallback and the sentence somebody
+    /// sees in their own language describe one lead rather than two. A lead that divides into no coarser unit stays
+    /// in minutes rather than being rounded into one: a day and a half is thirty-six hours, and a day and half an
+    /// hour is neither a whole number of hours nor of days and is therefore said in minutes.
     /// </remarks>
     private static string Remaining(int minutesBefore) => minutesBefore switch
     {
         0 => "Starting now.",
-        < 60 => Counted(minutesBefore, "minute"),
-        < 24 * 60 when minutesBefore % 60 == 0 => Counted(minutesBefore / 60, "hour"),
-        < 24 * 60 => Counted(minutesBefore, "minute"),
         _ when minutesBefore % (24 * 60) == 0 => Counted(minutesBefore / (24 * 60), "day"),
-        _ => Counted(minutesBefore / 60, "hour"),
+        _ when minutesBefore % 60 == 0 => Counted(minutesBefore / 60, "hour"),
+        _ => Counted(minutesBefore, "minute"),
     };
 
     private static string Counted(int count, string unit) => string.Create(
