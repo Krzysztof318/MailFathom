@@ -10,6 +10,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Contacts.Correspondence;
@@ -1486,6 +1487,11 @@ public static class ServiceCollectionExtensions
         // The use case a person reads and writes their own calendar through, scoped like the store beneath it: what it
         // acts for comes off the principal the scope authenticated.
         services.AddScoped<OwnCalendar>();
+
+        // The proposals an arriving message produces, registered on the same terms as the store: the extractor it
+        // resolves answers with a reason rather than by being absent, so an instance that turned the reading off
+        // composes it, is told nothing activated it, and proposes nothing without a provider call.
+        services.AddScoped<MailCalendarProposals>();
     }
 
     /// <summary>Registers the units of work that turn a message's passages into vectors.</summary>

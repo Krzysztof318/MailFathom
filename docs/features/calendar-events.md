@@ -15,9 +15,12 @@ work; a file read once subscribes to nothing and writes nothing back.
 
 **One surface serves this store: the client endpoint.** [Its calendar routes](../operations/client-endpoint.md#the-calendar-routes)
 are where the signed-in person reads a window of their own calendar, reads one event, puts one there, amends one,
-accepts a date their mail proposed, and removes one. No MCP tool and no command reaches an event, and nothing proposes
-one from mail yet — what a proposal is and what accepting one does are recorded here, and what produces one is still to
-come.
+accepts a date their mail proposed, and removes one. No MCP tool and no command reaches an event.
+
+**What fills it besides a person is a reading of text.** Where an operator turned it on, an arriving message naming a
+meeting is read into proposals on the calendar of everyone the account is assigned to, and a sentence somebody types
+into the dialog that creates an event is read into the fields it opens with — both by the agent
+[Reading a calendar event out of text](calendar-event-extraction.md) describes.
 
 ## What an event is
 

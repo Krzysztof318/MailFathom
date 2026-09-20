@@ -2,10 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Calendar;
+using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -27,6 +32,8 @@ public sealed class MailEnrichmentPassTests
         MailAccountId.Create("work");
 
     private static readonly DateTimeOffset DerivedAt = new(2026, 9, 6, 8, 30, 0, TimeSpan.Zero);
+
+    private static readonly MailUserId Owner = MailUserId.Create(Guid.CreateVersion7());
 
     [Fact]
     public async Task RunAsync_MailAwaitingADerivation_WritesOneRecordPerMessage()
@@ -286,6 +293,148 @@ public sealed class MailEnrichmentPassTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A deployment that reads no dates runs exactly the pass it always ran, and writes nothing to a calendar.</summary>
+    [Fact]
+    public async Task RunAsync_ADeploymentThatProposesNoEvents_ComposesNoReadingAndWritesNoCalendarRow()
+    {
+        // Arrange
+        var events = Substitute.For<ICalendarEventStore>();
+        var extractor = InactiveExtractor();
+        var pass = CreatePass(
+            StoreReturning([Enrichable()]),
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Settled([Sense()])),
+            proposals: ProposalsOver(extractor, events));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.ProposedEventCount);
+        Assert.Null(report.ProposalsStoppedBy);
+        await extractor.DidNotReceive().ProposeFromEmailAsync(
+            Arg.Any<EnrichableEmail>(),
+            Arg.Any<CancellationToken>());
+        await events.DidNotReceive().AddAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailUserId>(),
+            Arg.Any<CalendarEvent>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A date a message named reaches the calendar of the person the mailbox serves, as a proposal.</summary>
+    [Fact]
+    public async Task RunAsync_AMessageNamingADate_ProposesItToTheOwnerAndCountsIt()
+    {
+        // Arrange
+        var events = Substitute.For<ICalendarEventStore>();
+        var email = Enrichable();
+        var pass = CreatePass(
+            StoreReturning([email]),
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Settled([Sense()])),
+            proposals: ProposalsOver(
+                ExtractorAnswering(CalendarEventExtraction.Settled([Proposed()])),
+                events));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.ProposedEventCount);
+        Assert.Equal(1, report.DerivedEmailCount);
+        await events.Received(1).AddAsync(
+            Arg.Any<IPersistenceSession>(),
+            Owner,
+            Arg.Is<CalendarEvent>(proposed =>
+                proposed!.Origin == CalendarEventOrigin.Proposed
+                && proposed.SourceMessage == email.StoredEmailId
+                && proposed.Title.Value == "Racking survey"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A withheld reading is not written down and ends the pass, for the reason a withheld derivation does: every
+    /// condition that withholds one outlives the message it landed on.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AWithheldReading_WritesNothingForThatMessageAndEndsThePass()
+    {
+        // Arrange
+        var store = StoreReturning([Enrichable(), Enrichable()]);
+        var events = Substitute.For<ICalendarEventStore>();
+        var pass = CreatePass(
+            store,
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Settled([Sense()])),
+            proposals: ProposalsOver(
+                ExtractorAnswering(
+                    CalendarEventExtraction.Withholding(CalendarEventExtractionWithholding.AllowanceExhausted)),
+                events));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.DerivedEmailCount);
+        Assert.Equal(CalendarEventExtractionWithholding.AllowanceExhausted, report.ProposalsStoppedBy);
+        Assert.Null(report.StoppedBy);
+        Assert.True(report.EmailsRemain);
+        await store.DidNotReceive().SaveAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<EmailEnrichment>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message naming no date is ordinary, and is committed exactly as one naming several is.</summary>
+    [Fact]
+    public async Task RunAsync_AMessageNamingNoDate_CommitsTheDerivationAndProposesNothing()
+    {
+        // Arrange
+        var events = Substitute.For<ICalendarEventStore>();
+        var store = StoreReturning([Enrichable()]);
+        var pass = CreatePass(
+            store,
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Settled([Sense()])),
+            proposals: ProposalsOver(ExtractorAnswering(CalendarEventExtraction.Settled([])), events));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.DerivedEmailCount);
+        Assert.Equal(0, report.ProposedEventCount);
+        await store.Received(1).SaveAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<EmailEnrichment>(),
+            Arg.Any<CancellationToken>());
+        await events.DidNotReceive().AddAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailUserId>(),
+            Arg.Any<CalendarEvent>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A withheld derivation ends the pass before anything is read for dates, so the second call is never paid for.</summary>
+    [Fact]
+    public async Task RunAsync_AWithheldDerivation_NeverReachesTheReadingBehindIt()
+    {
+        // Arrange
+        var extractor = ExtractorAnswering(CalendarEventExtraction.Settled([Proposed()]));
+        var pass = CreatePass(
+            StoreReturning([Enrichable()]),
+            EnricherAnswering(_ =>
+                EmailEnrichmentDerivation.Withholding(EmailEnrichmentWithholding.AllowanceExhausted)),
+            proposals: ProposalsOver(extractor, Substitute.For<ICalendarEventStore>()));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailEnrichmentWithholding.AllowanceExhausted, report.StoppedBy);
+        Assert.Null(report.ProposalsStoppedBy);
+        await extractor.DidNotReceive().ProposeFromEmailAsync(
+            Arg.Any<EnrichableEmail>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>States the language the mailbox under test is read in, as its own record does.</summary>
     private static SyntheticAccountLanguages LanguagesAnswering(MailAccountLanguage language) =>
         new SyntheticAccountLanguages().Reading(Account, language);
@@ -298,7 +447,8 @@ public sealed class MailEnrichmentPassTests
     private static MailEnrichmentPass CreatePass(
         IStoredEmailEnrichmentStore store,
         IEmailEnricher enricher,
-        MailAccountLanguage language = MailAccountLanguage.English)
+        MailAccountLanguage language = MailAccountLanguage.English,
+        MailCalendarProposals? proposals = null)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -309,6 +459,7 @@ public sealed class MailEnrichmentPassTests
         return new MailEnrichmentPass(
             store,
             enricher,
+            proposals ?? ProposalsOver(InactiveExtractor(), Substitute.For<ICalendarEventStore>()),
             LanguagesAnswering(language),
             SensitiveContentEgressGuards.Inactive(),
             new OptimisticConcurrencyRetryPolicy(
@@ -317,4 +468,45 @@ public sealed class MailEnrichmentPassTests
                 timeProvider),
             timeProvider);
     }
+
+    /// <summary>Composes the calendar half over whatever reading and whatever calendar a test wants.</summary>
+    /// <remarks>
+    /// One user is assigned the account under test, which is what a deployment ordinarily holds; what a mailbox
+    /// assigned to two people proposes is asserted where the fan-out lives rather than here.
+    /// </remarks>
+    private static MailCalendarProposals ProposalsOver(
+        ICalendarEventExtractor extractor,
+        ICalendarEventStore events)
+    {
+        var assignments = Substitute.For<IMailAccountAssignments>();
+        assignments.UsersAssignedTo(Account).Returns([Owner]);
+
+        return new MailCalendarProposals(extractor, events, assignments, new FakeTimeProvider(DerivedAt));
+    }
+
+    private static ICalendarEventExtractor InactiveExtractor()
+    {
+        var extractor = Substitute.For<ICalendarEventExtractor>();
+        extractor.IsActive.Returns(false);
+
+        return extractor;
+    }
+
+    /// <summary>A reading that is switched on and answers the same way about every message.</summary>
+    private static ICalendarEventExtractor ExtractorAnswering(CalendarEventExtraction extraction)
+    {
+        var extractor = Substitute.For<ICalendarEventExtractor>();
+        extractor.IsActive.Returns(true);
+        extractor
+            .ProposeFromEmailAsync(Arg.Any<EnrichableEmail>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(extraction));
+
+        return extractor;
+    }
+
+    private static ExtractedCalendarEvent Proposed() =>
+        new(
+            CalendarEventTitle.Create("Racking survey"),
+            new DateTimeOffset(2026, 9, 24, 10, 0, 0, TimeSpan.Zero),
+            End: null);
 }

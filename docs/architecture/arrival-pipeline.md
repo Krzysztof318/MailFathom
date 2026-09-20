@@ -236,6 +236,13 @@ A pass ends early rather than walking the batch whenever a derivation is withhel
 — an operator who has not turned it on, a spent period allowance, an unreachable provider — outlives one message and
 would be met again by the next.
 
+**A second reading of the same message rides in this pass**, where an operator turned it on: the calendar events the
+message names are read out of it and staged as proposals in the same commit that writes the derivation, so a message
+is never recorded as derived while the dates it named were lost. It is in this pass rather than in one of its own for
+the reason it is one judgement about a message the pass already holds, guarded and cut; a withheld reading ends the
+pass exactly as a withheld derivation does, for the same reason.
+[Reading a calendar event out of text](../features/calendar-event-extraction.md) describes what it keeps and refuses.
+
 **One pass runs behind it, and its subject is a correspondence rather than a message.** Deriving
 [where a conversation stands](../features/thread-state.md) reads the messages an exchange holds, so it goes last for
 the reason enrichment goes last among the message stages: a conversation whose newest message is still being relocated,
@@ -373,6 +380,7 @@ has a scanner switched on.
 | The boundary rules a cut obeys, and what a passage of an attachment carries | [Message chunks](../features/message-chunks.md) |
 | What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |
 | What a message is about, why it may matter, and what backs each mark | [Message enrichment](../features/message-enrichment.md) |
+| Which occasions a message names, and why a deadline is not one | [Reading a calendar event out of text](../features/calendar-event-extraction.md) |
 | What a correspondence settled, left open, and undertook | [A conversation's state](../features/thread-state.md) |
 | Offering, embedding, and what a ceiling does | [Automatic embedding](../features/automatic-embedding.md) |
 | Reaching mail the live path missed | [Embedding backfill](../features/embedding-backfill.md) |

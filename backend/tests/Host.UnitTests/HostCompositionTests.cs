@@ -264,6 +264,12 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:ThreadState:Enabled", "true"),
             ],
+            ["text read into calendar events"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:Enrichment:Enabled", "true"),
+                new("Chat:CalendarEventExtraction:Enabled", "true"),
+            ],
             ["bodies cleaned on a model of their own"] =
             [
                 .. ChatEndpoint,
@@ -320,6 +326,7 @@ public sealed class HostCompositionTests
                 new("Chat:Enrichment:Enabled", "true"),
                 new("Chat:ThreadState:Enabled", "true"),
                 new("Chat:ReplyDrafting:Enabled", "true"),
+                new("Chat:CalendarEventExtraction:Enabled", "true"),
                 new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),

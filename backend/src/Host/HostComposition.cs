@@ -1061,6 +1061,12 @@ internal static class HostComposition
         builder.Services.AddThreadStateAgent(
             declaredChat?.IsConfigured is true && declaredChat.ThreadState.Enabled);
 
+        // And again for the dates text names, which needs the same two decisions and reports the absence of either the
+        // same way. One registration serves both halves of it — the proposals the arrival pass writes and the draft the
+        // new-event screen asks for — because they are one reading put to two inputs.
+        builder.Services.AddCalendarEventExtractionAgent(
+            declaredChat?.IsConfigured is true && declaredChat.CalendarEventExtraction.Enabled);
+
         // And again for the cleaned rendering a reading pane offers as its third, where what turns it on is the chat
         // endpoint alone: which readers want it is their own preference rather than a key an operator writes. The model
         // it runs on is its own capability's, resolved from the keyed plans above like every other.

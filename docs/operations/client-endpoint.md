@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -108,6 +108,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/drafts/{draftId}/send` | `mailfathom.mail.send` |
 | `GET /api/client/replies/drafting` | `mailfathom.mail.ask` |
 | `POST /api/client/replies/drafting` | `mailfathom.mail.ask` |
+| `GET /api/client/calendar/drafts` | `mailfathom.mail.ask` |
+| `POST /api/client/calendar/drafts` | `mailfathom.mail.ask` |
 | `GET /api/client/outbox` | `mailfathom.mail.send` |
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
@@ -2478,6 +2480,66 @@ drafting does: the conversation and a sample of the account's own sent mail leav
 and the call is charged to the same allowance a question is. A credential holding only `mailfathom.mail.read` is
 answered `403`. Nothing about a draft reaches a log or telemetry on either route.
 [Drafting a reply](../features/reply-drafting.md) holds what a draft is written from and what never leaves.
+
+### The calendar event drafting routes
+
+```http
+GET /api/client/calendar/drafts
+```
+
+```json
+{ "readsDescriptions": true }
+```
+
+```http
+POST /api/client/calendar/drafts
+Content-Type: application/json
+
+{
+  "description": "racking survey on Thursday at half past ten, an hour",
+  "writtenAt": "2026-09-21T09:30:00+02:00"
+}
+```
+
+```json
+{
+  "drafted": true,
+  "title": "Racking survey",
+  "start": "2026-09-24T10:30:00+02:00",
+  "end": "2026-09-24T11:30:00+02:00"
+}
+```
+
+**What comes back fills a dialog rather than a calendar.** Nothing on this route writes an event, and nothing is
+stored: the fields arrive in the dialog somebody opened, who edits them and submits the event themselves.
+
+**The read says whether this deployment reads a description at all**, so a dialog offers the field only where
+something answers it. It resolves a registration and calls no provider, so a client asks it once and holds the answer.
+`false` is what a deployment with no chat section answers and what one whose operator left
+[`Chat:CalendarEventExtraction:Enabled`](configuration-ai.md#reading-a-calendar-event-out-of-text--chatcalendareventextraction)
+off answers; the two are one answer for the reason the drafting read above gives.
+
+**`writtenAt` is the instant the person is standing on, and it carries their offset.** Every relative day and hour in
+the sentence — *tomorrow*, *Thursday*, *the week after next* — is resolved against it, and the offset is what makes
+*half past ten* their half past ten rather than the deployment's. It is required, and an instant written without an
+offset is refused with `400` rather than resolved in whichever zone this process happens to run in.
+
+**`drafted: false` is the dialog's own empty fields rather than a failure.** A sentence naming no occasion, a
+deployment reading none, and a provider that could not be reached are one answer, because what a client does about
+each is identical: it leaves the fields as they were and reports nothing. The exception is the same one the drafting
+route makes — a deployment that has spent what its operator allows a provider answers `429`, because a field that has
+quietly stopped working leaves somebody typing into it.
+
+**Everything travels in a body**, for the reason drafting does: what somebody is arranging is the most revealing value
+this route carries, and a query string is the part of a request that reaches an access log by default. A body over
+4 KiB is refused before it is read, a missing or over-long `description` is refused with `400`, and a refusal never
+echoes what was typed.
+
+**Both routes are published under `mailfathom.mail.ask`**, because the sentence leaves this deployment for a chat
+provider and the call is charged to the same allowance a question is. Nothing about a description or a drafted event
+reaches a log or telemetry on either route.
+[Reading a calendar event out of text](../features/calendar-event-extraction.md) holds what counts as an event, why a
+deadline is not one, and what reaches the provider.
 
 ### The outbox routes
 
