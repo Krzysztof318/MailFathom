@@ -5,6 +5,7 @@
 using System.Net;
 using System.Text;
 using MailFathom.AI.CalendarEvents;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -210,6 +211,37 @@ public sealed class CalendarEventExtractionAgentTests
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A long message is read from as much of it as the endpoint takes, rather than raising out of the pass that was
+    /// deriving it: the same message would be composed to the same length on every run, so a refusal would stop that
+    /// account's pass for ever.
+    /// </summary>
+    [Fact]
+    public async Task ProposeFromEmailAsync_AMessageLongerThanTheEndpointAccepts_IsStillReadFromItsOpening()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(OneEvent));
+        var agent = provider.ExtractorOver(plan: ChatDeclarations.Plan(maximumRequestCharacters: 800));
+        var longMessage = new EnrichableEmail(
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            "The racking survey",
+            ReceivedAt,
+            [
+                .. Enumerable.Range(0, 6).Select(ordinal => new EnrichablePassage(
+                    EmailChunkId.Create(Guid.CreateVersion7()),
+                    ordinal,
+                    new string('a', 400))),
+            ]);
+
+        // Act
+        var extraction = await agent.ProposeFromEmailAsync(longMessage, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(extraction.IsSettled);
+        Assert.Single(extraction.Events);
+        Assert.Equal(1, provider.RequestCount);
+    }
+
     /// <summary>One message is one call, because the agent reaches no tool and is shown nothing else.</summary>
     [Fact]
     public async Task ProposeFromEmailAsync_AnyMessage_ReachesTheProviderExactlyOnce()
@@ -389,7 +421,8 @@ public sealed class CalendarEventExtractionAgentTests
 
         public CalendarEventExtractionAgent ExtractorOver(
             SensitiveContentEgressGuard? egressGuard = null,
-            IMailAnsweringSpendLedger? spendLedger = null)
+            IMailAnsweringSpendLedger? spendLedger = null,
+            ChatGenerationPlan? plan = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -419,7 +452,7 @@ public sealed class CalendarEventExtractionAgentTests
                 });
 
             return new CalendarEventExtractionAgent(
-                ChatDeclarations.Plan(),
+                plan ?? ChatDeclarations.Plan(),
                 MailAnsweringRunBounds.Default,
                 spendLedger ?? AdmittingSpendLedger(),
                 credentialSource,

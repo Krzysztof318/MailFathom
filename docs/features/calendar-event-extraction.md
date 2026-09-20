@@ -70,6 +70,12 @@ it needs no second selection, no second queue, and no second sweep of the mailbo
 reads: the subject and the message's leading passages, already guarded for whatever the deployment withholds from a
 provider.
 
+**A message longer than the endpoint accepts is read from as much of it as fits.** The turn is cut at a character
+boundary rather than refused, on the same reading the enrichment beside it takes: the same message would be composed to
+the same length on every run, so refusing it would leave that message outstanding for ever and stop the account's pass
+each time it came round. What a cut costs is the tail of the last passage, and an occasion read out of a message's
+opening is still an occasion somebody is offered.
+
 **It stages its proposals in the same commit as the enrichment record.** A message is therefore never listed as
 derived while the events it named were lost, and never proposes events twice because the derivation was written and
 the pass then restarted.

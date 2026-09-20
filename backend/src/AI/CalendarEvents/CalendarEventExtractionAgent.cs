@@ -13,6 +13,7 @@ using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Emails;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -221,6 +222,20 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
         return CalendarEventExtraction.Settled(events);
     }
 
+    /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
+    /// <remarks>
+    /// A bound rather than a refusal, on the same reading the enrichment beside it takes: a message composed longer
+    /// than the declared endpoint accepts would be composed to that same length on every run, so refusing it would
+    /// leave the message outstanding for ever and stop the pass each time it came round. What a bounded turn costs is
+    /// the tail of the last passage, and an occasion read out of the opening of a message is still an occasion
+    /// somebody is offered. A typed sentence is bounded at five hundred characters before it ever reaches here, so
+    /// this touches it only where an operator declared an endpoint narrower than one sentence.
+    /// </remarks>
+    private static string Bounded(string turn, int maximumCharacters) =>
+        turn.Length <= maximumCharacters
+            ? turn
+            : MailTextBounds.TruncateAtTextElementBoundary(turn, maximumCharacters);
+
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
     /// <remarks>
     /// A failure is swallowed here rather than raised because both callers already have an outcome for that case, and
@@ -229,8 +244,10 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
     /// because a reading that never reached the endpoint was withheld the same way as one the endpoint refused. A
     /// cancellation stays outside, being the caller withdrawing the work rather than a provider failing to answer.
     /// </remarks>
-    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string composed, CancellationToken cancellationToken)
     {
+        var turn = Bounded(composed, this.plan.MaximumRequestCharacters);
+
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
             this.plan.MaximumMessagesPerRequest,

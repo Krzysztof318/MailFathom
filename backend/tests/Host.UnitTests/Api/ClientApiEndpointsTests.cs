@@ -568,7 +568,7 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}";
 
-    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search or into an event, or drafts a reply, by the five routes they are served at.</summary>
+    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search, drafts a reply, or reads a description into a calendar event, by the five routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the writes above are named that way — but the grant is what
     /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.mail.ask</c> is what sends mail to a
@@ -584,11 +584,10 @@ public sealed class ClientApiEndpointsTests
     /// Drafting a reply is the fourth and changes nothing either: what it answers with is text in the composer, which
     /// its author edits, discards, or saves through the drafting routes that do carry a write grant, and it is a
     /// <c>POST</c> for that same first reason — what somebody asks a reply to say is as revealing as the
-    /// correspondence it answers. Reading a typed sentence into a calendar event is the fifth and belongs here for the
-    /// same reasons as the third: it writes nothing to a calendar, what it answers with is the fields a dialog opens
-    /// with and its author then submits, and the sentence is a value a request line would publish to every log in front
-    /// of this deployment. Its <c>GET</c> joins it because the two are one route, and what that <c>GET</c> answers is
-    /// whether this deployment reads a description at all. Naming the five keeps the claim narrow.
+    /// correspondence it answers. Reading a typed description into a calendar event is the fifth and belongs here on
+    /// every one of those readings at once: it changes nothing, since what it answers with is the fields of a dialog
+    /// its author submits themselves, and it is a <c>POST</c> because what somebody is arranging and with whom is as
+    /// revealing as the mail that arranged it. Naming the five keeps the claim narrow.
     /// </remarks>
     private static bool AsksAQuestionOfTheCallersOwnMail(Endpoint endpoint) =>
         endpoint is RouteEndpoint route

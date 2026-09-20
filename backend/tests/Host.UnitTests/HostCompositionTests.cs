@@ -270,6 +270,15 @@ public sealed class HostCompositionTests
                 new("Chat:Enrichment:Enabled", "true"),
                 new("Chat:CalendarEventExtraction:Enabled", "true"),
             ],
+
+            // The two switches are independent, and a deployment wanting the typed-description field without a second
+            // provider call per arriving message is the shape that says so: the extractor registers on its own key, and
+            // the enrichment pass composes over an inactive one.
+            ["calendar events read from a description alone"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:CalendarEventExtraction:Enabled", "true"),
+            ],
             ["bodies cleaned on a model of their own"] =
             [
                 .. ChatEndpoint,
