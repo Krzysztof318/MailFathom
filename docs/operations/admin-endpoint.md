@@ -1374,8 +1374,8 @@ the version the buffer was opened at, and it needs `$VISUAL` or `$EDITOR` — a 
 it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the editor exits. An emptied
 buffer abandons the session and a buffer saved unchanged writes nothing. `--format yaml` opens the document as YAML and
 converts what was saved back to JSON before it is sent, as [editing a document as
-YAML](configuration-sources.md#editing-a-document-as-yaml) describes; `mfctl user edit`, `mfctl user show`, and
-`mfctl account edit` take the same option.
+YAML](configuration-sources.md#editing-a-document-as-yaml) describes; `mfctl user edit`, `mfctl user show`,
+`mfctl account edit`, and `mfctl account show` take the same option.
 
 **`mfctl config adopt` is previewed and then confirmed**, because after it the files stop deciding the settings it
 copied. `--yes` states the agreement where nobody is at the terminal, and `mfctl config unset` is what gives a setting
@@ -1690,8 +1690,8 @@ over exactly that set.
 | Command | What it does |
 | --- | --- |
 | `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, and who it is assigned to, and says so when more were held than it lists |
-| `mfctl account show --account <id>` | Reads one account's declaration, secrets redacted |
-| `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file, assigns it to that user, and reports the identifier it was generated under |
+| `mfctl account show --account <id> [--format json\|yaml]` | Reads one account's declaration, secrets redacted, as JSON or as YAML |
+| `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file — JSON, or YAML where the file is named `.yaml` or `.yml` — assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id> [--format json\|yaml]` | Opens that declaration in your `$VISUAL` or `$EDITOR`, as JSON or as YAML, and commits what you saved as one change |
 | `mfctl account assign --account <id> --user <id>` | Assigns an account to that user, beside whoever else is already assigned it |
 | `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing what they authored there, and erasing the account and its mail when it was the last one |

@@ -146,8 +146,8 @@ internal static class CliOptions
     /// <returns>The option, which defaults to <see cref="DocumentView.Json" />.</returns>
     /// <remarks>
     /// Declared once rather than per command because every command that opens a document in the operator's editor, and
-    /// the one that prints a user's record beside it, has to offer the same two views under the same name — an operator
-    /// who reads a record as YAML expects to edit it as YAML.
+    /// each one that prints the same document beside it, has to offer the same two views under the same name — an
+    /// operator who reads a record as YAML expects to edit it as YAML.
     /// </remarks>
     internal static Option<DocumentView> DocumentFormat() => new("--format")
     {

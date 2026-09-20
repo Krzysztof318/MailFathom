@@ -53,9 +53,9 @@ budget or the coordinator loop itself are marked *restart* below.
 
 This deployment declares no mail account of its own. Every account is a record the deployment holds and assigns to the
 users it serves, so the keys below are read from that account's declaration rather than from a configuration source —
-`mfctl account add --from-file` carries exactly this object, and
-[mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) is where one
-is created, edited, and assigned. A user is served each assigned account as one entry of a `MailAccounts` collection
+`mfctl account add --from-file` carries exactly this object, written as JSON or as YAML in a file named `.yaml` or
+`.yml`, and [mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to)
+is where one is created, edited, and assigned. A user is served each assigned account as one entry of a `MailAccounts` collection
 composed into their record, which is why a path below reads `MailAccounts:<m>:…`. *Change* below therefore means what
 the next run adopts once the account write commits, which it does without a restart.
 

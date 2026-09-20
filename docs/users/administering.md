@@ -787,7 +787,9 @@ it has nobody to keep off: give it a credential first.
 **Mailboxes are `mfctl account`, and they are records of their own.** `mfctl account add` creates one from a file and
 assigns it to a person, and `mfctl account edit` changes its settings. One address is one account in the whole
 deployment, and an account is served to one person at a time, so adding a mailbox somebody already has is refused, and
-so is assigning it to somebody else.
+so is assigning it to somebody else. The file is JSON, or YAML where you name it `.yaml` or `.yml` — the extension
+decides, the same way it decides for the configuration files you provision. What the deployment stores is JSON either
+way, so a comment you write to explain a setting stays in your own file.
 
 ```console
 $ mfctl account add --user 7c02... --from-file work.json
@@ -803,9 +805,9 @@ commits and the command prints that problem after it, so you can correct it befo
 [the endpoint reference](../operations/admin-endpoint.md#users-and-their-records) holds the rule.
 
 **Add `--format yaml` to read and edit in YAML instead of JSON.** `mfctl user edit`, `mfctl user show`,
-`mfctl account edit`, and `mfctl config edit` all take it, and `json` stays the default. What you save is converted back
-to JSON before anything is sent, so `true`, `3`, and an empty value mean what they meant; write `"3"` in quotes when you
-mean the text. Comments you add are not kept. A buffer that is not acceptable YAML — an anchor, a tag, a key written
+`mfctl account edit`, `mfctl account show`, and `mfctl config edit` all take it, and `json` stays the default. What you
+save is converted back to JSON before anything is sent, so `true`, `3`, and an empty value mean what they meant; write
+`"3"` in quotes when you mean the text. Comments you add are not kept. A buffer that is not acceptable YAML — an anchor, a tag, a key written
 twice — changes nothing, and the command tells you why and where it kept your edit so you can fix it rather than start
 again; [editing a document as YAML](../operations/configuration-sources.md#editing-a-document-as-yaml) has the whole rule.
 
