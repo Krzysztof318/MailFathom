@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260920130812_AddCalendarEvents")]
+    [Migration("20260920134832_AddCalendarEvents")]
     partial class AddCalendarEvents
     {
         /// <inheritdoc />
@@ -2636,6 +2636,41 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("outgoing_email_recipients", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SourceStoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DueOn", "Id")
+                        .HasDatabaseName("ix_tasks_user_due");
+
+                    b.ToTable("tasks", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ProviderPaceMarkerEntity", b =>
                 {
                     b.Property<string>("Workload")
@@ -4024,6 +4059,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_outgoing_email_recipients_emails");
 
                     b.Navigation("OutgoingEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
