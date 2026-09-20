@@ -29,7 +29,10 @@ afterEach(() => {
     process.env['TZ'] = zoneBefore;
 });
 
-const standing = new Date(2026, 8, 24, 10);
+// Stated as an instant with its offset rather than as local parts, because this one is read before the zone above is
+// pinned: a module-level `new Date(2026, 8, 24, 10)` is ten o'clock wherever the runner happens to stand, which is
+// noon in Warsaw on a machine set to UTC and would make what the deployment is told the reader's hour depend on it.
+const standing = new Date('2026-09-24T10:00:00+02:00');
 
 function deployment(answer: ClientResponse): {
     readonly transport: MailFathomTransport;
