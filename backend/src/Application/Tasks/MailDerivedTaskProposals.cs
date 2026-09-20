@@ -98,6 +98,10 @@ public sealed class MailDerivedTaskProposals
                     user,
                     proposal.Title,
                     proposal.DueOn,
+                    // A reading of a message never sets a reminder. What somebody wants to be told about is theirs
+                    // to set once they have agreed to the task, and a proposal nobody accepted raising notifications
+                    // would be mail announcing itself.
+                    TaskAnnouncement.Silent,
                     PersonalTaskOrigin.Proposed,
                     message);
 

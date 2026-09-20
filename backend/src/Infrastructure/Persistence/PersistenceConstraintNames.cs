@@ -372,6 +372,15 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string CalendarEventReminderDueIndexName = "ix_calendar_event_reminders_due_at";
 
+    /// <summary>The index the run that announces reminders reads over every task list at once.</summary>
+    /// <remarks>
+    /// The calendar's index with the same reasoning: the pass asks which reminders across the deployment have come
+    /// due and have not been announced, so the owner is not in it, and it is partial on the claim being absent so it
+    /// holds only what is still ahead. Whether the task is done is not in it either — that is read through the task,
+    /// because a completion is a column on a row this index does not cover.
+    /// </remarks>
+    internal const string PersonalTaskReminderDueIndexName = "ix_task_reminders_due_at";
+
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// It is the mutation identity's case with the consequence raised. Two callers asking for the same send reach the

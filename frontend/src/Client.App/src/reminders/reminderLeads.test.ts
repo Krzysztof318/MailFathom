@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-    allDayReminderPresets,
+    datedReminderPresets,
     defaultReminderLeads,
     orderedReminderLeads,
     readReminderLead,
@@ -61,11 +61,19 @@ describe('reminderLeadFrom', () => {
 
 describe('reminderPresetsFor', () => {
     it('offers the leads around a clock time on an event that names one', () => {
-        expect(reminderPresetsFor(false)).toEqual(timedReminderPresets);
+        expect(reminderPresetsFor('eventTime')).toEqual(timedReminderPresets);
     });
 
     it('offers the wider leads on an event stated as a day, which has no hour to precede', () => {
-        expect(reminderPresetsFor(true)).toEqual(allDayReminderPresets);
+        expect(reminderPresetsFor('eventDay')).toEqual(datedReminderPresets);
+    });
+
+    it('offers a due date the same leads as a day, which is what the design draws', () => {
+        expect(reminderPresetsFor('taskDueDate')).toEqual(datedReminderPresets);
+    });
+
+    it('offers the due-date leads the design names, in the design order', () => {
+        expect(datedReminderPresets).toEqual([0, 60, 4 * 60, 24 * 60, 2 * 24 * 60]);
     });
 
     it('starts a new event with the one lead the design draws already pressed', () => {

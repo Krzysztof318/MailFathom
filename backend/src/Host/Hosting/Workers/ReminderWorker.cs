@@ -3,11 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.Calendar;
+using MailFathom.Application.Reminders;
 
 namespace MailFathom.Host.Hosting.Workers;
 
-/// <summary>Announces the calendar reminders that have come due, one bounded pass per interval.</summary>
+/// <summary>Announces the reminders that have come due, of every kind, one bounded pass per interval.</summary>
 /// <remarks>
 /// <para>
 /// Every replica runs the loop and the pass's own lease decides which of them announces anything, so the interval is
@@ -18,11 +18,15 @@ namespace MailFathom.Host.Hosting.Workers;
 /// would ask the same question twice for the same answer and a longer one would make every reminder late by as much
 /// as it was lengthened — there is no setting here, only the unit the feature is already stated in.
 /// </para>
+/// <para>
+/// One loop for every kind of reminder rather than one per kind, because the pass beneath it reads every schedule
+/// registered: a second worker would take a second lease over the same question and announce on its own interval.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
-internal sealed partial class CalendarReminderWorker(
+internal sealed partial class ReminderWorker(
     IServiceScopeFactory scopeFactory,
-    ILogger<CalendarReminderWorker> logger,
+    ILogger<ReminderWorker> logger,
     TimeProvider timeProvider) : BackgroundService
 {
     /// <summary>How often a replica asks whether anything has come due, which is the unit a reminder is stated in.</summary>
@@ -46,7 +50,7 @@ internal sealed partial class CalendarReminderWorker(
             await using var scope = scopeFactory.CreateAsyncScope();
 
             var announced = await scope.ServiceProvider
-                .GetRequiredService<CalendarReminderSweep>()
+                .GetRequiredService<ReminderSweep>()
                 .RunAsync(stoppingToken);
 
             if (announced > 0)
@@ -65,14 +69,14 @@ internal sealed partial class CalendarReminderWorker(
         }
     }
 
-    /// <summary>Reports a pass in a count alone; no person, event, or title reaches a log.</summary>
+    /// <summary>Reports a pass in a count alone; no person, record, or title reaches a log.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Announced {AnnouncedReminderCount} calendar reminders that had come due.")]
+        Message = "Announced {AnnouncedReminderCount} reminders that had come due.")]
     private static partial void LogRemindersAnnounced(ILogger logger, int announcedReminderCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A pass over the calendar reminders that had come due failed; the next interval will ask again.")]
+        Message = "A pass over the reminders that had come due failed; the next interval will ask again.")]
     private static partial void LogPassFailed(ILogger logger, Exception exception);
 }

@@ -4,13 +4,14 @@
 
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Tasks;
 
 namespace MailFathom.Domain.Notifications;
 
 /// <summary>Where opening a notification leads.</summary>
 /// <remarks>
 /// <para>
-/// The four shapes are closed and each is reached through its own factory, so a target can never half exist — a
+/// The five shapes are closed and each is reached through its own factory, so a target can never half exist — a
 /// message target with no message, or a screen target that also names one. Which of the four a producer chose is what
 /// a reader switches on, and <see cref="NotificationTargetKind" /> is that answer without unwrapping anything.
 /// </para>
@@ -26,15 +27,17 @@ public sealed record NotificationTarget
         NotificationTargetKind kind,
         StoredEmailId? message,
         NotificationScreen? screen,
-        CalendarEventId? calendarEvent)
+        CalendarEventId? calendarEvent,
+        PersonalTaskId? personalTask)
     {
         this.Kind = kind;
         this.Message = message;
         this.Screen = screen;
         this.CalendarEvent = calendarEvent;
+        this.PersonalTask = personalTask;
     }
 
-    /// <summary>Gets which of the four shapes this target is.</summary>
+    /// <summary>Gets which of the five shapes this target is.</summary>
     public NotificationTargetKind Kind { get; }
 
     /// <summary>Gets the stored message the notification leads to, and <see langword="null" /> for every other shape.</summary>
@@ -46,15 +49,18 @@ public sealed record NotificationTarget
     /// <summary>Gets the calendar event the notification leads to, and <see langword="null" /> for every other shape.</summary>
     public CalendarEventId? CalendarEvent { get; }
 
+    /// <summary>Gets the task the notification leads to, and <see langword="null" /> for every other shape.</summary>
+    public PersonalTaskId? PersonalTask { get; }
+
     /// <summary>Gets the target of a notification that has nothing to open.</summary>
     public static NotificationTarget Nothing { get; } =
-        new(NotificationTargetKind.Nothing, message: null, screen: null, calendarEvent: null);
+        new(NotificationTargetKind.Nothing, message: null, screen: null, calendarEvent: null, personalTask: null);
 
     /// <summary>Creates a target that leads to one stored message.</summary>
     /// <param name="message">The message the notification is about.</param>
     /// <returns>A message target.</returns>
     public static NotificationTarget ToMessage(StoredEmailId message) =>
-        new(NotificationTargetKind.Message, message, screen: null, calendarEvent: null);
+        new(NotificationTargetKind.Message, message, screen: null, calendarEvent: null, personalTask: null);
 
     /// <summary>Creates a target that leads to a screen rather than to a record.</summary>
     /// <param name="screen">The screen the notification leads to.</param>
@@ -70,7 +76,12 @@ public sealed record NotificationTarget
                 "A notification leads to a declared screen or to nothing at all.");
         }
 
-        return new NotificationTarget(NotificationTargetKind.Screen, message: null, screen, calendarEvent: null);
+        return new NotificationTarget(
+            NotificationTargetKind.Screen,
+            message: null,
+            screen,
+            calendarEvent: null,
+            personalTask: null);
     }
 
     /// <summary>Creates a target that leads to one event of the person's own calendar.</summary>
@@ -95,6 +106,33 @@ public sealed record NotificationTarget
             NotificationTargetKind.CalendarEvent,
             message: null,
             screen: null,
-            calendarEvent);
+            calendarEvent,
+            personalTask: null);
+    }
+
+    /// <summary>Creates a target that leads to one task of the person's own list.</summary>
+    /// <param name="personalTask">The task the notification is about.</param>
+    /// <returns>A task target.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="personalTask" /> names no task.</exception>
+    /// <remarks>
+    /// One task rather than the task screen, for the reason the calendar event is one event: what a reminder is
+    /// about is a single thing somebody owes rather than a list, and a reader following it is taken to the thing
+    /// they were reminded of.
+    /// </remarks>
+    public static NotificationTarget ToPersonalTask(PersonalTaskId personalTask)
+    {
+        if (!personalTask.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A notification leading to a task names the task it leads to.",
+                nameof(personalTask));
+        }
+
+        return new NotificationTarget(
+            NotificationTargetKind.PersonalTask,
+            message: null,
+            screen: null,
+            calendarEvent: null,
+            personalTask);
     }
 }

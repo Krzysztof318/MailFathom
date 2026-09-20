@@ -2821,7 +2821,7 @@ refusal names which. It reaches no mail server and cannot set the remote `\Seen`
 These are the notification centre: what happened to a person while nobody was looking at their screen, how much of it
 they have not read, both ways of marking it read, and taking rows out of it for good. What they serve is a record this
 deployment produced — an [IMAP synchronization](../features/imap-synchronization.md) run writing down that mail arrived
-or that a credential was refused, a [calendar reminder](../features/calendar-events.md#reminders) coming due — rather
+or that a credential was refused, a [reminder](../features/reminders.md) coming due — rather
 than a second reading of the mailbox.
 
 | Route | What it does |
@@ -2862,7 +2862,8 @@ re-reads no mail — and no mail body, no address, and no attachment reaches the
 deduplication key is absent: it is the rule's own name for a condition rather than anything a screen renders.
 
 **What a notification says is a condition and its numbers, and the sentence is the client's.** `statement` carries a
-`cause` — `MailArrived`, `SynchronizationIncomplete`, `CredentialRefused`, or `CalendarReminderDue` — beside
+`cause` — `MailArrived`, `SynchronizationIncomplete`, `CredentialRefused`, `CalendarReminderDue`, or
+`TaskReminderDue` — beside
 `counted` and `outOf`, whose meaning is the cause's to give: mail counts the messages that arrived, an unfinished run
 counts the folders that did not finish out of the folders it scheduled, a due reminder counts the minutes between now
 and the event, and a refused credential counts nothing. A client turns that into a
@@ -2903,14 +2904,15 @@ maintains does not hold a write grant and still has to be able to clear their ow
 power to remove somebody's mail and is not what the erasure asks for: what leaves is a record about a message that
 stays.
 
-**Where opening one leads is one of four shapes**, and `target` carries the one the producer chose: `Nothing`,
-`Message` with a `messageId`, `Screen` with a `screen`, and `CalendarEvent` with a `calendarEventId` — which is what
-a due reminder names, and how a client reaches the event it is about. A row carrying a shape a client does not
-recognize leads nowhere rather than being drawn as an error.
+**Where opening one leads is one of five shapes**, and `target` carries the one the producer chose: `Nothing`,
+`Message` with a `messageId`, `Screen` with a `screen`, `CalendarEvent` with a `calendarEventId`, and `PersonalTask`
+with a `taskId` — the last two being what a [due reminder](../features/reminders.md) names, and how a client reaches
+the record it is about. A row carrying a shape a client does not recognize leads nowhere rather than being drawn as an
+error.
 
-**A reminder is the one row whose headline names a record.** `title` is what the person called their own event,
-because there is nothing else a reminder is about and no catalogue could hold it, so a client fills it into its own
-sentence rather than replacing it. Everything else about the event stays on the event.
+**A reminder is the one row whose headline names a record.** `title` is what the person called their own event or
+their own task, because there is nothing else a reminder is about and no catalogue could hold it, so a client fills it
+into its own sentence rather than replacing it. Everything else about the record stays on the record.
 
 **A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
@@ -2957,23 +2959,38 @@ that filtered them would need a second route to get them back.
 [the record routes](#the-record-routes), so a reading of somebody else's list cannot be composed. **A task another
 person holds answers `404` exactly as one nobody holds** — so nothing here reports whether such a task exists.
 
-**A row carries what a list draws and stops there**: the identifier, the line, the day, where the task came from,
-whether it is done, and the message it cites. No subject, no body, no address, and no attachment reaches these answers
+**A row carries what a list draws and stops there**: the identifier, the line, the day, the leads it is announced at,
+the instants those leads fall at, where the task came from, whether it is done, and the message it cites. No subject, no body, no address, and no attachment reaches these answers
 at any size. The citation is an identity rather than a reading of the message, so a client that draws the link follows
 it over [the message route](#the-message-route) under the grant that publishes reading mail — and a task whose message
 has since been erased finds nothing there, because what a person owes does not stop being owed when the mail naming it
 goes.
 
-**A write states the line and the day, and nothing else.** `{"title": "...", "dueOn": "2026-09-21"}` is the whole of
-what a creation and a revision carry, beside the optional `sourceMessageId` a creation may cite; a day is written
+**A write states the line, the day, and what announces it, and nothing else.**
+`{"title": "...", "dueOn": "2026-09-21", "reminders": [0, 1440], "dueDayOffsetMinutes": 120}` is the whole of what a
+creation and a revision carry, beside the optional `sourceMessageId` a creation may cite; a day is written
 `yyyy-mm-dd` and absent where nobody has said when. A key nothing here binds fails the bind rather than being ignored,
 so a client that tried to state an origin or a completion is told rather than having its request read as a rename that
-dropped the rest. **Where a task came from and whether it is done each move through the act that owns them**, which is
+dropped the rest.
+
+**A task is announced from nine in the morning on the day it is due**, which is
+[the reminders](../features/reminders.md) page's rule rather than these routes'. `reminders` states the leads in whole
+minutes before that hour, and `dueDayOffsetMinutes` states the whole-minute UTC offset that day runs in — a client
+sends it because this deployment keeps no timezone for a person, exactly as it states its own window when it asks for
+[a day to be arranged](#the-day-layout-routes). The answer carries `reminders` longest lead first and `remindsAt`
+beside it, the instants each one falls at, so the hour is derived in one place rather than in every client. The offset
+itself is not answered with: a client states its own on every write and never reads one back.
+
+**A request naming no lead announces nothing, whatever offset it states.** Turning the last reminder off is a
+revision stating a task with no leads, which is what makes `reminders` part of the record an edit states rather than a
+field it may leave out. **Where a task came from and whether it is done each move through the act that owns them**, which is
 what stops a rename turning a proposal into a commitment. A creation is always asserted: what a person types into their
 own client is something they owe, and a proposal arrives through the extraction that read the mail.
 
-**Refusals name the rule rather than the value.** A missing or blank title, a title past 200 characters, and a day that
-is not `yyyy-mm-dd` are each answered `400` naming the bound, and none of them echoes what was sent — a task's title is
+**Refusals name the rule rather than the value.** A missing or blank title, a title past 200 characters, a day that is
+not `yyyy-mm-dd`, and a set of leads no task may carry — more than sixteen, one stated twice, one outside nought to
+four weeks, one against a task nobody has dated, or one with no usable `dueDayOffsetMinutes` — are each answered `400`
+naming the bound, and none of them echoes what was sent — a task's title is
 a line a person wrote about their own correspondence, and a problem document is the part of an answer a proxy log
 keeps.
 
@@ -3124,7 +3141,7 @@ reads them back longest first, with `remindsAt` giving the instant each one curr
 client draws those rather than deriving them, because what an `isAllDay` event's reminders are measured from is this
 deployment's rule. `isAllDay` says the event names a day rather than a clock time: its `start` is still the instant
 the day opens at, and its reminders are measured back from nine in the morning on it.
-[Calendar events](../features/calendar-events.md#reminders) holds why, and what raises one.
+[Calendar events](../features/calendar-events.md#reminders) holds why, and [reminders](../features/reminders.md) what raises one.
 
 **A refusal names the rule rather than the value.** A title that is blank, longer than 200 characters, or carrying a
 character that renders as nothing is refused with `400` stating that rule, and the title itself is never echoed: a

@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Domain.Tasks;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Tasks;
@@ -30,6 +31,7 @@ public sealed class PersonalTaskMappingTests
             User,
             "Send the counter-proposal",
             DueOn,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Proposed,
             message);
 
@@ -56,6 +58,7 @@ public sealed class PersonalTaskMappingTests
             User,
             "Close the budget",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -119,5 +122,130 @@ public sealed class PersonalTaskMappingTests
 
         // Assert
         Assert.Null(task.SourceMessage);
+    }
+
+    /// <summary>
+    /// The instant is written beside the lead rather than computed in the producer's query, so the hour a due day is
+    /// measured back from and the offset it is read in stay one rule written once.
+    /// </summary>
+    [Fact]
+    public void ToEntity_ATaskThatAnnouncesSomething_WritesTheInstantEachLeadFallsAt()
+    {
+        // Arrange
+        var warsaw = TimeSpan.FromHours(2);
+        var task = PersonalTask.Compose(
+            PersonalTaskId.Create(Guid.NewGuid()),
+            User,
+            "Send the counter-proposal",
+            DueOn,
+            new TaskAnnouncement(warsaw, [Reminder.Create(0), Reminder.Create(24 * 60)]),
+            PersonalTaskOrigin.Asserted,
+            sourceMessage: null);
+
+        // Act
+        var entity = PersonalTaskMapping.ToEntity(task);
+
+        // Assert
+        Assert.Equal(120, entity.DueDayOffsetMinutes);
+        Assert.Equal(
+            [
+                (24 * 60, new DateTimeOffset(2026, 9, 26, 9, 0, 0, warsaw)),
+                (0, new DateTimeOffset(2026, 9, 27, 9, 0, 0, warsaw)),
+            ],
+            entity.Reminders.Select(reminder => (reminder.MinutesBefore, reminder.DueAt)));
+        Assert.All(entity.Reminders, reminder => Assert.Null(reminder.RaisedForDueAt));
+    }
+
+    /// <summary>A task announcing nothing states no offset either, because the offset exists only to place an hour.</summary>
+    [Fact]
+    public void ToEntity_ATaskThatAnnouncesNothing_WritesNoOffsetAndNoReminderRow()
+    {
+        // Arrange
+        var task = PersonalTask.Compose(
+            PersonalTaskId.Create(Guid.NewGuid()),
+            User,
+            "Sign the NDA",
+            DueOn,
+            TaskAnnouncement.Silent,
+            PersonalTaskOrigin.Asserted,
+            sourceMessage: null);
+
+        // Act
+        var entity = PersonalTaskMapping.ToEntity(task);
+
+        // Assert
+        Assert.Null(entity.DueDayOffsetMinutes);
+        Assert.Empty(entity.Reminders);
+    }
+
+    /// <summary>What a row holds is what the task reads back with, leads and the hour they are measured from alike.</summary>
+    [Fact]
+    public void ToPersonalTask_ARowCarryingReminders_ReadsThemBackWithTheirAnchor()
+    {
+        // Arrange
+        var identifier = Guid.NewGuid();
+        var entity = new PersonalTaskEntity
+        {
+            Id = identifier,
+            UserId = User.Value,
+            Title = "Send the counter-proposal",
+            DueOn = DueOn,
+            DueDayOffsetMinutes = 120,
+            Origin = PersonalTaskOrigin.Asserted,
+            IsCompleted = false,
+            SourceStoredEmailId = null,
+        };
+
+        entity.Reminders.Add(new PersonalTaskReminderEntity
+        {
+            PersonalTaskId = identifier,
+            MinutesBefore = 60,
+            DueAt = new DateTimeOffset(2026, 9, 27, 8, 0, 0, TimeSpan.FromHours(2)),
+        });
+
+        // Act
+        var task = PersonalTaskMapping.ToPersonalTask(entity);
+
+        // Assert
+        Assert.Equal([60], task.Reminders.Select(reminder => reminder.MinutesBefore));
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 27, 9, 0, 0, TimeSpan.FromHours(2)),
+            task.AnchorsRemindersAt);
+    }
+
+    /// <summary>
+    /// A row an older build wrote carries leads and no offset, and those leads name no instant — so it reads back as
+    /// a task announcing nothing rather than as reminders measured from an hour this deployment invented.
+    /// </summary>
+    [Fact]
+    public void ToPersonalTask_ARowCarryingRemindersAndNoOffset_ReadsBackAsAnnouncingNothing()
+    {
+        // Arrange
+        var identifier = Guid.NewGuid();
+        var entity = new PersonalTaskEntity
+        {
+            Id = identifier,
+            UserId = User.Value,
+            Title = "Send the counter-proposal",
+            DueOn = DueOn,
+            DueDayOffsetMinutes = null,
+            Origin = PersonalTaskOrigin.Asserted,
+            IsCompleted = false,
+            SourceStoredEmailId = null,
+        };
+
+        entity.Reminders.Add(new PersonalTaskReminderEntity
+        {
+            PersonalTaskId = identifier,
+            MinutesBefore = 60,
+            DueAt = new DateTimeOffset(2026, 9, 27, 8, 0, 0, TimeSpan.Zero),
+        });
+
+        // Act
+        var task = PersonalTaskMapping.ToPersonalTask(entity);
+
+        // Assert
+        Assert.Empty(task.Reminders);
+        Assert.Null(task.AnchorsRemindersAt);
     }
 }

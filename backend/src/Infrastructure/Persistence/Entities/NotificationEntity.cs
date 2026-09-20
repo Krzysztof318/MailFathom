@@ -68,6 +68,13 @@ internal sealed class NotificationEntity
     /// <summary>Gets or sets the calendar event the notification leads to.</summary>
     public CalendarEventEntity? TargetCalendarEvent { get; set; }
 
+    /// <summary>Gets or sets the task the notification leads to, and <see langword="null" /> for every other shape.</summary>
+    /// <remarks>A key for the reason the event above is one: a reminder about a task that is gone is not a row to keep.</remarks>
+    public Guid? TargetPersonalTaskId { get; set; }
+
+    /// <summary>Gets or sets the task the notification leads to.</summary>
+    public PersonalTaskEntity? TargetPersonalTask { get; set; }
+
     /// <summary>Gets or sets the condition this notification was raised for.</summary>
     /// <remarks>
     /// Unique among one user's unread rows, which is what makes a repeated raise idempotent: a condition already

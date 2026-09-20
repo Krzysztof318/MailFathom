@@ -5,7 +5,7 @@
 import type { MessageKey } from '../localization/en';
 import type { Locale } from '../localization/locale';
 import type { Translate } from '../localization/useLocalization';
-import { readReminderLead, type ReminderUnit } from './reminderLeads';
+import { reminderAnchorNamesATime, readReminderLead, type ReminderAnchor, type ReminderUnit } from './reminderLeads';
 
 // What a reminder lead is called, in the language its reader has. The deployment holds a number of minutes and says
 // nothing about how it reads; every sentence a lead appears in is here, so the panel, the chips, and the row a
@@ -17,7 +17,7 @@ import { readReminderLead, type ReminderUnit } from './reminderLeads';
 /** The forms one counted sentence takes, which every counted sentence below declares the same way. */
 type CountedForms = Readonly<Record<Intl.LDMLPluralRule, MessageKey>>;
 
-/** How far ahead of an event a lead falls, said in each unit's own forms. */
+/** How far ahead of what it announces a lead falls, said in each unit's own forms. */
 function leadForms(unit: ReminderUnit): CountedForms {
     return {
         zero: `reminders.lead.${unit}.other`,
@@ -29,7 +29,7 @@ function leadForms(unit: ReminderUnit): CountedForms {
     };
 }
 
-/** How long is left before an event, said in each unit's own forms. */
+/** How long is left before it, said in each unit's own forms. */
 function remainingForms(unit: ReminderUnit): CountedForms {
     return {
         zero: `reminders.remaining.${unit}.other`,
@@ -51,19 +51,27 @@ const countForms: CountedForms = {
 };
 
 /**
- * Says how long before an event one reminder falls.
+ * Says how long before what it announces one reminder falls.
  *
- * A lead of none is the event itself, and what that is called depends on what the event is: an event at a clock time
- * is reminded *at the time*, and one stated as a day is reminded *on the day*, because a day has no time to be at.
+ * A lead of none is the thing itself, and what that is called depends on what it is anchored to: a record at a clock
+ * time is reminded *at the time*, and one anchored to a day — an all-day event, or a task's due date — is reminded
+ * *on the day*, because a day has no time to be at.
  *
- * @param minutesBefore The lead, in minutes before the event.
- * @param allDay Whether the event is stated as a day rather than as a clock time.
+ * @param minutesBefore The lead, in minutes before what it announces.
+ * @param anchor What the lead is measured back from.
  */
-export function wordReminderLead(minutesBefore: number, allDay: boolean, locale: Locale, translate: Translate): string {
+export function wordReminderLead(
+    minutesBefore: number,
+    anchor: ReminderAnchor,
+    locale: Locale,
+    translate: Translate,
+): string {
     const lead = readReminderLead(minutesBefore);
 
     if (lead.unit === 'atTheTime') {
-        return translate(allDay ? 'reminders.lead.onTheDay' : 'reminders.lead.atTheTime');
+        return translate(
+            reminderAnchorNamesATime(anchor) ? 'reminders.lead.atTheTime' : 'reminders.lead.onTheDay',
+        );
     }
 
     return translate(leadForms(lead.unit)[new Intl.PluralRules(locale).select(lead.count)], {
@@ -72,7 +80,7 @@ export function wordReminderLead(minutesBefore: number, allDay: boolean, locale:
 }
 
 /** Says how long is left, which is what a reminder that has come due says rather than how far ahead it was set. */
-export function wordRemainingBeforeEvent(minutesBefore: number, locale: Locale, translate: Translate): string {
+export function wordReminderRemaining(minutesBefore: number, locale: Locale, translate: Translate): string {
     const lead = readReminderLead(minutesBefore);
 
     if (lead.unit === 'atTheTime') {
@@ -85,10 +93,10 @@ export function wordRemainingBeforeEvent(minutesBefore: number, locale: Locale, 
 }
 
 /**
- * Says how many reminders an event carries, which is what the count beside the panel's heading reads.
+ * Says how many reminders a record carries, which is what the count beside the panel's heading reads.
  *
- * An event carrying none reads as *off* rather than as none, which is the design project's own word: what it states
- * is that nothing will be raised about the event, and a zero would read as a number that might change on its own.
+ * A record carrying none reads as *off* rather than as none, which is the design project's own word: what it states
+ * is that nothing will be raised about it, and a zero would read as a number that might change on its own.
  */
 export function wordReminderCount(count: number, locale: Locale, translate: Translate): string {
     return count === 0

@@ -115,6 +115,54 @@ public sealed class PersonalTaskModelTests
             index.Properties.Select(property => property.Name));
     }
 
+    /// <summary>
+    /// The producer asks one question of the whole deployment every interval, and the index it rides holds only the
+    /// reminders still owed: a filter on the claim leaves out every reminder of every task already past, which is
+    /// nearly all of them once a list has any history.
+    /// </summary>
+    [Fact]
+    public void PersonalTaskReminderModel_DueIndex_HoldsOnlyTheRemindersNothingHasAnnouncedYet()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var index = ReminderEntityType(context)
+            .GetIndexes()
+            .Single(candidate => candidate.GetDatabaseName()
+                == PersistenceConstraintNames.PersonalTaskReminderDueIndexName);
+
+        // Assert
+        Assert.Equal([nameof(PersonalTaskReminderEntity.DueAt)], index.Properties.Select(property => property.Name));
+        Assert.Equal("\"RaisedForDueAt\" IS NULL", index.GetFilter());
+    }
+
+    /// <summary>
+    /// What deleting a task promises: it takes its reminders with it, so nothing is left to announce something
+    /// nobody owes any more. The lead is half the key, which is what makes one lead set twice one row.
+    /// </summary>
+    [Fact]
+    public void PersonalTaskReminderModel_TheTask_IsTheKeyItCascadesFrom()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var reminder = ReminderEntityType(context);
+        var reference = Assert.Single(reminder.GetForeignKeys());
+
+        // Assert
+        Assert.Equal(
+            [nameof(PersonalTaskReminderEntity.PersonalTaskId), nameof(PersonalTaskReminderEntity.MinutesBefore)],
+            reminder.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Equal(typeof(PersonalTaskEntity), reference.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
+    }
+
+    private static IEntityType ReminderEntityType(MailFathomDbContext context) =>
+        context.Model.FindEntityType(typeof(PersonalTaskReminderEntity))
+            ?? throw new InvalidOperationException("The model holds no task reminder row.");
+
     private static IForeignKey ForeignKeyOn(MailFathomDbContext context, string propertyName) =>
         EntityType(context)
             .GetForeignKeys()

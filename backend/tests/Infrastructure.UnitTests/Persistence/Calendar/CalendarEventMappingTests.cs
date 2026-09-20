@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Infrastructure.Persistence.Calendar;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.TestSupport;
@@ -112,7 +113,7 @@ public sealed class CalendarEventMappingTests
         var held = EventOf(
             end: null,
             origin: CalendarEventOrigin.Asserted,
-            reminders: [CalendarReminder.Create(15), CalendarReminder.Create(60)]);
+            reminders: [Reminder.Create(15), Reminder.Create(60)]);
 
         // Act
         var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
@@ -132,7 +133,7 @@ public sealed class CalendarEventMappingTests
             end: null,
             origin: CalendarEventOrigin.Asserted,
             isAllDay: true,
-            reminders: [CalendarReminder.Create(0)]);
+            reminders: [Reminder.Create(0)]);
 
         // Act
         var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
@@ -152,7 +153,7 @@ public sealed class CalendarEventMappingTests
             end: null,
             origin: CalendarEventOrigin.Asserted,
             isAllDay: true,
-            reminders: [CalendarReminder.Create(15), CalendarReminder.Create(1440)]);
+            reminders: [Reminder.Create(15), Reminder.Create(1440)]);
 
         // Act
         var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
@@ -192,7 +193,7 @@ public sealed class CalendarEventMappingTests
         StoredEmailId? sourceMessage = null,
         ImportedCalendarEventUid? importedUid = null,
         bool isAllDay = false,
-        IReadOnlyCollection<CalendarReminder>? reminders = null) =>
+        IReadOnlyCollection<Reminder>? reminders = null) =>
         CalendarEvent.Create(
             CalendarEventId.Create(Guid.CreateVersion7()),
             CalendarEventTitle.Create("Design review"),

@@ -456,13 +456,14 @@ service.
 | `UserId` | The user it happened to. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way |
 | `Kind` | Which part of MailFathom it is about — `Mail`, `Calendar`, `Case`, `Task`, or `System` — stored as text |
 | `Title`, `Body` | The two lines a row is drawn with in English, derived when the notification was produced rather than by re-reading mail when it is displayed |
-| `Cause` | The condition the row was raised for — `MailArrived`, `SynchronizationIncomplete`, `CredentialRefused`, or `CalendarReminderDue` — stored as text. It is what lets a client say the row in its reader's own language, the two lines above being that same condition written out. Absent on a row written before the column existed, which is what an upgrade over existing data leaves until retention has taken those rows |
+| `Cause` | The condition the row was raised for — `MailArrived`, `SynchronizationIncomplete`, `CredentialRefused`, `CalendarReminderDue`, or `TaskReminderDue` — stored as text. It is what lets a client say the row in its reader's own language, the two lines above being that same condition written out. Absent on a row written before the column existed, which is what an upgrade over existing data leaves until retention has taken those rows |
 | `Counted`, `OutOf` | The numbers the cause is stated with, whose meaning is the cause's: mail counts the messages that arrived, an unfinished run counts the folders that did not finish out of the folders it scheduled, a due reminder counts the minutes between now and the event, and a refused credential counts neither |
 | `Source` | What the source line names beyond the kind, which is an account identifier today, and absent where the kind is the whole of it |
-| `TargetKind` | Which of the four shapes opening it leads to — `Nothing`, `Message`, `Screen`, or `CalendarEvent` — stored as text |
+| `TargetKind` | Which of the five shapes opening it leads to — `Nothing`, `Message`, `Screen`, `CalendarEvent`, or `PersonalTask` — stored as text |
 | `TargetStoredEmailId` | The message a `Message` target names, and the foreign key onto `stored_emails` with `ON DELETE CASCADE`. Absent for every other shape |
 | `TargetScreen` | The screen a `Screen` target names — `Mail` or `Settings` — stored as text. Absent for every other shape |
 | `TargetCalendarEventId` | The event a `CalendarEvent` target names, and the foreign key onto `calendar_events` with `ON DELETE CASCADE`, so a deleted event takes the reminders it raised. Absent for every other shape |
+| `TargetPersonalTaskId` | The task a `PersonalTask` target names, and the foreign key onto `tasks` with `ON DELETE CASCADE`, for the same reason: a reminder about work nobody owes any more is not a row to keep. Absent for every other shape |
 | `DeduplicationKey` | MailFathom's own name for the condition the notification was raised for |
 | `OccurredAt` | When the thing it describes happened |
 | `IsRead` | Whether the person has read it, which is also what frees the condition to be said again |
@@ -514,6 +515,7 @@ board: no column assigns work to anybody but the person whose list it is.
 | `UserId` | The person whose list it is on. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `notifications` keys the same way |
 | `Title` | The line the list is drawn with, bounded at 200 characters |
 | `DueOn` | The day it is due on, as a `date`, and absent where nobody has said when. A day rather than an instant, because what a person owes is owed on a date; a reminder against that date is what carries a time, and it is a separate record |
+| `DueDayOffsetMinutes` | The whole-minute UTC offset the due day runs in, as the client that wrote the reminders stated it, and null on a task announcing nothing. A column rather than a deployment setting because this deployment keeps no timezone for a person, and nullable because a task with no reminder has no hour to place — a row carrying leads and no offset is one an older build wrote, and it reads back as a task announcing nothing rather than as reminders measured from an hour nobody chose |
 | `Origin` | Where the task came from — `Asserted` for one the person entered or accepted, `Proposed` for one read out of mail and not yet committed to — stored as text |
 | `IsCompleted` | Whether the person has done it |
 | `SourceStoredEmailId` | The message the task was read out of, as a plain value carrying no foreign key. Absent where the task cites none, which most do |
@@ -537,6 +539,23 @@ does carry.
 the row rather than marking it gone: a task nobody owes any more is not a record anything is owed about, and keeping
 one would leave every reader of the list having to remember to exclude it. Both are idempotent — asking for a state a
 task already stands in writes nothing, and erasing something already erased is the act the caller wanted.
+
+### What announces a task
+
+`task_reminders` holds the leads one task's due date is announced at, one row per lead, keyed on the task and the lead
+together — the same shape `calendar_event_reminders` carries and read by the same pass, which
+[reminders](../features/reminders.md) describes.
+
+| Column | What it records |
+|---|---|
+| `PersonalTaskId`, `MinutesBefore` | The task and how long before its due hour, together the primary key — so one task states each lead once |
+| `DueAt` | The instant that lead currently falls at, derived when the row is written: nine in the morning on `DueOn`, read in the offset `DueDayOffsetMinutes` states, less the lead. Written rather than computed on read so the pass asks the database which reminders have come due instead of reading every list to find out, and rewritten whenever the due date moves |
+| `RaisedForDueAt` | The instant this reminder was last announced for, and null while it stands unannounced. The claim is made against the instant for the reason the calendar's is: a due date moved forward is due again at its new time, and one moved back onto an announced time stays quiet |
+
+The foreign key onto `tasks` cascades, so deleting a task takes what would have announced it with it. **Whether the
+task is completed is not a column here**, and deliberately: the pass reads it through the association, so finishing a
+task early silences its reminders without writing to any of them, and reopening one restores them the same way. A
+reminder already announced is left announced, because what was said was true when it was said.
 
 `ix_tasks_user_due` covers `(UserId, DueOn, Id)`, which is the order the list is both read and drawn in: one person's
 tasks soonest due first, with PostgreSQL's own `NULLS LAST` putting the undated ones at the end and the identifier
@@ -2044,6 +2063,7 @@ account reach these four tables through the same cascade every other table is re
 | `ix_contact_addresses_book_holder_normalized_address` | `(BookHolderId, NormalizedAddress)`, unique | One address in one person's hands within one book. It is also what the lookup from an address to a person is served from, rather than a scan, and leading with the holder is what lets that lookup seek into each of the books a reader holds |
 | `IX_contact_addresses_ContactId_BookHolderId` | `(ContactId, BookHolderId)` | The foreign key back to the person, which is what erasing one reaches their addresses by. It carries the book because the key does |
 | `ix_calendar_events_user_starts_at_id` | `(UserId, StartsAt, Id)` | The window every view over a calendar is read as. The owner leads it because a read is always one person's, the start follows because a window is a range over it, and the identity settles two events beginning at the same instant, which is what makes the order total and a window answer the same way twice |
+| `ix_task_reminders_due_at` | `(DueAt)`, over the rows carrying no `RaisedForDueAt` | The other half of what the pass announcing reminders reads, on the same shape and for the same reason as the calendar's below: every task's reminders that have fallen and stand unannounced, across the deployment, with the filter keeping the index the size of what is still to be said. Whether the task is completed is read through the association rather than held here, so completing one takes its reminders out of what the pass announces without writing a row |
 | `ix_calendar_event_reminders_due_at` | `(DueAt)`, over the rows carrying no `RaisedForDueAt` | What the pass announcing reminders reads: every calendar's reminders that have fallen and stand unannounced, across the deployment, which is why the owner is absent from it — the pass is one run for the whole deployment rather than one person's read. The filter is the whole economy of it, an announced reminder leaving the index until the event moves and nulls the claim again, so the index stays the size of what is still to be said rather than of every reminder ever set |
 | `ix_calendar_events_user_imported_uid` | `(UserId, ImportedUid)`, unique, over the rows carrying one | One calendar holds an imported entry once, which is the whole of what makes importing a file twice create nothing the second time — two imports running together both read nothing, so only the constraint closes that window. The filter is what keeps the index the size of what was imported rather than of the calendar, nearly every event carrying no such identifier. Two calendars holding one identifier is ordinary rather than a conflict, which is why the owner leads it |
 | `ix_jobs_identity` | `(JobType, IdempotencyKey)`, unique | A job's idempotency identity, which is what makes the same execution enqueued twice one job. It spans terminal rows deliberately: a row that succeeded is what stops the same trigger asking again |
@@ -2064,6 +2084,7 @@ account reach these four tables through the same cascade every other table is re
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
 | `IX_notifications_TargetCalendarEventId` | `(TargetCalendarEventId)` | The same for the event a reminder leads to, which is what deleting an event reaches the rows that announced it by |
+| `IX_notifications_TargetPersonalTaskId` | `(TargetPersonalTaskId)` | The same again for the task a due reminder leads to, which is what erasing a task reaches the rows that announced it by |
 | `ix_tasks_user_due` | `(UserId, DueOn, Id)` | The one order a personal task list is read and drawn in: one person's tasks soonest due first, with PostgreSQL's own `NULLS LAST` leaving the undated ones at the end and the identifier keeping two tasks due on one day in a stable order across reads. Reading the proposals apart from the commitments is an equality on `Origin` within one person's rows, which is a handful of them, so that column earns no place in the key |
 | `ix_mailbox_exports_account_requested` | `(MailboxAccountId, RequestedAt DESC)` | One account's exports newest first, which is the listing an operator asks for and the only order this table is read in |
 | `ix_mailbox_exports_expires_at` | `(ExpiresAt)` where it is not null | The archives the expiry pass has to delete. The filter is what keeps the index the size of the archives that exist rather than of every export the deployment has ever written: one that failed, was cancelled, or has already gone carries no expiry |

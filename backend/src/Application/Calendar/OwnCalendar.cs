@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 
 namespace MailFathom.Application.Calendar;
 
@@ -318,14 +319,14 @@ public sealed class OwnCalendar
         // Asked here rather than caught out of the event's own constructor, for the reason the title and the span are:
         // a lead somebody typed is something this surface reports on, and the domain raising for it would be a fault
         // in the deployment rather than an answer to them.
-        return reminders.Count > CalendarEvent.MaximumReminderCount
-            || reminders.Any(minutesBefore => !CalendarReminder.IsStatable(minutesBefore))
+        return reminders.Count > Reminder.MaximumCount
+            || reminders.Any(minutesBefore => !Reminder.IsStatable(minutesBefore))
             || reminders.Distinct().Count() != reminders.Count
             ? CalendarEventWriteResult.RemindersRefused
             : null;
     }
 
     /// <summary>Reads the leads a caller stated, which <see cref="Refusal" /> has already held to what an event may carry.</summary>
-    private static IReadOnlyCollection<CalendarReminder> Stated(IReadOnlyCollection<int> reminders) =>
-        [.. reminders.Select(CalendarReminder.Create)];
+    private static IReadOnlyCollection<Reminder> Stated(IReadOnlyCollection<int> reminders) =>
+        [.. reminders.Select(Reminder.Create)];
 }

@@ -2,10 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Calendar;
+using MailFathom.Application.Reminders;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Calendar;
+using MailFathom.Domain.Reminders;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Calendar;
@@ -13,9 +13,9 @@ namespace MailFathom.Infrastructure.Persistence.Calendar;
 /// <summary>Answers what has come due across every calendar, and records what a pass announced.</summary>
 /// <remarks>
 /// <para>
-/// The one reader here that names no owner, because a reminder comes due whether or not anybody is signed in. It is
-/// still bounded in every direction a table scan could go: a window with both ends, a stated limit, and an index that
-/// holds only the reminders nothing has announced yet.
+/// One of the readers here that names no owner, because a reminder comes due whether or not anybody is signed in. It
+/// is still bounded in every direction a table scan could go: a window with both ends, a stated limit, and an index
+/// that holds only the reminders nothing has announced yet.
 /// </para>
 /// <para>
 /// The claim is a conditional update rather than a read followed by a write. Two replicas reading one pass together
@@ -29,10 +29,13 @@ namespace MailFathom.Infrastructure.Persistence.Calendar;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class CalendarReminderSchedule(MailFathomDbContext context) : ICalendarReminderSchedule
+internal sealed class CalendarReminderSchedule(MailFathomDbContext context) : IReminderSchedule
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DueCalendarReminder>> ReadDueAsync(
+    public ReminderSubject Subject => ReminderSubject.CalendarEvent;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DueReminder>> ReadDueAsync(
         DateTimeOffset asOf,
         DateTimeOffset notDueBefore,
         int limit,
@@ -62,21 +65,22 @@ internal sealed class CalendarReminderSchedule(MailFathomDbContext context) : IC
 
         return
         [
-            .. due.Select(reminder => new DueCalendarReminder(
+            .. due.Select(reminder => new DueReminder(
                 MailUserId.Create(reminder.UserId),
-                CalendarEventId.Create(reminder.CalendarEventId),
-                CalendarEventTitle.Create(reminder.Title),
-                CalendarReminder.Create(reminder.MinutesBefore),
+                ReminderSubject.CalendarEvent,
+                reminder.CalendarEventId,
+                reminder.Title,
+                Reminder.Create(reminder.MinutesBefore),
                 reminder.DueAt)),
         ];
     }
 
     /// <inheritdoc />
-    public async Task<bool> MarkRaisedAsync(DueCalendarReminder due, CancellationToken cancellationToken)
+    public async Task<bool> MarkRaisedAsync(DueReminder due, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(due);
 
-        var eventValue = due.Event.Value;
+        var eventValue = due.Identity;
         var minutesBefore = due.Reminder.MinutesBefore;
         var dueAt = due.DueAt;
 

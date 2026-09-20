@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Domain.Tasks;
 
 namespace MailFathom.Application.Tasks;
@@ -130,11 +131,13 @@ public sealed class OwnTasks
     /// <summary>Records a task the signed-in person has just committed to.</summary>
     /// <param name="title">The line the list is drawn with.</param>
     /// <param name="dueOn">The day it is due on, or <see langword="null" /> where they said nothing about when.</param>
+    /// <param name="announcement">What announces it and the offset their due day runs in, or <see cref="TaskAnnouncement.Silent" /> to announce nothing.</param>
     /// <param name="sourceMessage">The message they were looking at, or <see langword="null" /> where the task cites none.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The task as it was written.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when one lead is stated twice, or when leads are stated against no due day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />, or when more than <see cref="Reminder.MaximumCount" /> leads are stated.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// What somebody types into their own client is something they owe, so a task written here is asserted and this is
@@ -150,6 +153,7 @@ public sealed class OwnTasks
     public async Task<PersonalTask> RecordAsync(
         string title,
         DateOnly? dueOn,
+        TaskAnnouncement announcement,
         StoredEmailId? sourceMessage,
         CancellationToken cancellationToken)
     {
@@ -160,6 +164,7 @@ public sealed class OwnTasks
             this.authorization.RequireUser(),
             title,
             dueOn,
+            announcement,
             PersonalTaskOrigin.Asserted,
             sourceMessage);
 
@@ -172,20 +177,28 @@ public sealed class OwnTasks
     /// <param name="task">The task to revise.</param>
     /// <param name="title">The line the list is to be drawn with from now on.</param>
     /// <param name="dueOn">The day it is due on, or <see langword="null" /> where they took the date off it.</param>
+    /// <param name="announcement">What announces it afterwards and the offset their due day runs in, or <see cref="TaskAnnouncement.Silent" /> to announce nothing.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The task as it now stands, or <see langword="null" /> when this person holds none under that identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when one lead is stated twice, or when leads are stated against no due day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="PersonalTask.MaximumTitleLength" />, or when more than <see cref="Reminder.MaximumCount" /> leads are stated.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// The task is read before it is written because an edit is stated against the record it edits: the answer is what
     /// the person now holds rather than what they sent, and a task erased between the two is reported as one they do
     /// not hold rather than written back into existence.
+    /// <para>
+    /// What announces the task is part of the edit rather than beside it, which is what makes turning the last
+    /// reminder off a task stated with none rather than a field left out — and what makes taking the date off one
+    /// take its reminders with it, since a lead measured back from no due day is refused.
+    /// </para>
     /// </remarks>
     public async Task<PersonalTask?> ReviseAsync(
         PersonalTaskId task,
         string title,
         DateOnly? dueOn,
+        TaskAnnouncement announcement,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
@@ -197,7 +210,7 @@ public sealed class OwnTasks
             return null;
         }
 
-        var revision = held.Revise(title, dueOn);
+        var revision = held.Revise(title, dueOn, announcement);
 
         return await this.store.ReviseAsync(revision, cancellationToken) is PersonalTaskChangeOutcome.Applied
             ? revision

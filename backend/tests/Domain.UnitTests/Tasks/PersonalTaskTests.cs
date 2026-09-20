@@ -29,6 +29,7 @@ public sealed class PersonalTaskTests
             User,
             "Send the counter-proposal",
             dueOn,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -55,6 +56,7 @@ public sealed class PersonalTaskTests
             User,
             "Confirm the delivery date",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Proposed,
             message);
 
@@ -73,6 +75,7 @@ public sealed class PersonalTaskTests
             User,
             "Close the budget",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -90,6 +93,7 @@ public sealed class PersonalTaskTests
             User,
             "  Sign the NDA \n",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -110,6 +114,7 @@ public sealed class PersonalTaskTests
             User,
             title,
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -129,6 +134,7 @@ public sealed class PersonalTaskTests
             User,
             title,
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -146,6 +152,7 @@ public sealed class PersonalTaskTests
             default,
             "Sign the NDA",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -163,6 +170,7 @@ public sealed class PersonalTaskTests
             User,
             "Sign the NDA",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
@@ -180,6 +188,7 @@ public sealed class PersonalTaskTests
             User,
             "Sign the NDA",
             dueOn: null,
+            TaskAnnouncement.Silent,
             (PersonalTaskOrigin)42,
             sourceMessage: null);
 
@@ -197,6 +206,7 @@ public sealed class PersonalTaskTests
             User,
             "Sign the NDA",
             new DateOnly(2026, 9, 12),
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null,
             isCompleted: true);
@@ -218,6 +228,7 @@ public sealed class PersonalTaskTests
             User,
             title,
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null,
             isCompleted: false);
@@ -237,12 +248,13 @@ public sealed class PersonalTaskTests
             User,
             "Reply to the tender",
             new DateOnly(2026, 9, 27),
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Proposed,
             cited,
             isCompleted: true);
 
         // Act
-        var revised = proposed.Revise("  Reply to the tender by Friday  ", dueOn: null);
+        var revised = proposed.Revise("  Reply to the tender by Friday  ", dueOn: null, TaskAnnouncement.Silent);
 
         // Assert
         Assert.Equal("Reply to the tender by Friday", revised.Title);
@@ -266,11 +278,12 @@ public sealed class PersonalTaskTests
             User,
             "Sign the NDA",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
         // Act
-        var revising = () => task.Revise(title, dueOn: null);
+        var revising = () => task.Revise(title, dueOn: null, TaskAnnouncement.Silent);
 
         // Assert
         Assert.Throws<ArgumentException>(revising);
@@ -286,11 +299,12 @@ public sealed class PersonalTaskTests
             User,
             "Sign the NDA",
             dueOn: null,
+            TaskAnnouncement.Silent,
             PersonalTaskOrigin.Asserted,
             sourceMessage: null);
 
         // Act
-        var revising = () => task.Revise(new string('x', PersonalTask.MaximumTitleLength + 1), dueOn: null);
+        var revising = () => task.Revise(new string('x', PersonalTask.MaximumTitleLength + 1), dueOn: null, TaskAnnouncement.Silent);
 
         // Assert
         Assert.Throws<ArgumentOutOfRangeException>(revising);

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ClientNotification, NotificationCause } from '@mailfathom/client-backend';
-import { wordRemainingBeforeEvent } from '../calendar/reminderWords';
+import { wordReminderRemaining } from '../reminders/reminderWords';
 import type { MessageKey } from '../localization/en';
 import type { Locale } from '../localization/locale';
 import type { Translate } from '../localization/useLocalization';
@@ -31,17 +31,18 @@ export interface NotificationWords {
 /**
  * How each cause is titled, and which of them names the record the row is about.
  *
- * Every cause but one is a condition, and a condition's headline is the same sentence for everybody it happens to.
- * A reminder is the exception: what it is about is one event, and what that event is called is the person's own text
- * rather than anything a catalogue could hold — so its title is a sentence with the record's name in it, filled from
- * the headline the deployment already derived. `named` is what says which of the two a cause is, so a cause that
- * gains a name fails to compile here until somebody has decided.
+ * Most causes are a condition, and a condition's headline is the same sentence for everybody it happens to. A
+ * reminder is the exception, whichever record it announces: what it is about is one event or one task, and what that
+ * record is called is the person's own text rather than anything a catalogue could hold — so its title is a sentence
+ * with the record's name in it, filled from the headline the deployment already derived. `named` is what says which
+ * of the two a cause is, so a cause that gains a name fails to compile here until somebody has decided.
  */
 const causeTitles: Readonly<Record<NotificationCause, { readonly said: MessageKey; readonly named: boolean }>> = {
     MailArrived: { said: 'notifications.said.mailArrived.title', named: false },
     SynchronizationIncomplete: { said: 'notifications.said.synchronizationIncomplete.title', named: false },
     CredentialRefused: { said: 'notifications.said.credentialRefused.title', named: false },
     CalendarReminderDue: { said: 'notifications.said.calendarReminderDue.title', named: true },
+    TaskReminderDue: { said: 'notifications.said.taskReminderDue.title', named: true },
 };
 
 /**
@@ -62,9 +63,11 @@ const causeBodies: Readonly<Record<NotificationCause, CauseBody>> = {
     CredentialRefused: { said: 'notifications.said.credentialRefused.body' },
     // A third shape rather than a fourth set of counted forms, because a lead is said in the coarsest whole unit it
     // states exactly — minutes, hours, or days — and which of the three that is follows the number rather than the
-    // cause. `calendar/reminderWords.ts` is the one place that reading lives, so the panel a lead was set in and the
-    // row it is announced on cannot come to word it differently.
+    // cause. `reminders/reminderWords.ts` is the one place that reading lives, so the panel a lead was set in and the
+    // row it is announced on cannot come to word it differently — and the two kinds of reminder share it, because how
+    // long is left is the same reading whatever the lead was measured back from.
     CalendarReminderDue: { remaining: true },
+    TaskReminderDue: { remaining: true },
 };
 
 /**
@@ -93,12 +96,12 @@ export function wordNotification(
     const title = causeTitles[statement.cause];
 
     return {
-        title: translate(title.said, title.named ? { event: notification.title } : undefined),
+        title: translate(title.said, title.named ? { subject: notification.title } : undefined),
         body:
             'said' in body
                 ? translate(body.said)
                 : 'remaining' in body
-                  ? wordRemainingBeforeEvent(statement.counted ?? 0, locale, translate)
+                  ? wordReminderRemaining(statement.counted ?? 0, locale, translate)
                   : translate(body.counted[new Intl.PluralRules(locale).select(counted ?? 0)], {
                         count: number(statement.counted, locale),
                         outOf: number(statement.outOf, locale),

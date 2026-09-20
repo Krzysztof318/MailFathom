@@ -24,4 +24,7 @@ public enum NotificationCause
 
     /// <summary>A reminder somebody set on one of their own calendar events has come due.</summary>
     CalendarReminderDue = 3,
+
+    /// <summary>A reminder somebody set against one of their own tasks' due dates has come due.</summary>
+    TaskReminderDue = 4,
 }

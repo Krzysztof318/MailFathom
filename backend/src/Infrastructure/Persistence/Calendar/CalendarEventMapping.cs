@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Calendar;
@@ -48,7 +49,7 @@ internal static class CalendarEventMapping
     /// measured back from is the event's own rule. It is written rather than computed on read so that the pass
     /// announcing reminders can ask the database which have come due instead of reading every calendar to find out.
     /// </remarks>
-    internal static CalendarEventReminderEntity ToEntity(CalendarEvent calendarEvent, CalendarReminder reminder) =>
+    internal static CalendarEventReminderEntity ToEntity(CalendarEvent calendarEvent, Reminder reminder) =>
         new()
         {
             CalendarEventId = calendarEvent.Id.Value,
@@ -63,7 +64,7 @@ internal static class CalendarEventMapping
             stored.StartsAt,
             stored.EndsAt,
             stored.IsAllDay,
-            [.. stored.Reminders.Select(reminder => CalendarReminder.Create(reminder.MinutesBefore))],
+            [.. stored.Reminders.Select(reminder => Reminder.Create(reminder.MinutesBefore))],
             stored.Origin,
             stored.SourceStoredEmailId is { } message ? StoredEmailId.Create(message) : null,
             stored.ImportedUid is { } uid ? ImportedCalendarEventUid.Create(uid) : null,

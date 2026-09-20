@@ -3,11 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
-using MailFathom.Application.Calendar;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Notifications;
-using MailFathom.Domain.Calendar;
+using MailFathom.Application.Reminders;
 using MailFathom.Domain.Notifications;
+using MailFathom.Domain.Reminders;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -18,25 +18,24 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting.Workers;
 
-/// <summary>Covers the loop that announces the calendar reminders that have come due, one pass per interval.</summary>
+/// <summary>Covers the loop that announces the reminders that have come due, one pass per interval.</summary>
 /// <remarks>
 /// What the worker owns is the interval, the isolation, and what a pass is allowed to say about itself — not what a
 /// pass decides about a reminder, which is asserted where the sweep lives. A loop that ended on the first failed pass
 /// would leave every later reminder unannounced for as long as the replica ran.
 /// </remarks>
-public sealed class CalendarReminderWorkerTests
+public sealed class ReminderWorkerTests
 {
     /// <summary>Guards against a hung worker. No assertion depends on how long a pass actually takes.</summary>
     private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
 
-    private static readonly CalendarEventId Standup =
-        CalendarEventId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000001"));
+    private static readonly Guid Standup = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
 
     [Fact]
     public async Task ExecuteAsync_BeforeTheFirstIntervalElapses_AnnouncesNothing()
     {
         // Arrange
-        var schedule = Substitute.For<ICalendarReminderSchedule>();
+        var schedule = Substitute.For<IReminderSchedule>();
         schedule
             .ReadDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
@@ -54,17 +53,17 @@ public sealed class CalendarReminderWorkerTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>A pass is reported as a count, and neither the person nor what their event is called reaches the log.</summary>
+    /// <summary>A pass is reported as a count, and neither the person nor what their reminder names reaches the log.</summary>
     [Fact]
-    public async Task ExecuteAsync_APassThatAnnouncedAReminder_ReportsTheCountWithoutNamingTheEvent()
+    public async Task ExecuteAsync_APassThatAnnouncedAReminder_ReportsTheCountWithoutNamingTheSubject()
     {
         // Arrange
         var claimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var schedule = Substitute.For<ICalendarReminderSchedule>();
+        var schedule = Substitute.For<IReminderSchedule>();
         schedule
             .ReadDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([Due()]);
-        schedule.MarkRaisedAsync(Arg.Any<DueCalendarReminder>(), Arg.Any<CancellationToken>())
+        schedule.MarkRaisedAsync(Arg.Any<DueReminder>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 claimed.TrySetResult();
@@ -80,7 +79,7 @@ public sealed class CalendarReminderWorkerTests
 
         // Assert
         var reported = Assert.Single(logger.Messages);
-        Assert.Contains("Announced 1 calendar reminders", reported, StringComparison.Ordinal);
+        Assert.Contains("Announced 1 reminders", reported, StringComparison.Ordinal);
         Assert.DoesNotContain("Design review", reported, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Standup.ToString(), reported, StringComparison.OrdinalIgnoreCase);
     }
@@ -92,10 +91,10 @@ public sealed class CalendarReminderWorkerTests
         // Arrange
         var secondPass = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var passes = 0;
-        var schedule = Substitute.For<ICalendarReminderSchedule>();
+        var schedule = Substitute.For<IReminderSchedule>();
         schedule
             .ReadDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns<IReadOnlyList<DueCalendarReminder>>(_ =>
+            .Returns<IReadOnlyList<DueReminder>>(_ =>
             {
                 if (Interlocked.Increment(ref passes) >= 2)
                 {
@@ -115,14 +114,15 @@ public sealed class CalendarReminderWorkerTests
         Assert.False(worker.ExecuteTask!.IsFaulted);
         Assert.Contains(
             logger.Messages,
-            message => message.Contains("pass over the calendar reminders that had come due failed", StringComparison.Ordinal));
+            message => message.Contains("pass over the reminders that had come due failed", StringComparison.Ordinal));
     }
 
-    private static DueCalendarReminder Due() => new(
+    private static DueReminder Due() => new(
         SyntheticMailUser.Deployment,
+        ReminderSubject.CalendarEvent,
         Standup,
-        CalendarEventTitle.Create("Design review"),
-        CalendarReminder.Create(15),
+        "Design review",
+        Reminder.Create(15),
         new DateTimeOffset(2026, 9, 21, 8, 45, 0, TimeSpan.Zero));
 
     /// <summary>Moves the clock on until the worker has reached what the test is waiting for.</summary>
@@ -137,7 +137,7 @@ public sealed class CalendarReminderWorkerTests
 
         for (var attempt = 0; attempt < advanceAttempts && !reached.IsCompleted; attempt++)
         {
-            timeProvider.Advance(CalendarReminderWorker.Interval);
+            timeProvider.Advance(ReminderWorker.Interval);
 
             await Task.WhenAny(reached, Task.Delay(passObservationWindow, TestContext.Current.CancellationToken));
         }
@@ -146,12 +146,12 @@ public sealed class CalendarReminderWorkerTests
     }
 
     /// <summary>Composes the worker over the real sweep, a substituted schedule, and a lease nothing competes for.</summary>
-    private static CalendarReminderWorker CreateWorker(
-        ICalendarReminderSchedule schedule,
+    private static ReminderWorker CreateWorker(
+        IReminderSchedule schedule,
         out FakeTimeProvider timeProvider,
-        out RecordingLogger<CalendarReminderWorker> logger)
+        out RecordingLogger<ReminderWorker> logger)
     {
-        logger = new RecordingLogger<CalendarReminderWorker>();
+        logger = new RecordingLogger<ReminderWorker>();
         timeProvider = new FakeTimeProvider();
 
         var notifications = Substitute.For<INotificationStore>();
@@ -165,11 +165,11 @@ public sealed class CalendarReminderWorkerTests
         services.AddSingleton<IWorkLeaseRunner>(new GrantingLeaseRunner());
         services.AddSingleton(AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
         services.AddScoped<NotificationRaiser>();
-        services.AddScoped<CalendarReminderSweep>();
+        services.AddScoped<ReminderSweep>();
 
         var serviceProvider = services.BuildServiceProvider();
 
-        return new CalendarReminderWorker(
+        return new ReminderWorker(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             logger,
             timeProvider);

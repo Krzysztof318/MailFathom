@@ -29,6 +29,15 @@ internal sealed class PersonalTaskEntity
     /// <summary>Gets or sets the day it is due on, and <see langword="null" /> where nobody has said when.</summary>
     public DateOnly? DueOn { get; set; }
 
+    /// <summary>Gets or sets the UTC offset the person's due day runs in, and <see langword="null" /> where the task announces nothing.</summary>
+    /// <remarks>
+    /// Minutes rather than an interval, because what it records is a UTC offset and PostgreSQL has no type for one:
+    /// stored as an interval it would read as a duration, and stored on the instant it would be lost the moment the
+    /// column was read back as UTC. It is what nine in the morning on the due day means, and the reminder rows are
+    /// written from it.
+    /// </remarks>
+    public int? DueDayOffsetMinutes { get; set; }
+
     /// <summary>Gets or sets where the task came from, which accepting a proposal moves rather than replaces.</summary>
     public PersonalTaskOrigin Origin { get; set; }
 
@@ -42,4 +51,7 @@ internal sealed class PersonalTaskEntity
     /// payload names erased mail does.
     /// </remarks>
     public Guid? SourceStoredEmailId { get; set; }
+
+    /// <summary>Gets the leads this task is announced at, which go with it when it is erased.</summary>
+    public ICollection<PersonalTaskReminderEntity> Reminders { get; } = [];
 }

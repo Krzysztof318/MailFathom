@@ -250,6 +250,7 @@ public sealed class TodayLayoutTests
         Person,
         title,
         dueOn,
+        TaskAnnouncement.Silent,
         PersonalTaskOrigin.Asserted,
         sourceMessage: null,
         isCompleted);

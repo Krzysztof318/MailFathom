@@ -2411,6 +2411,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<Guid?>("TargetPersonalTaskId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("TargetScreen")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -2429,6 +2432,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TargetCalendarEventId");
+
+                    b.HasIndex("TargetPersonalTaskId");
 
                     b.HasIndex("TargetStoredEmailId");
 
@@ -2733,6 +2738,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("DueDayOffsetMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly?>("DueOn")
                         .HasColumnType("date");
 
@@ -2761,6 +2769,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_tasks_user_due");
 
                     b.ToTable("tasks", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskReminderEntity", b =>
+                {
+                    b.Property<Guid>("PersonalTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("MinutesBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RaisedForDueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PersonalTaskId", "MinutesBefore");
+
+                    b.HasIndex("DueAt")
+                        .HasDatabaseName("ix_task_reminders_due_at")
+                        .HasFilter("\"RaisedForDueAt\" IS NULL");
+
+                    b.ToTable("task_reminders", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ProviderPaceMarkerEntity", b =>
@@ -4137,6 +4168,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TargetCalendarEventId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskEntity", "TargetPersonalTask")
+                        .WithMany()
+                        .HasForeignKey("TargetPersonalTaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "TargetStoredEmail")
                         .WithMany()
                         .HasForeignKey("TargetStoredEmailId")
@@ -4149,6 +4185,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("TargetCalendarEvent");
+
+                    b.Navigation("TargetPersonalTask");
 
                     b.Navigation("TargetStoredEmail");
                 });
@@ -4196,6 +4234,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskReminderEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskEntity", "PersonalTask")
+                        .WithMany("Reminders")
+                        .HasForeignKey("PersonalTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PersonalTask");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
@@ -4383,6 +4432,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Filings");
 
                     b.Navigation("Recipients");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.PersonalTaskEntity", b =>
+                {
+                    b.Navigation("Reminders");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", b =>

@@ -270,6 +270,7 @@ public sealed class OwnTasksTests
         var written = await SignedIn(store).RecordAsync(
             "  Answer the tender  ",
             new DateOnly(2026, 9, 21),
+            TaskAnnouncement.Silent,
             cited,
             TestContext.Current.CancellationToken);
 
@@ -294,6 +295,7 @@ public sealed class OwnTasksTests
             kept.Id,
             "draft the reply to the tender",
             dueOn: null,
+            TaskAnnouncement.Silent,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -316,6 +318,7 @@ public sealed class OwnTasksTests
             theirs.Id,
             "mine now",
             dueOn: null,
+            TaskAnnouncement.Silent,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -447,7 +450,12 @@ public sealed class OwnTasksTests
         var store = new InMemoryPersonalTaskStore();
 
         // Act
-        await SignedIn(store).RecordAsync("keep a list", dueOn: null, sourceMessage: null, TestContext.Current.CancellationToken);
+        await SignedIn(store).RecordAsync(
+            "keep a list",
+            dueOn: null,
+            TaskAnnouncement.Silent,
+            sourceMessage: null,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("keep a list", Assert.Single(store.Held).Title);
@@ -472,6 +480,7 @@ public sealed class OwnTasksTests
             user,
             title,
             dueOn,
+            TaskAnnouncement.Silent,
             origin,
             sourceMessage: null);
 
