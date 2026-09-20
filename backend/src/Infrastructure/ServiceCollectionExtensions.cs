@@ -9,6 +9,7 @@ using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Calendar;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Contacts.Correspondence;
@@ -133,6 +134,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.AiProviders;
 using MailFathom.Infrastructure.Persistence.Answering;
+using MailFathom.Infrastructure.Persistence.Calendar;
 using MailFathom.Infrastructure.Persistence.ClientAssertions;
 using MailFathom.Infrastructure.Persistence.ClientSessions;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -341,6 +343,7 @@ public static class ServiceCollectionExtensions
         AddMailDelivery(services);
         AddMailboxMutations(services);
         AddContacts(services);
+        AddCalendar(services);
 
         return services;
     }
@@ -1467,6 +1470,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IContactCollectionTelemetry, ContactCollectionTelemetry>();
         services.AddScoped<MailContactCollector>();
     }
+
+    /// <summary>Registers the calendar this deployment holds.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <remarks>
+    /// Registered unconditionally, for the reason the contact book above is: it is a store rather than a capability an
+    /// operator switches on, and every surface over it is optional while none of them can be reached without it. It is
+    /// scoped beside the context it reads and the session it writes through.
+    /// </remarks>
+    private static void AddCalendar(IServiceCollection services) =>
+        services.AddScoped<ICalendarEventStore, CalendarEventStore>();
 
     /// <summary>Registers the units of work that turn a message's passages into vectors.</summary>
     /// <param name="services">The service collection.</param>

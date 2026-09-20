@@ -6,6 +6,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 using MailFathom.Infrastructure.Persistence.AiProviders.Configurations;
 using MailFathom.Infrastructure.Persistence.Answering.Configurations;
+using MailFathom.Infrastructure.Persistence.Calendar.Configurations;
 using MailFathom.Infrastructure.Persistence.ClientAssertions.Configurations;
 using MailFathom.Infrastructure.Persistence.ClientSessions.Configurations;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -214,6 +215,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<ContactAddressEntity> ContactAddresses => this.Set<ContactAddressEntity>();
 
+    internal DbSet<CalendarEventEntity> CalendarEvents => this.Set<CalendarEventEntity>();
+
     internal DbSet<JobEntity> Jobs => this.Set<JobEntity>();
 
     internal DbSet<JobScheduleEntity> JobSchedules => this.Set<JobScheduleEntity>();
@@ -308,6 +311,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EmailThreadIdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new ContactConfiguration());
         modelBuilder.ApplyConfiguration(new ContactAddressConfiguration());
+        modelBuilder.ApplyConfiguration(new CalendarEventConfiguration());
         modelBuilder.ApplyConfiguration(new JobConfiguration());
         modelBuilder.ApplyConfiguration(new JobScheduleConfiguration());
         modelBuilder.ApplyConfiguration(new WorkLeaseConfiguration());

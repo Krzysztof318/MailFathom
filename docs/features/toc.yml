@@ -76,6 +76,9 @@
 - name: Where a correspondence with one person stands
   href: contact-relationship.md
   description: How an opened contact is read into a short note about the relationship, one suggested next action, and a few observations, each leading back to the conversation or the document behind it.
+- name: Calendar events
+  href: calendar-events.md
+  description: What an event this deployment holds is made of, the difference between one somebody put on their calendar and one their mail proposed, and what accepting, amending, or deleting one does.
 - name: The Discover run
   href: discovery-run.md
   description: How a question and its scope become a retrieval plan and a block composition, what the model decides and what the code derives, and what a run does when no plan can be read.
