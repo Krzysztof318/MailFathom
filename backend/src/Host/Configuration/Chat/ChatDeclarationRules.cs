@@ -186,7 +186,7 @@ internal static class ChatDeclarationRules
         if (candidate.CalendarEventExtraction.Enabled != composed.CalendarEventExtraction.Enabled)
         {
             errors.Add(
-                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.CalendarEventExtraction)}:{nameof(CalendarEventExtractionOptions.Enabled)} — whether text is read into calendar events decides which extractor the arrival pass and the new-event screen resolve, so turning it on or off needs a restart rather than a configuration reload.");
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.CalendarEventExtraction)}:{nameof(CalendarEventExtractionOptions.Enabled)} — whether text is read into calendar events decides which extractor the arrival pass and the drafting route resolve, so turning it on or off needs a restart rather than a configuration reload.");
         }
 
         return errors;

@@ -2510,12 +2510,15 @@ Content-Type: application/json
 }
 ```
 
-**What comes back fills a dialog rather than a calendar.** Nothing on this route writes an event, and nothing is
-stored: the fields arrive in the dialog somebody opened, who edits them and submits the event themselves — through
-[`POST /api/client/calendar`](#the-calendar-routes), which is the route that writes one.
+**What comes back is fields rather than a calendar entry.** Nothing on this route writes an event, and nothing is
+stored: the answer is a reading of the sentence, which a caller presents for whoever typed it to correct and submit
+through [`POST /api/client/calendar`](#the-calendar-routes), the route that writes one. No client in this repository
+calls either route yet; the screen that will is
+[#1566](https://github.com/Krzysztof318/MailFathom/issues/1566)'s work.
 
-**The read says whether this deployment reads a description at all**, so a dialog offers the field only where
-something answers it. It resolves a registration and calls no provider, so a client asks it once and holds the answer.
+**The read says whether this deployment reads a description at all**, so a caller can ask once and leave the field
+out where nothing would answer it. It resolves a registration and calls no provider, so the answer is cheap and stable
+enough to hold.
 `false` is what a deployment with no chat section answers and what one whose operator left
 [`Chat:CalendarEventExtraction:Enabled`](configuration-ai.md#reading-a-calendar-event-out-of-text--chatcalendareventextraction)
 off answers; the two are one answer for the reason the drafting read above gives.
@@ -2525,11 +2528,11 @@ the sentence — *tomorrow*, *Thursday*, *the week after next* — is resolved a
 *half past ten* their half past ten rather than the deployment's. It is required, and an instant written without an
 offset is refused with `400` rather than resolved in whichever zone this process happens to run in.
 
-**`drafted: false` is the dialog's own empty fields rather than a failure.** A sentence naming no occasion, a
-deployment reading none, and a provider that could not be reached are one answer, because what a client does about
-each is identical: it leaves the fields as they were and reports nothing. The exception is the same one the drafting
-route makes — a deployment that has spent what its operator allows a provider answers `429`, because a field that has
-quietly stopped working leaves somebody typing into it.
+**`drafted: false` is an ordinary answer rather than a failure.** A sentence naming no occasion, a deployment
+reading none, and a provider that could not be reached are one answer, because there is nothing a caller could
+usefully do differently about each: it has no fields to fill and nothing to report. The exception is the same one the
+drafting route makes — a deployment that has spent what its operator allows a provider answers `429`, because nothing
+sent for the rest of the period will be read, and that is a condition a caller has to act on.
 
 **Everything travels in a body**, for the reason drafting does: what somebody is arranging is the most revealing value
 this route carries, and a query string is the part of a request that reaches an access log by default. A body over

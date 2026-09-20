@@ -879,19 +879,19 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 ### Reading a calendar event out of text — `Chat:CalendarEventExtraction`
 
 Reading the occasions a text names into events: an arriving message into proposals on the calendars of everyone the
-account is assigned to, and a sentence somebody typed into the fields the dialog that creates an event opens with. One
+account is assigned to, and a sentence somebody typed into the fields an event is composed from. One
 switch covers both halves, because both are one agent reading one kind of words. A block inside `Chat` for the reason
 the blocks above are: it reads with that endpoint and has nothing to send a text to without one.
 
-Off by default, and off is a supported deployment: nothing proposes an event from mail, the dialog offers no
-description field, and a person writes every event by hand exactly as they did before. Turning it on is a spend
+Off by default, and off is a supported deployment: nothing proposes an event from mail, the drafting route answers
+that this deployment reads no description, and a person writes every event by hand exactly as they did before. Turning it on is a spend
 decision above all — the mail half is a **second** provider call on every message that arrives, running beside the
 enrichment call rather than instead of it, so an account whose mail is being derived costs twice as much to take in.
 
 **It competes with questions for one allowance**, exactly as the blocks above do: every reading is admitted against
 and charged to the same `MailAnswering` period ceilings a question is. A refused admission withholds the reading and
-leaves the message outstanding for the next period; on the typed half it refuses the drafting, so somebody who pressed
-a button is told rather than shown an empty dialog.
+leaves the message outstanding for the next period; on the typed half it refuses the drafting with a `429` rather
+than answering empty, so a caller is told the allowance is gone instead of reading it as a sentence naming nothing.
 
 **Nothing it produces reaches a calendar on its own.** A proposal is a row somebody still has to accept and a drafted
 event is fields somebody still has to submit, which is what bounds what a wrong reading can cost.

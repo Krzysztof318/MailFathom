@@ -2,10 +2,10 @@
 
 <!-- describes: backend/src/AI/CalendarEvents/**, backend/src/Application/Calendar/Extraction/**, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Configuration/Chat/CalendarEventExtractionOptions.cs -->
 
-Two places in MailFathom turn words into a date somebody can act on: a message that arrives naming a meeting, and a
-sentence a person types into the dialog that creates an event. Both are the same judgement about the same kind of
-words, so both are read by one agent, under one instruction, with one switch in front of them. This page describes
-what that reading produces, what it refuses to produce, and what it costs.
+Two texts in MailFathom turn words into a date somebody can act on: a message that arrives naming a meeting, and a
+sentence somebody types to describe one. Both are the same judgement about the same kind of words, so both are read by
+one agent, under one instruction, with one switch in front of them. This page describes what that reading produces,
+what it refuses to produce, and what it costs.
 
 What the events themselves are — the record, the difference between one somebody put on their calendar and one that
 was merely offered, and what accepting or dismissing a proposal does — is [Calendar events](calendar-events.md).
@@ -18,8 +18,8 @@ was merely offered, and what accepting or dismissing a proposal does — is [Cal
 | A typed sentence | Up to 500 characters somebody typed, with the instant they typed it at | One event | Answered to the client, stored nowhere |
 
 Neither half puts anything on anybody's calendar. A proposal is a row a person still has to accept, and a drafted
-event is fields a dialog fills in that the person then submits themselves — so the worst a wrong reading costs is
-something to dismiss, never an appointment somebody finds they are committed to.
+event is fields answered to whoever asked, which they submit themselves over a route of their own — so the worst a
+wrong reading costs is something to dismiss, never an appointment somebody finds they are committed to.
 
 **The agent holds no tools.** The text arrives in the turn and the answer is a structure, so there is nothing for it
 to look up and nothing for it to write. That is the capability rather than a description of one: an agent able to
@@ -37,8 +37,8 @@ column tells somebody they are busy when they are not. *Pay the invoice by the t
 and *reply by Monday afternoon* are all commitments, and the [enrichment pass](message-enrichment.md) is what records
 them; only *we meet on Tuesday at half past ten* is an occasion.
 
-**A day with no hour is shown as the day.** The event starts at midnight and carries no end, so the person is shown
-the day and sets the hour themselves rather than being offered one nobody wrote down.
+**A day with no hour is read as the day.** The event starts at midnight and carries no end, which leaves the hour to
+whoever acts on it rather than stating one nobody wrote down.
 
 **An end only where the text says how long it lasts.** No length is invented, and an end that is not after its start
 is dropped while the event is kept — what the text fixed was when the thing begins, so the length is the part to
@@ -90,16 +90,21 @@ one enrichment call already paid for on the message the pass stopped at.
 
 ## Reading a typed sentence
 
-The client asks once whether this deployment reads a description at all, and offers the field only where it does. A
-deployment that reads none answers the same way an unreachable provider does, so a dialog is never left with a field
-that has quietly stopped working and no way to tell.
+The typed half is served over two routes, and nothing in this repository calls them yet — the screen that will is
+[#1566](https://github.com/Krzysztof318/MailFathom/issues/1566)'s work. What exists is the contract, and it is shaped
+for a caller that draws a form.
 
-What comes back is one event or nothing, and nothing is an ordinary answer: a sentence naming no occasion leaves the
-dialog's own empty fields rather than telling the person they made a mistake. The two routes, what they refuse, and
-what a refusal carries are in [The client endpoint](../operations/client-endpoint.md).
+One route says whether this deployment reads a description at all, so a caller can ask once and leave the field out
+where nothing would answer it. A deployment that reads none answers that the same way one whose provider is
+unreachable does, which is what keeps a caller from having to tell those two apart.
 
-A spent allowance is the one condition that travels as a refusal rather than as an empty answer, because a field that
-has stopped working for the rest of the period is something the person needs to be told about instead of typing into.
+The other answers one event or nothing, and nothing is an ordinary answer rather than a failure: a sentence naming no
+occasion comes back empty instead of as an error, so a caller has nothing to report to whoever typed it. The two
+routes, what they refuse, and what a refusal carries are in
+[The client endpoint](../operations/client-endpoint.md).
+
+A spent allowance is the one condition that travels as a refusal rather than as an empty answer, because it is the one
+a caller has to act on: nothing it sends for the rest of the period will be read.
 
 ## What it costs
 
@@ -110,8 +115,8 @@ than failing what it was part of.
 
 **Off by default, and off is a supported deployment.** The mail half doubles what an arriving message costs — a second
 provider call per message, on top of the enrichment call it runs beside — so it is a spend decision an operator takes
-deliberately rather than one a deployment inherits. With it off, nothing proposes an event from mail and the dialog
-offers no description field. `Chat:CalendarEventExtraction` in
+deliberately rather than one a deployment inherits. With it off, nothing proposes an event from mail and the drafting
+route answers that this deployment reads no description. `Chat:CalendarEventExtraction` in
 [Configuring the AI features](../operations/configuration-ai.md#reading-a-calendar-event-out-of-text--chatcalendareventextraction)
 holds the keys.
 

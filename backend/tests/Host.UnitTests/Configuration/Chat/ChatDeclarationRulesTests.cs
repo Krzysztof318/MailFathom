@@ -292,6 +292,28 @@ public sealed class ChatDeclarationRulesTests
     }
 
     /// <summary>
+    /// Whether the extraction is registered at all is decided while the container is built, so a reload that flipped
+    /// this would report the setting as taken while every arriving message went on proposing nothing and the drafting
+    /// route went on answering that this deployment reads no description.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_TheCalendarEventExtractionTurnedOn_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.CalendarEventExtraction.Enabled = true;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:CalendarEventExtraction:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
+    /// <summary>
     /// The model the body cleaning routes to is read per proposal out of the snapshot in force, so moving it is a reload
     /// an instance takes rather than a restart it needs. The block carries nothing else: whether a body is cleaned is the
     /// reader's own preference, so there is no switch here for a reload to have to refuse.

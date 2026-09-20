@@ -19,8 +19,11 @@ namespace MailFathom.Application.Calendar.Extraction;
 /// </para>
 /// <para>
 /// It carries no origin, no owner, and no citation, because none of those is in the text: the reading knows what it
-/// read and nothing about the calendar it may reach. An end before or at the start never gets this far — the reading
-/// drops such an event, which is the same rule <see cref="CalendarEvent" /> enforces when one is composed.
+/// read and nothing about the calendar it may reach. An end at or before the start never gets this far either, but the
+/// event does: the reading keeps it and leaves <see cref="End" /> unset, because what the text fixed was when the
+/// occasion begins and the length is the part to discard. That is why a caller may compose a
+/// <see cref="CalendarEvent" /> from one of these without checking — the span it would refuse is already gone, and it
+/// refuses by throwing rather than by dropping anything.
 /// </para>
 /// </remarks>
 public sealed record ExtractedCalendarEvent(CalendarEventTitle Title, DateTimeOffset Start, DateTimeOffset? End);

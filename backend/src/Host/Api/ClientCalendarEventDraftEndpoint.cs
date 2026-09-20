@@ -14,17 +14,16 @@ namespace MailFathom.Host.Api;
 /// <summary>Reads a sentence somebody typed into the one event it describes, without storing any of it.</summary>
 /// <remarks>
 /// <para>
-/// Two routes on one address, because a screen has two different questions and only one of them costs anything. The
-/// read says whether this deployment reads a description at all, which is what decides whether the new-event dialog
-/// may offer the field before anybody types into it — a field promising to take a description over a deployment that
-/// reads none fails a person at the one moment they trusted it. The write reads one sentence and costs a provider
-/// call.
+/// Two routes on one address, because a caller has two different questions and only one of them costs anything. The
+/// read says whether this deployment reads a description at all, so a form need not offer the field before anybody
+/// types into it — a field promising to take a description over a deployment that reads none would fail a person at
+/// the one moment they trusted it. The write reads one sentence and costs a provider call.
 /// </para>
 /// <para>
-/// <strong>Nothing here writes to a calendar.</strong> What comes back is a draft the dialog fills its own fields
-/// from, which the person then edits and saves through the ordinary create route or abandons. A route that saved as
-/// well would put an event somebody never read onto their calendar, which is the one thing every half of this feature
-/// is arranged to prevent.
+/// <strong>Nothing here writes to a calendar.</strong> What comes back is a reading a caller fills its own fields
+/// from, to be saved through the ordinary create route or abandoned. A route that saved as well would put an event
+/// somebody never read onto their calendar, which is the one thing every half of this feature is arranged to
+/// prevent.
 /// </para>
 /// <para>
 /// The sentence travels in a body rather than in a query string, which is the whole reason this is a <c>POST</c> for
@@ -35,8 +34,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// It is published under the grant that governs asking a question rather than the one that governs reading mail,
 /// because that is what it does: a sentence leaves this deployment for a chat provider and is charged to the same
-/// allowance a question is. A caller holding only the reading grant is refused here and fills the dialog's fields in
-/// themselves, which is the dialog a deployment with no provider serves.
+/// allowance a question is. A caller holding only the reading grant is refused here and composes the event itself,
+/// which is what a deployment with no provider leaves every caller doing.
 /// </para>
 /// </remarks>
 internal static class ClientCalendarEventDraftEndpoint
@@ -94,9 +93,9 @@ internal static class ClientCalendarEventDraftEndpoint
     /// <remarks>
     /// <para>
     /// A deployment that reads no description answers <c>200</c> saying so rather than <c>404</c>, because a person
-    /// typing the fields in themselves has made no mistake and there is nothing for the client to repair. The same
-    /// answer is what a provider that failed produces, and deliberately so: what follows either is the dialog's own
-    /// fields, empty.
+    /// composing the event themselves has made no mistake and there is nothing for the caller to repair. The same
+    /// answer is what a provider that failed produces, and deliberately so: what follows either is a form with
+    /// nothing filled in.
     /// </para>
     /// <para>
     /// A spent allowance is the one failure that travels, because answering <c>200</c> there would leave a person
@@ -157,12 +156,12 @@ internal static class ClientCalendarEventDraftEndpoint
             out instant);
 }
 
-/// <summary>What this deployment does with a description, which is what says whether a dialog may offer the field.</summary>
+/// <summary>What this deployment does with a description, which is what says whether a caller may offer the field.</summary>
 /// <param name="ReadsDescriptions">Whether a typed description is read into an event draft.</param>
 /// <remarks>
 /// One field and no reason beside it. A deployment that declared no chat endpoint and one whose operator turned this
-/// off are the same answer to a screen — offer the fields — and naming which would publish a deployment's
-/// configuration to every signed-in browser to answer a question nobody asked.
+/// off are the same answer to a caller — there is no description to send — and naming which would publish a
+/// deployment's configuration to every signed-in browser to answer a question nobody asked.
 /// </remarks>
 internal sealed record ClientCalendarEventDraftingResponse(bool ReadsDescriptions);
 
@@ -183,13 +182,13 @@ internal sealed record ClientCalendarEventDraftRequest(string? Description, stri
 /// <param name="End">When it ends, or <see langword="null" /> where the sentence stated no length or nothing was drafted.</param>
 /// <remarks>
 /// <para>
-/// <c>drafted</c> being <see langword="false" /> is not a failure a client reports. It is the dialog's own empty
-/// fields, which is what a deployment with no provider serves and what this one serves while its provider is
+/// <c>drafted</c> being <see langword="false" /> is not a failure a client reports: there is simply nothing to fill
+/// a form with. It is what a deployment with no provider answers, and what this one answers while its provider is
 /// unreachable or the sentence named no day.
 /// </para>
 /// <para>
-/// Nothing here is stored. The draft exists for as long as the dialog holds it, and the event the person saves is the
-/// one they saw rather than the one a model wrote.
+/// Nothing here is stored. The reading lives only in the answer, and the event that reaches a calendar is the one
+/// whoever typed the sentence submitted rather than the one a model wrote.
 /// </para>
 /// </remarks>
 internal sealed record ClientCalendarEventDraftResponse(
