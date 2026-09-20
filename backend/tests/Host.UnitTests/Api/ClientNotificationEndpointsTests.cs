@@ -8,6 +8,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
+using MailFathom.Domain.Tasks;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -100,6 +101,39 @@ public sealed class ClientNotificationEndpointsTests
         Assert.Null(row.Target.MessageId);
         Assert.Null(row.Target.Screen);
         Assert.Equal("CalendarReminderDue", row.Statement?.Cause);
+    }
+
+    /// <summary>
+    /// A task's reminder leads to the task rather than to the calendar, which is the fifth shape the target carries.
+    /// A client switching on the kind meets a value it may not recognise, so the answer states that kind beside the
+    /// identifier exactly as the calendar's does rather than letting a second identifier stand for a second shape.
+    /// </summary>
+    [Fact]
+    public async Task ReadPageAsync_ATaskReminderThatCameDue_LeadsToTheTaskItIsAbout()
+    {
+        // Arrange
+        var task = PersonalTaskId.Create(new Guid("c4d5e6f7-a8b9-4c0d-8e1f-2a3b4c5d6e7f"));
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.ReadPageAsync(User, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => [TaskReminderNotification(task)]);
+
+        // Act
+        var result = await ClientNotificationEndpoints.ReadPageAsync(
+            pageSize: 1,
+            cursor: null,
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var row = Assert.Single(Assert.IsType<Ok<ClientNotificationPageResponse>>(result.Result).Value!.Notifications);
+
+        Assert.Equal("Task", row.Kind);
+        Assert.Equal("PersonalTask", row.Target.Kind);
+        Assert.Equal(task.Value, row.Target.TaskId);
+        Assert.Null(row.Target.CalendarEventId);
+        Assert.Null(row.Target.MessageId);
+        Assert.Null(row.Target.Screen);
+        Assert.Equal("TaskReminderDue", row.Statement?.Cause);
     }
 
     /// <summary>A row written before conditions were kept names none, and the answer says so rather than inventing one.</summary>
@@ -433,5 +467,17 @@ public sealed class ClientNotificationEndpointsTests
         source: null,
         NotificationTarget.ToCalendarEvent(calendarEvent),
         NotificationDeduplicationKey.Create("calendar-reminder:15"),
+        OccurredAt);
+
+    private static Notification TaskReminderNotification(PersonalTaskId task) => Notification.Compose(
+        NotificationId.Create(NotificationIdentifier),
+        User,
+        NotificationKind.Task,
+        title: "Renew the certificate",
+        body: "1 day left.",
+        NotificationStatement.TaskReminderDue(24 * 60),
+        source: null,
+        NotificationTarget.ToPersonalTask(task),
+        NotificationDeduplicationKey.Create("task-reminder:1440"),
         OccurredAt);
 }

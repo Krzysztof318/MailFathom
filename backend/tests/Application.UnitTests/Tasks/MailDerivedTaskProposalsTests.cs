@@ -156,6 +156,43 @@ public sealed class MailDerivedTaskProposalsTests
         Assert.Distinct(written.Select(task => task.Id));
     }
 
+    /// <summary>
+    /// A reading of a message proposes the task and never the reminder: what somebody wants to be told about is
+    /// theirs to set once they have accepted it, and a proposal nobody agreed to that announced itself would be mail
+    /// raising notifications of its own.
+    /// </summary>
+    [Fact]
+    public async Task ProposeAsync_AProposalCarryingADueDay_AnnouncesNothing()
+    {
+        // Arrange
+        var written = new List<PersonalTask>();
+        var store = Substitute.For<IPersonalTaskStore>();
+        store
+            .AddAsync(Arg.Any<PersonalTask>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                written.Add(call.ArgAt<PersonalTask>(0));
+
+                return Task.CompletedTask;
+            });
+
+        var proposals = Compose(store, assignedTo: [SyntheticMailUser.Deployment]);
+
+        // Act
+        await proposals.ProposeAsync(
+            Account,
+            Message,
+            [EmailTaskProposal.Create("Answer the supplier", new DateOnly(2026, 9, 30))],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposed = Assert.Single(written);
+
+        Assert.Empty(proposed.Reminders);
+        Assert.Null(proposed.DueDayOffset);
+        Assert.Null(proposed.AnchorsRemindersAt);
+    }
+
     private static MailDerivedTaskProposals Compose(
         IPersonalTaskStore store,
         IReadOnlyList<MailUserId> assignedTo)
