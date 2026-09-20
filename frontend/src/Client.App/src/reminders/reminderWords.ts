@@ -69,9 +69,7 @@ export function wordReminderLead(
     const lead = readReminderLead(minutesBefore);
 
     if (lead.unit === 'atTheTime') {
-        return translate(
-            reminderAnchorNamesATime(anchor) ? 'reminders.lead.atTheTime' : 'reminders.lead.onTheDay',
-        );
+        return translate(reminderAnchorNamesATime(anchor) ? 'reminders.lead.atTheTime' : 'reminders.lead.onTheDay');
     }
 
     return translate(leadForms(lead.unit)[new Intl.PluralRules(locale).select(lead.count)], {

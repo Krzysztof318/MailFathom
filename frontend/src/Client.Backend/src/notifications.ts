@@ -90,11 +90,7 @@ export type NotificationTarget =
  * `parseNotification` as no statement at all rather than as a value nothing can draw.
  */
 export type NotificationCause =
-    | 'MailArrived'
-    | 'SynchronizationIncomplete'
-    | 'CredentialRefused'
-    | 'CalendarReminderDue'
-    | 'TaskReminderDue';
+    'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused' | 'CalendarReminderDue' | 'TaskReminderDue';
 
 /**
  * What a notification says, as the condition it was raised for and the numbers it is stated with.

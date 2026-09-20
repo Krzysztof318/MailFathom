@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260920212510_AddTaskReminders")]
+    [Migration("20260920213742_AddTaskReminders")]
     partial class AddTaskReminders
     {
         /// <inheritdoc />
@@ -415,6 +415,70 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_content_move_runs_singleton", "\"Name\" = 'stored-content'");
                         });
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("EndedAt");
+
+                    b.Property<DateTimeOffset>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("LastUsedAt");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("StartedAt");
+
+                    b.Property<DateTimeOffset?>("StopRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("StopRequestedAt");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("discovery_runs", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEventEntity", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("RunId");
+
+                    b.Property<long>("Sequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Sequence");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("Kind");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("Payload");
+
+                    b.Property<DateTimeOffset>("WrittenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("WrittenAt");
+
+                    b.HasKey("RunId", "Sequence")
+                        .HasName("pk_discovery_run_events");
+
+                    b.ToTable("discovery_run_events", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailAttachmentTextEntity", b =>
@@ -3711,6 +3775,24 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEventEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.DiscoveryRunEntity", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailAttachmentTextEntity", b =>

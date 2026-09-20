@@ -173,6 +173,33 @@ public sealed class PersonalTaskReminderTests
         Assert.Equal("reminders", Assert.Throws<ArgumentOutOfRangeException>(composing).ParamName);
     }
 
+    /// <summary>
+    /// The offset is what places the hour, so a value no UTC offset can be is refused here as well as at the
+    /// transport boundary — the anchor is then a value rather than a property that throws when it is read.
+    /// </summary>
+    [Theory]
+    [InlineData(15, 0)]
+    [InlineData(-15, 0)]
+    [InlineData(2, 30)]
+    public void Compose_AnOffsetNoDueDayCanRunIn_IsRefused(int hours, int seconds)
+    {
+        // Arrange
+        var offset = TimeSpan.FromHours(hours) + TimeSpan.FromSeconds(seconds);
+
+        // Act
+        var composing = () => PersonalTask.Compose(
+            Identifier,
+            User,
+            "Send the counter-proposal",
+            DueOn,
+            new TaskAnnouncement(offset, [Reminder.Create(60)]),
+            PersonalTaskOrigin.Asserted,
+            sourceMessage: null);
+
+        // Assert
+        Assert.Equal("announcement", Assert.Throws<ArgumentOutOfRangeException>(composing).ParamName);
+    }
+
     /// <summary>A task that announces nothing has no hour to name, so asking for one is a fault rather than an answer.</summary>
     [Fact]
     public void RemindsAt_ATaskThatAnnouncesNothing_Refuses()

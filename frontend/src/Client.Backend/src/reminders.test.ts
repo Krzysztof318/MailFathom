@@ -3,7 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { isStatableReminderLead, isStatableReminderSet, longestReminderLead, mostRemindersOnOneRecord } from './reminders';
+import {
+    isStatableReminderLead,
+    isStatableReminderSet,
+    longestReminderLead,
+    mostRemindersOnOneRecord,
+} from './reminders';
 
 describe('isStatableReminderLead', () => {
     it('accepts the event itself and the longest lead, which are the two ends the deployment allows', () => {

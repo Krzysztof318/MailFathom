@@ -137,26 +137,21 @@ internal sealed class PersistedPersonalTaskStore(
         ArgumentNullException.ThrowIfNull(revision);
 
         return commitPolicy.CommitAsync(
-            async (session, token) =>
-            {
-                var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+            (session, token) => StageAsync(
+                session,
+                revision.User,
+                revision.Id,
+                (writeContext, stored) =>
+                {
+                    stored.Title = revision.Title;
+                    stored.DueOn = revision.DueOn;
+                    stored.DueDayOffsetMinutes = revision.DueDayOffset is { } offset
+                        ? (int)offset.TotalMinutes
+                        : null;
 
-                return await StageAsync(
-                    session,
-                    revision.User,
-                    revision.Id,
-                    stored =>
-                    {
-                        stored.Title = revision.Title;
-                        stored.DueOn = revision.DueOn;
-                        stored.DueDayOffsetMinutes = revision.DueDayOffset is { } offset
-                            ? (int)offset.TotalMinutes
-                            : null;
-
-                        Reconcile(writeContext, stored, revision);
-                    },
-                    token);
-            },
+                    Reconcile(writeContext, stored, revision);
+                },
+                token),
             cancellationToken);
     }
 
@@ -175,7 +170,7 @@ internal sealed class PersistedPersonalTaskStore(
                 session,
                 user,
                 task,
-                stored => stored.Origin = PersonalTaskOrigin.Asserted,
+                (_, stored) => stored.Origin = PersonalTaskOrigin.Asserted,
                 token),
             cancellationToken);
 
@@ -194,7 +189,7 @@ internal sealed class PersistedPersonalTaskStore(
                 session,
                 user,
                 task,
-                stored => stored.IsCompleted = isCompleted,
+                (_, stored) => stored.IsCompleted = isCompleted,
                 token),
             cancellationToken);
 
@@ -283,15 +278,16 @@ internal sealed class PersistedPersonalTaskStore(
     /// <summary>Finds one of a person's tasks inside the session and applies a change to it.</summary>
     /// <remarks>
     /// Every state change here has the same two halves — address the row through the user as well as the identifier,
-    /// then move one column — so the addressing is written once and each caller supplies only the column it moves.
+    /// then move what the change states — so the addressing is written once and each caller supplies only that.
     /// Assigning a value the row already carries leaves the change tracker with nothing to write, which is what makes
-    /// a repeated request a read rather than a second write.
+    /// a repeated request a read rather than a second write. The context is handed to the change because a revision
+    /// removes reminder rows as well as moving columns, and the two changes that move one column ignore it.
     /// </remarks>
     private static async Task<PersonalTaskChangeOutcome> StageAsync(
         IPersistenceSession session,
         MailUserId user,
         PersonalTaskId task,
-        Action<PersonalTaskEntity> change,
+        Action<MailFathomDbContext, PersonalTaskEntity> change,
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -309,7 +305,7 @@ internal sealed class PersistedPersonalTaskStore(
             return PersonalTaskChangeOutcome.NotFound;
         }
 
-        change(stored);
+        change(writeContext, stored);
 
         return PersonalTaskChangeOutcome.Applied;
     }

@@ -41,6 +41,9 @@ public sealed record PersonalTask
     /// </remarks>
     public const int DueDayReminderHour = 9;
 
+    /// <summary>How far from UTC a due day may run, which is the range an offset can be at all.</summary>
+    private static readonly TimeSpan MaximumDueDayOffset = TimeSpan.FromHours(14);
+
     private PersonalTask(
         PersonalTaskId id,
         MailUserId user,
@@ -129,7 +132,7 @@ public sealed record PersonalTask
     /// <returns>A task that stands outstanding.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when <paramref name="user" /> names nobody, when <paramref name="id" /> is the struct default, when one lead is stated twice, or when leads are stated against no due day.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin, when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />, or when more than <see cref="Reminder.MaximumCount" /> leads are stated.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin, when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />, when more than <see cref="Reminder.MaximumCount" /> leads are stated, or when the stated offset is not one a UTC offset can be.</exception>
     /// <remarks>
     /// The user has to be a named one, because a row written under the unspecified identity would belong to nobody:
     /// unreachable by any read and uncollected by any erasure.
@@ -250,7 +253,9 @@ public sealed record PersonalTask
     /// A lead is measured back from the due day, so leads against no due day are refused rather than kept as
     /// reminders nothing could ever raise — which is the same answer the client gives, where a task nobody has dated
     /// offers no presets at all. The offset is kept only where leads are, for the same reason: it exists to say what
-    /// nine in the morning means, and there is nothing to say it about otherwise.
+    /// nine in the morning means, and there is nothing to say it about otherwise. The offset is held to what a UTC
+    /// offset can be here as well as at the transport boundary that refuses one, so that the anchor a lead is
+    /// measured back from is a value rather than a property that throws.
     /// </remarks>
     private static (TimeSpan? DueDayOffset, IReadOnlyList<Reminder> Reminders) Announced(
         DateOnly? dueOn,
@@ -270,6 +275,15 @@ public sealed record PersonalTask
             throw new ArgumentException(
                 "A task is announced against its due day, so one nobody has dated carries no reminder.",
                 nameof(announcement));
+        }
+
+        if (announcement.DueDayOffset.Ticks % TimeSpan.TicksPerMinute != 0
+            || announcement.DueDayOffset.Duration() > MaximumDueDayOffset)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(announcement),
+                announcement.DueDayOffset,
+                "A due day runs in a whole number of minutes from UTC, at most fourteen hours either way.");
         }
 
         return (announcement.DueDayOffset, ordered);
