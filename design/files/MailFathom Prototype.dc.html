@@ -1159,7 +1159,7 @@
                   </sc-for>
                 </div>
                 <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:11px;color:var(--accent-d)">
-                  <span style="background:var(--panel);border-radius:5px;padding:3px 8px">Kontekst: {{ composeContext }}</span>
+                  <span style="background:var(--panel);border-radius:5px;padding:3px 8px">Context: {{ composeContext }}</span>
                   <span>the draft stays local until you send it</span>
                 </div>
               </div>
@@ -1536,7 +1536,7 @@
           <sc-if value="{{ hasArchived }}" hint-placeholder-val="{{ false }}">
             <div onClick="{{ toggleArchiveSection }}" style="display:flex;align-items:center;gap:6px;padding:8px 2px 4px 2px;margin-top:4px;border-top:1px solid var(--line2)" style-hover="cursor:pointer">
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--muted)">{{ archiveChevron }}</span>
-              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;color:var(--muted)">ZARCHIWIZOWANE ({{ archivedCount }})</span>
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;color:var(--muted)">ARCHIVED ({{ archivedCount }})</span>
             </div>
             <sc-if value="{{ archiveSectionOpen }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ archivedHistory }}" as="h" hint-placeholder-count="2">
@@ -1575,17 +1575,163 @@
                   <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.06em;color:var(--onaccent);background:var(--accent);border-radius:4px;padding:3px 7px">AI</span>
                   <span style="font-size:11px;color:var(--muted)">{{ m.scope }}</span>
                 </div>
-                <div style="font-size:15px;line-height:1.6;color:var(--text2);text-wrap:pretty">{{ m.text }}</div>
+                <sc-if value="{{ m.hasText }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:15px;line-height:1.6;color:var(--text2);text-wrap:pretty">{{ m.text }}</div>
+                </sc-if>
+                <sc-if value="{{ m.working }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--accent-d)">autorenew</span>The agent is going through your mail…</div>
+                </sc-if>
                 <sc-for list="{{ m.bullets }}" as="b" hint-placeholder-count="0">
                   <div style="display:flex;gap:10px;align-items:baseline">
                     <span style="width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--accent)"></span>
                     <span style="font-size:14px;line-height:1.5;text-wrap:pretty">{{ b.t }}</span>
                   </div>
                 </sc-for>
-                <sc-if value="{{ m.hasActions }}" hint-placeholder-val="{{ false }}">
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line2);padding-top:11px">
-                    <sc-for list="{{ m.actions }}" as="ac" hint-placeholder-count="2">
-                      <div onClick="{{ ac.run }}" style="{{ ac.style }}" style-hover="cursor:pointer;opacity:0.9">{{ ac.label }}</div>
+                <sc-if value="{{ m.hasBlocks }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ m.blocksStyle }}">
+                    <sc-for list="{{ m.blocks }}" as="bk" hint-placeholder-count="1">
+                      <div style="{{ bk.cardStyle }}">
+                        <div style="{{ bk.headStyle }}">
+                          <div style="{{ bk.labelStyle }}">{{ bk.label }}</div>
+                          <div style="{{ bk.metaStyle }}">{{ bk.meta }}</div>
+                          <sc-if value="{{ bk.hasChip }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.chipStyle }}"><span style="{{ bk.chipIconStyle }}">{{ bk.chipIcon }}</span>{{ bk.chipLabel }}</div>
+                          </sc-if>
+                        </div>
+
+                        <sc-if value="{{ bk.isDeclined }}" hint-placeholder-val="{{ false }}">
+                          <div style="{{ bk.declinedStyle }}">
+                            <span style="{{ bk.declinedIconStyle }}">block</span>
+                            <span style="{{ bk.strikeStyle }}">{{ bk.title }}</span>
+                            <span>{{ bk.declinedWord }} — {{ bk.declinedNote }}</span>
+                          </div>
+                        </sc-if>
+
+                        <sc-if value="{{ bk.showBody }}" hint-placeholder-val="{{ true }}">
+                          <sc-if value="{{ bk.isLoading }}" hint-placeholder-val="{{ false }}">
+                            <sc-for list="{{ bk.skel }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+                          </sc-if>
+                          <sc-if value="{{ bk.isError }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.emptyBodyStyle }}">
+                              <span style="{{ bk.errIconStyle }}">error</span>
+                              <div style="{{ bk.emptyTextStyle }}">{{ bk.errorText }}</div>
+                              <div role="button" tabIndex="0" aria-label="{{ bk.retryAria }}" onClick="{{ bk.retry }}" onKeyDown="{{ bk.retryKey }}" style="{{ bk.retryStyle }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px">Try again</div>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ bk.isEmpty }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.emptyBodyStyle }}">
+                              <span style="{{ bk.emptyIconStyle }}">{{ bk.emptyIcon }}</span>
+                              <div style="{{ bk.emptyTextStyle }}">{{ bk.emptyText }}</div>
+                            </div>
+                          </sc-if>
+
+                          <sc-if value="{{ bk.ready }}" hint-placeholder-val="{{ true }}">
+                            <sc-if value="{{ bk.isTimeline }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.tlWrapStyle }}">
+                                <sc-for list="{{ bk.items }}" as="t" hint-placeholder-count="4">
+                                  <div style="{{ t.style }}">
+                                    <div style="{{ t.dateStyle }}">{{ t.date }}</div>
+                                    <div style="{{ t.titleStyle }}">{{ t.title }}</div>
+                                    <div style="{{ t.detailStyle }}">{{ t.detail }}</div>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ bk.isEvidence }}" hint-placeholder-val="{{ false }}">
+                              <sc-for list="{{ bk.items }}" as="e" hint-placeholder-count="2">
+                                <div style="{{ e.style }}">
+                                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                                    <span style="{{ e.nStyle }}">{{ e.n }}</span>
+                                    <div style="font-size:13.5px;font-weight:600;min-width:0">{{ e.source }}</div>
+                                    <span style="{{ e.badgeStyle }}">{{ e.badge }}</span>
+                                  </div>
+                                  <sc-if value="{{ e.isPrivate }}" hint-placeholder-val="{{ false }}">
+                                    <div style="{{ e.privStyle }}">Content not available for review — the conclusion drawn from this source is kept in the result.</div>
+                                  </sc-if>
+                                  <sc-if value="{{ e.hasSnippet }}" hint-placeholder-val="{{ true }}">
+                                    <div style="{{ e.snipStyle }}">{{ e.snippet }}</div>
+                                  </sc-if>
+                                  <div style="{{ e.subStyle }}">relevance {{ e.relevance }} · {{ e.freshness }}</div>
+                                </div>
+                              </sc-for>
+                            </sc-if>
+                            <sc-if value="{{ bk.isThreadState }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.colsStyle }}">
+                                <sc-for list="{{ bk.stateCols }}" as="c" hint-placeholder-count="3">
+                                  <div style="{{ c.style }}">
+                                    <div style="{{ c.labelStyle }}">{{ c.label }}</div>
+                                    <sc-for list="{{ c.items }}" as="it" hint-placeholder-count="2">
+                                      <div style="{{ it.style }}">{{ it.t }}</div>
+                                    </sc-for>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ bk.isTable }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.tableScrollStyle }}">
+                                <div style="{{ bk.tableStyle }}">
+                                  <sc-for list="{{ bk.cells }}" as="c" hint-placeholder-count="8"><div style="{{ c.style }}">{{ c.t }}</div></sc-for>
+                                </div>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ bk.isFiles }}" hint-placeholder-val="{{ false }}">
+                              <sc-for list="{{ bk.items }}" as="f" hint-placeholder-count="3">
+                                <div style="{{ f.style }}">
+                                  <span style="{{ f.iconStyle }}">{{ f.icon }}</span>
+                                  <div style="min-width:0">
+                                    <div style="{{ f.nameStyle }}">{{ f.name }}</div>
+                                    <div style="{{ f.metaStyle }}">{{ f.meta }}</div>
+                                  </div>
+                                </div>
+                              </sc-for>
+                            </sc-if>
+                            <sc-if value="{{ bk.isProposal }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.propTitleStyle }}">{{ bk.title }}</div>
+                            </sc-if>
+                            <sc-for list="{{ bk.fields }}" as="f" hint-placeholder-count="0">
+                              <div style="{{ f.rowStyle }}"><div style="{{ f.kStyle }}">{{ f.k }}</div><div style="{{ f.vStyle }}">{{ f.v }}</div></div>
+                            </sc-for>
+                            <sc-if value="{{ bk.isDraft }}" hint-placeholder-val="{{ false }}">
+                              <sc-if value="{{ bk.editing }}" hint-placeholder-val="{{ false }}">
+                                <textarea value="{{ bk.editText }}" onChange="{{ bk.onEdit }}" aria-label="Edit the draft text before sending" style="{{ bk.textareaStyle }}"></textarea>
+                              </sc-if>
+                              <sc-if value="{{ bk.notEditing }}" hint-placeholder-val="{{ true }}">
+                                <sc-for list="{{ bk.paras }}" as="p" hint-placeholder-count="3"><div style="{{ p.style }}">{{ p.t }}</div></sc-for>
+                              </sc-if>
+                            </sc-if>
+                            <sc-if value="{{ bk.hasConflict }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.conflictStyle }}"><span style="{{ bk.conflictIconStyle }}">warning</span>{{ bk.conflict }}</div>
+                            </sc-if>
+                            <sc-if value="{{ bk.hasReason }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.reasonStyle }}">{{ bk.reason }}</div>
+                            </sc-if>
+                            <sc-if value="{{ bk.hasEffect }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.effectStyle }}"><span style="{{ bk.effectIconStyle }}">bolt</span>{{ bk.effect }}</div>
+                            </sc-if>
+                            <sc-if value="{{ bk.isPartial }}" hint-placeholder-val="{{ false }}">
+                              <div style="{{ bk.noteStyle }}"><span style="{{ bk.noteIconStyle }}">hourglass_top</span>{{ bk.partialNote }}</div>
+                            </sc-if>
+                          </sc-if>
+
+                          <sc-if value="{{ bk.hasResult }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.resultStyle }}"><span style="{{ bk.resultIconStyle }}">{{ bk.resultIcon }}</span>{{ bk.resultText }}</div>
+                          </sc-if>
+                          <sc-if value="{{ bk.hasControls }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.controlsStyle }}">
+                              <sc-for list="{{ bk.controls }}" as="cn" hint-placeholder-count="2">
+                                <div role="button" tabIndex="0" aria-label="{{ cn.aria }}" onClick="{{ cn.run }}" onKeyDown="{{ cn.key }}" style="{{ cn.style }}" style-hover="cursor:pointer;opacity:0.9" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ cn.label }}</div>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ bk.hasNav }}" hint-placeholder-val="{{ false }}">
+                            <div style="{{ bk.navStyle }}">
+                              <sc-for list="{{ bk.nav }}" as="nv" hint-placeholder-count="1">
+                                <div role="button" tabIndex="0" aria-label="{{ nv.aria }}" onClick="{{ nv.run }}" onKeyDown="{{ nv.key }}" style="{{ nv.style }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px"><span style="{{ nv.iconStyle }}">{{ nv.icon }}</span>{{ nv.label }}</div>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                        </sc-if>
+                      </div>
                     </sc-for>
                   </div>
                 </sc-if>
@@ -1603,7 +1749,7 @@
         <sc-if value="{{ agentCtxShown }}" hint-placeholder-val="{{ false }}">
           <div style="display:flex;align-items:center;gap:9px;align-self:flex-start;max-width:100%;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:11px;padding:8px 10px 8px 12px">
             <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;color:var(--accent-d)">attach_file</span>
-            <span style="flex:1;min-width:0;font-size:13px;color:var(--accent-d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Kontekst: {{ agentCtxLabel }}</span>
+            <span style="flex:1;min-width:0;font-size:13px;color:var(--accent-d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Context: {{ agentCtxLabel }}</span>
             <span onClick="{{ clearAgentCtx }}" title="Remove context" style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;color:var(--accent-d)" style-hover="cursor:pointer;color:var(--text)">close</span>
           </div>
         </sc-if>
@@ -2774,7 +2920,7 @@
         <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px;line-height:1;color:var(--muted)">notifications</span>
         <div style="flex:1;min-width:0;font-size:16px;font-weight:600">Notifications</div>
         <sc-if value="{{ notifHasUnread }}" hint-placeholder-val="{{ true }}">
-          <div style="{{ notifNewBadgeStyle }}">{{ notifCountLabel }} nowe</div>
+          <div style="{{ notifNewBadgeStyle }}">{{ notifNewLabel }}</div>
         </sc-if>
         <div onClick="{{ closeNotifCenter }}" title="Close" style="{{ notifCloseStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="{{ notifCloseIconStyle }}">close</span></div>
       </div>
@@ -2857,6 +3003,11 @@
     </div>
   </sc-if>
 </div>
+
+
+  <sc-if value="{{ convReturnShown }}" hint-placeholder-val="{{ false }}">
+    <div role="button" tabIndex="0" aria-label="Back to the agent conversation you came from" onClick="{{ backToConv }}" onKeyDown="{{ backToConvKey }}" style="{{ convReturnStyle }}" style-hover="cursor:pointer;opacity:0.92" style-focus="outline:2px solid var(--accent);outline-offset:3px"><span style="{{ convReturnIconStyle }}">arrow_back</span>{{ convReturnLabel }}</div>
+  </sc-if>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;aiHints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;showTrace&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;streamDelay&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:550,&quot;min&quot;:120,&quot;max&quot;:1200,&quot;step&quot;:50,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
 /* MARKDOWN IN MESSAGE BODIES
@@ -4301,47 +4452,297 @@ const parseEventPrompt = (raw) => {
   return { title, day: day || "28", time: time || "12:00", chips };
 };
 
+/* ——— Agent answer blocks ———
+   The agent renders the SAME catalogue as Discover (see “MailFathom Result Blocks”):
+   ANSWER, EVIDENCE, TIMELINE, FACT TABLE, PEOPLE, THREAD STATE, ATTACHMENTS, DRAFT, SUGGESTED ACTION.
+   What differs in a conversation is that an actionable block carries real controls and therefore
+   three phases: pending (proposal + controls), accepted (result line), declined (one quiet struck line). */
+
+const atToday = (h, m) => { const d = new Date(); d.setHours(h, m || 0, 0, 0); return d.getTime(); };
+
+const BK_TIMELINE_TODAY = {
+  type: "timeline", meta: "today · 5 items",
+  items: [
+    { date: "09:00", title: "Fabrikam rollout review", detail: "Piotr Zieliński · 45 min" },
+    { date: "11:00", title: "Call with Wrona Law Office", detail: "addendum wording · 30 min" },
+    { date: "13:00", title: "Call with Anna Kowalska", detail: "Contoso · 30 min" },
+    { date: "15:00", title: "Rollout status with Piotr", detail: "until 16:30" },
+    { date: "all day", title: "Decision: Contoso addendum", detail: "deadline today" },
+  ],
+};
+
+const BK_DRAFT_CONTOSO = {
+  type: "draft", meta: "reply · 96 words",
+  to: "Anna Kowalska", subject: "Re: Contract addendum — signatures",
+  paras: [
+    "Thank you for the addendum. We accept shortening the response time for critical incidents to 2 hours on business days.",
+    "In return we ask for an upper cap on CPI indexation of 5% per year. At the 4.1% forecast this keeps the cost predictable for both sides through 2027.",
+    "If the cap is acceptable, we are ready to close the decision by 28 August.",
+  ],
+  done: "Sent into “Contract addendum — signatures”",
+  nav: [{ label: "Open the thread", icon: "forum", kind: "thread", tid: "contoso" }],
+};
+
+const SEED_CONVS = () => [
+  {
+    id: "c-plan", title: "Plan my day", when: "09:41",
+    msgs: [
+      { role: "user", text: "Plan my day", ts: atToday(9, 41) },
+      {
+        role: "bot", ts: atToday(9, 41), scope: "today · 3 accounts",
+        text: "Four fixed items today and one all-day decision. Two focus blocks cover what is actually at risk.",
+        blocks: [
+          BK_TIMELINE_TODAY,
+          {
+            type: "event", meta: "calendar · work", phase: "accepted",
+            title: "Focus block: CPI cap counter-proposal",
+            when: "today 10:00–11:00", duration: "1 h", attendees: "You", from: "Contract addendum — signatures",
+            result: "Added to the calendar · 09:42",
+            nav: [{ label: "Open the calendar", icon: "calendar_month", kind: "gocal" }],
+          },
+          {
+            type: "event", meta: "calendar · work", phase: "pending",
+            title: "Focus block: IT contract audit list",
+            when: "today 16:00–17:00", duration: "1 h", attendees: "You", from: "IT contract audit",
+            conflict: "overlaps Rollout status with Piotr (15:00–16:30)",
+            done: "Added to the calendar",
+            nav: [{ label: "Open the calendar", icon: "calendar_month", kind: "gocal" }],
+          },
+        ],
+      },
+      { role: "user", text: "Move the second one to tomorrow", ts: atToday(9, 44) },
+      {
+        role: "bot", ts: atToday(9, 44), scope: "calendar · tomorrow",
+        text: "Moved. Tomorrow morning is free before the Fabrikam call.",
+        blocks: [{
+          type: "event", meta: "calendar · work", phase: "pending",
+          title: "Focus block: IT contract audit list",
+          when: "tomorrow 09:00–10:00", duration: "1 h", attendees: "You", from: "IT contract audit",
+          done: "Added to the calendar",
+          nav: [{ label: "Open the calendar", icon: "calendar_month", kind: "gocal" }],
+        }],
+      },
+    ],
+  },
+  {
+    id: "c-slip", title: "What slipped this week?", when: "08:20",
+    msgs: [
+      { role: "user", text: "What slipped this week?", ts: atToday(8, 20) },
+      {
+        role: "bot", ts: atToday(8, 20), scope: "7 days · 3 accounts",
+        text: "Two commitments have passed their date, and both of them are yours.",
+        blocks: [
+          {
+            type: "threadstate", meta: "3 threads · 7 days",
+            cols: [
+              { label: "AGREED", items: [{ t: "2 h response time for critical incidents" }, { t: "Decision closes on 28 August" }] },
+              { label: "OPEN QUESTIONS", items: [{ t: "Upper cap on CPI indexation — no answer from Contoso" }] },
+              { label: "COMMITMENTS", items: [
+                { t: "You: notice-period list to the audit — overdue since 02.09", late: true },
+                { t: "You: confirm the 12.11 date to Fabrikam — overdue since 04.09", late: true },
+              ] },
+            ],
+          },
+          {
+            type: "task", meta: "tasks · from mail", phase: "pending",
+            title: "Send the notice-period list to the audit",
+            due: "tomorrow, 17:00", from: "IT contract audit", reminder: "09:00 tomorrow",
+            done: "Added to tasks",
+            nav: [{ label: "Open the thread", icon: "forum", kind: "thread", tid: "audyt1" }],
+          },
+          {
+            type: "action", meta: "one step", phase: "declined",
+            title: "Mark the Fabrikam thread as waiting on them",
+            reason: "No reply from Tomasz Zieliński for 5 days.",
+            effect: "Changes the thread state only — nothing is sent.",
+            cta: "Mark it",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "c-draft", title: "Draft a reply to Contoso", when: "11:02",
+    msgs: [
+      { role: "user", text: "Draft a reply to Contoso", ts: atToday(11, 2) },
+      {
+        role: "bot", ts: atToday(11, 2), scope: "thread · 6 messages",
+        text: "We accept the 2 h SLA and ask for a 5% annual cap on indexation in return. Two sources carry the numbers.",
+        blocks: [
+          {
+            type: "evidence", meta: "2 sources",
+            items: [
+              { n: "1", source: "SLA addendum.pdf", badge: "attachment", snippet: "“Response time drops from 4 to 2 hours, fee +8%…”", relevance: "94%", freshness: "current · 18.11.2025" },
+              { n: "2", source: "Private message — Marta Nowak", badge: "private source", private: true, relevance: "76%", freshness: "today" },
+            ],
+          },
+          Object.assign({ phase: "pending" }, BK_DRAFT_CONTOSO),
+        ],
+      },
+      { role: "user", text: "Send it", ts: atToday(11, 7) },
+      {
+        role: "bot", ts: atToday(11, 7), scope: "thread · Contoso",
+        text: "Sent. I will flag it if nothing comes back before the 28 August decision.",
+        blocks: [Object.assign({ phase: "accepted", result: "Sent into “Contract addendum — signatures” · 11:07" }, BK_DRAFT_CONTOSO)],
+      },
+    ],
+  },
+  {
+    id: "c-cases", title: "Status of open cases", when: "14:15",
+    msgs: [
+      { role: "user", text: "Status of open cases", ts: atToday(14, 15) },
+      {
+        role: "bot", ts: atToday(14, 15), scope: "3 cases in progress",
+        text: "The Contoso 2027 renegotiation is the hot one — one open question, decision tomorrow. Here is where the versions differ.",
+        blocks: [
+          {
+            type: "facttable", meta: "Contoso renegotiation",
+            cols: ["Version", "Price", "SLA", "Indexation"],
+            rows: [
+              ["v2 · 12.04.2021", "€1,200 / mo", "4 h", "CPI, no cap"],
+              ["v3 · 18.11.2025", "€1,296 / mo", "2 h", "CPI, no cap"],
+              ["v4 · proposed", "€1,296 / mo", "2 h", "CPI, 5% cap"],
+            ],
+          },
+          {
+            type: "attachments", meta: "3 documents",
+            items: [
+              { name: "SLA addendum.pdf", icon: "picture_as_pdf", meta: "18.11.2025 · 240 kB" },
+              { name: "Calculation_2027.xlsx", icon: "table_chart", meta: "yesterday · Marta Nowak" },
+              { name: "Legal opinion — indexation.docx", icon: "description", meta: "05.09 · Wrona Law Office" },
+            ],
+          },
+          {
+            type: "action", meta: "one step", phase: "pending",
+            title: "Attach the legal opinion to the Contoso 2027 case",
+            reason: "The opinion answers the open question about the indexation cap and is not in the case file.",
+            effect: "Adds the document to the case — nothing is sent to anyone.",
+            cta: "Attach it", done: "Attached to Contoso 2027",
+            nav: [{ label: "Open the case", icon: "folder_open", kind: "case" }],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "c-thread", title: "Contract addendum — what is agreed", when: "now",
+    ctx: "thread “Contract addendum — signatures”",
+    msgs: [
+      { role: "user", text: "What has been agreed here so far?", ts: atToday(15, 12) },
+      {
+        role: "bot", ts: atToday(15, 12), scope: "thread · 6 messages", working: true,
+        text: "",
+        blocks: [
+          {
+            type: "threadstate", meta: "this thread",
+            cols: [
+              { label: "AGREED", items: [{ t: "2 h response time for critical incidents" }, { t: "Fee rises by 8% from January" }] },
+              { label: "OPEN QUESTIONS", items: [{ t: "Upper cap on CPI indexation" }] },
+              { label: "COMMITMENTS", items: [{ t: "You: counter-proposal by 28 August" }] },
+            ],
+          },
+          { type: "evidence", state: "loading", meta: "reading the attachments…" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "c-states", title: "Blocks that did not come back whole", when: "yesterday",
+    msgs: [
+      { role: "user", text: "Check the Fabrikam delivery dates", ts: atToday(7, 30) },
+      {
+        role: "bot", ts: atToday(7, 30), scope: "2 accounts · partial",
+        text: "One account did not answer in time, so part of this is incomplete.",
+        blocks: [
+          { type: "event", state: "loading", meta: "checking the calendar…", phase: "pending", title: "Fabrikam delivery date confirmation" },
+          {
+            type: "task", state: "error", meta: "tasks", phase: "pending",
+            title: "Confirm the 12.11 date to Fabrikam",
+            errorText: "The task list did not answer.",
+          },
+          { type: "draft", state: "empty", meta: "reply", phase: "pending", to: "Tomasz Zieliński", title: "Reply to Fabrikam", emptyText: "Nothing to draft — the last message in the thread is yours." },
+          {
+            type: "evidence", state: "partial", meta: "1 of 3 sources",
+            items: [{ n: "1", source: "Q4 delivery dates", badge: "mail", snippet: "“Delivery moved to 12.11…”", relevance: "89%", freshness: "yesterday · Tomasz Zieliński" }],
+            partialNote: "Fabrikam’s archive is still being read — more sources may appear.",
+          },
+          {
+            type: "action", meta: "one step", phase: "accepted", failed: true,
+            title: "Add the 12.11 date to the Fabrikam case",
+            effect: "Writes the date into the case file.",
+            cta: "Add it",
+            result: "Could not add it — the case server rejected the write · 07:31",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "c-invoice", title: "Invoice 08/2026 — what is missing", when: "Monday", archived: true,
+    msgs: [
+      { role: "user", text: "What is missing on invoice 08/2026?", ts: atToday(10, 5) },
+      {
+        role: "bot", ts: atToday(10, 5), scope: "1 account · accounting",
+        text: "The invoice has no purchase-order number, which is why accounting bounced it.",
+        blocks: [{
+          type: "action", meta: "one step", phase: "accepted",
+          title: "Ask Marek Wiśniewski for the PO number",
+          effect: "Sends a one-line question into the invoice thread.",
+          cta: "Ask him", result: "Sent into “Invoice 08/2026” · 10:06",
+          nav: [{ label: "Open the thread", icon: "forum", kind: "thread", tid: "faktura1" }],
+        }],
+      },
+    ],
+  },
+];
+
 const AGENT_REPLIES = [
   {
     match: /(plan|schedule).*(day)|plan my day/i,
     scope: "calendar · 14 new messages",
-    text: "Today you have two meetings, and one critical deadline tomorrow. Here is how I would lay out the day:",
-    bullets: [
-      "10:00–10:30 — reply to Marta about the CPI calculation",
-      "15:00–15:45 — rollout status with Piotr (already in the calendar)",
-      "16:00–16:45 — block for the CPI cap counter-proposal to Contoso",
-    ],
-    actions: [
-      { label: "Book the blocks", kind: "cal" },
-      { label: "Open the calendar", kind: "gocal" },
+    text: "Two meetings today and one deadline tomorrow. One focus block would cover what is actually at risk.",
+    bullets: [],
+    blocks: [
+      BK_TIMELINE_TODAY,
+      {
+        type: "event", meta: "calendar · work", phase: "pending",
+        title: "Focus block: CPI cap counter-proposal",
+        when: "today 16:00–17:00", duration: "1 h", attendees: "You", from: "Contract addendum — signatures",
+        conflict: "overlaps Rollout status with Piotr (15:00–16:30)",
+        done: "Added to the calendar",
+        nav: [{ label: "Open the calendar", icon: "calendar_month", kind: "gocal" }],
+      },
     ],
   },
   {
     match: /slip|missed|forgot|overdue/i,
     scope: "7 days · 3 accounts",
-    text: "Three things have been waiting on you for more than two days:",
-    bullets: [
-      "Contoso — CPI cap counter-proposal (decision tomorrow)",
-      "Fabrikam — confirm the 12.11 date (by 02.09)",
-      "Adventure Works — weekend SLA question (unanswered for 5 days)",
-    ],
-    actions: [
-      { label: "Draft a reply to Contoso", kind: "draft" },
-      { label: "Open the Fabrikam thread", kind: "thread", tid: "fabrikam1" },
+    text: "Three things have been waiting on you for more than two days — the audit list is the one with a date on it.",
+    bullets: [],
+    blocks: [
+      {
+        type: "task", meta: "tasks · from mail", phase: "pending",
+        title: "Send the notice-period list to the audit",
+        due: "tomorrow, 17:00", from: "IT contract audit", reminder: "09:00 tomorrow",
+        done: "Added to tasks",
+        nav: [{ label: "Open the thread", icon: "forum", kind: "thread", tid: "audyt1" }],
+      },
+      {
+        type: "action", meta: "one step", phase: "pending",
+        title: "Mark the Fabrikam thread as waiting on them",
+        reason: "No reply from Tomasz Zieliński for 5 days.",
+        effect: "Changes the thread state only — nothing is sent.",
+        cta: "Mark it", done: "Marked as waiting on them",
+        nav: [{ label: "Open the Fabrikam thread", icon: "forum", kind: "thread", tid: "fabrikam1" }],
+      },
     ],
   },
   {
     match: /contoso|addendum|cpi|reply|write|draft/i,
     scope: "thread: Contract addendum — 6 messages",
-    text: "I drafted a reply to Anna Kowalska: we accept the 2 h SLA and in return ask for a 5% annual cap on CPI indexation. The draft is ready for review.",
-    bullets: [
-      "Cites § 3 of the addendum and the 4.1% CPI forecast",
-      "Closes the decision with the 28 August deadline",
-    ],
-    actions: [
-      { label: "Open the draft in the editor", kind: "draft" },
-      { label: "Show the thread", kind: "thread", tid: "contoso" },
-    ],
+    text: "We accept the 2 h SLA and ask for a 5% annual cap on indexation in return. The draft is ready for review.",
+    bullets: [],
+    blocks: [Object.assign({ phase: "pending" }, BK_DRAFT_CONTOSO)],
     sources: [
       { n: "1", title: "Contract addendum — signatures", snippet: "“Response time drops from 4 to 2 hours, fee +8%…”", meta: "18.11.2025 · SLA addendum.pdf", tid: "contoso" },
       { n: "2", title: "CPI calculation 2027", snippet: "“A 4.1% CPI forecast adds €10,542…”", meta: "yesterday · Marta Nowak", tid: "marta" },
@@ -4352,9 +4753,24 @@ const AGENT_REPLIES = [
     scope: "3 cases in progress",
     text: "The hottest one is the Contoso 2027 renegotiation — one open question and a decision tomorrow. Fabrikam and the audit have deadlines next week.",
     bullets: [],
-    actions: [
-      { label: "Open the Contoso case", kind: "case" },
-      { label: "Draft a reply", kind: "draft" },
+    blocks: [
+      {
+        type: "facttable", meta: "Contoso renegotiation",
+        cols: ["Version", "Price", "SLA", "Indexation"],
+        rows: [
+          ["v2 · 12.04.2021", "€1,200 / mo", "4 h", "CPI, no cap"],
+          ["v3 · 18.11.2025", "€1,296 / mo", "2 h", "CPI, no cap"],
+          ["v4 · proposed", "€1,296 / mo", "2 h", "CPI, 5% cap"],
+        ],
+      },
+      {
+        type: "action", meta: "one step", phase: "pending",
+        title: "Attach the legal opinion to the Contoso 2027 case",
+        reason: "The opinion answers the open question about the indexation cap and is not in the case file.",
+        effect: "Adds the document to the case — nothing is sent to anyone.",
+        cta: "Attach it", done: "Attached to Contoso 2027",
+        nav: [{ label: "Open the case", icon: "folder_open", kind: "case" }],
+      },
     ],
     sources: [
       { n: "1", title: "Contract addendum — signatures", snippet: "“Response time drops from 4 to 2 hours, fee +8%…”", meta: "18.11.2025 · SLA addendum.pdf", tid: "contoso" },
@@ -4368,10 +4784,13 @@ const AGENT_FALLBACK = {
   scope: "214,138 messages in scope",
   text: "I went through the correspondence in that scope. I can draft a reply, block time in the calendar or show the threads behind it — tell me what should happen next.",
   bullets: [],
-  actions: [
-    { label: "Draft a reply", kind: "draft" },
-    { label: "Plan my day", kind: "planday" },
-  ],
+  blocks: [{
+    type: "action", meta: "one step", phase: "pending",
+    title: "Draft a reply to the oldest unanswered thread",
+    reason: "Three threads have been waiting on you for more than two days.",
+    effect: "Writes a draft into the conversation — you approve it before it is sent.",
+    cta: "Write it", done: "Draft prepared",
+  }],
 };
 
 const AGENT_DRAFT_HTML = '<div id="ai-draft-block" style="border-left:3px solid var(--accent);padding-left:14px;margin-left:-14px"><p style="margin:0 0 12px 0">Hello,</p><p style="margin:0 0 12px 0">thank you for the addendum. We accept shortening the response time for critical incidents to 2 hours on business days.</p><p style="margin:0 0 12px 0">At the same time we ask for an upper cap on CPI indexation of 5% per year. At the 4.1% forecast this gives both sides a predictable cost through 2027.</p><p style="margin:0">If the cap is acceptable, we are ready to close the decision by 28 August.</p></div><p style="margin:12px 0 0 0">Best regards,<br />Karolina Kowalska</p>';
@@ -4417,7 +4836,7 @@ const msgAddrRows = (thread, m, msgs) => {
 function formatMsgTime(ts) {
   if (!ts) return "";
   const diff = Date.now() - ts;
-  if (diff < 45000) return "teraz";
+  if (diff < 45000) return "now";
   const min = Math.floor(diff / 60000);
   if (min < 60) return min + " " + (min === 1 ? "minute" : "minutes") + " ago";
   const hrs = Math.floor(diff / 3600000);
@@ -4439,11 +4858,11 @@ const isNotifUnread = (n, read) => (read && read[n.id] !== undefined ? !read[n.i
 
 const notifTime = (mins) => {
   const m = Number(mins) || 0;
-  if (m < 1) return "teraz";
+  if (m < 1) return "now";
   if (m < 60) return m + " min";
   if (m < 1440) return Math.round(m / 60) + " h";
   if (m < 2880) return "yesterday";
-  return Math.round(m / 1440) + " dni";
+  return Math.round(m / 1440) + " days ago";
 };
 
 const NOTIFS = [
@@ -4514,7 +4933,7 @@ const DEMO_BATCHES = [
 ];
 
 class Component extends DCLogic {
-  state = { workMode: "classic", tabs: [{ key: "thread:contoso", kind: "thread", id: "contoso" }], activeTab: "thread:contoso", screen: "discover", phase: "idle", query: "", planKey: null, ready: {}, ev: null, threadId: "contoso", fromCite: null, cameFrom: false, mailAnswer: false, mailPane: "list", themeOverride: null, stateOpen: false, vw: typeof window !== "undefined" ? window.innerWidth : 1440, listW: 340, remMap: { t1: [15], t3: [1440, 60] }, remUnit: "min" };
+  state = { workMode: "classic", tabs: [{ key: "thread:contoso", kind: "thread", id: "contoso" }], activeTab: "thread:contoso", screen: "discover", phase: "idle", query: "", planKey: null, ready: {}, ev: null, threadId: "contoso", fromCite: null, cameFrom: false, mailAnswer: false, mailPane: "list", themeOverride: null, stateOpen: false, vw: typeof window !== "undefined" ? window.innerWidth : 1440, listW: 340, remMap: { t1: [15], t3: [1440, 60] }, remUnit: "min", convs: SEED_CONVS(), bkPhase: {}, bkState: {}, bkResult: {}, bkEdit: {} };
   timers = [];
   rootRef = React.createRef();
 
@@ -4714,7 +5133,7 @@ class Component extends DCLogic {
       title: o.title || text,
       body: o.title ? text : (o.body || ""),
       undo: !!o.undo,
-      actionLabel: o.actionLabel || (o.undo ? "Cofnij" : ""),
+      actionLabel: o.actionLabel || (o.undo ? "Undo" : ""),
       onAction: o.onAction || null,
       ms: o.ms || 5000,
       sticky: o.kind === "loading" || !!o.sticky,
@@ -5378,7 +5797,7 @@ class Component extends DCLogic {
     const n = parseInt((el && el.value) || "", 10);
     if (!n || n < 1) return;
     const unit = this.state.remUnit || "min";
-    const m = unit === "dni" ? n * 1440 : unit === "godz" ? n * 60 : n;
+    const m = unit === "days" ? n * 1440 : unit === "hrs" ? n * 60 : n;
     if (el) el.value = "";
     if (this.remList(key).indexOf(m) < 0) this.remToggle(key, m);
   };
@@ -5401,7 +5820,7 @@ class Component extends DCLogic {
       }),
       list: list.map(m => ({ label: remLabel(m, zero), remove: () => this.remToggle(key, m) })),
       numRef: o.numRef,
-      units: ["min", "godz", "dni"].map(u => ({
+      units: ["min", "hrs", "days"].map(u => ({
         label: u,
         pick: () => this.setState({ remUnit: u }),
         style: "display:flex;align-items:center;height:26px;padding:0 10px;font-size:12px;border-radius:7px;" +
@@ -5758,7 +6177,7 @@ class Component extends DCLogic {
     let i = convs.findIndex(c => c.id === id);
     if (i < 0) {
       id = "c" + Date.now();
-      convs.push({ id, title: "", when: "teraz", msgs: [] });
+      convs.push({ id, title: "", when: "now", msgs: [] });
       i = convs.length - 1;
     }
     const conv = Object.assign({}, convs[i]);
@@ -5776,7 +6195,7 @@ class Component extends DCLogic {
       const todo = TASKS.concat(s2.extraTasks || []).filter(t2 => t2.group === "Today" && (s2.taskDone || []).indexOf(t2.id) < 0 && (s2.taskSched || []).indexOf(t2.id) < 0);
       let h = 11;
       const blocks = todo.map(t2 => {
-        const slot = { day: "27", time: (h < 10 ? "0" : "") + h + ":00", h, t: t2.t, kind: "meeting", src: "zadanie" };
+        const slot = { day: "27", time: (h < 10 ? "0" : "") + h + ":00", h, t: t2.t, kind: "meeting", src: "task" };
         h += 2;
         return slot;
       });
@@ -5798,10 +6217,274 @@ class Component extends DCLogic {
       const hit = AGENT_REPLIES.find(r => r.match.test(q)) || AGENT_FALLBACK;
       this.setState(s2 => Object.assign(
         { agentThinking: false },
-        this.pushMsg(s2, [{ role: "bot", scope: hit.scope, text: hit.text, bullets: hit.bullets || [], actions: hit.actions || [] }])
+        this.pushMsg(s2, [{ role: "bot", scope: hit.scope, text: hit.text, bullets: hit.bullets || [], blocks: hit.blocks || [] }])
       ));
     }, Math.max(500, (this.props.streamDelay ?? 550) * 1.1)));
   };
+
+  /* One block, drawn exactly as the Discover catalogue draws it — plus, for the three actionable
+     types, the controls and the pending / accepted / declined phase. */
+  bkView = (b, key, isMobile) => {
+    const st = this.state;
+    const phase = (st.bkPhase || {})[key] || b.phase || null;
+    const bstate = (st.bkState || {})[key] || b.state || "ready";
+    const editRaw = (st.bkEdit || {})[key];
+    const editing = typeof editRaw === "string";
+    const LABEL = { timeline: "TIMELINE", evidence: "EVIDENCE", threadstate: "THREAD STATE", facttable: "FACT TABLE", attachments: "ATTACHMENTS", draft: "DRAFT", event: "EVENT PROPOSAL", task: "TASK PROPOSAL", action: "SUGGESTED ACTION" };
+    const declined = phase === "declined";
+    const accepted = phase === "accepted";
+    const failed = accepted && !!b.failed;
+    const ready = bstate === "ready" || bstate === "partial";
+
+    const icon = (size, color) => "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + size + "px;line-height:1;flex:0 0 auto;color:" + color;
+    const rowGap = isMobile ? 8 : 9;
+    const fieldRow = "display:flex;gap:10px;align-items:baseline";
+    const kStyle = "flex:0 0 " + (isMobile ? 66 : 78) + "px;font-size:11.5px;letter-spacing:0.03em;color:var(--muted)";
+    const vStyle = "flex:1;min-width:0;font-size:13.5px;color:var(--text);text-wrap:pretty";
+    const btn = (variant) => "display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;font-size:13.5px;white-space:nowrap;" +
+      (isMobile ? "width:100%;min-height:44px;padding:0 16px;" : "padding:9px 15px;") +
+      (variant === "primary" ? "font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);" : "color:var(--text2);background:var(--panel);border:1px solid var(--border2);");
+    const keyer = (run) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run(); } };
+
+    /* Controls only exist while the proposal is live and the block actually came back. */
+    let raw = [];
+    if (phase === "pending" && ready) {
+      if (b.type === "event") raw = [
+        { label: "Add to calendar", aria: "Add “" + b.title + "” to the calendar, " + (b.when || ""), primary: true, run: () => this.acceptBk(key, b) },
+        { label: "Another time", aria: "Ask for another time for “" + b.title + "”", run: () => this.anotherTimeBk(key, b) },
+        { label: "Decline", aria: "Decline putting “" + b.title + "” in the calendar", run: () => this.declineBk(key) },
+      ];
+      else if (b.type === "task") raw = [
+        { label: "Add", aria: "Add the task “" + b.title + "”, due " + (b.due || ""), primary: true, run: () => this.acceptBk(key, b) },
+        { label: "Decline", aria: "Decline the task “" + b.title + "”", run: () => this.declineBk(key) },
+      ];
+      else if (b.type === "draft") raw = editing
+        ? [{ label: "Send", aria: "Send the edited draft to " + b.to, primary: true, run: () => this.acceptBk(key, b) },
+           { label: "Stop editing", aria: "Stop editing the draft to " + b.to, run: () => this.editBk(key, false) }]
+        : [{ label: "Send", aria: "Send the draft to " + b.to, primary: true, run: () => this.acceptBk(key, b) },
+           { label: "Edit here", aria: "Edit the draft to " + b.to + " inside the conversation", run: () => this.editBk(key, true, (b.paras || []).join("\n\n")) },
+           { label: "Discard", aria: "Discard the draft to " + b.to, run: () => this.declineBk(key) }];
+      else if (b.type === "action") raw = [
+        { label: b.cta || "Do it", aria: b.title, primary: true, run: () => this.acceptBk(key, b) },
+        { label: "Decline", aria: "Decline: " + b.title, run: () => this.declineBk(key) },
+      ];
+    }
+    if (failed) raw = [{ label: "Try again", aria: "Try again: " + b.title, primary: true, run: () => this.setBk(key, { phase: "pending" }) }];
+
+    const controls = raw.map(c => ({ label: c.label, aria: c.aria, run: c.run, key: keyer(c.run), style: btn(c.primary ? "primary" : "quiet") }));
+
+    const nav = (declined ? [] : (b.nav || [])).map(n => ({
+      label: n.label, icon: n.icon, aria: n.label + " — leaves the conversation, you can come straight back",
+      run: () => this.goLook(n), key: keyer(() => this.goLook(n)),
+      iconStyle: icon(16, "var(--muted)"),
+      style: "display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text2);font-size:12.5px;white-space:nowrap;" +
+        (isMobile ? "min-height:44px;padding:0 14px;" : "padding:6px 12px;"),
+    }));
+
+    const chip = phase === "pending" ? { icon: "help", label: "needs confirmation" }
+      : failed ? { icon: "error", label: "not done" }
+      : accepted ? { icon: "check_circle", label: "done" }
+      : declined ? { icon: "block", label: "declined" } : null;
+
+    const fields = b.type === "event" ? [
+      { k: "When", v: b.when }, { k: "Duration", v: b.duration }, { k: "Attendees", v: b.attendees }, { k: "From", v: "thread “" + (b.from || "") + "”" },
+    ] : b.type === "task" ? [
+      { k: "Due", v: b.due }, { k: "From", v: "message “" + (b.from || "") + "”" },
+    ].concat(b.reminder ? [{ k: "Reminder", v: b.reminder }] : []) : b.type === "draft" ? [
+      { k: "To", v: b.to }, { k: "Subject", v: b.subject },
+    ] : [];
+
+    const cols = (b.cols || []).length;
+    const cells = b.type === "facttable"
+      ? (b.cols || []).map(c => ({ t: c, style: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.05em;color:var(--muted);padding:0 0 7px 0;border-bottom:1px solid var(--line2);white-space:nowrap" }))
+        .concat([].concat.apply([], (b.rows || []).map((r, ri) => r.map((c, ci) => ({
+          t: c,
+          style: "font-size:13px;padding:8px 0;white-space:nowrap;" + (ci === 0 ? "font-weight:600;" : "color:var(--text2);") + (ri ? "border-top:1px solid var(--line2);" : ""),
+        })))))
+      : [];
+
+    return {
+      label: LABEL[b.type] || "BLOCK",
+      meta: b.meta || "",
+      cardStyle: "display:flex;flex-direction:column;gap:" + rowGap + "px;border-radius:11px;padding:" + (isMobile ? "12px 13px" : "13px 15px") + ";" +
+        (declined ? "border:1px dashed var(--border2);background:transparent;"
+          : phase === "pending" ? "border:1px solid var(--accent-line);background:var(--accent-soft);"
+          : "border:1px solid var(--line);background:var(--sub);"),
+      headStyle: "display:flex;align-items:center;gap:9px;flex-wrap:wrap",
+      labelStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.09em;color:var(--muted)",
+      metaStyle: "font-size:11px;color:var(--faint)",
+      hasChip: !!chip,
+      chipLabel: chip ? chip.label : "",
+      chipIcon: chip ? chip.icon : "",
+      chipIconStyle: icon(13, "inherit"),
+      chipStyle: "margin-left:auto;display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
+        (phase === "pending" ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
+          : failed ? "color:var(--text);background:var(--hl);border:1px solid var(--hl-line);"
+          : "color:var(--muted);background:var(--panel);border:1px solid var(--line);"),
+
+      isDeclined: declined,
+      showBody: !declined,
+      declinedStyle: "display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)",
+      declinedIconStyle: icon(16, "var(--muted)"),
+      strikeStyle: "text-decoration:line-through;min-width:0",
+      declinedWord: "Declined",
+      declinedNote: "nothing was done",
+
+      isLoading: bstate === "loading",
+      isError: bstate === "error",
+      isEmpty: bstate === "empty",
+      isPartial: bstate === "partial",
+      ready: ready,
+      skel: [96, 74, 58].map(w => ({ style: SHIM + "height:11px;border-radius:5px;width:" + w + "%" })),
+      emptyBodyStyle: "display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:4px 0 2px 0",
+      emptyIconStyle: icon(20, "var(--faint)"),
+      errIconStyle: icon(20, "var(--hl-line)"),
+      emptyIcon: b.type === "draft" ? "edit_note" : b.type === "task" ? "task_alt" : b.type === "event" ? "event_busy" : "find_in_page",
+      emptyTextStyle: "font-size:13px;color:var(--muted);text-wrap:pretty",
+      emptyText: b.emptyText || "Nothing came back for this one.",
+      errorText: b.errorText || "This block could not be built.",
+      retry: () => this.retryBk(key),
+      retryKey: keyer(() => this.retryBk(key)),
+      retryAria: "Try again: " + (LABEL[b.type] || "block").toLowerCase(),
+      retryStyle: btn("quiet"),
+      noteStyle: "display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)",
+      noteIconStyle: icon(15, "var(--muted)"),
+      partialNote: b.partialNote || "Still being read — more may appear.",
+
+      isTimeline: b.type === "timeline",
+      isEvidence: b.type === "evidence",
+      isThreadState: b.type === "threadstate",
+      isTable: b.type === "facttable",
+      isFiles: b.type === "attachments",
+      isDraft: b.type === "draft",
+      isProposal: b.type === "event" || b.type === "task" || b.type === "action",
+
+      tlWrapStyle: isMobile ? "display:flex;flex-direction:column;gap:0" : "display:flex;gap:0;overflow:auto",
+      items: b.type === "timeline" ? (b.items || []).map((t, i) => ({
+        date: t.date, title: t.title, detail: t.detail,
+        style: isMobile
+          ? "display:flex;flex-direction:column;gap:2px;border-top:2px solid var(--border2);padding:8px 0 10px 0"
+          : "flex:1;min-width:110px;display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--border2);padding:8px 12px 2px 0",
+        dateStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;color:var(--muted)",
+        titleStyle: "font-size:13px;font-weight:600;text-wrap:pretty",
+        detailStyle: "font-size:11.5px;color:var(--faint);text-wrap:pretty",
+      })) : b.type === "evidence" ? (b.items || []).map((e, i) => ({
+        n: e.n, source: e.source, snippet: e.snippet, relevance: e.relevance, freshness: e.freshness,
+        isPrivate: !!e.private, hasSnippet: !e.private && !!e.snippet,
+        badge: e.badge,
+        style: "display:flex;flex-direction:column;gap:5px;padding:9px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
+        nStyle: "flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:5px;font-size:11px;color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line)",
+        badgeStyle: "font-size:10.5px;letter-spacing:0.04em;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;white-space:nowrap",
+        privStyle: "font-size:12.5px;color:var(--faint);font-style:italic;text-wrap:pretty",
+        snipStyle: "font-size:13px;color:var(--text2);text-wrap:pretty",
+        subStyle: "font-size:11.5px;color:var(--faint)",
+      })) : b.type === "attachments" ? (b.items || []).map((f, i) => ({
+        name: f.name, meta: f.meta, icon: f.icon,
+        style: "display:flex;align-items:center;gap:10px;padding:8px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
+        iconStyle: icon(19, "var(--muted)"),
+        nameStyle: "font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
+        metaStyle: "font-size:11.5px;color:var(--faint)",
+      })) : [],
+
+      colsStyle: isMobile ? "display:flex;flex-direction:column;gap:12px" : "display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px",
+      stateCols: (b.cols || []).map(c => ({
+        label: c.label,
+        style: "display:flex;flex-direction:column;gap:6px;min-width:0",
+        labelStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.08em;color:var(--muted)",
+        items: (c.items || []).map(it => ({
+          t: it.t,
+          style: "font-size:12.5px;line-height:1.45;text-wrap:pretty;border-left:2px solid " + (it.late ? "var(--hl-line)" : "var(--line)") + ";padding-left:8px;" + (it.late ? "color:var(--text);" : "color:var(--text2);"),
+        })),
+      })),
+
+      tableScrollStyle: "overflow-x:auto;max-width:100%",
+      tableStyle: "display:grid;grid-template-columns:repeat(" + (cols || 1) + ",max-content);gap:0 18px;min-width:min-content",
+      cells: cells,
+
+      fields: fields.filter(f => !!f.v).map(f => ({ k: f.k, v: f.v, rowStyle: fieldRow, kStyle: kStyle, vStyle: vStyle })),
+      fieldsStyle: "display:flex;flex-direction:column;gap:5px",
+      propTitleStyle: "font-size:" + (isMobile ? 15 : 15.5) + "px;font-weight:600;letter-spacing:-0.01em;text-wrap:pretty",
+      title: b.title || "",
+      hasConflict: !!b.conflict && !accepted,
+      conflict: b.conflict || "",
+      conflictStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--text);background:var(--hl);border:1px solid var(--hl-line);border-radius:8px;padding:7px 9px;text-wrap:pretty",
+      conflictIconStyle: icon(16, "var(--hl-line)"),
+      hasReason: !!b.reason,
+      reason: b.reason || "",
+      reasonStyle: "font-size:13px;color:var(--text2);text-wrap:pretty",
+      hasEffect: !!b.effect,
+      effect: b.effect || "",
+      effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--muted);text-wrap:pretty",
+      effectIconStyle: icon(15, "var(--muted)"),
+
+      editing: editing,
+      notEditing: !editing,
+      editText: editing ? editRaw : "",
+      onEdit: (e) => this.editBk(key, true, e.target.value),
+      textareaStyle: "width:100%;box-sizing:border-box;min-height:" + (isMobile ? 150 : 130) + "px;resize:vertical;font-family:inherit;font-size:13.5px;line-height:1.6;color:var(--text);background:var(--panel);border:1px solid var(--accent-line);border-radius:9px;padding:10px 12px",
+      paras: (b.paras || []).map(p => ({ t: p, style: "font-size:13.5px;line-height:1.6;color:var(--text2);text-wrap:pretty" })),
+
+      hasControls: controls.length > 0,
+      controls: controls,
+      controlsStyle: (isMobile ? "display:flex;flex-direction:column;gap:8px;" : "display:flex;gap:8px;flex-wrap:wrap;align-items:center;") + "border-top:1px solid var(--line2);padding-top:10px",
+      hasResult: accepted && !declined,
+      resultText: (st.bkResult || {})[key] || b.result || ((b.done || "Done") + " · " + this.hm()),
+      resultIcon: failed ? "error" : "check_circle",
+      resultIconStyle: icon(16, failed ? "var(--hl-line)" : "var(--accent-d)"),
+      resultStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;color:" + (failed ? "var(--text)" : "var(--accent-d)") + ";text-wrap:pretty",
+      hasNav: nav.length > 0,
+      nav: nav,
+      navStyle: isMobile ? "display:flex;flex-direction:column;gap:8px" : "display:flex;gap:8px;flex-wrap:wrap",
+    };
+  };
+
+  /* Approving, declining and repairing a block. The phase lives outside the message, so the seeded
+     histories stay immutable and a re-proposal can reuse the very same block object. */
+  hm = (t) => { const d = new Date(t || Date.now()); return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes(); };
+
+  setBk = (key, patch) => this.setState(s2 => ({
+    bkPhase: Object.assign({}, s2.bkPhase, patch.phase ? { [key]: patch.phase } : {}),
+    bkState: Object.assign({}, s2.bkState, patch.state ? { [key]: patch.state } : {}),
+    bkResult: Object.assign({}, s2.bkResult, patch.result ? { [key]: patch.result } : {}),
+  }));
+
+  acceptBk = (key, b) => {
+    this.setBk(key, { phase: "accepted", result: (b.done || "Done") + " · " + this.hm() });
+    this.editBk(key, false);
+    if (b.type === "event") {
+      const t = (b.when || "").match(/\d{2}:\d{2}/);
+      this.setState(s2 => ({
+        calAdded: (s2.calAdded || []).concat([{ day: "27", time: t ? t[0] : "10:00", h: t ? parseInt(t[0], 10) : 10, t: b.title, kind: "meeting", src: "agent block" }]),
+      }));
+    }
+  };
+
+  declineBk = (key) => this.setBk(key, { phase: "declined" });
+  retryBk = (key) => this.setBk(key, { state: "ready" });
+
+  editBk = (key, on, text) => this.setState(s2 => ({
+    bkEdit: Object.assign({}, s2.bkEdit, { [key]: on ? (typeof text === "string" ? text : ((s2.bkEdit || {})[key] || "")) : null }),
+  }));
+
+  /* “Another time” is not a silent reshuffle — it says so in the conversation and comes back
+     with the same proposal at a new hour, still needing approval. */
+  anotherTimeBk = (key, b) => {
+    this.declineBk(key);
+    this.setState(s2 => Object.assign({ agentThinking: true }, this.pushMsg(s2, [{ role: "user", text: "Find another time for “" + b.title + "”" }])));
+    this.timers.push(setTimeout(() => this.setState(s2 => Object.assign({ agentThinking: false }, this.pushMsg(s2, [{
+      role: "bot", scope: "calendar · next free slot",
+      text: "The next clear hour is tomorrow morning, before the Fabrikam call.",
+      blocks: [Object.assign({}, b, { phase: "pending", when: "tomorrow 09:00–10:00", conflict: "" })],
+    }]))), Math.max(400, (this.props.streamDelay ?? 550))));
+  };
+
+  /* Going to look at a thread, a case or the calendar must not lose the place in the conversation. */
+  goLook = (a) => {
+    this.setState({ agentReturn: this.state.convId || null });
+    this.agentAction(a);
+  };
+
+  backToConv = () => this.setState(s2 => ({ screen: "agent", convId: s2.agentReturn || s2.convId, agentReturn: null }));
 
   agentAction = (a) => {
     if (a.kind === "draft") {
@@ -6001,7 +6684,7 @@ class Component extends DCLogic {
   planFor(q) {
     const s = (q || "").toLowerCase();
     if (s.includes("polic") || s.includes("file") || s.includes("document") || s.includes("attach")) return "files";
-    if (s.includes("kto") || s.includes("osob") || s.includes("zatwierdz") || s.includes("kim")) return "people";
+    if (s.includes("who") || s.includes("person") || s.includes("people") || s.includes("approv")) return "people";
     return "contract";
   }
 
@@ -6613,7 +7296,7 @@ class Component extends DCLogic {
               openSrc: () => this.setState({ screen: "mail", threadId: t2.tid || "contoso", mailPane: "thread", threadOpen: true, cameFrom: false }),
               schedule: () => this.setState(s2 => sched ? {} : ({
                 taskSched: (s2.taskSched || []).concat([t2.id]),
-                calAdded: (s2.calAdded || []).concat([{ day: t2.day || "27", time: "11:00", h: 11, t: t2.t, kind: "meeting", src: "zadanie" }]),
+                calAdded: (s2.calAdded || []).concat([{ day: t2.day || "27", time: "11:00", h: 11, t: t2.t, kind: "meeting", src: "task" }]),
               })),
               schedLabel: sched ? "in the calendar" : "Schedule",
               schedStyle: "border-radius:12px;white-space:nowrap;" + (touch ? "font-size:12.5px;padding:9px 14px;" : "font-size:11px;padding:5px 10px;") + (sched
@@ -6659,14 +7342,14 @@ class Component extends DCLogic {
       tkParse: () => {
         const raw = ((this.tkPromptRef.current || {}).value || "").trim();
         const p = parseEventPrompt(raw);
-        const est = (raw.match(/\d{1,3}\s*(?:min|minut|h|godz)\w*/i) || ["30 min"])[0];
+        const est = (raw.match(/\d{1,3}\s*(?:min|minutes?|h|hrs?|hours?)\b/i) || ["30 min"])[0];
         if (this.tkTitleRef.current) this.tkTitleRef.current.value = p.title;
         if (this.tkDueRef.current) this.tkDueRef.current.value = p.day + ".09";
         if (this.tkEstRef.current) this.tkEstRef.current.value = est;
       },
       saveTask: () => {
         const t2 = (this.tkTitleRef.current || {}).value || "New task";
-        const when = (this.tkDueRef.current || {}).value || "bez terminu";
+        const when = (this.tkDueRef.current || {}).value || "no due date";
         const est = (this.tkEstRef.current || {}).value || "30 min";
         const rem = this.remList("new:task");
         const id = "tk" + Date.now();
@@ -6712,7 +7395,7 @@ class Component extends DCLogic {
       })),
       agentNewConv: () => this.setState({ convId: null, agentInput: "", agentThinking: false }),
       historyOpen: st.history == null ? !isMobile : !!st.history,
-      historyLabel: isMobile ? "" : "Historia",
+      historyLabel: isMobile ? "" : "History",
       toggleHistory: () => this.setState(s2 => ({ history: !s2.history })),
       historyPanelW: Math.max(200, Math.min(480, st.historyPanelW || 250)),
       showHistoryResizer: !isMobile,
@@ -6741,8 +7424,17 @@ class Component extends DCLogic {
         return { convs: rest, convId: s2.convId === s2.deleteConvAsk ? null : s2.convId, deleteConvAsk: null };
       }),
       agentShowChips: convMsgs.length < 2,
-      agentChips: ["Plan my day", "What slipped this week?", "Draft a reply to Contoso", "Status of open cases"].map(c => ({
-        label: c, run: () => this.agentAsk(c),
+      /* Each starter chip opens the conversation it belongs to — a finished history, not an empty screen. */
+      agentChips: [
+        { label: "Plan my day", id: "c-plan" },
+        { label: "What slipped this week?", id: "c-slip" },
+        { label: "Draft a reply to Contoso", id: "c-draft" },
+        { label: "Status of open cases", id: "c-cases" },
+      ].map(c => ({
+        label: c.label,
+        run: () => ((st.convs || []).some(x => x.id === c.id)
+          ? this.setState({ screen: "agent", convId: c.id, agentInput: "" })
+          : this.agentAsk(c.label)),
       })),
       agentInput: st.agentInput || "",
       onAgentInput: (e) => this.setState({ agentInput: e.target.value }),
@@ -6754,23 +7446,20 @@ class Component extends DCLogic {
         scope: "3 accounts · mail, calendar, cases",
         text: "Hi. I can write a message, lay out your day or check what is stuck. I always show the result for approval — nothing goes out without you.",
         bullets: [],
-        actions: [],
+        blocks: [],
         ts: Date.now(),
-      }]).map(m => ({
+      }]).map((m, mi) => ({
         isUser: m.role === "user",
         isBot: m.role === "bot",
         time: formatMsgTime(m.ts),
         text: m.text,
+        hasText: !!m.text,
         scope: m.scope || "",
+        working: !!m.working,
         bullets: (m.bullets || []).map(t2 => ({ t: t2 })),
-        hasActions: (m.actions || []).length > 0,
-        actions: (m.actions || []).map((a, i) => ({
-          label: a.label,
-          run: () => this.agentAction(a),
-          style: "font-size:13px;border-radius:8px;padding:8px 14px;white-space:nowrap;" + (i === 0
-            ? "font-weight:600;color:var(--onaccent);background:var(--accent);"
-            : "color:var(--text2);border:1px solid var(--border2);background:var(--panel);"),
-        })),
+        hasBlocks: (m.blocks || []).length > 0,
+        blocks: (m.blocks || []).map((b, bi) => this.bkView(b, (activeConv ? activeConv.id : "new") + "#" + mi + "#" + bi, isMobile)),
+        blocksStyle: "display:flex;flex-direction:column;gap:" + (isMobile ? 10 : 11) + "px",
         rowStyle: "display:flex;justify-content:flex-start",
         bubbleStyle: m.role === "user"
           ? "max-width:" + (isMobile ? "88%" : "620px") + ";font-size:15px;line-height:1.55;color:var(--onaccent);background:var(--accent);border-radius:14px 14px 3px 14px;padding:12px 16px;text-wrap:pretty"
@@ -6863,10 +7552,14 @@ class Component extends DCLogic {
         const q = st.query || "";
         this.setState(s2 => Object.assign({ convId: null }, this.pushMsg(Object.assign({}, s2, { convId: null }), [
           { role: "user", text: q },
-          { role: "bot", scope: "continuing a Discover result", text: "I have the context of that result: " + q + ". I can draft a reply, block time or show the sources.", bullets: [], actions: [
-            { label: "Draft a reply", kind: "draft" },
-            { label: "Open the case", kind: "case" },
-          ] },
+          { role: "bot", scope: "continuing a Discover result", text: "I have the context of that result: " + q + ". Here is the one step I would take next.", bullets: [], blocks: [{
+            type: "action", meta: "one step", phase: "pending",
+            title: "Draft a reply from this result",
+            reason: "The result already carries the numbers and the sources the reply needs.",
+            effect: "Writes a draft into this conversation — you approve it before anything is sent.",
+            cta: "Write it", done: "Draft prepared",
+            nav: [{ label: "Open the case", icon: "folder_open", kind: "case" }],
+          }] },
         ])));
         this.setState({ screen: "agent" });
       },
@@ -7250,7 +7943,7 @@ class Component extends DCLogic {
           personId: id,
           peoplePane: "detail",
           extraContacts: (s2.extraContacts || []).concat([{
-            id, name, role: role || "—", org: org || "—", mail, last: "brak korespondencji",
+            id, name, role: role || "—", org: org || "—", mail, last: "no correspondence yet",
             owed: "—", cases: "—", note: "Contact added manually. After the first exchange of messages the relationship state appears here.",
             threads: [], docs: [],
           }]),
@@ -7959,6 +8652,7 @@ class Component extends DCLogic {
       notifCloseStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:10px;" + (touch ? "width:38px;height:38px;border:1px solid var(--line)" : "width:32px;height:32px"),
       notifCloseIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 23 : 19) + "px;line-height:1",
       notifCountLabel: notifUnreadCount > 9 ? "9+" : String(notifUnreadCount),
+      notifNewLabel: notifUnreadCount === 1 ? "1 new" : notifUnreadCount + " new",
       notifCenterOpen: !!st.notifCenter,
       closeNotifCenter: this.closeNotifCenter,
       toggleNotifCenter: this.toggleNotifCenter,
@@ -8097,11 +8791,18 @@ class Component extends DCLogic {
       goAgentBtnStyle: "display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid var(--accent-line);border-radius:12px;background:var(--accent-soft);color:var(--accent-d);font-weight:600;" +
         (touch ? "min-height:50px;padding:0 14px;font-size:14px" : "min-height:40px;padding:0 14px;font-size:13px"),
       askAgentThread: () => this.goAgentWith("thread “" + thread.subject + "”"),
-      askAgentCase: () => this.goAgentWith("sprawa „" + kase.title + "”"),
-      agentCtxShown: !!st.agentCtx,
+      askAgentCase: () => this.goAgentWith("case “" + kase.title + "”"),
+      agentCtxShown: !!(st.agentCtx || (activeConv && activeConv.ctx && !st.agentCtxCleared)),
       agentInputRef: this.agentInputRef,
-      agentCtxLabel: st.agentCtx || "",
-      clearAgentCtx: () => this.setState({ agentCtx: null }),
+      agentCtxLabel: st.agentCtx || (activeConv ? activeConv.ctx : "") || "",
+      clearAgentCtx: () => this.setState({ agentCtx: null, agentCtxCleared: true }),
+      convReturnShown: !!st.agentReturn && st.screen !== "agent",
+      convReturnLabel: "Back to the conversation",
+      backToConv: this.backToConv,
+      backToConvKey: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.backToConv(); } },
+      convReturnStyle: "position:fixed;z-index:120;left:50%;transform:translateX(-50%);" + (isMobile ? "bottom:78px;" : "bottom:22px;") +
+        "display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:24px;font-size:13.5px;font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);box-shadow:0 6px 20px var(--sh-1)",
+      convReturnIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1",
       closeThreadSheet: () => this.setState({ threadSheet: false }),
       onThreadScroll: (e) => {
         const y = e.target.scrollTop, c = y > 40;
@@ -8241,10 +8942,10 @@ class Component extends DCLogic {
       sendWarnings: ((st.sendAsk && st.sendAsk.warnings) || []).map(w => ({ text: w })),
       sendHasWarn: !!(st.sendAsk && st.sendAsk.warnings.length),
       sendConfirmLabel: st.sendAsk && st.sendAsk.warnings.length ? "Send anyway" : "Send",
-      sendSummaryTo: composeTo.length ? composeTo.join(", ") : "— brak odbiorcy —",
-      sendSummarySubj: curSubj.trim() || "— brak tematu —",
+      sendSummaryTo: composeTo.length ? composeTo.join(", ") : "— no recipient —",
+      sendSummarySubj: curSubj.trim() || "— no subject —",
       confirmSend: () => {
-        const to = composeTo.length ? composeTo.join(", ") : "brak odbiorcy";
+        const to = composeTo.length ? composeTo.join(", ") : "no recipient";
         finishCompose();
         this.notifyTask({
           title: "Sending message…",
@@ -8526,7 +9227,7 @@ class Component extends DCLogic {
         }));
         const btn = (kind) => "display:flex;align-items:center;justify-content:center;align-self:flex-start;gap:6px;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;white-space:nowrap;" + kind;
         const onAiLang = v => this.setState({ aiLang: v });
-        const aiLang = st.aiLang || "pl";
+        const aiLang = st.aiLang || "en";
         return {
           userMailboxes: accounts.map(a => ({
             mail: a.mail, dot: a.dot, current: false, pick: null,
@@ -8549,7 +9250,7 @@ class Component extends DCLogic {
           notifAutoClearAfter: st.notifAutoClearAfter || "24h",
           onNotifAutoClearAfter: e => this.setState({ notifAutoClearAfter: e.target.value }),
           notifAfterOptions: [["now", "Right away"], ["1h", "After 1 hour"], ["24h", "After 24 hours"], ["7d", "After 7 days"]].map(([v, label]) => ({ v, label })),
-          aiLangOptions: [["pl", "Polski"], ["en", "English"]].map(([v, label]) => ({
+          aiLangOptions: [["en", "English"], ["pl", "Polski"]].map(([v, label]) => ({
             label,
             pick: () => onAiLang(v),
             style: "padding:7px 13px;border-radius:8px;font-size:13.5px;" + (aiLang === v
@@ -8661,10 +9362,10 @@ class Component extends DCLogic {
       settingsOpen: !!st.settings,
       openSettings: () => this.setState({ settings: true, userMenu: false }),
       closeSettings: () => this.setState({ settings: false, acctDraft: null, acctDel: null }),
-      langOptions: [["pl", "Polski"], ["en", "English"]].map(([v, label]) => ({
+      langOptions: [["en", "English"], ["pl", "Polski"]].map(([v, label]) => ({
         label,
         pick: () => this.setState({ lang: v }),
-        style: "padding:7px 13px;border-radius:8px;font-size:12.5px;" + ((st.lang || "pl") === v
+        style: "padding:7px 13px;border-radius:8px;font-size:12.5px;" + ((st.lang || "en") === v
           ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
           : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
       })),

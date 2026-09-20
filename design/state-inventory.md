@@ -1,6 +1,6 @@
 # The design's state inventory
 
-**Mirror stamp `a97698feb767efae`** — the etag set this was extracted from. Run
+**Mirror stamp `0137d9bdb81209a7`** — the etag set this was extracted from. Run
 `bash scripts/design-mirror.sh stamp`; a different answer means the design moved and this file
 describes something older than the mirror beside it. Refresh with `$mf-sync-design` rather than reading
 around it.
@@ -17,11 +17,11 @@ This file and the sources it was extracted from are tracked, so every clone read
 
 | Mirrored file | What it settles |
 |---|---|
-| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 8 749 lines, and the only file that carries navigation |
+| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 9 450 lines, and the only file that carries navigation |
 | `MailFathom Sign-in.dc.html` | Sign-in, and the server screen behind it |
 | `MailFathom Toasts.dc.html` | Toasts and the blocking overlay — the system's answer to what somebody just did |
 | `MailFathom Notification Gesture.dc.html` | The phone's notification-panel gesture, as four frames plus the numbers behind them |
-| `MailFathom Result Blocks.dc.html` | The Discover answer's block types |
+| `MailFathom AI Blocks.dc.html` | The block catalogue both AI surfaces draw: the nine types Discover renders read-only, and the four the Agent renders with controls, each in its three phases |
 | `MailFathom Mail Search.html` | Mail search: results, empty, waiting, lexical-only, failure |
 
 What the mirror carries is the list written into `scripts/design-mirror.sh` — those six files and
@@ -49,7 +49,7 @@ Three things decide composition before any state does, and they are read from th
 | `touch` | `isMobile \|\| tablet` | Every `pointer: coarse` affordance |
 | `drawer` | `tablet \|\| isMobile` | The side list arrives as a drawer rather than a column |
 
-`FRAMES` (line 3437) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
+`FRAMES` (line 3588) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
 `tablet` 1024 × 768, and the artboard's 1440 × 900. A `fold` is a *tablet-class* width with two panes.
 
 ## Discover — `isDiscover`
@@ -72,11 +72,12 @@ The run is a phase machine (`st.phase`), and the blocks arrive one at a time (`r
 | Evidence inspector open | `inspectorOpen` | a citation is pressed |
 | Evidence inspector closed | `inspectorClosed` | nothing selected — the resting state |
 
-Which blocks a run produces is the plan, and there are three (`PLANS`, line 3011): `contract`
+Which blocks a run produces is the plan, and there are three (`PLANS`, line 3162): `contract`
 (answer + timeline + table + action), `files` (answer + gallery + action), `people`
 (answer + people + action). **No single run draws every block**, so a screenshot of one plan is not
-the block set to build against; `MailFathom Result Blocks.dc.html` is where the block types stand
-together.
+the block set to build against; `MailFathom AI Blocks.dc.html` is where the block types stand
+together. **Discover draws them read-only.** The same catalogue with controls on it is the Agent's,
+and the blocks screen carries both halves — see *Agent* below.
 
 ## Mail — `isMail`
 
@@ -92,16 +93,16 @@ together.
 | Primary actions in the bar | `tbPrimaryShown` | the toolbar has room for them |
 | Resizer between panes | `showResizer` | `!singlePane && !tablet` |
 | Side list expanded | `sideExpanded` | not collapsed; collapsed is 58 px, expanded is 210 px and draggable to 420 |
-| Side list resizer | `showSideResizer` | `!drawer && !sideCollapsed && !isMobile` (line 7071) — drag widens the folder pane between 210 and 420 px, double-click returns it to 210 |
+| Side list resizer | `showSideResizer` | `!drawer && !sideCollapsed && !isMobile` (line 7764) — drag widens the folder pane between 210 and 420 px, double-click returns it to 210 |
 | Side list as a drawer | `showSide` / `sideScrim` | `drawer && drawerOpen` |
 | Folder button | `showFolderBtn` | `drawer` |
 | Account menu on a mailbox | `ctxMenu` through `g.ctxOpen` | right-click a mailbox header, or hold it for 460 ms — *New folder* and *Mark all as read*; **All accounts carries none** |
-| Menu on a folder row | `folderMenu` (line 4940) | right-click a folder, or hold it — *Mark all as read* always, *New folder inside* while the path is under three segments, and *Edit folder* and *Delete folder* only on a folder the user made; **All accounts carries none** |
-| New folder row | `g.canAdd` (line 7092) | drawn at the end of every account group as a `create_new_folder` row reading *New folder* — `g.key !== "all"`, so the unified view carries none, having no mail server of its own; a collapsed side list draws the glyph alone (`g.expanded`), and the row takes the phone's taller padding under `isMobile` |
+| Menu on a folder row | `folderMenu` (line 5359) | right-click a folder, or hold it — *Mark all as read* always, *New folder inside* while the path is under three segments, and *Edit folder* and *Delete folder* only on a folder the user made; **All accounts carries none** |
+| New folder row | `g.canAdd` (line 7785) | drawn at the end of every account group as a `create_new_folder` row reading *New folder* — `g.key !== "all"`, so the unified view carries none, having no mail server of its own; a collapsed side list draws the glyph alone (`g.expanded`), and the row takes the phone's taller padding under `isMobile` |
 | A folder the user made | `st.extraFolders[<mailbox>]` | the row above, the two menus above it, or *New folder here* in the move sheet; it is drawn below the standard set |
 
 An account draws six folders in the same order — Inbox, Sent, Drafts, Archive, Spam, Trash
-(`STD_FOLDERS`, line 6331) — and a count only where the mock data gives one. **The unified view
+(`STD_FOLDERS`, line 7014) — and a count only where the mock data gives one. **The unified view
 draws three of them.** `STD_FOLDERS` takes a `unified` flag, and the last three carry `perAccount`:
 *All accounts* is Inbox, Sent and Drafts alone, because Archive, Spam and Trash are always opened in
 the account they live in rather than merged across accounts. Anything under either set is a folder
@@ -114,15 +115,15 @@ list: it nests, it is placed somewhere in the account's own tree, and it can be 
 
 | State | Flag | Reveal |
 |---|---|---|
-| The folder tree | `st.folderOpen[<mailbox·path>]` | a folder with children draws a twisty; each level is indented 15 px, and **three path segments is the ceiling** (`MAX_DEPTH`, line 4953) |
+| The folder tree | `st.folderOpen[<mailbox·path>]` | a folder with children draws a twisty; each level is indented 15 px, and **three path segments is the ceiling** (`MAX_DEPTH`, line 5372) |
 | Children shown | `mb.hasKids` / `mb.twisty` | `expand_more` against `chevron_right`, titled *Collapse subfolders* and *Show subfolders*; a collapsed side list draws depth 0 only |
-| New folder dialog | `newFolderOpen` (line 7901) | the *New folder* row at the end of an account group, *New folder inside* on a folder, or *New folder here* in the move sheet |
+| New folder dialog | `newFolderOpen` (line 8594) | the *New folder* row at the end of an account group, *New folder inside* on a folder, or *New folder here* in the move sheet |
 | Editing one | the same dialog in `mode: "edit"` | *Edit folder* — the title reads *Edit folder* and the button *Save changes* |
 | Its two fields | `nfName` / `nfParent` | *FOLDER NAME*, and *INSIDE* as a select rather than a text field |
-| Where it may sit | `nfLocations` (line 7935), from `folderLocations` (line 4959) | the select's options: *Top level of the account* first, then the account's folders drawn as `Parent / Child`. Editing one drops the folder itself, everything under it, and any parent too shallow to hold its subtree |
+| Where it may sit | `nfLocations` (line 8628), from `folderLocations` (line 5378) | the select's options: *Top level of the account* first, then the account's folders drawn as `Parent / Child`. Editing one drops the folder itself, everything under it, and any parent too shallow to hold its subtree |
 | Nothing typed yet | `nfCreateStyle` / `nfCreateHover` | the create button is drawn flat and refuses the pointer while the name is empty |
-| The name is taken | the `warning` notification *Pick another name* (line 4995) | saving an edit onto a name already used in that place — *There is already a folder called “<name>” inside …* |
-| Delete confirmation | `delFolderOpen` (line 7905) / `delFolderText` (line 7909) | *Delete folder* — four outcomes computed from the state rather than one sentence |
+| The name is taken | the `warning` notification *Pick another name* (line 5414) | saving an edit onto a name already used in that place — *There is already a folder called “<name>” inside …* |
+| Delete confirmation | `delFolderOpen` (line 8598) / `delFolderText` (line 8602) | *Delete folder* — four outcomes computed from the state rather than one sentence |
 
 **The design's own statement about what a folder is: the user places it, MailFathom puts it on the
 server.** The hint under the select reads *MailFathom creates the folder on this account's mail
@@ -131,7 +132,7 @@ the source says why in as many words — accounts are administrator-managed and 
 the user's business. So nothing about a folder the user made shows a remote path or takes one — the
 account editor's own folder mapping is the administrator's setting rather than theirs — and creating,
 renaming and deleting one each post a success toast naming the mailbox and the place
-(`locLabel`, line 4973 —
+(`locLabel`, line 5392 —
 *inside Parent / Child*, or *top level*), never a path. `MAX_DEPTH` still caps the tree at three
 segments, and `folderLocations` enforces it against the subtree being moved rather than against the
 folder alone.
@@ -147,8 +148,8 @@ and deleting it cannot be undone.*
 
 | State | Flag | Reveal |
 |---|---|---|
-| AI summary | `aiSumOpen` (line 7862) | the `auto_awesome` control on a message row, or *AI summary* at the top of that row's context menu |
-| Its cards | `aiSumCards` (line 5166) | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model — mailfathom-email-enrichment*, and the fragment of the message it rests on |
+| AI summary | `aiSumOpen` (line 8555) | the `auto_awesome` control on a message row, or *AI summary* at the top of that row's context menu |
+| Its cards | `aiSumCards` (line 5585) | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model — mailfathom-email-enrichment*, and the fragment of the message it rests on |
 | Which headings exist | — | *WHAT IS SETTLED*, *WHAT IS STILL OPEN*, *WHAT IS THE COMMITMENT*, *WHAT THE DEADLINE IS*, and *WHAT THIS IS ABOUT* where the list's own reading fills a card out |
 | Jump to the source | `ac.showSrc` | only where the thread holds more than one message — *Open message N in the thread* |
 
@@ -164,9 +165,9 @@ fragment it rests on.*
 | State bar beside the thread | `showThreadStateBar` | `!singlePane && !tablet && !stateBarOff` |
 | State cards | `showStateCards` | `!singlePane && !stateStale` |
 | State inside the body | `stateInBody` | `tablet && !stateBarOff && !stateStale` — the tablet's own answer to the same content |
-| The AI line on one pane | `mobileStateLine` (line 8134) | `singlePane && !stateStale` — the state bar's one-line reading, on the phone |
-| Reading held back | `stateStale` / `stateFresh` (line 8079) | the thread carries `stateStale`: a message joined or left the conversation after its state was derived. The state cards, the in-body chips, the one-pane AI line and the thread sheet's state list stop drawing, and each place says instead *This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.* The prototype reaches it through *Refresh*, whose second step marks the thread it changes |
-| Held back, on the tablet | `staleInBody` (line 8082) | `tablet && !stateBarOff && stateStale` — the same sentence as a note at the top of the thread body, where `stateInBody` would have drawn the chips |
+| The AI line on one pane | `mobileStateLine` (line 8835) | `singlePane && !stateStale` — the state bar's one-line reading, on the phone |
+| Reading held back | `stateStale` / `stateFresh` (line 8773) | the thread carries `stateStale`: a message joined or left the conversation after its state was derived. The state cards, the in-body chips, the one-pane AI line and the thread sheet's state list stop drawing, and each place says instead *This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.* The prototype reaches it through *Refresh*, whose second step marks the thread it changes |
+| Held back, on the tablet | `staleInBody` (line 8776) | `tablet && !stateBarOff && stateStale` — the same sentence as a note at the top of the thread body, where `stateInBody` would have drawn the chips |
 | Panels hidden | `st.stateBarOff` | the *fullscreen* toolbar control; nothing else sets it |
 | Jump to the agent | `showAgentJump` | `!isMobile && !stateBarOff` |
 | Arrived from a citation | `showCitationTag` / `cameFromResult` | reached from a Discover citation, and only for the `contoso` thread |
@@ -198,11 +199,11 @@ Added to the prototype after this inventory was first written, and read against 
 | Filters open | `filtersOpen` | the filter control |
 | Filters in force | `filtersActive` | `filterCount > 0` over unread, flagged, attachment, date range and sort |
 | Undo after archiving | `undoShown` | `isMobile` and the last archived thread is still archived — **phone only** |
-| A thread being dragged | `st.dragIds` (`dragThreadsStart`, line 5100) | a row is `draggable` and starts a drag; the dragged rows go to `opacity:0.45` while it lasts, and a drag started on a row inside a selection of more than one carries **the whole selection** rather than that row |
-| A folder under the drag | `st.dragOverKey` (`dragOverFolder`, line 5111) | the pointer over a folder row in the side list while `dragIds` is set — that row draws the accent-soft background, the accent text and an `inset 0 0 0 2px var(--accent)` ring, which is the only affordance saying a drop lands here |
+| A thread being dragged | `st.dragIds` (`dragThreadsStart`, line 5519) | a row is `draggable` and starts a drag; the dragged rows go to `opacity:0.45` while it lasts, and a drag started on a row inside a selection of more than one carries **the whole selection** rather than that row |
+| A folder under the drag | `st.dragOverKey` (`dragOverFolder`, line 5530) | the pointer over a folder row in the side list while `dragIds` is set — that row draws the accent-soft background, the accent text and an `inset 0 0 0 2px var(--accent)` ring, which is the only affordance saying a drop lands here |
 
-Dropping is a move and nothing new: `dropOnFolder` (line 5117) hands the ids to `moveThreads`,
-which now takes them as an argument (line 5088) rather than reading `moveFor`, so a drag and the
+Dropping is a move and nothing new: `dropOnFolder` (line 5536) hands the ids to `moveThreads`,
+which now takes them as an argument (line 5507) rather than reading `moveFor`, so a drag and the
 move dialog end in the same act, the same row animation and the same toast. The drop targets are the
 folder rows alone — a mailbox header carries none of the four handlers. `draggable` and the two drag
 handlers sit on every row at every width, beside the long-press and swipe the touch compositions
@@ -310,8 +311,12 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | State | Flag | Reveal |
 |---|---|---|
 | Thinking | `agentThinking` | a question was sent |
-| Context chip | `agentCtxShown` | the agent was opened from a screen that carries context |
+| Context chip | `agentCtxShown` (line 8795) | the agent was opened from a screen that carries context, **or** the open conversation carries its own `ctx` and it was not cleared |
 | Starter chips | `agentShowChips` | fewer than two messages in the conversation |
+| An answer with prose | `m.hasText` | the bot message carries `text` |
+| An answer still being worked | `m.working` (line 4633) | the message carries `working` — it draws an `autorenew` glyph and *The agent is going through your mail…* instead of prose |
+| An answer carrying blocks | `m.hasBlocks` (line 7460) | the message carries `blocks` |
+| Back to the conversation | `convReturnShown` (line 8799) | a block's `nav` row was pressed, which is what `goLook` (line 6482) records in `agentReturn`; the pill stands fixed over whatever screen was opened until `backToConv` (line 6487) is pressed |
 | History open | `historyOpen` | `!isMobile` by default, and the history control otherwise |
 | History close | `historyCloseShown` | `isMobile` |
 | History search has a value | `historySearchValue` | typing in it |
@@ -320,6 +325,52 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | History resizer | `showHistoryResizer` | `!isMobile` |
 | Conversation bar | `convBarShown` | tabs mode with more than one conversation — see the tabs note above |
 | Delete a conversation | `deleteConvAskOpen` | the delete control on a conversation |
+
+### The answer is blocks, and three of them are actionable
+
+An answer is not prose with buttons under it. `bkView(b, key, isMobile)` (line 6227) draws one block,
+and the catalogue is the Discover one: `TIMELINE`, `EVIDENCE`, `THREAD STATE`, `FACT TABLE`,
+`ATTACHMENTS`, `DRAFT`, `EVENT PROPOSAL`, `TASK PROPOSAL`, `SUGGESTED ACTION`. What a conversation
+adds is that the last four carry controls, and therefore a phase.
+
+| State | Flag | Reveal |
+|---|---|---|
+| Pending | `phase === "pending"` | the block's own `phase`, or `bkPhase[key]` once something was pressed — an accent card (`--accent-soft` on `--accent-line`) with a `help` chip reading *needs confirmation* and the type's controls under a rule |
+| Accepted | `accepted` | `acceptBk` (line 6451) — the controls go, a `check_circle` chip reads *done*, and one result line states what happened and at what time |
+| Accepted but not done | `failed` | the block carries `failed` — an `error` chip reading *not done*, and *Try again* as the only control |
+| Declined | `isDeclined` | `declineBk` (line 6462) — the card collapses to a dashed outline holding one struck line, *Declined — nothing was done*, and its `nav` rows go with it |
+| Loading | `isLoading` | the block's `state` is `loading` — three skeleton bars |
+| Partial | `isPartial` | `state` is `partial` — an `hourglass_top` note, `partialNote`, under the body it did return |
+| Empty | `isEmpty` | `state` is `empty` — a per-type icon and sentence, `event_busy`, `task_alt`, `edit_note` or `find_in_page` |
+| Error | `isError` | `state` is `error` — `errorText` and a *Try again* control that `retryBk` (line 6463) puts back to `ready` |
+| Editing a draft | `editing` | *Edit here* — `editBk` (line 6465) swaps the paragraphs for a `textarea` inside the conversation, and the controls become *Send* and *Stop editing* |
+
+**The controls are the type's.** `EVENT PROPOSAL` takes *Add to calendar*, *Another time* and
+*Decline*; `TASK PROPOSAL` takes *Add* and *Decline*; `DRAFT` takes *Send*, *Edit here* and
+*Discard*; `SUGGESTED ACTION` takes the block's own `cta` and *Decline*. Each is a `role="button"`
+with its own `aria-label` naming the object, and on touch they stack full width at 44 px.
+
+**A phase is not stored in the message.** `bkPhase`, `bkState`, `bkResult` and `bkEdit` are keyed by
+`<conversation>#<message>#<block>` (`setBk`, line 6445), which is what lets the seeded histories in
+`SEED_CONVS()` (line 4486) stay immutable and lets the same block object be proposed twice.
+*Another time* is the case that shows why: `anotherTimeBk` (line 6471) declines the block, writes the
+user's own line into the conversation, and comes back with the same proposal at a new hour, pending
+again.
+
+**The starter chips open a seeded conversation** rather than asking the question (`agentChips`,
+line 7428). Seven are seeded, and two exist for states nothing else reaches: `c-states`, whose blocks
+came back loading, error, empty, partial and failed, and `c-invoice`, which is archived.
+
+### States the blocks screen holds and the prototype does not
+
+`MailFathom AI Blocks.dc.html` draws the catalogue rather than a conversation, so it is where a
+phase is read against its siblings. Thirteen `PROPOSAL_SPECS` cards (line 417 of that file) stand
+under the heading *Proposal blocks — the Agent's three phases* (line 319), two to a row, one per
+type and phase. Its `state` property — `ready`, `loading`, `partial`, `empty`, `error`, `offline` —
+drives every card at once, so the empty and error wording of each type is reachable there and
+nowhere else. It also states the rule for which types earn a proposal block at all: `EVENT` and
+`TASK` exist only because the object has to be seen and corrected before it is approved, and moving
+to a folder, marking as read, adding to a case and closing a case stay a one-line `SUGGESTED ACTION`.
 
 ## Chrome that stands over every screen
 
@@ -331,24 +382,24 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | Mail FAB | `showFab` | no composer, no document, no selection; on one pane it needs the list |
 | User menu | `userMenuOpen` | the avatar |
 | Settings | `settingsOpen` | the settings control; closing it also drops the account draft. It clears `acctDel` too, which nothing sets any more — removing an account left the design and that one line stayed behind |
-| Settings: its five tabs | `tabProfil` / `tabAccounts` / `tabAi` / `tabNotif` / `tabApp` | the tab strip — *Profile*, *Accounts*, *AI*, *Notifications*, *Application* (`settingsTabs`, line 8455), `tabProfil` being the default |
+| Settings: its five tabs | `tabProfil` / `tabAccounts` / `tabAi` / `tabNotif` / `tabApp` | the tab strip — *Profile*, *Accounts*, *AI*, *Notifications*, *Application* (`settingsTabs`, line 9156), `tabProfil` being the default |
 | Own photo | `meHasPhoto` | a photo was uploaded |
 | **Photo rejected** | `photoError` | a file over 1 MB — a real file has to be chosen, so **no click reaches this** |
 | Telemetry off | `telemetryOptOut` | the telemetry switch |
 | Notification centre | `notifCenterOpen` | the bell, or the phone's upward gesture |
-| Unread notifications | `notifHasUnread` | the unread count; it gates three regions including the rail badge |
+| Unread notifications | `notifHasUnread` | the unread count; it gates three regions including the rail badge. The panel's own badge is one composed string, `notifNewLabel` (line 8655), reading *1 new* or *N new* |
 | **No notifications** | `notifEmpty` | the shown list is empty — reachable by filtering to unread after reading them all |
-| Refresh | `refreshAll` (line 5642) / `refreshBusy` | the `refresh` control in the rail, titled *Refresh*, and its floating copy at the phone's bottom-left (line 209) — it re-reads the mail in front of the reader and the notification centre, pulses its glyph (`mfpulse`, 1 s) rather than spinning while it waits, and refuses a second press until the re-read lands |
-| Move dialog | `moveOpen` | the move action on a selection — grouped by mailbox (`moveGroups`, line 7877), each group ending in *New folder here*, and the toast it produces names the mailbox |
-| Permanent delete | `confirmDel` under `inTrash` | a delete action while the open folder is a Trash (line 4892) — *Delete permanently*, no undo offered, and the toast reads *Permanently deleted* rather than *Moved to trash* |
-| The rail's nav scrolls | `railNavStyle` (line 6550) | a viewport too short for the seven destinations — the nav scrolls and the bottom cluster stays pinned |
+| Refresh | `refreshAll` (line 6061) / `refreshBusy` | the `refresh` control in the rail, titled *Refresh*, and its floating copy at the phone's bottom-left (line 209) — it re-reads the mail in front of the reader and the notification centre, pulses its glyph (`mfpulse`, 1 s) rather than spinning while it waits, and refuses a second press until the re-read lands |
+| Move dialog | `moveOpen` | the move action on a selection — grouped by mailbox (`moveGroups`, line 8570), each group ending in *New folder here*, and the toast it produces names the mailbox |
+| Permanent delete | `confirmDel` under `inTrash` | a delete action while the open folder is a Trash (line 5311) — *Delete permanently*, no undo offered, and the toast reads *Permanently deleted* rather than *Moved to trash* |
+| The rail's nav scrolls | `railNavStyle` (line 7233) | a viewport too short for the seven destinations — the nav scrolls and the bottom cluster stays pinned |
 | Cancel confirmation | `cancelAskOpen` | closing a toast that carries a running operation |
 | Toasts | `toasts` | any operation that reports; `MailFathom Toasts.dc.html` is the whole of it |
 
 Every label in the prototype is English. The four that were not — the Settings tabs *Profil* and
-*Aplikacja* (line 8455, now *Profile* and *Application*, with *Accounts*, *AI* and *Notifications*
+*Aplikacja* (line 9156, now *Profile* and *Application*, with *Accounts*, *AI* and *Notifications*
 standing between them), the user menu's sign-out item *Wyloguj* (line 143, now *Sign out*), and the
-single-pane state toggle beside the thread head, *ukryj* (line 7845, now *Hide panels —
+single-pane state toggle beside the thread head, *ukryj* (line 8538, now *Hide panels —
 correspondence only* against *Show thread panels*) — were translated in the project, and
 `design/parity.json` presses two of them under their English names.
 
@@ -358,10 +409,10 @@ Added on 2026-09-11, where the panel had held two tabs and a fixed card.
 
 The card itself is two shapes. On one pane it fills the screen; on two it is `st.settingsW || 700`
 by `st.settingsH || 720` with a `south_east` grip in the bottom-right corner
-(`settingsResizable` / `settingsResizeDown`, line 8433) that drags it between 560 × 420 and the
+(`settingsResizable` / `settingsResizeDown`, line 9134) that drags it between 560 × 420 and the
 viewport less 40 px. **The grip exists on two panes only**, so a phone or fold capture draws none.
 
-The card also **moves**. Its header is the handle: `settingsHeadDown` (line 8404) is `null` on one
+The card also **moves**. Its header is the handle: `settingsHeadDown` (line 9105) is `null` on one
 pane and a pointer drag on two, so the header carries `cursor:move;user-select:none` there and the
 card is drawn at `transform:translate(settingsDX, settingsDY)`. The travel is clamped to half the
 free space in each direction, so the card cannot be dragged past the viewport edge, and the close
@@ -370,25 +421,25 @@ control is marked `data-nodrag` so pressing it closes the panel instead of start
 
 | State | Flag | Reveal |
 |---|---|---|
-| The account list | `acctListShown` (line 8563) | the *Accounts* tab with no draft open — one row per account carrying a colour dot, the display name, the address, `IMAP host:port · SMTP host:port` and `chevron_right`, under a `MAIL ACCOUNTS` caption beside `acctCount`, and under the rows the sentence that settles what this tab is: *Accounts are set up by your administrator — here you can open one and change its settings.* |
-| The account editor | `acctEditShown` | a row. `acctTitle` (line 8574) reads *Edit account* and nothing else, there being no second way in |
-| The address is fixed | the `E-MAIL ADDRESS` input | it is `readOnly` with `tabIndex` `-1`, drawn on `--bg` rather than `--sub`, under *The address identifies the account and cannot be changed here.* (line 2478) |
+| The account list | `acctListShown` (line 9264) | the *Accounts* tab with no draft open — one row per account carrying a colour dot, the display name, the address, `IMAP host:port · SMTP host:port` and `chevron_right`, under a `MAIL ACCOUNTS` caption beside `acctCount`, and under the rows the sentence that settles what this tab is: *Accounts are set up by your administrator — here you can open one and change its settings.* |
+| The account editor | `acctEditShown` | a row. `acctTitle` (line 9275) reads *Edit account* and nothing else, there being no second way in |
+| The address is fixed | the `E-MAIL ADDRESS` input | it is `readOnly` with `tabIndex` `-1`, drawn on `--bg` rather than `--sub`, under *The address identifies the account and cannot be changed here.* (line 2624) |
 | Save refused | `acctSaveStyle` | the display name or the address is empty — the button is drawn flat and refuses the pointer |
 | The password shown | `acctPassType` / `acctPassIcon` | the `visibility` control beside the field |
 | Login left empty | `acctLoginHint` | nothing typed in LOGIN — *Empty = the e-mail address is used as the login.* |
-| Connection test refused | `acctTestBad` (line 8601) | *Test connection* while a host, a port, a login or a password is missing — it names every field still empty |
+| Connection test refused | `acctTestBad` (line 9302) | *Test connection* while a host, a port, a login or a password is missing — it names every field still empty |
 | Connection test passed | `acctTestOk` | *Test connection* with all six filled — it names the two hosts |
-| An earliest date set | `acctEarliestClearShown` / `acctEarliestHint` (line 8611) | the date field — the hint states that older mail stays on the mail server, and reverts to *No limit* when cleared |
-| The folder mapping | `acctFolders` (line 8618) | six rows pairing Inbox, Sent, Drafts, Archive, Spam and Trash with `INBOX`, `Sent`, `Drafts`, `Archive`, `Junk` and `Trash` |
-| The three switches over what it deletes and sends | `acctHardDelete` / `acctPurgeGone` / `acctSaveSent` (line 8623) | each is on by default and each carries a hint that changes with its position — hard delete states that a message goes from both servers with nothing left to restore |
-| The secret check | `acctSecretScan` / `acctSecretScanWarn` (line 8586) | the account editor's own switch, under `BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY` (line 2597), on by default; while it is on, a warning states the check is best-effort and can both miss a secret and hide ordinary text |
-| The AI language | `aiLangOptions` / `aiMatchReply` | *AI* — Polski or English, separate from the interface language, with a note that a change applies only to content written from now on, and *Match the language of the message* beneath it |
-| Notifications cleared on read | `notifAutoClear` (line 8546) | the *Notifications* tab's switch; while it is on, a `REMOVE` select offers Right away, After 1 hour, After 24 hours and After 7 days |
-| Notified on this device | `notifDevice` (line 8423) | the *Notifications* tab's `THIS DEVICE` group (line 2661), off by default — *When the window is not in front of you, this device tells you how many things arrived and of what kind — never from whom, never what it is about.* |
-| How long one stays up | `notifDuration` / `notifDurationLabel` (line 8426) | the range beneath it, 1 to 30 whole seconds and 5 by default, drawn as `<n> s` in the accent; its copy ties the value to the undo window, which *waits exactly as long as its notification is up* |
-| The message view | `viewAiStyle` / `viewSimpleStyle` / `viewHtmlStyle` (line 8484) | *Application* — a `MESSAGE VIEW` strip of three (line 2690), *AI simplified*, *Simplified* and *Original* in that order, each drawn by one `segStyle` helper (line 3474) that is the only place the segment's own styling lives |
-| Images loaded automatically | `autoImages` (line 8464) | *Application* — while it is on, a warning states the image is fetched from the sender's server and is how tracking pixels work |
-| Layout reset | `resetLayout` / `resetLayoutDone` (line 8539) | *Reset layout* under `LAYOUT ON THIS DEVICE`; the confirmation *Layout restored to the defaults.* stands for 3 200 ms and then goes |
+| An earliest date set | `acctEarliestClearShown` / `acctEarliestHint` (line 9312) | the date field — the hint states that older mail stays on the mail server, and reverts to *No limit* when cleared |
+| The folder mapping | `acctFolders` (line 9319) | six rows pairing Inbox, Sent, Drafts, Archive, Spam and Trash with `INBOX`, `Sent`, `Drafts`, `Archive`, `Junk` and `Trash` |
+| The three switches over what it deletes and sends | `acctHardDelete` / `acctPurgeGone` / `acctSaveSent` (line 9324) | each is on by default and each carries a hint that changes with its position — hard delete states that a message goes from both servers with nothing left to restore |
+| The secret check | `acctSecretScan` / `acctSecretScanWarn` (line 9287) | the account editor's own switch, under `BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY` (line 2743), on by default; while it is on, a warning states the check is best-effort and can both miss a secret and hide ordinary text |
+| The AI language | `aiLangOptions` (line 9253) / `aiMatchReply` | *AI* — English or Polski, **English first and English selected** (`st.aiLang` falls back to `"en"`), separate from the interface language, with a note that a change applies only to content written from now on, and *Match the language of the message* beneath it. `langOptions` (line 9365), the interface language in the account menu, is drawn and defaulted the same way |
+| Notifications cleared on read | `notifAutoClear` (line 9247) | the *Notifications* tab's switch; while it is on, a `REMOVE` select offers Right away, After 1 hour, After 24 hours and After 7 days |
+| Notified on this device | `notifDevice` (line 9124) | the *Notifications* tab's `THIS DEVICE` group (line 2807), off by default — *When the window is not in front of you, this device tells you how many things arrived and of what kind — never from whom, never what it is about.* |
+| How long one stays up | `notifDuration` / `notifDurationLabel` (line 9127) | the range beneath it, 1 to 30 whole seconds and 5 by default, drawn as `<n> s` in the accent; its copy ties the value to the undo window, which *waits exactly as long as its notification is up* |
+| The message view | `viewAiStyle` / `viewSimpleStyle` / `viewHtmlStyle` (line 9185) | *Application* — a `MESSAGE VIEW` strip of three (line 2836), *AI simplified*, *Simplified* and *Original* in that order, each drawn by one `segStyle` helper (line 3625) that is the only place the segment's own styling lives |
+| Images loaded automatically | `autoImages` (line 9165) | *Application* — while it is on, a warning states the image is fetched from the sender's server and is how tracking pixels work |
+| Layout reset | `resetLayout` / `resetLayoutDone` (line 9240) | *Reset layout* under `LAYOUT ON THIS DEVICE`; the confirmation *Layout restored to the defaults.* stands for 3 200 ms and then goes |
 
 **An account is neither added nor removed here any more.** The dashed *Add account* row, `acctAdd`,
 *Remove this account* and the two-step removal dialog that made the name be typed out are all gone
@@ -397,7 +448,7 @@ nothing else. A client screen offering either act is offering something the desi
 
 **The secret check is per account, and the AI tab says so rather than holding it.** The switch and
 its warning moved into the account editor, and where the global switch stood the *AI* tab now draws a
-`shield` note (line 2631) reading that the check *is set separately for each mail account — open
+`shield` note (line 2777) reading that the check *is set separately for each mail account — open
 Accounts and pick the account*. Which is why the editor's own group is captioned
 `BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY` and its copy says *from this account*.
 
@@ -417,7 +468,7 @@ plain *Simplified*, especially on newsletters and long reply chains.
 ### What a refresh turns up, and which row animates
 
 *Refresh* is a product control (the table above), and what a re-read turns up in the prototype is one
-scripted batch out of three (`DEMO_BATCHES`, line 4468) — a message lands at the top of the list and
+scripted batch out of three (`DEMO_BATCHES`, line 4887) — a message lands at the top of the list and
 in the notification centre, a second after 1 000 ms an existing thread is replaced in place and its
 reading held back, and a third after 2 050 ms is simply no longer in the list, with the toast *The
 sender withdrew a message — the thread has left the list*.
@@ -431,14 +482,14 @@ here is the states it reveals, each of which the client reaches from its own liv
 | A row deleted | `rowAnim[<id>] === "outdel"` | the collapse below, and `mfrowdel` over it — 460 ms, an error bar and an error wash that come up and stay while the row goes |
 | A row archived | `rowAnim[<id>] === "outarc"` | the same collapse, and `mfrowarc` — the warning bar and wash, otherwise identical |
 | **A row removed with no act named** | `rowAnim[<id>] === "out"` | the collapse alone, with no wash — the fallback `animateRowsOut` takes when no act is passed, and **all four of its callers pass one**, so nothing in the prototype reaches it |
-| A row moved to a folder | `rowAnim[<id>] === "move"` | `mfrowmoved` — 900 ms, a warning wash that comes up and fades back out; the row stays, so nothing collapses (line 5095) |
+| A row moved to a folder | `rowAnim[<id>] === "move"` | `mfrowmoved` — 900 ms, a warning wash that comes up and fades back out; the row stays, so nothing collapses (line 5514) |
 | A row changing in place | `rowAnim[<id>] === "edit"` | `mfrowedit` — 1 700 ms, an accent bar and a soft accent wash that fade out |
 | A notification arriving | `notifAnim[<id>] === "in"` | the same `mfrowin` on the notification-centre row |
 
 The collapse the three removals share is `mfrowout` — 440 ms, closing to zero height and sliding
 22 px left, pointer events off while it goes — and the state change itself lands at 380 ms, before
-the wash has finished (`animateRowsOut`, line 5629). The wash is drawn on the row rather than on the
-wrapper that collapses (`rowWash`, line 6122), which is what lets the two run at different lengths.
+the wash has finished (`animateRowsOut`, line 6048). The wash is drawn on the row rather than on the
+wrapper that collapses (`rowWash`, line 6805), which is what lets the two run at different lengths.
 
 The comment above them is the requirement rather than the animation: *Only the touched tile
 animates — the list is never re-rendered as a whole, so scroll position and every other row stay
@@ -453,7 +504,7 @@ was pending.
 
 **The wash names the act, and the colour is the whole of the naming**: the error pair for a deletion
 and for a permanent deletion, the warning pair for an archive. The swipe that archives draws the same
-warning colours behind the row as it is dragged (`swipeBgStyle`, line 8162) rather than the success
+warning colours behind the row as it is dragged (`swipeBgStyle`, line 8863) rather than the success
 green it used to, so the gesture and the wash that follows it are one colour rather than two. A move
 is the one act that washes a row it does not remove: the row keeps its place under its new folder
 chip while `mfrowmoved` fades back out behind it.
@@ -534,7 +585,7 @@ a failure banner. Worth carrying out of it:
 This is the class the inventory exists for. Each is in the source, and none of them can be reached by
 clicking a preview.
 
-- **The application with no mailbox at all.** `const emptyApp = false;` (line 6325) is a constant, and
+- **The application with no mailbox at all.** `const emptyApp = false;` (line 7008) is a constant, and
   every one of the seven screen gates is `st.screen === "…" && !emptyApp`. Nothing anywhere draws the
   true branch, so **the design does not cover a deployment with no mailbox** — a session that needs
   that screen is designing something the project has not settled, and it goes to the owner rather than
