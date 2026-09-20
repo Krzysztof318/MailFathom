@@ -25,6 +25,27 @@ internal sealed record EmailEnrichmentDocument
     /// <summary>Gets the commitment the model said the message contains.</summary>
     [JsonPropertyName("commitment")]
     public EmailEnrichmentMarkDocument? Commitment { get; init; }
+
+    /// <summary>Gets what the model said the message asks the person who received it to do.</summary>
+    [JsonPropertyName("tasks")]
+    public IReadOnlyList<EmailTaskDocument>? Tasks { get; init; }
+}
+
+/// <summary>One thing the model says is being asked of the person, with nothing about it yet established.</summary>
+/// <remarks>
+/// It cites no passage, which is the one way it differs from a mark beside it. A task leaves the message behind — it
+/// is a row on a list somebody keeps after the mail is gone — so what it carries back to the message is the message's
+/// own identity, which the pass already holds, rather than a position in a turn.
+/// </remarks>
+internal sealed record EmailTaskDocument
+{
+    /// <summary>Gets the line the model offered the task as.</summary>
+    [JsonPropertyName("title")]
+    public string? Title { get; init; }
+
+    /// <summary>Gets the day the model said it falls due on, as it wrote it.</summary>
+    [JsonPropertyName("dueOn")]
+    public string? DueOn { get; init; }
 }
 
 /// <summary>One reading as the model wrote it, with nothing about it yet established.</summary>

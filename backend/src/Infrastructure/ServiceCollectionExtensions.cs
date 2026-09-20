@@ -1407,6 +1407,11 @@ public static class ServiceCollectionExtensions
         // context directly.
         services.AddScoped<IPersonalTaskStore, PersistedPersonalTaskStore>();
         services.AddScoped<OwnTasks>();
+        // The producer of everything on the other half of that list, reached by the enrichment pass rather than by a
+        // screen, and the reading a person asks for when they want the day arranged. Both are scoped like the store
+        // they write and read through.
+        services.AddScoped<MailDerivedTaskProposals>();
+        services.AddScoped<TodayLayout>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.

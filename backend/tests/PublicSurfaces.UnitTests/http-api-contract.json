@@ -906,6 +906,93 @@
         ],
         "type": "object"
       },
+      "ClientDayLayoutAvailabilityResponse": {
+        "properties": {
+          "arrangesDays": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "arrangesDays"
+        ],
+        "type": "object"
+      },
+      "ClientDayLayoutPlacementResponse": {
+        "properties": {
+          "minutes": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "startAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "startAt",
+          "minutes"
+        ],
+        "type": "object"
+      },
+      "ClientDayLayoutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "until": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "until"
+        ],
+        "type": "object"
+      },
+      "ClientDayLayoutResponse": {
+        "properties": {
+          "arranged": {
+            "type": "boolean"
+          },
+          "notToday": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDayLayoutPlacementResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "arranged",
+          "placements",
+          "notToday"
+        ],
+        "type": "object"
+      },
       "ClientDeletedNotificationsResponse": {
         "properties": {
           "deleted": {
@@ -16846,6 +16933,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientTaskPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/tasks/today/layout": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDayLayoutAvailabilityResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientDayLayoutRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDayLayoutResponse"
                 }
               }
             },

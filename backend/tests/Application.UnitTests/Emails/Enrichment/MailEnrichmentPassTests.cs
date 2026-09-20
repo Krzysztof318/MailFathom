@@ -8,10 +8,12 @@ using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Tasks;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Tasks;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -232,6 +234,61 @@ public sealed class MailEnrichmentPassTests
         Assert.Equal(withholding, report.StoppedBy);
     }
 
+    /// <summary>What a message asked for reaches the list of the person whose mailbox it arrived in, as a proposal.</summary>
+    [Fact]
+    public async Task RunAsync_ADerivationThatReadTasksOutOfAMessage_OffersEachOfThemToThePersonAssignedTheMailbox()
+    {
+        // Arrange
+        var email = Enrichable();
+        var taskStore = Substitute.For<IPersonalTaskStore>();
+        var pass = CreatePass(
+            StoreReturning([email]),
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Settled(
+                [],
+                [
+                    EmailTaskProposal.Create("Answer the supplier", new DateOnly(2026, 9, 11)),
+                    EmailTaskProposal.Create("Countersign the quotation", dueOn: null),
+                ])),
+            taskStore: taskStore);
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        await taskStore.Received(1).AddAsync(
+            Arg.Is<PersonalTask>(task =>
+                task!.Title == "Answer the supplier"
+                && task.DueOn == new DateOnly(2026, 9, 11)
+                && task.Origin == PersonalTaskOrigin.Proposed
+                && task.User == SyntheticMailUser.Deployment
+                && task.SourceMessage == email.StoredEmailId),
+            Arg.Any<CancellationToken>());
+        await taskStore.Received(1).AddAsync(
+            Arg.Is<PersonalTask>(task => task!.Title == "Countersign the quotation" && task.DueOn == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A derivation nothing was settled from proposes nothing, so a withheld pass leaves no list touched.</summary>
+    [Fact]
+    public async Task RunAsync_ADerivationWithheld_ProposesNothingToAnybody()
+    {
+        // Arrange
+        var taskStore = Substitute.For<IPersonalTaskStore>();
+        var pass = CreatePass(
+            StoreReturning([Enrichable()]),
+            EnricherAnswering(_ => EmailEnrichmentDerivation.Withholding(
+                EmailEnrichmentWithholding.ProviderUnavailable)),
+            taskStore: taskStore);
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        await taskStore.DidNotReceiveWithAnyArgs().AddAsync(
+            Arg.Any<PersonalTask>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private static EnrichableEmail Enrichable() =>
         new(
             StoredEmailId.Create(Guid.CreateVersion7()),
@@ -448,7 +505,8 @@ public sealed class MailEnrichmentPassTests
         IStoredEmailEnrichmentStore store,
         IEmailEnricher enricher,
         MailAccountLanguage language = MailAccountLanguage.English,
-        MailCalendarProposals? proposals = null)
+        MailCalendarProposals? proposals = null,
+        IPersonalTaskStore? taskStore = null)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -461,6 +519,10 @@ public sealed class MailEnrichmentPassTests
             enricher,
             proposals ?? ProposalsOver(InactiveExtractor(), Substitute.For<ICalendarEventStore>()),
             LanguagesAnswering(language),
+            new MailDerivedTaskProposals(
+                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
+                taskStore ?? Substitute.For<IPersonalTaskStore>(),
+                timeProvider),
             SensitiveContentEgressGuards.Inactive(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,

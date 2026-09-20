@@ -214,6 +214,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TasksRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.ProposedTasksRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TodayLayoutRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TodayLayoutRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}",
@@ -307,6 +309,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientTaskEndpoints.ProposedTasksRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -351,6 +354,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientTaskEndpoints.TasksRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientTaskEndpoints.TodayLayoutRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientTaskEndpoints.TaskAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientTaskEndpoints.TaskCompletionRoute} -> {MailFathomPermission.MailRead.Name}",
                 .. ClientTelemetrySignal.All
@@ -587,7 +591,10 @@ public sealed class ClientApiEndpointsTests
     /// correspondence it answers. Reading a typed description into a calendar event is the fifth and belongs here on
     /// every one of those readings at once: it changes nothing, since what it answers with is the fields of a dialog
     /// its author submits themselves, and it is a <c>POST</c> because what somebody is arranging and with whom is as
-    /// revealing as the mail that arranged it. Naming the five keeps the claim narrow.
+    /// revealing as the mail that arranged it. Arranging a day is the sixth and changes nothing either: it answers
+    /// with an arrangement drawn beside the list the person already holds, no task is moved and no event is written by
+    /// asking, and it is a <c>POST</c> because the window and what it is arranged around are the caller's own day.
+    /// Naming the six keeps the claim narrow.
     /// </remarks>
     private static bool AsksAQuestionOfTheCallersOwnMail(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
@@ -596,7 +603,8 @@ public sealed class ClientApiEndpointsTests
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}");
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TodayLayoutRoute}");
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

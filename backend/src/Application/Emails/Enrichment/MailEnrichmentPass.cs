@@ -6,12 +6,19 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Tasks;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Enrichment;
 
-/// <summary>Derives what the account's newly cut mail is about and which dates it names, once per message, and writes both down.</summary>
+/// <summary>Derives what the account's newly cut mail is about, which dates it names, and what it asks of its reader, once per message, and writes all three down.</summary>
 /// <remarks>
+/// <para>
+/// The proposed tasks come out of the same derivation as the marks and cost nothing beyond it: one call answers what a
+/// message is about and what it asks of the person who received it, so reading mail into somebody's task list is not a
+/// second unattended thing a deployment spends on and has no ceiling of its own. A deployment that has not turned
+/// enrichment on proposes nothing, for the same reason it derives nothing.
+/// </para>
 /// <para>
 /// The last stage of the arrival pipeline, behind the cut, and behind it because a mark cites passages: a message
 /// derived before it was cut would have nothing to rest its evidence on. Everything the earlier stages settle is
@@ -78,6 +85,7 @@ public sealed class MailEnrichmentPass
     private readonly IEmailEnricher enricher;
     private readonly MailCalendarProposals calendarProposals;
     private readonly IMailAccountLanguages accountLanguages;
+    private readonly MailDerivedTaskProposals taskProposals;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -87,6 +95,7 @@ public sealed class MailEnrichmentPass
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
     /// <param name="calendarProposals">Reads the dates one message names and writes them onto the calendars the mailbox serves.</param>
     /// <param name="accountLanguages">Answers which language the account's mail is read in.</param>
+    /// <param name="taskProposals">Offers what a message asked for to the people the mailbox is assigned to.</param>
     /// <param name="egressGuard">Holds the posture the passages are scanned under while the pass runs.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
@@ -96,6 +105,7 @@ public sealed class MailEnrichmentPass
         IEmailEnricher enricher,
         MailCalendarProposals calendarProposals,
         IMailAccountLanguages accountLanguages,
+        MailDerivedTaskProposals taskProposals,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
@@ -104,6 +114,7 @@ public sealed class MailEnrichmentPass
         ArgumentNullException.ThrowIfNull(enricher);
         ArgumentNullException.ThrowIfNull(calendarProposals);
         ArgumentNullException.ThrowIfNull(accountLanguages);
+        ArgumentNullException.ThrowIfNull(taskProposals);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -112,6 +123,7 @@ public sealed class MailEnrichmentPass
         this.enricher = enricher;
         this.calendarProposals = calendarProposals;
         this.accountLanguages = accountLanguages;
+        this.taskProposals = taskProposals;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
@@ -219,6 +231,17 @@ public sealed class MailEnrichmentPass
             {
                 markedCount++;
             }
+
+            // Outside the statement above rather than inside it, which is the task store's own decision: a list
+            // somebody owns is not part of the transaction that records having read their mail, and a suggestion that
+            // failed must not fail mail already committed. After it rather than before it, because a proposal lost to
+            // a crash between them is a suggestion nobody was made, while a record lost after the proposals were
+            // written would leave the message outstanding and offer the same tasks again on the next run.
+            await this.taskProposals.ProposeAsync(
+                account,
+                email.StoredEmailId,
+                derivation.Tasks,
+                cancellationToken);
         }
 
         return new MailEnrichmentPassReport(

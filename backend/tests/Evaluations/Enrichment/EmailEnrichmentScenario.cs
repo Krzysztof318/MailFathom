@@ -60,9 +60,17 @@ internal static class EmailEnrichmentScenario
             StructuredAnswerScenario.JudgedWhen(readsTwoWays: false));
     }
 
-    /// <summary>Holds the marks to the case's expectation, then to the language the case declares.</summary>
-    private static string? Held(EmailEnrichmentCase scenario, IReadOnlyList<EmailEnrichmentMark> marks) =>
-        scenario.Expectation(marks) ?? (scenario.Language is { } language
-            ? WrittenLanguage.Shortfall(string.Join('\n', marks.Select(static mark => mark.Text)), language)
+    /// <summary>Holds the marks to the case's expectation, then the tasks read beside them, then the language the case declares.</summary>
+    /// <remarks>
+    /// The language is held against the tasks as well as the marks, both being sentences this derivation wrote for one
+    /// mailbox: a task offered in the message's language on a list kept in another reads as somebody else's row.
+    /// </remarks>
+    private static string? Held(EmailEnrichmentCase scenario, EmailEnrichmentDerivation derivation) =>
+        scenario.Expectation(derivation.Marks)
+        ?? scenario.TaskExpectation?.Invoke(derivation.Tasks)
+        ?? (scenario.Language is { } language
+            ? WrittenLanguage.Shortfall(
+                string.Join('\n', derivation.Marks.Select(static mark => mark.Text).Concat(derivation.Tasks.Select(static task => task.Title))),
+                language)
             : null);
 }

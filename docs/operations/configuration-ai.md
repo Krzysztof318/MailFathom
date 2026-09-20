@@ -763,6 +763,7 @@ its own. Every one of them may, and each takes the same two keys as `Chat:MainMo
 | `Chat:ImageDescription:Model` | Describing an image attachment, which `Embeddings:ImageDescription:Enabled` turns on |
 | `Chat:BodyCleanup:Model` | [Cleaning a message body](#cleaning-a-message-body--chatbodycleanup) |
 | `Chat:CalendarEventExtraction:Model` | [Reading a calendar event out of text](#reading-a-calendar-event-out-of-text--chatcalendareventextraction) |
+| `Chat:DayLayout:Model` | [Arranging a day](#arranging-a-day--chatdaylayout) |
 
 Routing them separately is the point of the keys: the per-message derivations and the per-candidate judgement are
 cheap judgements a small fast model makes well, answering and drafting are rare and worth the best model an operator
@@ -843,6 +844,13 @@ What one pass covers is not configurable: eight messages, six leading passages e
 pass's latency inside a run that other accounts are queued behind rather than describing a deployment, and what a pass
 leaves behind the next run takes. [Message enrichment](../features/message-enrichment.md) describes what a mark carries,
 what withholds a derivation, and what reaches the provider.
+
+**The same derivation also offers what a message asks its reader to do**, and it has no key of its own. What comes back
+beside the marks is at most three lines, each landing on the task list of every person the mailbox is assigned to as a
+proposal nobody has agreed to — inside the one call this section already pays for, under the one allowance it is already
+admitted against. So turning enrichment on turns this on with it, and there is nothing beside the key above to raise, to
+narrow, or to switch off. [Tasks read out of mail](../features/tasks-from-mail.md) describes what a proposal is and what
+accepting one does.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -1027,6 +1035,40 @@ message it is, so a deployment that scans what leaves it for secrets scans this 
 | --- | --- | --- | --- | --- |
 | `Chat:BodyCleanup:Model:Alias` | string | *(empty)* | an alias `Chat:Models` declares, which this pass alone is routed to. Empty routes it to `Chat:MainModel`. A model named here is a declaration of its own, so the cheap model this pass runs on may sit at another address, under another credential, with bounds and a timeout of its own — which is what makes it worth naming, this being the one pass a reader waits for in front of a message | reload |
 | `Chat:BodyCleanup:Model:Fallback` | string | *(empty)* | an alias attempted where the model above could not answer, under the rules [`Chat:MainModel:Fallback`](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it) states. A pass somebody is waiting in front of is exactly the one worth answering from a second model rather than not at all | reload |
+
+### Arranging a day — `Chat:DayLayout`
+
+Putting the tasks somebody owes today into the gaps between what they are already committed to, when they press the
+control that asks for it. A block inside `Chat` for the reason the blocks above are: it decides with that endpoint and
+has nowhere to send a day without one.
+
+**It carries no switch either**, for the same reason cleaning a body carries none: a declared model is the whole of what
+turns it on, and whether a day is arranged is the person's own act rather than an operator's setting. A deployment that
+declares no chat endpoint tells the client it arranges no day, and the control is not offered.
+
+**The derivation runs per press.** Nothing schedules it, no pass reaches it, and opening a screen does not run it — so
+what a deployment spends here is one call for each time somebody asked, and nothing at all for the days nobody asked
+about. A day with nothing owed on it is answered without a call at all.
+
+**What leaves the deployment is the day, not the lists.** The window, the lines of the tasks due by the end of it, and
+the titles and times of what is already on the calendar during it; no message, no address, no identity, and nothing
+about a task beyond the line it is drawn with. The answer comes back naming tasks by identity rather than repeating
+them, which is what keeps an arrangement from becoming a second copy of somebody's list, and **every line passes the
+egress guard the arrival derivation's prompt passes**, under the posture of the person whose day it is.
+
+What one arrangement covers is not configurable: at most twenty tasks, at most fifty commitments, and a window of at
+most two days. Those bound what one press sends to a provider rather than describing a deployment.
+
+**It competes with questions for one allowance**, exactly as the blocks above do: each arrangement is admitted against
+and charged to the same `MailAnswering` period ceilings a question is. A period the people of a deployment exhausted
+leaves the day untouched and the control pressable again, because nothing was written either way — an arrangement is
+offered and applied by the person or by nobody. [Tasks read out of mail](../features/tasks-from-mail.md) describes what
+an arrangement holds and what acting on one takes.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:DayLayout:Model:Alias` | string | *(empty)* | an alias `Chat:Models` declares, which arranging a day alone is routed to. Empty routes it to `Chat:MainModel`. One press is one short call carrying no mail, so this is a candidate for the cheap model a deployment already declares — and somebody is waiting in front of it | reload |
+| `Chat:DayLayout:Model:Fallback` | string | *(empty)* | an alias attempted where the model above could not answer, under the rules [`Chat:MainModel:Fallback`](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it) states. A control somebody pressed is worth answering from a second model rather than not at all | reload |
 
 ## `MailAnswering`
 
