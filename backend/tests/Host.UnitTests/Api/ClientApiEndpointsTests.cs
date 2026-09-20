@@ -131,6 +131,12 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientContactEndpoints.ContactsRoute}",
@@ -258,6 +264,7 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.Equal(
             [
+                $"DELETE {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"DELETE {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -265,6 +272,8 @@ public sealed class ClientApiEndpointsTests
                 $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.MailContactsRead.Name}",
                 $"GET {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsRead.Name}",
@@ -298,6 +307,8 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"POST {prefix}{ClientContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
@@ -342,6 +353,7 @@ public sealed class ClientApiEndpointsTests
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
+                $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"PUT {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -376,8 +388,8 @@ public sealed class ClientApiEndpointsTests
     /// could not tell apart: the caller's own client preferences, the caller's own portrait, and the client handing
     /// over its own telemetry.
     /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
-    /// changing a flag, moving a message, deleting one, and writing the caller's own address book are separately
-    /// provisioned powers, so a route that changes anything under
+    /// changing a flag, moving a message, deleting one, writing the caller's own address book, and writing their own
+    /// calendar are separately provisioned powers, so a route that changes anything under
     /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
     /// to read a mailbox would then send from it.
     /// </summary>
@@ -410,6 +422,7 @@ public sealed class ClientApiEndpointsTests
                         || WritesTheCallersOwnPortrait(endpoint)
                         || ChangesTheCallersOwnNotificationCentre(endpoint)
                         || ChangesTheCallersOwnTaskList(endpoint)
+                        || ChangesTheCallersOwnCalendar(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
@@ -491,6 +504,22 @@ public sealed class ClientApiEndpointsTests
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskCompletionRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskAcceptanceRoute}");
+
+    /// <summary>Reports whether a route changes the caller's own calendar, by the three routes its four writes are served at.</summary>
+    /// <remarks>
+    /// The routes rather than the grant, for the reason the task list's writes are named that way. An event is this
+    /// deployment's own record of when one person is committed: nothing here reaches a mail server, nothing moves in a
+    /// mailbox, and the message an event cites is a value it carries rather than mail this route reads. The deletion
+    /// is carried by that same reasoning — <see cref="MailFathomPermission.MailDelete" /> is the power to remove
+    /// somebody's mail, and what leaves here is a date about a message that stays. Naming the three keeps the claim
+    /// narrow — a fourth route published under the read grant fails this rather than joining it.
+    /// </remarks>
+    private static bool ChangesTheCallersOwnCalendar(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
+        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute}");
 
     /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
     /// <remarks>

@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -134,6 +134,12 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/tasks/{taskId}/completion` | `mailfathom.mail.read` |
 | `POST /api/client/tasks/{taskId}/acceptance` | `mailfathom.mail.read` |
 | `DELETE /api/client/tasks/{taskId}` | `mailfathom.mail.read` |
+| `GET /api/client/calendar` | `mailfathom.mail.read` |
+| `GET /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
+| `POST /api/client/calendar` | `mailfathom.mail.read` |
+| `PUT /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
+| `POST /api/client/calendar/{eventId}/acceptance` | `mailfathom.mail.read` |
+| `DELETE /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
@@ -2860,6 +2866,95 @@ reasoning rather than [the mutation routes](#the-mutation-routes)' — a person 
 maintains does not hold a write grant and still has to be able to keep their own list. `mailfathom.mail.delete` is the
 power to remove somebody's mail and is not what the erasure asks for: what leaves is a commitment about a message that
 stays.
+
+### The calendar routes
+
+These are the signed-in person's own days: the events they put on their calendar, the dates their mail proposed to
+them, and the five things they do about either. Nothing here reaches a mail server or a calendar server — a MailFathom
+event is native to this deployment, and [calendar events](../features/calendar-events.md) holds what one is.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/calendar` | Reads one window of the calendar, earliest first |
+| `GET /api/client/calendar/{eventId}` | Reads one event |
+| `POST /api/client/calendar` | Puts an event this person states on their calendar |
+| `PUT /api/client/calendar/{eventId}` | Amends one to the record the request states |
+| `POST /api/client/calendar/{eventId}/acceptance` | Takes a date their mail proposed onto the calendar |
+| `DELETE /api/client/calendar/{eventId}` | Removes an event, which is also how a proposal is dismissed |
+
+**Every read is a window, because every view over a calendar is one.** A month, a week, a day, and an agenda are four
+spans rather than four questions, so one route answers them all and the client states the span it drew:
+
+```http
+GET /api/client/calendar?from=2026-09-21T00:00:00Z&until=2026-09-28T00:00:00Z&origin=Asserted&count=200
+```
+
+```json
+{
+  "events": [
+    {
+      "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "title": "Kick-off",
+      "start": "2026-09-21T09:00:00+00:00",
+      "end": "2026-09-21T10:00:00+00:00",
+      "origin": "Asserted",
+      "sourceMessage": "0198f2c3-4d5e-7f80-9a1b-2c3d4e5f6071",
+      "recordedAt": "2026-09-18T11:04:19.512+00:00",
+      "amendedAt": "2026-09-18T11:04:19.512+00:00"
+    }
+  ]
+}
+```
+
+`from` and `until` are both required, and the window is half-open: an event beginning exactly as it closes, or ending
+exactly as it opens, is outside it, which is what lets two consecutive days, weeks, or months answer for every event
+exactly once between them. An event is in the window when any part of it falls inside, so a meeting that began before
+the window opened is still what the day it runs into shows.
+
+**What bounds a read is how many events it may answer with rather than how long the span may be.** A year of an agenda
+is an ordinary request; the number of rows is what decides the cost of answering. `count` defaults to 200 and may name
+anything up to 1000, and a window outside that — or one that closes before it opens — is refused with `400` rather
+than narrowed to what this deployment would serve: a screen that asked for a year and was served a month would be
+missing eleven of them while believing it drew the year. A window that came back with as many events as it asked for
+is a window whose span is too wide to draw at once, and the client asks about a shorter one.
+
+**`origin` names which half of the record to read**, as `Asserted` or `Proposed`, and naming neither reads both. The
+two are drawn in different places — the calendar itself, and the dates mail named that nobody has agreed to — which is
+why a caller asks for one rather than sorting the answer out afterwards. Only those two spellings are admitted: the
+number behind an enum member is not part of this contract, and `origin=1` is refused.
+
+**No request names a person.** The calendar reached is the one the credential authenticated, so a reading of somebody
+else's days cannot be composed, and an event another person holds answers `404` exactly as one nobody holds. The
+all-zero identifier no event carries answers `404` too.
+
+**A write states the whole record rather than the difference from the one held.** Creating an event names its title,
+its start, an optional end, and optionally the message it was created from; amending one names the title, the start,
+and the end it is to stand with, and changes neither the identity, the origin, nor the message it cites. What a person
+types into their own client is on the calendar rather than offered to it, so a created event is always `Asserted` —
+nothing here produces a proposal.
+
+**Accepting a proposal is a route and dismissing one is not.** Acceptance changes what the record claims and keeps the
+identity, the message, and everything derived from it pointing at the event the person now holds; it answers `409`
+where the event is already on the calendar, because a second acceptance is a caller acting on a proposal somebody
+already took and answering it as done would move the record of when the event actually reached the calendar. A
+dismissal removes the row, which is the same act as deleting an event somebody typed — a date nobody wanted is not a
+fact worth keeping — so `DELETE` serves both and answers `204`, or `404` where the calendar holds no such event.
+
+**A refusal names the rule rather than the value.** A title that is blank, longer than 200 characters, or carrying a
+character that renders as nothing is refused with `400` stating that rule, and the title itself is never echoed: a
+problem document is the one part of an answer a proxy log, a trace, and a client's captured error all keep, and a
+title says who somebody is meeting. An end that is not after its start is refused the same way, when the event is
+created and again whenever it is amended.
+
+**Every route here is `mailfathom.mail.read`, the four writes included**, exactly as
+[the task routes](#the-task-routes) above are. An event is this deployment's own record of when one person is
+committed: nothing here reaches a mail server, nothing moves in a mailbox, and the message an event cites is a value it
+carries rather than mail these routes read. `mailfathom.mail.delete` is the power to remove somebody's mail and is not
+what the deletion asks for — what leaves is a date about a message that stays.
+
+**What these routes do not serve.** There is no recurrence, no external calendar synchronization, no reminder, and no
+`.ics` import here; [calendar events](../features/calendar-events.md) states which of those are refused as ideas and
+which are simply not part of the record today.
 
 ### The Discover routes
 

@@ -80,6 +80,14 @@ namespace MailFathom.Host.Api;
 /// and what mail proposed — because those are two things to somebody looking at a screen.
 /// </para>
 /// <para>
+/// The calendar routes, which <see cref="ClientCalendarEndpoints" /> describes, are the person's own days, and they
+/// stand beside the task routes for the reason those stand where they do: what they hold is a record native to this
+/// deployment — what somebody put on their calendar, and the dates their mail proposed to it — and no act among
+/// them reaches a mail server or any calendar server at all, so every one of them is admitted under the reading grant.
+/// Every read is a window, because every view over a calendar is one, and the two halves are asked for separately
+/// because they are drawn in different places.
+/// </para>
+/// <para>
 /// The contact correlation route, which <see cref="ClientContactCorrespondenceEndpoint" /> describes, is what an opened
 /// contact is drawn beside: the conversations one person's addresses appear in and the documents they sent, computed
 /// from the mail index on the read rather than held anywhere. It sits among the mail routes because that is what it
@@ -192,6 +200,7 @@ internal static class ClientApiEndpoints
         api.MapClientContacts();
         api.MapClientNotifications();
         api.MapClientTasks();
+        api.MapClientCalendar();
         api.MapClientSignalTicket();
         api.MapClientTelemetry();
 
