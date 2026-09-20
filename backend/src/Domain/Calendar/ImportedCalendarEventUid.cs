@@ -2,8 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
-
 namespace MailFathom.Domain.Calendar;
 
 /// <summary>Carries the <c>UID</c> a <c>VEVENT</c> named itself by, for an event that came out of a file.</summary>
@@ -46,17 +44,14 @@ public readonly record struct ImportedCalendarEventUid
     /// <remarks>
     /// The file is untrusted input, and this value is answered back to whoever imported it in the report naming what
     /// was skipped — so a control character or a bidirectional override is refused here for the same reason a title's
-    /// is, and the entry carrying one is reported as an entry that could not be read.
+    /// is, and the entry carrying one is reported as an entry that could not be read. <see cref="CalendarText" />
+    /// holds which characters those are.
     /// </remarks>
     public static bool TryCreate(string? value, out ImportedCalendarEventUid uid)
     {
         var trimmed = value?.Trim();
 
-        if (string.IsNullOrEmpty(trimmed)
-            || trimmed.Length > MaximumLength
-            || trimmed.Any(static character =>
-                char.IsControl(character)
-                || char.GetUnicodeCategory(character) == UnicodeCategory.Format))
+        if (string.IsNullOrEmpty(trimmed) || trimmed.Length > MaximumLength || !CalendarText.IsReadable(trimmed))
         {
             uid = default;
 

@@ -1391,18 +1391,19 @@ that decision covers and the rules every writer obeys.
 | `Title` | What the event is called, as whoever wrote it down wrote it |
 | `StartsAt`, `EndsAt` | When it begins, and when it ends where anything said so. A duration is derived from the pair rather than stored beside it, because an end and a duration are one fact; the domain refuses an end that is not after the start |
 | `Origin` | `Asserted` where somebody put the event on their calendar, `Proposed` where a reading of their mail offered it and nobody has agreed. Held as its own name for the reason every bounded value on this page is, and **accepting a proposal changes this column rather than writing a second row**, which is what keeps the message it cites pointing at the event the person holds |
-| `SourceStoredEmailId` | The message a date was found in, or null. A pointer rather than a copy: nothing of the message is on this row |
+| `SourceStoredEmailId` | The message a date was found in, or null. A pointer rather than a copy — nothing of the message is on this row — and an identifier rather than a foreign key, for the reason below |
 | `ImportedUid` | The `UID` the `.ics` entry it was imported under named itself by, or null on an event a person typed or a reading proposed. Compared exactly as written, RFC 5545 giving it no property but equality |
 | `RecordedAt`, `AmendedAt` | When the event was written here, and when it was last amended or accepted |
 | `ConcurrencyVersion` | The `xmin` token, because an event is amended in place. What it settles above all is an amendment racing a deletion, which then writes nothing rather than putting the event back |
 
-**The message key clears rather than cascades, and it is the only reference from another table that does.** Every other
-table recording something about a message is a record of an act and goes with the mail it was about — a reply becoming
-a root is a self-reference rather than a second such table. An event somebody accepted is their own plan, so erasing
-the message a date was found in takes the pointer and leaves the meeting on their calendar. That is not only about
-erasure: a message deleted in the mailbox in the ordinary way removes the same row, and deleting mail is not something
-anybody expects to change what their day holds. What a reader loses is the ability to open the thread from the event,
-which is the honest consequence of the mail being gone.
+**The cited message is an identifier rather than a foreign key, which is how the event outlives the mail.** Every
+foreign key onto `stored_emails` cascades, so that nothing derived from a message survives it, and that rule is kept
+absolute rather than given exceptions — a table whose rows have to outlive the mail cites it as a plain identifier
+instead, as `mailbox_mutation_audit_entries` already does. An event is such a row: it is somebody's own plan rather
+than a derivation of a message, and a message deleted in the mailbox in the ordinary way removes the same row an
+erasure would. Deleting mail is not something anybody expects to change what their day holds. What the shape costs is
+that nothing constrains the value, so a citation whose message is gone resolves to nothing — which is the answer a
+reader is meant to get, the thread simply no longer being there to open.
 
 Deleting an event removes the row. There is no state a deleted event is in and nothing restores one, which is also how
 a proposal nobody wanted is dismissed.
@@ -1979,7 +1980,6 @@ account reach these four tables through the same cascade every other table is re
 | `IX_contact_addresses_ContactId_BookHolderId` | `(ContactId, BookHolderId)` | The foreign key back to the person, which is what erasing one reaches their addresses by. It carries the book because the key does |
 | `ix_calendar_events_user_starts_at_id` | `(UserId, StartsAt, Id)` | The window every view over a calendar is read as. The owner leads it because a read is always one person's, the start follows because a window is a range over it, and the identity settles two events beginning at the same instant, which is what makes the order total and a window answer the same way twice |
 | `ix_calendar_events_user_imported_uid` | `(UserId, ImportedUid)`, unique, over the rows carrying one | One calendar holds an imported entry once, which is the whole of what makes importing a file twice create nothing the second time — two imports running together both read nothing, so only the constraint closes that window. The filter is what keeps the index the size of what was imported rather than of the calendar, nearly every event carrying no such identifier. Two calendars holding one identifier is ordinary rather than a conflict, which is why the owner leads it |
-| `IX_calendar_events_SourceStoredEmailId` | `(SourceStoredEmailId)` | The key back to the message an event cites, which is what erasing one reaches the events citing it by — to clear the pointer rather than to remove them |
 | `ix_jobs_identity` | `(JobType, IdempotencyKey)`, unique | A job's idempotency identity, which is what makes the same execution enqueued twice one job. It spans terminal rows deliberately: a row that succeeded is what stops the same trigger asking again |
 | `ix_jobs_claimable` | `(JobType, TurnAt)` where the state is `Pending` or `Claimed` | Both of the queries this table runs at any volume: the claim, and the queue-depth check every enqueue makes. The second column is the order the claim drains the queue in, which is what the fairness across users is. The filter keeps the index the size of the backlog rather than of the queue's whole history, and the claim repeats that same membership in its own predicate so PostgreSQL can prove the index applies to it rather than having to derive it through a disjunction. It names the two claimable states rather than excluding the terminal ones, so a job that reaches a terminal state leaves the index whichever one it reaches. The depth check reads the same leading column and rechecks `Pending` against the heap, because the index carries both claimable states rather than that one; what keeps that cheap is the bound on the read rather than the index |
 | `ix_jobs_account` | `(MailboxAccountId, EnqueuedAt)` | An account's queued work, which is what erasure and any per-account bound reach a job by |
@@ -2074,8 +2074,8 @@ who somebody is meeting and the two instants say when they are not somewhere els
 owner, and the origin is therefore sensitive, and none of them reaches a log, a metric, a trace, or an error message —
 the event's identifier is what a failure names. It has no retention window: an event is held until somebody deletes it,
 and a deletion removes the row rather than marking it. Erasing the user takes the whole calendar through the cascade
-onto `settings_accounts`, and erasing a message clears the pointer to it and leaves the event, for the reason [the
-calendar](#the-calendar) gives.
+onto `settings_accounts`, and erasing a message leaves the event with a citation that resolves to nothing, for the
+reason [the calendar](#the-calendar) gives.
 
 `outgoing_emails`, `outgoing_email_recipients`, and `outgoing_email_contents` are derived personal data of a kind
 nothing else on this page holds: an outgoing record says who this mailbox's user wrote to and when, and the recipients

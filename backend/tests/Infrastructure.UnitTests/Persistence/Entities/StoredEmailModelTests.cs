@@ -119,17 +119,13 @@ public sealed class StoredEmailModelTests
 
     /// <summary>
     /// Erasing a stored message reaches every row derived from it through its identity alone, so no derived table
-    /// outlives the message or needs an occurrence to be found. Two references survive it instead, and both are rows
-    /// that are not derivations of the message: a reply, which stands as a root of its own, and a calendar event,
-    /// which is the plan its owner holds rather than a record of the mail a date was found in — a message deleted in
-    /// the mailbox would otherwise take a meeting off somebody's calendar.
+    /// outlives the message or needs an occurrence to be found. A reply is the one reference that survives, as a root.
     /// </summary>
     [Fact]
-    public void StoredEmailModel_EveryReferenceToTheIdentity_CascadesExceptAReplyAndACalendarEvent()
+    public void StoredEmailModel_EveryReferenceToTheIdentity_CascadesExceptTheParentOfAReply()
     {
         // Arrange
         using var context = CreateContext();
-        string[] clearedRatherThanCascaded = ["ParentStoredEmailId", "SourceStoredEmailId"];
 
         // Act
         var references = StoredEmailEntityType(context).GetReferencingForeignKeys().ToArray();
@@ -139,8 +135,7 @@ public sealed class StoredEmailModelTests
         Assert.All(references, reference =>
         {
             Assert.Equal([nameof(StoredEmailEntity.Id)], reference.PrincipalKey.Properties.Select(property => property.Name));
-            var expected = clearedRatherThanCascaded.Any(column =>
-                reference.Properties.Select(property => property.Name).SequenceEqual([column]))
+            var expected = reference.Properties.Select(property => property.Name).SequenceEqual(["ParentStoredEmailId"])
                 ? DeleteBehavior.SetNull
                 : DeleteBehavior.Cascade;
             Assert.Equal(expected, reference.DeleteBehavior);

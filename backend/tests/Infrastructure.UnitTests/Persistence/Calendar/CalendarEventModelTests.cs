@@ -13,9 +13,9 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Calendar;
 
 /// <summary>
 /// Asserts what a calendar's own schema has to say rather than leave to a reader: the order a window is answered in,
-/// the rule that makes a repeated import write nothing, and what each of the two references does when what it names is
-/// erased. The model is built in memory by the real PostgreSQL provider and no connection is opened, so what this
-/// states is the declaration a schema is generated from.
+/// the rule that makes a repeated import write nothing, what happens to a calendar when its owner is erased, and why
+/// the message an event cites is not a key. The model is built in memory by the real PostgreSQL provider and no
+/// connection is opened, so what this states is the declaration a schema is generated from.
 /// </summary>
 public sealed class CalendarEventModelTests
 {
@@ -54,30 +54,41 @@ public sealed class CalendarEventModelTests
         Assert.Equal("\"ImportedUid\" IS NOT NULL", index.GetFilter());
     }
 
-    /// <summary>
-    /// The calendar goes with the person whose it is, and the citation goes with the message — but the event does not,
-    /// because an event somebody accepted is theirs and erasing the mail a date was found in is not a reason to take
-    /// the meeting off their calendar.
-    /// </summary>
-    [Theory]
-    [InlineData("UserId", typeof(UserAccountEntity), DeleteBehavior.Cascade)]
-    [InlineData("SourceStoredEmailId", typeof(StoredEmailEntity), DeleteBehavior.SetNull)]
-    public void CalendarEventModel_Reference_FollowsWhatItNamesAsFarAsItShould(
-        string column,
-        Type principal,
-        DeleteBehavior behavior)
+    /// <summary>The calendar goes with the person whose it is, rather than being reached by an erasure that has to know this table exists.</summary>
+    [Fact]
+    public void CalendarEventModel_TheOwner_IsTheOneReferenceAndItCascades()
     {
         // Arrange
         using var context = CreateContext();
 
         // Act
-        var reference = Assert.Single(
-            EntityTypeOf<CalendarEventEntity>(context).GetForeignKeys(),
-            candidate => candidate.Properties.Any(property => property.Name == column));
+        var reference = Assert.Single(EntityTypeOf<CalendarEventEntity>(context).GetForeignKeys());
 
         // Assert
-        Assert.Equal(principal, reference.PrincipalEntityType.ClrType);
-        Assert.Equal(behavior, reference.DeleteBehavior);
+        Assert.Equal(["UserId"], reference.Properties.Select(property => property.Name));
+        Assert.Equal(typeof(UserAccountEntity), reference.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
+    }
+
+    /// <summary>
+    /// The message an event came out of is cited as an identifier rather than as an association, which is the whole of
+    /// how an event outlives the mail a date was found in: every foreign key onto a stored message cascades, so a key
+    /// here would take somebody's meeting off their calendar the moment they deleted the message in their mailbox.
+    /// </summary>
+    [Fact]
+    public void CalendarEventModel_TheCitedMessage_IsAnIdentifierRatherThanAKey()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var calendarEvent = EntityTypeOf<CalendarEventEntity>(context);
+
+        // Assert
+        Assert.NotNull(calendarEvent.FindProperty(nameof(CalendarEventEntity.SourceStoredEmailId)));
+        Assert.DoesNotContain(
+            calendarEvent.GetForeignKeys(),
+            reference => reference.PrincipalEntityType.ClrType == typeof(StoredEmailEntity));
     }
 
     private static IIndex IndexNamed(IEntityType entityType, string name) =>

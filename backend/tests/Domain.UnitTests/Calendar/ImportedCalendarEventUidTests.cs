@@ -61,11 +61,29 @@ public sealed class ImportedCalendarEventUidTests
     /// <summary>The value is answered back in the report naming what an import skipped, so it carries no such character.</summary>
     [Theory]
     [InlineData("entry\n@example.test")]
-    [InlineData("entry‮@example.test")]
+    [InlineData("entry\u202E@example.test")]
+    [InlineData("entry\u2028@example.test")]
     public void Create_ACharacterThatCarriesNoGlyph_IsRefused(string value)
     {
         // Act, Assert
         Assert.Throws<ArgumentException>(() => ImportedCalendarEventUid.Create(value));
+    }
+
+    /// <summary>
+    /// The file is untrusted, so the two shapes a per-character test would let through are refused here: a formatting
+    /// character outside the Basic Multilingual Plane, whose surrogate halves categorize as neither control nor
+    /// format, and an unpaired surrogate, which is not a character at all.
+    /// </summary>
+    [Fact]
+    public void Create_TextOnlyAScalarWalkRefuses_IsRefused()
+    {
+        // Arrange
+        var tagged = "entry" + char.ConvertFromUtf32(0xE0001) + "@example.test";
+        var illFormed = "entry" + (char)0xDC00 + "@example.test";
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ImportedCalendarEventUid.Create(tagged));
+        Assert.Throws<ArgumentException>(() => ImportedCalendarEventUid.Create(illFormed));
     }
 
     [Fact]

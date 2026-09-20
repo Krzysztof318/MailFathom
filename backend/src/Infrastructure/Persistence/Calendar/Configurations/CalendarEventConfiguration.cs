@@ -16,11 +16,11 @@ namespace MailFathom.Infrastructure.Persistence.Calendar.Configurations;
 /// calendar rather than leaving it behind.
 /// </para>
 /// <para>
-/// The message an event cites is a foreign key that clears rather than cascades, which is the one place this table
-/// disagrees with the tables recording what was done about a message. Those are records of an act and go with the mail
-/// they were about; an event is a person's own plan, and erasing the message a date was found in is not a reason to
-/// take the meeting off their calendar. What goes is the pointer, so the event stays and the thread simply cannot be
-/// opened from it any more.
+/// The message an event cites is a plain identifier rather than an association, and that is the whole of how an event
+/// outlives the mail it came from. Every foreign key onto a stored message cascades, deliberately, so that nothing
+/// derived from a message survives it — an event is not such a derivation, it is a person's own plan, and a message
+/// deleted in the mailbox is not a reason to take the meeting off their calendar. What the shape costs is that nothing
+/// constrains the value: a citation whose message is gone resolves to nothing, which is the intended answer.
 /// </para>
 /// <para>
 /// The imported identifier is unique per calendar and only where it is present, which is what makes importing one file
@@ -72,10 +72,5 @@ internal sealed class CalendarEventConfiguration : IEntityTypeConfiguration<Cale
             .WithMany()
             .HasForeignKey(calendarEvent => calendarEvent.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        entity.HasOne<StoredEmailEntity>()
-            .WithMany()
-            .HasForeignKey(calendarEvent => calendarEvent.SourceStoredEmailId)
-            .OnDelete(DeleteBehavior.SetNull);
     }
 }

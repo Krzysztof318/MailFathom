@@ -132,8 +132,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SourceStoredEmailId");
-
                     b.HasIndex("UserId", "ImportedUid")
                         .IsUnique()
                         .HasDatabaseName("ix_calendar_events_user_imported_uid")
@@ -3577,11 +3575,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.CalendarEventEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SourceStoredEmailId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()
                         .HasForeignKey("UserId")

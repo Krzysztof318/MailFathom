@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260920121321_AddCalendarEvents")]
+    [Migration("20260920130812_AddCalendarEvents")]
     partial class AddCalendarEvents
     {
         /// <inheritdoc />
@@ -134,8 +134,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("SourceStoredEmailId");
 
                     b.HasIndex("UserId", "ImportedUid")
                         .IsUnique()
@@ -3545,11 +3543,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.CalendarEventEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SourceStoredEmailId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()
                         .HasForeignKey("UserId")

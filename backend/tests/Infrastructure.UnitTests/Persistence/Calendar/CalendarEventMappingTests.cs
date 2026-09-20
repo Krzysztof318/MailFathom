@@ -61,6 +61,23 @@ public sealed class CalendarEventMappingTests
         Assert.Null(row.SourceStoredEmailId);
     }
 
+    /// <summary>An imported event is the only shape carrying both optional references, so it is the one a round trip has to cover.</summary>
+    [Fact]
+    public void ToDomain_AnImportedRowThisMappingWrote_ReadsBackWithItsIdentifier()
+    {
+        // Arrange
+        var importedUid = ImportedCalendarEventUid.Create("entry@example.test");
+        var held = EventOf(end: Start.AddHours(1), origin: CalendarEventOrigin.Asserted, importedUid: importedUid);
+
+        // Act
+        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
+
+        // Assert
+        Assert.Equal(importedUid, read.ImportedUid);
+        Assert.Equal(held.Id, read.Id);
+        Assert.Equal(held.End, read.End);
+    }
+
     [Fact]
     public void ToDomain_ARowThisMappingWrote_ReadsBackAsTheSameEvent()
     {

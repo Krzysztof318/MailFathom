@@ -50,12 +50,56 @@ public sealed class CalendarEventTitleTests
     [Theory]
     [InlineData("Design\nreview")]
     [InlineData("Design\treview")]
-    [InlineData("Design‮review")]
-    [InlineData("Design​review")]
+    [InlineData("Design\u202Ereview")]
+    [InlineData("Design\u200Breview")]
+    [InlineData("Design\u2028review")]
+    [InlineData("Design\u2029review")]
     public void Create_ACharacterThatCarriesNoGlyph_IsRefused(string value)
     {
         // Act, Assert
         Assert.Throws<ArgumentException>(() => CalendarEventTitle.Create(value));
+    }
+
+    /// <summary>
+    /// A formatting character outside the Basic Multilingual Plane is a surrogate pair whose halves categorize as
+    /// <c>Surrogate</c> rather than as <c>Format</c>, so a title is judged as Unicode scalars: the language tag
+    /// character here is exactly the invisible one a per-character test would keep.
+    /// </summary>
+    [Fact]
+    public void Create_AFormattingCharacterOutsideTheBasicPlane_IsRefused()
+    {
+        // Arrange
+        var tagged = "Design" + char.ConvertFromUtf32(0xE0001) + "review";
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => CalendarEventTitle.Create(tagged));
+    }
+
+    /// <summary>
+    /// An unpaired surrogate is not a character at all, and enumerating scalars substitutes a printable replacement
+    /// symbol for it — so it is refused before that, rather than reaching the database as text an encoder rejects.
+    /// </summary>
+    [Fact]
+    public void Create_AnUnpairedSurrogate_IsRefused()
+    {
+        // Arrange
+        var illFormed = "Design" + (char)0xD800 + "review";
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => CalendarEventTitle.Create(illFormed));
+    }
+
+    /// <summary>The two joiners shape neighbouring letters inside words people write, so refusing them would refuse those titles.</summary>
+    [Theory]
+    [InlineData("\u0644\u0627\u200C\u0642\u0627\u0621")]
+    [InlineData("\u0915\u094D\u200D\u0937")]
+    public void Create_AJoinerWrittenInsideAWord_IsAccepted(string value)
+    {
+        // Act
+        var title = CalendarEventTitle.Create(value);
+
+        // Assert
+        Assert.Equal(value, title.Value);
     }
 
     [Fact]

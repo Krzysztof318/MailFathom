@@ -40,18 +40,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         principalTable: "settings_accounts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_calendar_events_stored_emails_SourceStoredEmailId",
-                        column: x => x.SourceStoredEmailId,
-                        principalTable: "stored_emails",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                 });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_calendar_events_SourceStoredEmailId",
-                table: "calendar_events",
-                column: "SourceStoredEmailId");
 
             migrationBuilder.CreateIndex(
                 name: "ix_calendar_events_user_imported_uid",

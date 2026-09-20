@@ -116,10 +116,11 @@ entry the file says is a different one. An event a person typed and a date read 
 An event that came out of a message keeps a pointer to it and nothing else. No subject, no participant, no line of a
 body is copied here, so the thread can be opened from the event and the message stays the one copy of itself.
 
-When that message goes — deleted in the mailbox like any other, or erased on somebody's request — the pointer is
-cleared and the event stays. It is the one place this record disagrees with everything else derived from a message:
-those are records of an act and go with the mail they were about, while an event somebody accepted is their own plan.
-Deleting mail is not something anybody expects to change what their day holds.
+When that message goes — deleted in the mailbox like any other, or erased on somebody's request — the event stays and
+its citation resolves to nothing. Everything else derived from a message goes with it, deliberately; an event somebody
+accepted is their own plan rather than a derivation, and deleting mail is not something anybody expects to change what
+their day holds. What a reader loses is the thread behind the event, which is the honest consequence of the mail being
+gone.
 
 ## Privacy
 

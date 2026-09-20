@@ -16,9 +16,10 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// involved.
 /// </para>
 /// <para>
-/// <see cref="SourceStoredEmailId" /> is a pointer and nothing more. Nothing of the message is copied here, and the key
-/// is cleared rather than cascaded when the message goes — an event somebody accepted is theirs, and erasing the mail
-/// it was found in is not a reason to take the meeting off their calendar.
+/// <see cref="SourceStoredEmailId" /> is a pointer and nothing more: nothing of the message is copied here, and it is
+/// an identifier rather than a foreign key. Every key onto a stored message cascades, so that nothing derived from a
+/// message outlives it; an event somebody accepted is their own plan rather than such a derivation, and a message
+/// deleted in the mailbox is not a reason to take the meeting off their calendar.
 /// </para>
 /// <para>
 /// Every column but the identity, the owner, and the origin is personal data: a title says who somebody is meeting,
@@ -58,6 +59,10 @@ internal sealed class CalendarEventEntity
     public CalendarEventOrigin Origin { get; set; }
 
     /// <summary>Gets or sets the message this event came out of, or <see langword="null" /> when no message named it.</summary>
+    /// <remarks>
+    /// Nothing constrains it, which is the cost of an event outliving its mail: a citation whose message is gone
+    /// resolves to nothing rather than being cleared, and that is the answer a reader is meant to get.
+    /// </remarks>
     public Guid? SourceStoredEmailId { get; set; }
 
     /// <summary>Gets or sets the identifier the file this event was imported from named it by, or <see langword="null" /> when none did.</summary>

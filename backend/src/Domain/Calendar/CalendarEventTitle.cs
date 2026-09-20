@@ -2,8 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
-
 namespace MailFathom.Domain.Calendar;
 
 /// <summary>Names what an event is, in the words of whoever put it on the calendar.</summary>
@@ -38,6 +36,7 @@ public readonly record struct CalendarEventTitle
     public bool IsSpecified => this.Value is not null;
 
     /// <summary>Reads a title, refusing one that is blank, too long, or carrying a character that renders as nothing.</summary>
+    /// <remarks><see cref="CalendarText" /> holds which characters those are, and why the text is walked as Unicode scalars rather than as UTF-16 code units.</remarks>
     /// <param name="value">The title as supplied.</param>
     /// <param name="title">The title, when it is one.</param>
     /// <returns><see langword="true" /> when <paramref name="value" /> is a title.</returns>
@@ -45,11 +44,7 @@ public readonly record struct CalendarEventTitle
     {
         var trimmed = value?.Trim();
 
-        if (string.IsNullOrEmpty(trimmed)
-            || trimmed.Length > MaximumLength
-            || trimmed.Any(static character =>
-                char.IsControl(character)
-                || char.GetUnicodeCategory(character) == UnicodeCategory.Format))
+        if (string.IsNullOrEmpty(trimmed) || trimmed.Length > MaximumLength || !CalendarText.IsReadable(trimmed))
         {
             title = default;
 
