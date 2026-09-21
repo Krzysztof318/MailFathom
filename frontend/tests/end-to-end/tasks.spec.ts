@@ -65,7 +65,10 @@ test('writes a task down, marks it done, and deletes it', async ({ page }) => {
     // here against a task the deployment has only just been told about.
     await expect(page.getByRole('region', { name: 'Today', exact: true }).getByText(written)).toBeVisible();
 
-    await page.getByRole('checkbox', { name: `Mark ${written} as done` }).check();
+    // Pressed rather than checked: the screen answers a write by reading the list again rather than by correcting
+    // what it holds, and a task marked done leaves the list — so the box `check()` would look back at to confirm its
+    // own state is gone by the time it looks.
+    await page.getByRole('checkbox', { name: `Mark ${written} as done` }).click();
 
     // Done work leaves the list rather than sitting in it struck through, which is what the switch below is for.
     await expect(rowFor(page, written)).toHaveCount(0);
