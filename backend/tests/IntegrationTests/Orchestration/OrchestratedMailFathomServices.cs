@@ -335,6 +335,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         var deploymentUser = OrchestratedDeploymentUser.Shared;
 
         builder.Services.AddSingleton<IDeploymentMailUserSource>(deploymentUser);
+        // The zone that user's own days are read in, which the composition root answers out of its published roster
+        // and this harness answers directly. Every operation resolving a relative period resolves a clock over it, so
+        // a harness without it would fail to compose rather than behave like a deployment nobody stated a zone to.
+        builder.Services.AddSingleton<IMailUserTimeZones>(new OrchestratedMailUserTimeZones());
         // The port every folder decision is read through, registered by the composition root from the same options
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
         // would fail to compose rather than behave like a deployment that configured no folder switch.

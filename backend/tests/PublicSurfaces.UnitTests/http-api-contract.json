@@ -6283,6 +6283,11 @@
             ]
           }
         },
+        "required": [
+          "maximumRetrievedCharacters",
+          "maximumProviderCalls",
+          "maximumTokens"
+        ],
         "type": "object"
       },
       "MailAnsweringRunSpend": {
