@@ -3185,7 +3185,7 @@ what it holds. So a client shows what the first route reports and calls the seco
 it. The two read the same file the same way and answer with the same shape:
 
 ```http
-POST /api/client/calendar/import/summary?timeZone=Europe/Warsaw
+POST /api/client/calendar/import/summary
 Content-Type: text/calendar
 
 BEGIN:VCALENDAR
@@ -3210,12 +3210,13 @@ no half-import to expire, to clean up, or to leave an entry of somebody's day si
 decide. The body is the file itself, sent as `text/calendar` or as `application/octet-stream` for a browser that
 reported no type at all; neither is trusted, and what the octets are is decided by parsing them.
 
-**`timeZone` decides only what the file left undecided.** An entry stating a UTC instant or naming its own `TZID`
-resolves to the instant the file names, whatever this parameter says. What it is for are the two shapes that name no
-zone: a floating time, which RFC 5545 defines as the local time of whoever reads it, and an all-day entry, whose day
-opens at a different instant in every zone. Name the IANA identifier the person is in — a client sends its own. Naming
-nothing reads both in the coordinated zone, and naming one this deployment does not know is refused with `400` rather
-than quietly read in another.
+**What the file left undecided is read in the person's own zone.** An entry stating a UTC instant or naming its own
+`TZID` resolves to the instant the file names. Two shapes name no zone — a floating time, which RFC 5545 defines as
+the local time of whoever reads it, and an all-day entry, whose day opens at a different instant in every zone — and
+both are read in [the zone that person's record states](#the-time-zone-a-persons-days-are-read-in), which is the
+coordinated zone where it states none. Neither route takes a zone of its own: one the request carried could name a
+zone nobody chose, and the same file opened on a second machine would then land on a different day than it did on the
+first.
 
 **An entry this deployment has no event for is skipped and counted rather than failing the file.** There are nine
 reasons, and each says one thing about the entry:

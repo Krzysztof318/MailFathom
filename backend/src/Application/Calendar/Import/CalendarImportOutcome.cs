@@ -20,12 +20,4 @@ public enum CalendarImportOutcome
 
     /// <summary>The file names more entries than one import writes.</summary>
     TooManyEntries = 2,
-
-    /// <summary>The request names a time zone this deployment does not know.</summary>
-    /// <remarks>
-    /// The whole file rather than an entry, because the zone the request states is what every entry naming no zone of
-    /// its own is read in: carrying on under a zone nobody asked for would put a person's whole day on the wrong side
-    /// of a date boundary.
-    /// </remarks>
-    UnknownTimeZone = 3,
 }

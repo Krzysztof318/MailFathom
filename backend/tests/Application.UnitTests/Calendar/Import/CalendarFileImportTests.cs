@@ -34,6 +34,7 @@ public sealed class CalendarFileImportTests
     private readonly FakeTimeProvider clock = new(Now);
     private readonly ICalendarFileReader reader = Substitute.For<ICalendarFileReader>();
     private readonly Queue<PersistenceCommitResult> commits = new();
+    private MailUserTimeZone zone = MailUserTimeZone.Coordinated;
 
     [Fact]
     public async Task SummariseAsync_AFileWithEntriesInIt_ReportsWhatItWouldCreateAndWritesNothing()
@@ -42,7 +43,7 @@ public sealed class CalendarFileImportTests
         this.Reads(Entry("one", Monday), Entry("two", Monday.AddDays(2)));
 
         // Act
-        var summary = await this.SignedIn().SummariseAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().SummariseAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(CalendarImportOutcome.Read, summary.Outcome);
@@ -59,7 +60,7 @@ public sealed class CalendarFileImportTests
         this.Reads(Entry("one", Monday));
 
         // Act
-        var summary = await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         var written = Assert.Single(await this.HeldAsync());
@@ -79,10 +80,10 @@ public sealed class CalendarFileImportTests
     {
         // Arrange
         this.Reads(Entry("one", Monday), Entry("two", Monday.AddHours(2)));
-        await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Act
-        var again = await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var again = await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, again.Events);
@@ -107,7 +108,7 @@ public sealed class CalendarFileImportTests
 
         // Act
         var summary = await this.AdvancePastTheBackoffAsync(
-            this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken));
+            this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(CalendarImportOutcome.Read, summary.Outcome);
@@ -123,7 +124,7 @@ public sealed class CalendarFileImportTests
         this.Reads(Entry("one", Monday));
 
         // Act
-        var summary = await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, summary.Events);
@@ -137,7 +138,7 @@ public sealed class CalendarFileImportTests
         this.Reads(Entry("one", Monday), Entry("one", Monday.AddHours(3)));
 
         // Act
-        var summary = await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, summary.Events);
@@ -160,7 +161,7 @@ public sealed class CalendarFileImportTests
                 [CalendarImportSkipReason.Recurring, CalendarImportSkipReason.Recurring]));
 
         // Act
-        var summary = await this.SignedIn().SummariseAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().SummariseAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, summary.Events);
@@ -186,49 +187,36 @@ public sealed class CalendarFileImportTests
                 : CalendarFileReading.TooManyEntries);
 
         // Act
-        var summary = await this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        var summary = await this.SignedIn().ImportAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(refusal, summary.Outcome);
         Assert.Empty(await this.HeldAsync());
     }
 
-    /// <summary>Carrying on under a zone nobody asked for would put a whole day on the wrong side of a date boundary.</summary>
+    /// <summary>A floating time and an all-day entry both need a zone, and whose day it is decides which one.</summary>
     [Fact]
-    public async Task ImportAsync_AZoneThisDeploymentDoesNotKnow_RefusesTheFileWithoutReadingIt()
-    {
-        // Act
-        var summary = await this.SignedIn().ImportAsync(
-            File(),
-            "Mars/Olympus_Mons",
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(CalendarImportOutcome.UnknownTimeZone, summary.Outcome);
-        this.reader.DidNotReceive().Read(Arg.Any<Stream>(), Arg.Any<TimeZoneInfo>());
-    }
-
-    [Fact]
-    public async Task SummariseAsync_AZoneTheRequestNamed_ReadsTheFileInThatZoneRatherThanTheCoordinatedOne()
+    public async Task SummariseAsync_APersonWhoseRecordStatesAZone_ReadsTheFileInTheirOwnZoneRatherThanTheCoordinatedOne()
     {
         // Arrange
+        this.zone = MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw) ? warsaw : throw new InvalidOperationException();
         this.Reads();
 
         // Act
-        await this.SignedIn().SummariseAsync(File(), "Europe/Warsaw", TestContext.Current.CancellationToken);
+        await this.SignedIn().SummariseAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         this.reader.Received(1).Read(Arg.Any<Stream>(), TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw"));
     }
 
     [Fact]
-    public async Task SummariseAsync_ARequestNamingNoZone_ReadsTheFileInTheCoordinatedZone()
+    public async Task SummariseAsync_APersonWhoseRecordStatesNoZone_ReadsTheFileInTheCoordinatedZone()
     {
         // Arrange
         this.Reads();
 
         // Act
-        await this.SignedIn().SummariseAsync(File(), zoneId: null, TestContext.Current.CancellationToken);
+        await this.SignedIn().SummariseAsync(File(), TestContext.Current.CancellationToken);
 
         // Assert
         this.reader.Received(1).Read(Arg.Any<Stream>(), TimeZoneInfo.Utc);
@@ -242,7 +230,7 @@ public sealed class CalendarFileImportTests
 
         // Act and assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => import.ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken));
+            () => import.ImportAsync(File(), TestContext.Current.CancellationToken));
     }
 
     private static CalendarFileEntry Entry(string uid, DateTimeOffset start) =>
@@ -313,10 +301,14 @@ public sealed class CalendarFileImportTests
             .Returns(_ => new StagedSession(
                 this.commits.Count == 0 ? PersistenceCommitResult.Committed : this.commits.Dequeue()));
 
+        var zones = Substitute.For<IMailUserTimeZones>();
+        zones.ZoneOf(Arg.Any<MailUserId>()).Returns(_ => this.zone);
+
         return new CalendarFileImport(
             AccessAuthorizations.ForUserGranted(Person, granted),
             this.reader,
             this.store,
+            zones,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
             this.clock);
     }

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Calendar;
 using MailFathom.Application.Calendar.Import;
 using MailFathom.Application.Persistence;
@@ -41,7 +42,6 @@ public sealed class ClientCalendarImportEndpointsTests
 
         // Act
         var result = await ClientCalendarImportEndpoints.SummariseAsync(
-            timeZone: null,
             this.Import(),
             Offering("BEGIN:VCALENDAR"),
             TestContext.Current.CancellationToken);
@@ -70,7 +70,6 @@ public sealed class ClientCalendarImportEndpointsTests
 
         // Act
         var result = await ClientCalendarImportEndpoints.ImportAsync(
-            timeZone: null,
             this.Import(),
             Offering("not a calendar"),
             TestContext.Current.CancellationToken);
@@ -90,7 +89,6 @@ public sealed class ClientCalendarImportEndpointsTests
 
         // Act
         var result = await ClientCalendarImportEndpoints.ImportAsync(
-            timeZone: null,
             this.Import(),
             Offering("BEGIN:VCALENDAR"),
             TestContext.Current.CancellationToken);
@@ -105,30 +103,12 @@ public sealed class ClientCalendarImportEndpointsTests
             StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ImportAsync_AZoneThisDeploymentDoesNotKnow_IsRefusedWithTheShapeOfIdentifierItWants()
-    {
-        // Act
-        var result = await ClientCalendarImportEndpoints.ImportAsync(
-            "Mars/Olympus_Mons",
-            this.Import(),
-            Offering("BEGIN:VCALENDAR"),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
-
-        Assert.Equal(StatusCodes.Status400BadRequest, refused.StatusCode);
-        Assert.Contains("Europe/Warsaw", refused.ProblemDetails.Detail, StringComparison.Ordinal);
-    }
-
     /// <summary>A request with no body is somebody's client having sent nothing, which is a different thing from a calendar holding nothing.</summary>
     [Fact]
     public async Task SummariseAsync_ARequestCarryingNoFile_IsRefusedRatherThanReadAsAnEmptyCalendar()
     {
         // Act
         var result = await ClientCalendarImportEndpoints.SummariseAsync(
-            timeZone: null,
             this.Import(),
             Offering(string.Empty),
             TestContext.Current.CancellationToken);
@@ -148,7 +128,6 @@ public sealed class ClientCalendarImportEndpointsTests
 
         // Act
         var result = await ClientCalendarImportEndpoints.ImportAsync(
-            timeZone: null,
             this.Import(),
             context,
             TestContext.Current.CancellationToken);
@@ -192,10 +171,14 @@ public sealed class ClientCalendarImportEndpointsTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        var zones = Substitute.For<IMailUserTimeZones>();
+        zones.ZoneOf(Arg.Any<MailUserId>()).Returns(MailUserTimeZone.Coordinated);
+
         return new CalendarFileImport(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
             this.reader,
             this.store,
+            zones,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
             clock);
     }

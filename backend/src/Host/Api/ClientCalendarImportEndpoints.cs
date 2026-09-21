@@ -85,13 +85,11 @@ internal static class ClientCalendarImportEndpoints
     }
 
     /// <summary>Reports what the offered file would put on the acting person's calendar, writing nothing.</summary>
-    /// <param name="timeZone">The zone an entry naming none of its own is read in, as an IANA identifier, or nothing for the coordinated zone.</param>
     /// <param name="import">Reads the file against the calendar of the person the credential names.</param>
     /// <param name="context">The request being answered, whose body carries the file.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with what the file would create and skip, <c>413</c> for a file over the bound, or <c>400</c> naming why the file was refused.</returns>
     internal static async Task<Results<Ok<CalendarImportResponse>, ProblemHttpResult>> SummariseAsync(
-        [FromQuery] string? timeZone,
         [FromServices] CalendarFileImport import,
         HttpContext context,
         CancellationToken cancellationToken)
@@ -100,12 +98,11 @@ internal static class ClientCalendarImportEndpoints
 
         return await AnswerAsync(
             context,
-            (file, token) => import.SummariseAsync(file, timeZone, token),
+            (file, token) => import.SummariseAsync(file, token),
             cancellationToken);
     }
 
     /// <summary>Puts the events of the offered file onto the acting person's calendar.</summary>
-    /// <param name="timeZone">The zone an entry naming none of its own is read in, as an IANA identifier, or nothing for the coordinated zone.</param>
     /// <param name="import">Performs the write against the calendar of the person the credential names.</param>
     /// <param name="context">The request being answered, whose body carries the file.</param>
     /// <param name="cancellationToken">Cancels the read and the commit when the client disconnects.</param>
@@ -116,7 +113,6 @@ internal static class ClientCalendarImportEndpoints
     /// transaction, so a file that fails part way through leaves nothing to find and undo by hand.
     /// </remarks>
     internal static async Task<Results<Ok<CalendarImportResponse>, ProblemHttpResult>> ImportAsync(
-        [FromQuery] string? timeZone,
         [FromServices] CalendarFileImport import,
         HttpContext context,
         CancellationToken cancellationToken)
@@ -125,7 +121,7 @@ internal static class ClientCalendarImportEndpoints
 
         return await AnswerAsync(
             context,
-            (file, token) => import.ImportAsync(file, timeZone, token),
+            (file, token) => import.ImportAsync(file, token),
             cancellationToken);
     }
 
@@ -179,8 +175,6 @@ internal static class ClientCalendarImportEndpoints
         CalendarImportOutcome.TooManyEntries =>
             $"An import reads at most {CalendarFileImport.MaximumEntryCount} entries, and this file names more. It is "
             + "refused whole rather than partly written, so nothing was put on the calendar.",
-        CalendarImportOutcome.UnknownTimeZone =>
-            "The time zone stated is not one this deployment knows. Name an IANA identifier, such as Europe/Warsaw.",
         _ => "The file cannot be imported as offered.",
     };
 

@@ -27,6 +27,13 @@ namespace MailFathom.Application.Calendar.Import;
 /// because it is taken in the attempt that committed.
 /// </para>
 /// <para>
+/// <b>The zone an entry naming none of its own is read in is the person's own recorded zone.</b> RFC 5545 defines a
+/// floating time as the local time of whoever reads it, and an all-day entry states a date whose day opens at a
+/// different instant in every zone — so both need a zone this deployment supplies, and the one it supplies is the one
+/// the person's record states rather than one the request carried. A request could state a zone nobody chose, and a
+/// file opened on a second machine would then land on a different day than the same file opened on the first.
+/// </para>
+/// <para>
 /// <b>The confirmation carries the file again rather than a token.</b> Nothing is staged between the two acts, so
 /// there is no half-import to expire, to clean up, or to leave an entry of somebody's day sitting in this deployment
 /// while they decide. The cost is one more upload of a file already bounded at
@@ -59,6 +66,7 @@ public sealed class CalendarFileImport
     private readonly AccessAuthorization authorization;
     private readonly ICalendarFileReader reader;
     private readonly ICalendarEventStore store;
+    private readonly IMailUserTimeZones zones;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
 
@@ -66,6 +74,7 @@ public sealed class CalendarFileImport
     /// <param name="authorization">Reports the grant the caller holds and the person it acts for.</param>
     /// <param name="reader">Reads the entries of an offered file.</param>
     /// <param name="store">Holds the calendars.</param>
+    /// <param name="zones">Answers which zone the acting person's own days are read in.</param>
     /// <param name="concurrencyRetryPolicy">Commits the write, deciding again from a fresh read when another write won.</param>
     /// <param name="timeProvider">Supplies the instant an imported event is identified and recorded by.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -73,35 +82,34 @@ public sealed class CalendarFileImport
         AccessAuthorization authorization,
         ICalendarFileReader reader,
         ICalendarEventStore store,
+        IMailUserTimeZones zones,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.authorization = authorization;
         this.reader = reader;
         this.store = store;
+        this.zones = zones;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
     }
 
     /// <summary>Reports what a file would put on the acting person's calendar, writing nothing.</summary>
     /// <param name="file">The octets the person chose.</param>
-    /// <param name="zoneId">The zone an entry naming none of its own is read in, or <see langword="null" /> for the coordinated one.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What the file would create, what it would skip and why, or why the whole file was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="file" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no person, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    public async Task<CalendarImportSummary> SummariseAsync(
-        Stream file,
-        string? zoneId,
-        CancellationToken cancellationToken)
+    public async Task<CalendarImportSummary> SummariseAsync(Stream file, CancellationToken cancellationToken)
     {
-        var (outcome, offered, skipped) = this.Offered(file, zoneId);
+        var (outcome, offered, skipped) = this.Offered(file);
 
         if (outcome is not CalendarImportOutcome.Read)
         {
@@ -119,7 +127,6 @@ public sealed class CalendarFileImport
 
     /// <summary>Puts the events of a file the acting person confirmed onto their own calendar.</summary>
     /// <param name="file">The octets the person chose, which are read again rather than recalled from the summary.</param>
-    /// <param name="zoneId">The zone an entry naming none of its own is read in, or <see langword="null" /> for the coordinated one.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What the file created, what it skipped and why, or why the whole file was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="file" /> is <see langword="null" />.</exception>
@@ -129,12 +136,9 @@ public sealed class CalendarFileImport
     /// events on their calendar. Nothing an import produces is a proposal: a proposal is a date something read out of
     /// mail that nobody has agreed to, and this person has agreed to all of these.
     /// </remarks>
-    public async Task<CalendarImportSummary> ImportAsync(
-        Stream file,
-        string? zoneId,
-        CancellationToken cancellationToken)
+    public async Task<CalendarImportSummary> ImportAsync(Stream file, CancellationToken cancellationToken)
     {
-        var (outcome, offered, skipped) = this.Offered(file, zoneId);
+        var (outcome, offered, skipped) = this.Offered(file);
 
         if (outcome is not CalendarImportOutcome.Read)
         {
@@ -184,19 +188,13 @@ public sealed class CalendarFileImport
     /// competing import while this one does not.
     /// </remarks>
     private (CalendarImportOutcome Outcome, IReadOnlyList<CalendarFileEntry> Offered, IReadOnlyList<CalendarImportSkipReason> Skipped) Offered(
-        Stream file,
-        string? zoneId)
+        Stream file)
     {
         ArgumentNullException.ThrowIfNull(file);
 
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        if (ZoneOf(zoneId) is not { } zone)
-        {
-            return (CalendarImportOutcome.UnknownTimeZone, [], []);
-        }
-
-        var reading = this.reader.Read(file, zone);
+        var reading = this.reader.Read(file, this.zones.ZoneOf(this.authorization.RequireUser()).Zone);
 
         if (reading.Outcome is not CalendarImportOutcome.Read)
         {
@@ -273,15 +271,4 @@ public sealed class CalendarFileImport
 
         return (CalendarImportSummary.Of([.. events.Select(written => written.Start)], skipped), events);
     }
-
-    /// <summary>Reads the zone a request named, or the coordinated one where it named none.</summary>
-    /// <remarks>
-    /// Resolved rather than trusted: the identifier arrives from a client, and a zone this host does not carry is a
-    /// refusal of the request instead of a silent fall back to the server's own — which would be the one reading
-    /// nobody asked for and the one that moves a whole day.
-    /// </remarks>
-    private static TimeZoneInfo? ZoneOf(string? zoneId) =>
-        string.IsNullOrWhiteSpace(zoneId)
-            ? TimeZoneInfo.Utc
-            : TimeZoneInfo.TryFindSystemTimeZoneById(zoneId.Trim(), out var named) ? named : null;
 }

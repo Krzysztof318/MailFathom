@@ -13886,15 +13886,6 @@
     },
     "/api/client/calendar/import": {
       "post": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "timeZone",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/octet-stream": {
@@ -13934,15 +13925,6 @@
     },
     "/api/client/calendar/import/summary": {
       "post": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "timeZone",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/octet-stream": {
