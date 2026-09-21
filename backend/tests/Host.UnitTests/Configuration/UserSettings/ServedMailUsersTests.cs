@@ -9,6 +9,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -189,6 +190,31 @@ public sealed class ServedMailUsersTests
         var served = Assert.Single(servedUsers.Users);
 
         Assert.Same(classification, served.MailAccounts.Single().SpamClassification);
+    }
+
+    /// <summary>A committed record decides the level this person's client is asked to record at, so the roster carries it without the process restarting.</summary>
+    /// <remarks>
+    /// This is the whole of what makes the raise take effect: the session route reads the level off the roster, so a
+    /// republication that dropped it would leave an operator's <c>mfctl user edit</c> waiting for a restart it was
+    /// written to avoid.
+    /// </remarks>
+    [Fact]
+    public void UserDocumentPublished_ARecordStatingAClientTelemetryLevel_ServesThatUserFromIt()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user")]);
+
+        // Act
+        servedUsers.UserDocumentPublished(
+            SyntheticMailUser.Deployment,
+            "user",
+            new UserAccountOptions { ClientTelemetryLevel = "Debug" },
+            2);
+
+        // Assert
+        Assert.Equal(ClientTelemetryLevel.Debug, Assert.Single(servedUsers.Users).ClientTelemetryLevel);
     }
 
     /// <summary>Two user-document writes cannot validate and publish against the same runtime roster.</summary>

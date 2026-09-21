@@ -14,6 +14,7 @@ using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Startup;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Rules;
@@ -574,6 +575,48 @@ public sealed class ServedMailUsersStartupGateTests
 
         // Assert
         Assert.Equal(MailUserLanguage.English, Assert.Single(roster.Users).Language);
+    }
+
+    /// <summary>A record raised before the process last started is still raised after it, the gate reading the level off the same record every other reader does.</summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordStatesAClientTelemetryLevel_PublishesIt()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(
+                    Record(user, """{"Language":"English","ClientTelemetryLevel":"Debug"}""", AlexWork)))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ClientTelemetryLevel.Debug, Assert.Single(roster.Users).ClientTelemetryLevel);
+    }
+
+    /// <summary>
+    /// A record held from before the key existed states no level and reads as nothing, which is what has the session
+    /// route go on answering the deployment's own level for everybody nobody raised.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordStatesNoClientTelemetryLevel_PublishesNoLevel()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, EmptyRecord, AlexWork)))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(roster.Users).ClientTelemetryLevel);
     }
 
     /// <summary>The language an account's declaration states reaches the roster, which is where every derivation reads it from.</summary>

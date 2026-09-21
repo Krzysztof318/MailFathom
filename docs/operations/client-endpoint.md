@@ -214,17 +214,26 @@ answering the port, which contract it speaks, and what the rest of the surface w
 sign-in be built and proven end to end before a screen exists — a client that reached here with a token it had just been
 issued knows the token works.
 
-**`telemetry` answers one of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `off`.** The first six are
-whatever [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) states, and `off` is what a
-deployment that named no collector answers whatever it configured that key to. Those two questions are one field
-deliberately: whether anything is forwarded is decided by whether there is anywhere to forward it to, which is the same
-condition that decides whether [the telemetry routes](#the-telemetry-routes) are served at all, and a second field
-could disagree with the first about it.
+**`telemetry` answers one of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `off`.** The first six are the
+level this caller is asked for — whatever
+[`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) states, unless this person's own record
+states a [`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel)
+of its own — and `off` is what a deployment that named no collector answers whatever either of them says. Those two
+questions are one field deliberately: whether anything is forwarded is decided by whether there is anywhere to forward
+it to, which is the same condition that decides whether [the telemetry routes](#the-telemetry-routes) are served at
+all, and a second field could disagree with the first about it.
 
-**It is not part of the grant and never varies by credential.** A client reads it to decide what it records at all and
-whether its own switch is worth offering; the only other way to find out is to export a batch and read the `404`, which
-is finding out by doing the thing. A client reading an answer that omits the field, or one carrying a level this client
-does not know, treats it as `off` and sends nothing. `info` is the default, and
+**It is not part of the grant, and it is the one field here that answers per person.** No permission decides it and no
+credential's grant changes it; what changes it is whose record the credential named, because a level worth turning up
+for one person reporting a defect is not one a deployment turns up for everybody. The record's level is read on every
+session read, so raising or clearing one takes effect on that person's next read and on nobody else's. A caller that
+names no user is answered the deployment's own level, which is what every caller was answered before a record could
+state one.
+
+A client reads the field to decide what it records at all and whether its own switch is worth offering; the only other
+way to find out is to export a batch and read the `404`, which is finding out by doing the thing. A client reading an
+answer that omits the field, or one carrying a level this client does not know, treats it as `off` and sends nothing.
+`info` is the deployment default, and
 [what each level costs a deployment](telemetry.md#what-the-client-publishes-about-itself) is on the telemetry page
 beside the records it decides.
 
