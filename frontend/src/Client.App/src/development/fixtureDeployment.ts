@@ -16,6 +16,7 @@ import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
+import * as discovery from '../../../../tests/fixtures/discovery';
 import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
 import * as messages from '../../../../tests/fixtures/messages';
@@ -353,6 +354,7 @@ function answerFor(
     }
 
     return (
+        discoveryAnswer(route, asked, request, options) ??
         calendarAnswer(route, asked, request, options) ??
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??
@@ -457,6 +459,42 @@ function calendarAnswer(
     }
 
     return answering(calendar.calendarEventWritten);
+}
+
+/**
+ * What asking a question, following the run answering it, and stopping that run answer with.
+ *
+ * Three routes and one run: every question is accepted as the corpus's own run, so a screen asking anything reaches an
+ * answer. A cursor is honoured rather than ignored — the client reads from where it left off and a corpus answering the
+ * whole run again would be answering a question it was not asked — and the run is finished by the time the first read
+ * lands, which is what makes a development run deterministic instead of arriving over several polls. The state where one
+ * is still working is reached with `latency` turned up, which is what every other waiting surface here is looked at
+ * under.
+ *
+ * An empty answer is the run that composed nothing, which is this screen's own empty state: a question was asked, the
+ * run finished, and there was nothing to put on the canvas.
+ */
+function discoveryAnswer(
+    route: string,
+    asked: URLSearchParams,
+    request: ClientRequest,
+    options: Readonly<FixtureDeploymentOptions>,
+): ClientResponse | null {
+    if (!route.startsWith('/discovery/runs')) {
+        return null;
+    }
+
+    if (request.method === 'POST') {
+        return { ...answering(discovery.runStarted), status: 202 };
+    }
+
+    if (request.method === 'DELETE') {
+        return { status: 204, body: '', headers: {} };
+    }
+
+    return answering(
+        options.emptyCollections ? discovery.runComposedNothing : discovery.runTail(Number(asked.get('since') ?? '0')),
+    );
 }
 
 /** The day the machine running this is on, as a calendar day is spelled, which is the day a task list is grouped by. */

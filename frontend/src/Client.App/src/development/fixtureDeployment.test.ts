@@ -8,6 +8,7 @@ import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
 import * as deployment from '../../../../tests/fixtures/deployment';
+import * as discovery from '../../../../tests/fixtures/discovery';
 import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
 import * as messages from '../../../../tests/fixtures/messages';
@@ -290,6 +291,31 @@ describe('fixtureAnswer', () => {
 
         expect(withheld['selfContainedHtml']).toBeNull();
         expect(asked['selfContainedHtml']).not.toBeNull();
+    });
+
+    it('accepts any question as the corpus own run, which is what a screen follows', () => {
+        const accepted = answered('/discovery/runs', {}, 1, 'POST', '{"question":"anything"}');
+
+        expect(accepted.status).toBe(202);
+        expect(stated(accepted)['runId']).toBe(discovery.runId);
+    });
+
+    it('answers the run from the cursor it was asked from rather than from its beginning', () => {
+        const whole = stated(answered(`/discovery/runs/${discovery.runId}`))['events'];
+        const after = stated(answered(`/discovery/runs/${discovery.runId}?since=6`))['events'];
+
+        expect(Array.isArray(whole) && whole.length).toBeGreaterThan(Array.isArray(after) ? after.length : 0);
+        expect(Array.isArray(after) && after.every((event) => (event as { sequence: number }).sequence > 6)).toBe(true);
+    });
+
+    it('answers stopping a run with nothing, which is what the deployment states', () => {
+        expect(answered(`/discovery/runs/${discovery.runId}`, {}, 1, 'DELETE').status).toBe(204);
+    });
+
+    it('answers a run that composed nothing where the deployment is set to hold nothing', () => {
+        const held = stated(answered(`/discovery/runs/${discovery.runId}`, { emptyCollections: true }));
+
+        expect(held).toStrictEqual(discovery.runComposedNothing);
     });
 
     it('answers every collection empty where the options ask for it', () => {

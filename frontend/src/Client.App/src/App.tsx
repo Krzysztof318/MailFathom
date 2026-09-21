@@ -38,6 +38,7 @@ import {
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
+import { DiscoverSpace } from './discover/DiscoverSpace';
 import { FolderTree } from './folders/FolderTree';
 import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
 import type { MessageKey } from './localization/en';
@@ -850,6 +851,22 @@ export function App({
         );
     }
 
+    // The two regions the frame composes for whichever space is in front. They are named here rather than written into
+    // the frame's own props because Discover is handed them as well — the design project draws the question field under
+    // that screen's own head rather than at its foot — and one element described twice is how the field's two copies
+    // would come to disagree about whether the composer has the foot of the column.
+    //
+    // Asking is what the field is for, so a credential that may not ask is not shown one. It is absent rather than
+    // disabled: a control nobody can use says less about why than the sentence above it does. Not while a message is
+    // being written either — what stands at the foot of that column then is the composer's own footer, and two rows of
+    // controls under one column are two answers to what the primary act is.
+    const intentField =
+        written === null && deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
+            <IntentField accounts={mailAccounts} />
+        ) : null;
+
+    const connectionSummary = <ConnectionSummary connection={connection} />;
+
     return (
         // Outermost of all, because every screen under it draws a date and none of them is near the read that answers
         // which zone those dates are placed in. It is the deployment's answer rather than the runtime's report, which
@@ -969,29 +986,58 @@ export function App({
                                                                                 // A screen never sees the credential; what it is handed is the name the deployment knows the
                                                                                 // person by, which is what a preference kept per person on this machine is written under.
                                                                                 person={person}
-                                                                                // Asking is what the field is for, so a credential that may not ask is not shown one. It is
-                                                                                // absent rather than disabled: a control nobody can use says less about why than the sentence
-                                                                                // above does. Where it stands is the space's decision, which is why it is handed in rather
-                                                                                // than drawn here.
-                                                                                intent={
-                                                                                    // Not while a message is being written: what stands at the foot of that column then is
-                                                                                    // the composer's own footer, and two rows of controls under one column is two answers
-                                                                                    // to what the primary act is.
-                                                                                    written === null &&
-                                                                                    deploymentSession !== null &&
-                                                                                    offers(
-                                                                                        deploymentSession,
-                                                                                        'askMail',
-                                                                                    ) ? (
-                                                                                        <IntentField
+                                                                                // Where the field stands is the space's decision, which is why it is handed in rather than
+                                                                                // drawn here.
+                                                                                intent={intentField}
+                                                                                status={connectionSummary}
+                                                                                discover={
+                                                                                    session === null ||
+                                                                                    !asksMail ? null : (
+                                                                                        <DiscoverSpace
+                                                                                            session={session}
+                                                                                            transport={readMail}
                                                                                             accounts={mailAccounts}
+                                                                                            // Handed the frame's two
+                                                                                            // regions only while this
+                                                                                            // is the space in front,
+                                                                                            // which is the rule every
+                                                                                            // space is handed them
+                                                                                            // under: two fields
+                                                                                            // somebody's question
+                                                                                            // could be typed into are
+                                                                                            // two fields, and one of
+                                                                                            // them would be inside a
+                                                                                            // region nobody can see.
+                                                                                            intent={
+                                                                                                space === 'discover'
+                                                                                                    ? intentField
+                                                                                                    : null
+                                                                                            }
+                                                                                            status={
+                                                                                                space === 'discover'
+                                                                                                    ? connectionSummary
+                                                                                                    : null
+                                                                                            }
+                                                                                            onOpenMessage={(
+                                                                                                messageId,
+                                                                                            ) => {
+                                                                                                // A citation names a
+                                                                                                // message and mail is
+                                                                                                // read in the Mail
+                                                                                                // space, exactly as a
+                                                                                                // task's citation is:
+                                                                                                // the message opens
+                                                                                                // there and the
+                                                                                                // address follows it.
+                                                                                                openTabs.openMail(
+                                                                                                    messageId,
+                                                                                                    null,
+                                                                                                );
+                                                                                                window.location.hash =
+                                                                                                    addressOf('mail');
+                                                                                            }}
                                                                                         />
-                                                                                    ) : null
-                                                                                }
-                                                                                status={
-                                                                                    <ConnectionSummary
-                                                                                        connection={connection}
-                                                                                    />
+                                                                                    )
                                                                                 }
                                                                                 folders={
                                                                                     session === null ||

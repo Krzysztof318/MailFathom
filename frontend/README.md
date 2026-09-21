@@ -362,7 +362,9 @@ it with `page.route`, a unit test hands it to a transport function, and the deve
 ## Looking at a screen with mail in it, with nothing behind the client
 
 `pnpm dev:fixtures` serves this client out of that corpus: a populated mailbox, three accounts in three different
-states, a conversation, a search, and a notification centre, with no database, no mail server and no service running.
+states, a conversation, a search, a notification centre, and a question answered on the Discover screen — the run is
+started, followed and stopped against the corpus exactly as against a deployment — with no database, no mail server and
+no service running.
 It signs in with any name and password, because the credential reaches nothing: the corpus exchanges whatever is
 presented for a session of its own, as a deployment does.
 
@@ -379,7 +381,7 @@ own console, and the next thing a screen asks for is answered under it — nothi
 ```js
 mailfathomFixtures.latency = 1500; // every surface that waits, waiting
 mailfathomFixtures.failureRate = 1; // every failure sentence and its way out
-mailfathomFixtures.emptyCollections = true; // the empty folder, the search that found nothing, the empty centre
+mailfathomFixtures.emptyCollections = true; // the empty folder, the search that found nothing, the empty centre, the run that composed nothing
 mailfathomFixtures.expiredSession = true; // the client asking for the password again
 mailfathomFixtures.unreachable = true; // the offline state, which is not an empty answer
 ```

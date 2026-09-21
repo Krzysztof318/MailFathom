@@ -341,6 +341,27 @@
       "compositions": ["telefon", "fold", "tablet", "desktop"]
     },
     {
+      "id": "discover",
+      "route": "/#/discover",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "What am I still owed an answer on?",
+            "exact": true
+          }
+        },
+        {
+          "expect": {
+            "role": "article",
+            "name": "Answer"
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
       "id": "composer",
       "route": "/#/mail",
       "signIn": true,

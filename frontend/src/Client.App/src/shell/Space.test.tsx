@@ -19,6 +19,7 @@ const handedToTheCalendar = 'the calendar handed to the frame';
 const handedToTasks = 'The task list this space was handed.';
 const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
+const handedToDiscover = 'The answer this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
 
@@ -50,6 +51,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                             list={<p>{handedTheList}</p>}
                             mail={<p>{handedToMail}</p>}
                             tabs={<p>{handedTheTabs}</p>}
+                            discover={<p>{handedToDiscover}</p>}
                             tasks={<p>{handedToTasks}</p>}
                             people={<p>{handedToPeople}</p>}
                             calendar={<p>{handedToTheCalendar}</p>}
@@ -120,7 +122,25 @@ describe('Space', () => {
         expect(screen.getByRole('main', { name: 'Mail' })).toBeDefined();
     });
 
-    it('carries the question and the connection into every space', () => {
+    it('draws the Discover space it was handed rather than a placeholder', () => {
+        render(inStrictMode('discover'));
+
+        expect(screen.getByText(handedToDiscover)).toBeDefined();
+        expect(within(screen.getByRole('main', { name: 'Discover' })).queryByText(/not built yet/)).toBeNull();
+        expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    });
+
+    // The one space the two regions are not stood beneath: the design project draws the question field under this
+    // screen's own head, so the space is handed them where it is built rather than given them here as well — and a
+    // second copy of the field is exactly what this asserts is absent.
+    it('stands neither region beneath Discover, which is handed them instead', () => {
+        render(inStrictMode('discover'));
+
+        expect(screen.queryByText(handedTheIntent)).toBeNull();
+        expect(screen.queryByText(handedTheStatus)).toBeNull();
+    });
+
+    it('carries the question and the connection into every other space', () => {
         for (const space of ['mail', 'cases'] as const) {
             const { unmount } = render(inStrictMode(space));
 
