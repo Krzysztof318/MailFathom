@@ -2,20 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-export {
-    calendarRoute,
-    createCalendarEvent,
-    isCalendarEventOrigin,
-    isStatableReminderLead,
-    isStatableReminderSet,
-    longestReminderLead,
-    mostEventsInAWindow,
-    mostRemindersOnAnEvent,
-    readCalendarWindow,
-    type CalendarEvent,
-    type CalendarEventOrigin,
-    type CalendarEventRecord,
-} from './calendar';
+export { isStatableReminderLead, isStatableReminderSet, longestReminderLead, mostRemindersOnAnEvent } from './calendar';
 export {
     acceptCalendarEvent,
     amendCalendarEvent,

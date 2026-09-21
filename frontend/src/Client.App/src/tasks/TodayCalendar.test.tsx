@@ -24,6 +24,9 @@ function eventAt(id: string, title: string, start: string): CalendarEvent {
         title,
         start,
         end: start,
+        isAllDay: false,
+        reminders: [],
+        remindsAt: [],
         origin: 'Asserted',
         sourceMessage: null,
         recordedAt: start,
@@ -42,6 +45,14 @@ function drawDay(day: Partial<TodayCalendarInForce> = {}): void {
 }
 
 describe('TodayCalendar', () => {
+    // The one control the panel carries. It is an address rather than a button because a space is reached at a
+    // fragment, so what is asserted is where it points as well as what it is named.
+    it('offers the way through to the calendar itself', () => {
+        drawDay({ events: [] });
+
+        expect(screen.getByRole('link', { name: 'Open the calendar' }).getAttribute('href')).toBe('#/calendar');
+    });
+
     it('draws what the day holds, at the hour the reader’s own clock shows', () => {
         process.env['TZ'] = 'Europe/Warsaw';
 

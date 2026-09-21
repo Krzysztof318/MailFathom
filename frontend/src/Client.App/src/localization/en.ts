@@ -1497,6 +1497,8 @@ export const en = {
     'tasks.someRefused.many': 'The deployment refused {count} of these. The rest went through.',
     'tasks.someRefused.other': 'The deployment refused {count} of these. The rest went through.',
     'tasks.todaysCalendar': "Today's calendar",
+    'tasks.openCalendar': 'Open',
+    'tasks.openTheCalendar': 'Open the calendar',
     'tasks.dayReading': 'Reading the day…',
     'tasks.dayEmpty': 'Nothing is in the calendar today.',
     'tasks.dayFailedUnauthenticated': 'Your session is no longer accepted, so the day could not be read. Sign in again.',

@@ -115,6 +115,9 @@ function deployment({
                                   title: 'Answer the tender',
                                   start: '2026-09-23T22:00:00.000Z',
                                   end: '2026-09-23T22:00:00.000Z',
+                                  isAllDay: false,
+                                  reminders: [],
+                                  remindsAt: [],
                                   origin: 'Asserted',
                                   sourceMessage: null,
                                   recordedAt: '2026-09-21T07:00:00+00:00',
@@ -183,6 +186,9 @@ describe('TasksSpace', () => {
                     title: 'Standup',
                     start: '2026-09-21T07:00:00+00:00',
                     end: '2026-09-21T07:15:00+00:00',
+                    isAllDay: false,
+                    reminders: [],
+                    remindsAt: [],
                     origin: 'Asserted',
                     sourceMessage: null,
                     recordedAt: '2026-09-21T07:00:00+00:00',
@@ -272,6 +278,8 @@ describe('TasksSpace', () => {
             title: 'Answer the tender',
             start: '2026-09-23T22:00:00.000Z',
             end: null,
+            isAllDay: true,
+            reminders: [],
             sourceMessage: null,
         });
     });
@@ -327,6 +335,8 @@ describe('TasksSpace', () => {
             title: 'Answer the tender',
             start: '2026-09-21T09:00:00+00:00',
             end: '2026-09-21T09:45:00.000Z',
+            isAllDay: false,
+            reminders: [],
             sourceMessage: null,
         });
     });

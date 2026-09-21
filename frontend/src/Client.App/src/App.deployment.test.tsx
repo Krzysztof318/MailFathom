@@ -41,6 +41,20 @@ resetsBetweenTests();
  * week of one year and the list would stop holding the day after it was written. What these lists are about is which
  * deployment each request went to, and `calendar/calendarSpan.test.ts` is where the span itself is proven.
  */
+/**
+ * Waits until the sign-in screen has asked a typed deployment what it offers.
+ *
+ * That pair of reads is behind a timer rather than a render — the screen waits for the typing to settle — and pressing
+ * *Connect* unmounts the screen and clears the timer with it. So a test that types an address and signs in at once
+ * races it, and whether those two routes appear in the list below depends on how long the sign-in happened to take.
+ * Waiting for them first makes the order these lists assert a fact rather than a coin toss.
+ */
+async function askedWhatItOffers(deployment: string): Promise<void> {
+    await waitFor(() => {
+        expect(routesAsked()).toContain(`${deployment}/api/client/sign-in-methods`);
+    });
+}
+
 function calendarWindowAt(deployment: string): unknown {
     const origin = deployment.replaceAll('.', '\\.');
     const asked = `^${origin}/api/client/calendar\\?from=[^&]+&until=[^&]+&count=200$`;
@@ -152,11 +166,14 @@ describe('App deployment', () => {
         renderApp(nothingAdopted, null);
 
         typeAddress('mail.example.test');
+        await askedWhatItOffers('https://mail.example.test');
         signIn();
         await framed();
 
         await waitFor(() => {
             expect(routesAsked()).toEqual([
+                'https://mail.example.test/api/client/sign-in-methods',
+                'https://mail.example.test/.well-known/oauth-protected-resource/api/client',
                 'https://mail.example.test/api/client/session',
                 'https://mail.example.test/api/client/session/token',
                 'https://mail.example.test/api/client/accounts',
@@ -348,6 +365,7 @@ describe('App deployment', () => {
         await signOut();
         fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
         typeAddress('second.example.invalid');
+        await askedWhatItOffers('https://second.example.invalid');
         signIn();
         await framed();
 
@@ -378,6 +396,8 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/sign-in-methods',
                 'https://first.example.invalid/.well-known/oauth-protected-resource/api/client',
 
+                'https://second.example.invalid/api/client/sign-in-methods',
+                'https://second.example.invalid/.well-known/oauth-protected-resource/api/client',
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/session/token',
                 'https://second.example.invalid/api/client/accounts',

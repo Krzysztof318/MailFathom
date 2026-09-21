@@ -4,6 +4,7 @@
 
 import type { ClientFailureReason } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { addressOf } from '../routing/spaces';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { TodayCalendarInForce } from './useTodayCalendar';
@@ -12,10 +13,9 @@ import type { TodayCalendarInForce } from './useTodayCalendar';
 // somewhere for are read together. It is the calendar's own route and nothing derived: this screen keeps no calendar
 // state, and the Calendar space is where an event is opened, amended or answered.
 //
-// The design draws an *Open* link in this heading, reaching the Calendar screen. That screen is
-// [#1566](https://github.com/Krzysztof318/MailFathom/issues/1566) and is still a placeholder, so the link is left out
-// under the rule `messageRows/MessageRowMenu.tsx` states: a control that reaches a screen saying it does not exist is
-// worse than no control, and it arrives with the screen rather than ahead of it.
+// The *Open* link in the heading is the design's own and reaches the Calendar space, which is where an event is
+// opened, amended or answered. It is an address rather than a control for the reason every move between spaces is one:
+// a space is reached at a fragment, so what takes somebody there is a link they can open the way they open any other.
 //
 // Every failure says what it is and offers the way out, which here is reading the day again — the same five sentences
 // the list carries, worded for a day rather than for a list.
@@ -37,9 +37,19 @@ export function TodayCalendar({ day }: { readonly day: TodayCalendarInForce }) {
 
     return (
         <section aria-labelledby="tasks-today-calendar" className="flex flex-col gap-2.5">
-            <h2 id="tasks-today-calendar" className="text-xs tracking-widest text-muted uppercase">
-                {translate('tasks.todaysCalendar')}
-            </h2>
+            <div className="flex items-baseline justify-between gap-2">
+                <h2 id="tasks-today-calendar" className="text-xs tracking-widest text-muted uppercase">
+                    {translate('tasks.todaysCalendar')}
+                </h2>
+
+                <a
+                    href={addressOf('calendar')}
+                    aria-label={translate('tasks.openTheCalendar')}
+                    className="rounded-sm text-sm text-accent transition hover:text-accent-strong"
+                >
+                    {translate('tasks.openCalendar')}
+                </a>
+            </div>
 
             {day.reading ? (
                 <p role="status" className="text-sm text-muted">

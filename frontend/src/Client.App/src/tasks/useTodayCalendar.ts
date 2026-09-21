@@ -95,7 +95,7 @@ export function useTodayCalendar(
             setHeld(
                 answer.outcome === 'failed'
                     ? { session, day: from, events: [], reading: false, failure: answer.failure.reason }
-                    : { session, day: from, events: answer.value, reading: false, failure: null },
+                    : { session, day: from, events: answer.value.events, reading: false, failure: null },
             );
         },
         [session, transport],

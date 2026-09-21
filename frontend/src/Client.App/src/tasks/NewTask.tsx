@@ -5,6 +5,7 @@
 import { useId, useState, type RefObject } from 'react';
 import { longestTaskTitle } from '@mailfathom/client-backend';
 import { mannerDrawn } from '../confirmation/wayOutShapes';
+import { dialogField, dialogFieldLabel } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
@@ -31,11 +32,6 @@ import { useLocalization } from '../localization/useLocalization';
 // **Nothing here asks for focus**, which is `confirmation/Confirmation.tsx`'s arrangement and is deliberate: a dialog
 // that is mounted whether or not it is open, carrying an element that asks for focus on mount, takes focus from
 // whatever the reader was on the moment the screen it stands in is drawn. `showModal` places focus for itself.
-
-const field =
-    'w-full rounded-lg border border-line-strong bg-sunken px-2.75 py-2 text-base text-text outline-none focus:border-accent';
-
-const fieldLabel = 'text-2xs tracking-widest text-muted uppercase';
 
 /** What a person has typed into the form, which is the whole of what a task this client writes carries. */
 export interface TaskDraft {
@@ -120,7 +116,7 @@ export function NewTask({
 
                 <div className="flex flex-col gap-3.5 px-4.5 py-4.5">
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor={titles} className={fieldLabel}>
+                        <label htmlFor={titles} className={dialogFieldLabel}>
                             {translate('tasks.taskTitle')}
                         </label>
 
@@ -129,7 +125,7 @@ export function NewTask({
                             type="text"
                             maxLength={longestTaskTitle}
                             value={draft.title}
-                            className={field}
+                            className={dialogField}
                             onChange={(typing) => {
                                 setDraft({ ...draft, title: typing.target.value });
                             }}
@@ -137,7 +133,7 @@ export function NewTask({
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor={days} className={fieldLabel}>
+                        <label htmlFor={days} className={dialogFieldLabel}>
                             {translate('tasks.taskDueOn')}
                         </label>
 
@@ -148,7 +144,7 @@ export function NewTask({
                             id={days}
                             type="date"
                             value={draft.dueOn}
-                            className={field}
+                            className={dialogField}
                             onChange={(typing) => {
                                 setDraft({ ...draft, dueOn: typing.target.value });
                             }}

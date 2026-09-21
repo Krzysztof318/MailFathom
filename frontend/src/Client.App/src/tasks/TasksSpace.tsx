@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
     acceptTask,
     arrangesDays,
-    createCalendarEvent,
+    recordCalendarEvent,
     eraseTask,
     layOutToday,
     recordTask,
     setTaskCompletion,
+    type CalendarEventWrite,
+    type ClientResult,
     type ClientSession,
     type DayLayout,
     type MailFathomTransport,
@@ -78,6 +80,13 @@ const erasureQuestions: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     many: 'tasks.eraseQuestion.many',
     other: 'tasks.eraseQuestion.other',
 };
+
+// Whether one event actually reached the calendar. A `ClientResult` says the request was answered; what the calendar
+// did with the record is the answer's own outcome, and every value but `Written` is a row this screen must not draw as
+// scheduled.
+function wasWritten(answer: ClientResult<CalendarEventWrite>): boolean {
+    return answer.outcome === 'read' && answer.value.outcome === 'Written';
+}
 
 export function TasksSpace({
     session,
@@ -256,12 +265,14 @@ export function TasksSpace({
 
                 return start === null
                     ? Promise.resolve({ failed: true, id: task.id })
-                    : createCalendarEvent(session, transport, {
+                    : recordCalendarEvent(session, transport, {
                           title: task.title,
                           start,
                           end: null,
+                          isAllDay: true,
+                          reminders: [],
                           sourceMessage: task.sourceMessageId,
-                      }).then((answer) => ({ failed: answer.outcome === 'failed', id: task.id }));
+                      }).then((answer) => ({ failed: !wasWritten(answer), id: task.id }));
             }),
         ).then((answers) => {
             setScheduled((standing) => [
@@ -312,12 +323,14 @@ export function TasksSpace({
 
                 return task === undefined || end === null
                     ? Promise.resolve({ failed: true, id: placement.taskId })
-                    : createCalendarEvent(session, transport, {
+                    : recordCalendarEvent(session, transport, {
                           title: task.title,
                           start: placement.startAt,
                           end,
+                          isAllDay: false,
+                          reminders: [],
                           sourceMessage: task.sourceMessageId,
-                      }).then((answer) => ({ failed: answer.outcome === 'failed', id: placement.taskId }));
+                      }).then((answer) => ({ failed: !wasWritten(answer), id: placement.taskId }));
             }),
         ).then((answers) => {
             setApplying(false);

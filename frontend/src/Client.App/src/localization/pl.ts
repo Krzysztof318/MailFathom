@@ -1512,6 +1512,8 @@ export const pl: Catalogue = {
     'tasks.someRefused.many': 'Wdrożenie odrzuciło {count} z nich. Reszta przeszła.',
     'tasks.someRefused.other': 'Wdrożenie odrzuciło {count} z nich. Reszta przeszła.',
     'tasks.todaysCalendar': 'Dzisiejszy kalendarz',
+    'tasks.openCalendar': 'Otwórz',
+    'tasks.openTheCalendar': 'Otwórz kalendarz',
     'tasks.dayReading': 'Wczytywanie dnia…',
     'tasks.dayEmpty': 'Dziś nie ma nic w kalendarzu.',
     'tasks.dayFailedUnauthenticated':
