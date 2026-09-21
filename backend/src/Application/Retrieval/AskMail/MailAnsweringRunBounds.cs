@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace MailFathom.Application.Retrieval.AskMail;
 
@@ -29,8 +30,24 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// </remarks>
 public sealed record MailAnsweringRunBounds
 {
-    private MailAnsweringRunBounds(int maximumRetrievedCharacters, int maximumProviderCalls, long maximumTokens)
+    /// <summary>Creates bounds, refusing values no run could complete under.</summary>
+    /// <param name="maximumRetrievedCharacters">The greatest number of characters of retrieved mail one run may send.</param>
+    /// <param name="maximumProviderCalls">The greatest number of provider calls one run may make.</param>
+    /// <param name="maximumTokens">The greatest number of tokens one run may consume.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value is below one.</exception>
+    /// <remarks>
+    /// Public because a Discover run's start event carries these bounds into its journal row, and the serializer that
+    /// reads the row back is source-generated: source generation reaches no non-public member, so a constructor behind
+    /// <see cref="Create" /> left every stored run unreadable. It validates exactly what that factory validates, so the
+    /// two are one construction path rather than a checked one and a way around it.
+    /// </remarks>
+    [JsonConstructor]
+    public MailAnsweringRunBounds(int maximumRetrievedCharacters, int maximumProviderCalls, long maximumTokens)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumRetrievedCharacters, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumProviderCalls, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumTokens, 1);
+
         this.MaximumRetrievedCharacters = maximumRetrievedCharacters;
         this.MaximumProviderCalls = maximumProviderCalls;
         this.MaximumTokens = maximumTokens;
@@ -67,14 +84,8 @@ public sealed record MailAnsweringRunBounds
     public static MailAnsweringRunBounds Create(
         int maximumRetrievedCharacters,
         int maximumProviderCalls,
-        long maximumTokens)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(maximumRetrievedCharacters, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maximumProviderCalls, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maximumTokens, 1);
-
-        return new MailAnsweringRunBounds(maximumRetrievedCharacters, maximumProviderCalls, maximumTokens);
-    }
+        long maximumTokens) =>
+        new(maximumRetrievedCharacters, maximumProviderCalls, maximumTokens);
 
     /// <inheritdoc />
     public override string ToString() => string.Format(

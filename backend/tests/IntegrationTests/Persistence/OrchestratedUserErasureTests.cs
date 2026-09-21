@@ -719,6 +719,33 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
 
         await context.SaveChangesAsync(cancellationToken);
 
+        // The two records that outlive the mail they are about: a delete the server only flagged, and a local copy
+        // erased while the server went on holding the message. They are written after the save above because the
+        // flagged delete carries the folder's key rather than a navigation to it, and the key is generated. Both are
+        // here for the reason everything above is — a table naming an account and holding no row proves nothing about
+        // whether the erasure reaches it.
+        context.MailboxFlaggedDeletes.Add(new MailboxFlaggedDeleteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            MailFolderId = folder.Id,
+            UidValidity = 1,
+            Uid = 1,
+            StoredEmailId = storedEmail.Id,
+            LastObservedAt = now,
+        });
+        context.MailboxSourceRemovals.Add(new MailboxSourceRemovalEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            MailFolder = folder,
+            UidValidity = 1,
+            Uid = 2,
+            RecordedAt = now,
+        });
+
+        await context.SaveChangesAsync(cancellationToken);
+
         return storedEmail.Id;
     }
 
