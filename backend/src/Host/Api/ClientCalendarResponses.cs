@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Calendar.Import;
 using MailFathom.Domain.Calendar;
 
 namespace MailFathom.Host.Api;
@@ -117,3 +118,44 @@ internal sealed record CalendarEventResponse(
 /// instead — and a count over the whole calendar would be a second query nobody drew.
 /// </remarks>
 internal sealed record CalendarWindowResponse(IReadOnlyList<CalendarEventResponse> Events);
+
+/// <summary>How many entries of an offered file were skipped for one reason.</summary>
+/// <param name="Reason">Why they became no event, as the published spelling of the reason.</param>
+/// <param name="Count">How many of them there were, which is never zero.</param>
+/// <remarks>
+/// A reason and a count, never the entries. Which eight of eighty entries recur is a list of somebody's appointments,
+/// and that eight of them do is the whole of what a person deciding whether to confirm the import needs.
+/// </remarks>
+internal sealed record CalendarImportSkipResponse(string Reason, int Count);
+
+/// <summary>What an offered file would put on the calendar, or what it just did.</summary>
+/// <param name="Events">How many events the file writes, which the summary states as how many it would write.</param>
+/// <param name="Earliest">When the earliest of them begins, or nothing where there are none.</param>
+/// <param name="Latest">When the latest of them begins, or nothing where there are none.</param>
+/// <param name="Skipped">How many entries were skipped, per reason, ordered so two readings report alike.</param>
+/// <remarks>
+/// The same shape answers the summary and the import, because what a person confirmed has to be what was then
+/// performed. Neither carries an event: the calendar is read back through its own window afterwards, which is the one
+/// place events are drawn from.
+/// </remarks>
+internal sealed record CalendarImportResponse(
+    int Events,
+    DateTimeOffset? Earliest,
+    DateTimeOffset? Latest,
+    IReadOnlyList<CalendarImportSkipResponse> Skipped)
+{
+    /// <summary>Describes a reading of an offered file for the person who offered it.</summary>
+    /// <param name="summary">What the file would create, and what it would skip.</param>
+    /// <returns>The response body.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="summary" /> is <see langword="null" />.</exception>
+    internal static CalendarImportResponse For(CalendarImportSummary summary)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+
+        return new CalendarImportResponse(
+            summary.Events,
+            summary.Earliest,
+            summary.Latest,
+            [.. summary.Skipped.Select(tally => new CalendarImportSkipResponse(tally.Reason.ToString(), tally.Count))]);
+    }
+}

@@ -203,6 +203,7 @@ internal static class ClientApiEndpoints
         api.MapClientNotifications();
         api.MapClientTasks();
         api.MapClientCalendar();
+        api.MapClientCalendarImport();
         api.MapClientSignalTicket();
         api.MapClientTelemetry();
 

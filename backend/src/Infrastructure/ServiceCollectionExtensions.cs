@@ -11,6 +11,7 @@ using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar;
 using MailFathom.Application.Calendar.Extraction;
+using MailFathom.Application.Calendar.Import;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Contacts.Correspondence;
@@ -116,6 +117,7 @@ using MailFathom.Application.Tasks;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Accounts;
+using MailFathom.Infrastructure.Calendar;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Documents;
@@ -1516,6 +1518,14 @@ public static class ServiceCollectionExtensions
         // The use case a person reads and writes their own calendar through, scoped like the store beneath it: what it
         // acts for comes off the principal the scope authenticated.
         services.AddScoped<OwnCalendar>();
+
+        // The reader an offered .ics file is parsed by. A singleton because it holds nothing: every call takes the
+        // octets and the zone to read unzoned times in, and answers from those alone.
+        services.AddSingleton<ICalendarFileReader, CalendarFileReader>();
+
+        // The use case that summarises such a file and, once the person has confirmed it, writes what it named.
+        // Scoped beside the store it writes through, like the calendar's other use case above.
+        services.AddScoped<CalendarFileImport>();
 
         // The proposals an arriving message produces, registered on the same terms as the store: the extractor it
         // resolves answers with a reason rather than by being absent, so an instance that turned the reading off

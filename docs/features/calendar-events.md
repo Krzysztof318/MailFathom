@@ -1,6 +1,6 @@
 # Calendar events
 
-<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/CalendarEventMapping.cs, backend/src/Infrastructure/Persistence/Calendar/CalendarEventStore.cs, backend/src/Infrastructure/Persistence/Calendar/Configurations/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs -->
+<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/CalendarEventMapping.cs, backend/src/Infrastructure/Persistence/Calendar/CalendarEventStore.cs, backend/src/Infrastructure/Persistence/Calendar/Configurations/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs -->
 
 MailFathom holds a calendar of its own: events a person put there, and dates their mail named that nobody has agreed
 to yet, in the same PostgreSQL database the mail is in. This page describes what an event is, the difference between
@@ -10,12 +10,15 @@ the two halves of the record, and what writing, accepting, and deleting one does
 calendar, and no protocol of any kind: a MailFathom event is one this deployment created or was handed, holdable and
 deletable exactly like a contact, and nothing more. That is a decision rather than an omission — synchronizing against
 a calendar somebody else owns is a second protocol with its own consent, conflict, and retention questions, and this
-deployment answers none of them. Reading an `.ics` file a person chooses is neither of those things and is separate
-work; a file read once subscribes to nothing and writes nothing back.
+deployment answers none of them. Reading an `.ics` file a person chooses is neither of those things and is described
+under [Importing a file somebody handed over](#importing-a-file-somebody-handed-over) below; a file read once
+subscribes to nothing and writes nothing back.
 
 **One surface serves this store: the client endpoint.** [Its calendar routes](../operations/client-endpoint.md#the-calendar-routes)
 are where the signed-in person reads a window of their own calendar, reads one event, puts one there, amends one,
-accepts a date their mail proposed, and removes one. No MCP tool and no command reaches an event.
+accepts a date their mail proposed, and removes one, and
+[its import routes](../operations/client-endpoint.md#the-calendar-import-routes) are where a file they choose reaches
+it. No MCP tool and no command reaches an event.
 
 **What fills it besides a person is a reading of text.** Where an operator turned it on, an arriving message naming a
 meeting is read into proposals on the calendar of everyone the account is assigned to, and a sentence somebody types
@@ -134,12 +137,60 @@ is an ordinary request, while the number of rows is what decides the cost of ans
 first, with the identity settling two events that begin at the same instant so that reading one window twice answers
 the same way twice.
 
+## Importing a file somebody handed over
+
+A person picks an `.ics` file and this deployment reads it: a conference programme, a schedule exported from another
+calendar, an invitation saved to disk. The client offers the file and shows what it would create; the deployment
+parses it, because the store, the account scope, and the trust boundary are all on that side — such a file is
+untrusted input, and the client is the wrong place to decide what it may become.
+
+**The parser is chosen rather than written.** RFC 5545 folds lines at 75 octets, escapes values, carries parameters on
+every property, and states a date in three different ways, and hand-rolling that is how an imported date lands
+silently wrong. The base class library carries no iCalendar reader, so one is pinned and recorded in
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md); it stays
+inside the adapter that owns parsing, and what crosses into the application is five facts per entry.
+
+**Nothing creates an event until the person has seen what it would create.** The summary and the import read the same
+file the same way and answer with the same report — how many events, the span of dates they cover, and how many
+entries were skipped for each kind of reason — and the first of them writes nothing. That is the acceptance an
+imported event rests on, rather than a courtesy: the rule that nothing is calendared without somebody typing or
+accepting it is what a confirmation discharges here.
+
+**An entry this store has no event for is skipped and counted.** A recurring entry is the one worth naming, because it
+is a deliberate refusal rather than a gap: this store models single events, and expanding a rule would write events
+the file does not contain that nothing could later tell apart from events somebody typed. The rest are entries that
+state no start, no usable title, no usable identifier, a zone this deployment does not know, an end that is not after
+their start, or a start and duration whose sum no calendar here can hold. A file full of them is still imported for
+whatever it does hold, and the report says how much was left.
+
+**The instant is the one the file names.** A value stating UTC already is one; a value naming a `TZID` is resolved in
+that zone; a value naming neither is a floating time, which RFC 5545 defines as the local time of whoever reads it. An
+all-day entry stays an all-day entry rather than becoming a midnight one — its day opens at a different instant in
+every zone, which is why the request states the zone the two unzoned shapes are read in.
+
+**Nothing the file names is fetched, and almost nothing it carries is read.** An entry's identifier, summary, start,
+end or duration, and whether it recurs are what an import reads. Its attendees, organizer, location, description,
+attachments, and URLs are not read at all, so a file cannot put somebody else's text into this deployment or make it
+reach an address.
+
+**The file is bounded as the untrusted input it is**, by an explicit ceiling on its octets and an explicit ceiling on
+how many entries one import writes. Both refuse with a message rather than truncating, because a person confirming a
+summary is deciding about everything the file holds.
+
+**What an import is not**: an export, an answer to an invitation, or a reading of an `.ics` that arrived as a message
+attachment. `METHOD:REQUEST` and `METHOD:REPLY` are ignored and nothing replies to an organizer — answering an
+invitation is a mail-side flow with a consent question of its own.
+
 ## An imported identifier, and why it is carried
 
 Every entry in an iCalendar file carries a `UID` of its own, and an event imported from such a file keeps the one it
-arrived under. It exists for a single question, asked by whoever reads such a file: has this entry already been
+arrived under. An entry that states none is skipped rather than imported under one this deployment invented, because
+such an event would be created again on every reading of the same file. It exists for a single question, asked by whoever reads such a file: has this entry already been
 imported here. One calendar holds an identifier at most once, and the database is what enforces that rather than a
 check before the insert — two imports running at once both read nothing, so only the constraint closes that window.
+The import that loses that race decides again from a fresh read rather than repeating the one it arrived with, so the
+winner's entries are counted as already held and the person is told what a second import in sequence would have told
+them.
 
 Two calendars holding one identifier is ordinary rather than a conflict: two people handed the same file each keep
 their own copy of what it described.
@@ -175,4 +226,6 @@ event's identifier is what a failure names.
   into occurrences or stores one.
 - **Attendees, locations, attachments, and free-or-busy status.** None of them is refused as an idea; none of them is
   part of the record today.
-- **Any synchronization**, as the top of this page states.
+- **Any synchronization**, as the top of this page states. An `.ics` file read once is not one: nothing is
+  subscribed to, nothing is polled, and nothing is written back.
+- **Export to `.ics`.** The other direction is not opened here.

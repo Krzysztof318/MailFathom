@@ -89,6 +89,13 @@
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
+    <!-- The iCalendar (RFC 5545) reader an imported `.ics` file is parsed by. The base class library carries none, and
+         the format is exactly the kind nobody hand-rolls safely: lines are folded at 75 octets, values escape their own
+         separators, every property carries parameters, and a date names a zone, a UTC instant, or neither. Referenced
+         by Infrastructure alone, so every Ical.Net type stays inside the reader under Calendar/ and the application
+         sees entries of MailFathom's own. It brings NodaTime with it, which is its zone database and is named nowhere
+         in this repository; both are recorded in THIRD_PARTY_LICENSES.md. -->
+    <PackageVersion Include="Ical.Net" Version="5.2.3" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <!-- The OpenAPI document generator, which ships outside the shared framework. It builds the HTTP contract from the

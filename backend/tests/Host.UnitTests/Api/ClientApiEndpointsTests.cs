@@ -135,6 +135,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}",
@@ -318,6 +320,8 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientContactEndpoints.ContactsRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
@@ -530,21 +534,26 @@ public sealed class ClientApiEndpointsTests
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskCompletionRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TaskAcceptanceRoute}");
 
-    /// <summary>Reports whether a route changes the caller's own calendar, by the three routes its four writes are served at.</summary>
+    /// <summary>Reports whether a route changes the caller's own calendar, by the five routes its five writes and the one reading that answers as a <c>POST</c> are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the task list's writes are named that way. An event is this
     /// deployment's own record of when one person is committed: nothing here reaches a mail server, nothing moves in a
     /// mailbox, and the message an event cites is a value it carries rather than mail this route reads. The deletion
     /// is carried by that same reasoning — <see cref="MailFathomPermission.MailDelete" /> is the power to remove
-    /// somebody's mail, and what leaves here is a date about a message that stays. Naming the three keeps the claim
-    /// narrow — a fourth route published under the read grant fails this rather than joining it.
+    /// somebody's mail, and what leaves here is a date about a message that stays. The import carries it too: the file
+    /// is the caller's own and what it becomes is events on the caller's own calendar. Its summary writes nothing at
+    /// all and is a <c>POST</c> only because the file it reads is a request body rather than a query — so it is named
+    /// here to be admitted rather than because it changes anything. Naming the five keeps the claim narrow — a sixth
+    /// route published under the read grant fails this rather than joining it.
     /// </remarks>
     private static bool ChangesTheCallersOwnCalendar(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute}");
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarImportEndpoints.CalendarImportSummaryRoute}");
 
     /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
     /// <remarks>

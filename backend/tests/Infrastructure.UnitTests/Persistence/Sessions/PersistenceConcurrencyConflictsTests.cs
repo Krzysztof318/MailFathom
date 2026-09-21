@@ -44,6 +44,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName,
         PersistenceConstraintNames.CalendarEventReminderPrimaryKeyConstraintName,
         PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName,
+        PersistenceConstraintNames.CalendarEventImportedUidUniqueIndexName,
     ];
 
     [Theory]
