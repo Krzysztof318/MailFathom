@@ -7,6 +7,7 @@ import type { AnswerBlock, PersonEntry } from '@mailfathom/client-backend';
 import { SenderAvatar } from '../../controls/SenderAvatar';
 import { wordRecentInstant } from '../../localization/instants';
 import { useLocalization } from '../../localization/useLocalization';
+import { useReadingZone } from '../../localization/useReadingZone';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { Citation } from './Citation';
 import { personCounts, supportVerdicts } from './blockWording';
@@ -88,7 +89,8 @@ function Person({
     readonly positionOf: (source: string) => number;
 }) {
     const { locale, translate } = useLocalization();
-    const last = wordRecentInstant(entry.lastContactAt, locale, now);
+    const timeZone = useReadingZone();
+    const last = wordRecentInstant(entry.lastContactAt, locale, now, timeZone);
 
     return (
         <>
@@ -104,7 +106,9 @@ function Person({
                 {/* The instant the service sent is what the element carries, and the reader's own wording is what it
                     shows: the two are different things and neither replaces the other. */}
                 {entry.lastContactAt === null || last === null ? (
-                    <span className="text-xs whitespace-nowrap text-faint">{translate('answer.peopleLastContactNone')}</span>
+                    <span className="text-xs whitespace-nowrap text-faint">
+                        {translate('answer.peopleLastContactNone')}
+                    </span>
                 ) : (
                     <time className="text-xs whitespace-nowrap text-faint" dateTime={entry.lastContactAt}>
                         {translate('answer.peopleLastContact', { at: last })}

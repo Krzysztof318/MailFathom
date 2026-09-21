@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnswerBlock, BlockEvidence, DeclaredSource, PersonEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
+import { ReadingZoneContext } from '../../localization/useReadingZone';
 import { AnswerSourcesContext } from '../answerSources';
 import { People } from './People';
 
@@ -40,12 +41,16 @@ function renderPeople(block: AnswerBlock, sources: readonly DeclaredSource[] = [
 
     return render(
         <LocalizationProvider>
-            {/* A citation is given somewhere to follow to, which is what the canvas hands every block on the screen
-                this block is drawn on: a chip with nowhere to go says so in its own name, and asserting that here would
-                be asserting `Citation`'s behaviour rather than this block's. */}
-            <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
-                <People block={block} />
-            </AnswerSourcesContext>
+            {/* A zone the suite is not running in, so the wording below proves the block placed the instant in the
+                zone the reader's record states rather than in whichever one the machine reports. */}
+            <ReadingZoneContext value="America/New_York">
+                {/* A citation is given somewhere to follow to, which is what the canvas hands every block on the screen
+                    this block is drawn on: a chip with nowhere to go says so in its own name, and asserting that here
+                    would be asserting `Citation`'s behaviour rather than this block's. */}
+                <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
+                    <People block={block} />
+                </AnswerSourcesContext>
+            </ReadingZoneContext>
         </LocalizationProvider>,
     );
 }
@@ -95,10 +100,13 @@ describe('People', () => {
         expect(screen.getAllByRole('button', { name: 'Citation 2: CPI calculation 2027' })).toHaveLength(2);
     });
 
-    it('words the last contact against the reader’s own day rather than spelling a raw instant', () => {
+    it('words the last contact in the zone the reader’s record states rather than spelling a raw instant', () => {
         renderPeople(found([anna]));
 
-        expect(screen.getByText(/^last contact /u)).toBeDefined();
+        // Written out rather than compared against a formatter built here, because that comparison passes just as
+        // happily for a block that named a zone of its own. New York is four hours behind in September, and the contact
+        // still falls on the reader's own day, which is what leaves the time alone on the line.
+        expect(screen.getByText(/^last contact 4:47/u)).toBeDefined();
     });
 
     it('says a contact nothing established was not established, rather than leaving the space blank', () => {

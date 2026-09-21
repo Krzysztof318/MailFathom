@@ -246,18 +246,32 @@ describe('readDiscoveryRunTail', () => {
     it('reads a block the catalogue carries under the type it names', async () => {
         const answered = await readDiscoveryRunTail(
             session,
-            answering({ status: 200, body: bodyOf([{ event: 'block', sequence: 4, block: { type: 'people' } }]) }),
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 4,
+                        block: {
+                            type: 'people',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            entries: [],
+                        },
+                    },
+                ]),
+            }),
             runId,
             0,
         );
 
-        expect(answered).toEqual({
-            outcome: 'read',
-            value: {
-                running: false,
-                events: [{ kind: 'block', sequence: 4, block: { type: 'people', named: 'people' } }],
-            },
-        });
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+
+        expect(event?.kind === 'block' ? [event.block.type, event.block.named] : null).toEqual(['people', 'people']);
     });
 
     it('keeps the name of a block type the catalogue does not carry rather than refusing the run', async () => {

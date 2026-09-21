@@ -12,6 +12,7 @@ import type {
     ThreadCommitment,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
+import { ReadingZoneContext } from '../../localization/useReadingZone';
 import { AnswerSourcesContext } from '../answerSources';
 import { ConversationStandingBody, ThreadState } from './ThreadState';
 
@@ -56,11 +57,15 @@ function renderStanding(block: AnswerBlock) {
 
     return render(
         <LocalizationProvider>
-            {/* A citation is given somewhere to follow to, as the canvas gives every block one: a chip with nowhere to
-                go says so in its own name, which is `Citation`'s behaviour rather than this block's. */}
-            <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
-                <ThreadState block={block} />
-            </AnswerSourcesContext>
+            {/* A zone the suite is not running in, so the hour below proves a commitment falls due on the reader's own
+                clock rather than on whichever one the machine reports. */}
+            <ReadingZoneContext value="America/New_York">
+                {/* A citation is given somewhere to follow to, as the canvas gives every block one: a chip with nowhere
+                    to go says so in its own name, which is `Citation`'s behaviour rather than this block's. */}
+                <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
+                    <ThreadState block={block} />
+                </AnswerSourcesContext>
+            </ReadingZoneContext>
         </LocalizationProvider>,
     );
 }
@@ -87,7 +92,11 @@ describe('ThreadState', () => {
     it('says who owes a commitment and when it falls due in one sentence', () => {
         renderStanding(stood());
 
-        expect(screen.getByText(/^Karolina Kowalska — Counter-proposal with a 5% cap · due /u)).toBeDefined();
+        // The hour is written out rather than compared against a formatter built here, because that comparison passes
+        // just as happily for a block that named a zone of its own. New York is four hours behind in August.
+        expect(
+            screen.getByText(/^Karolina Kowalska — Counter-proposal with a 5% cap · due 8\/28\/26, 5:00/u),
+        ).toBeDefined();
     });
 
     it('states a commitment the correspondence named nobody for without inventing an owner', () => {

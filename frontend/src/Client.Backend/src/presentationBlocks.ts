@@ -298,13 +298,7 @@ export interface ComposedDraft {
 
 /** The closed set of next steps a plan may suggest, so that nothing is proposed no client wrote a control for. */
 export type SuggestedActionKind =
-    | 'ReplyToThread'
-    | 'ForwardEmail'
-    | 'ComposeEmail'
-    | 'FlagEmail'
-    | 'OpenThread'
-    | 'SearchAgain'
-    | 'CreateMailRule';
+    'ReplyToThread' | 'ForwardEmail' | 'ComposeEmail' | 'FlagEmail' | 'OpenThread' | 'SearchAgain' | 'CreateMailRule';
 
 const actionKinds: readonly SuggestedActionKind[] = [
     'ReplyToThread',

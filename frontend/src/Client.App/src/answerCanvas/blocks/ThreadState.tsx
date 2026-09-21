@@ -13,6 +13,7 @@ import { SenderAvatar } from '../../controls/SenderAvatar';
 import type { MessageKey } from '../../localization/en';
 import { wordInstant } from '../../localization/instants';
 import { useLocalization } from '../../localization/useLocalization';
+import { useReadingZone } from '../../localization/useReadingZone';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { Citation } from './Citation';
 import { participantCounts, supportVerdicts } from './blockWording';
@@ -211,7 +212,8 @@ function Commitment({
     readonly positionOf: (source: string) => number;
 }) {
     const { locale, translate } = useLocalization();
-    const due = wordInstant(commitment.dueAt, locale, 'stamp');
+    const timeZone = useReadingZone();
+    const due = wordInstant(commitment.dueAt, locale, 'stamp', timeZone);
     const owedBy = commitment.owedBy?.displayName ?? null;
 
     return (

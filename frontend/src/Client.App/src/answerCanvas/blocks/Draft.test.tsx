@@ -4,7 +4,13 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { AnswerBlock, BlockEvidence, ComposedDraft, DeclaredSource, DraftDisposition } from '@mailfathom/client-backend';
+import type {
+    AnswerBlock,
+    BlockEvidence,
+    ComposedDraft,
+    DeclaredSource,
+    DraftDisposition,
+} from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
 import { AnswerSourcesContext } from '../answerSources';
 import { Draft } from './Draft';
@@ -73,9 +79,7 @@ describe('Draft', () => {
         });
 
         expect(
-            screen.getByText(
-                'Anna Kowalska (anna@contoso.example) and Anna Kowalska (a.kowalska@fabrikam.example)',
-            ),
+            screen.getByText('Anna Kowalska (anna@contoso.example) and Anna Kowalska (a.kowalska@fabrikam.example)'),
         ).toBeDefined();
     });
 
@@ -138,9 +142,7 @@ describe('Draft', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
 
-        expect(
-            screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.'),
-        ).toBeDefined();
+        expect(screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeDefined();
     });
 
     it('names a block it is not the renderer for rather than drawing somebody else’s data as a draft', () => {

@@ -73,10 +73,7 @@ describe('SuggestedAction', () => {
 
     it.each([
         ['ReadsOnly', 'What would change: nothing changes — it only shows you something'],
-        [
-            'ChangesMailbox',
-            'What would change: something in your mailbox changes, and you can change it back',
-        ],
+        ['ChangesMailbox', 'What would change: something in your mailbox changes, and you can change it back'],
         ['SendsMail', 'What would change: mail leaves this deployment, which nothing here can undo'],
     ] as const)('says what taking a %s step would change before anybody agrees', (impact, said) => {
         renderSuggestion(suggested({ impact, requiresConfirmation: impact !== 'ReadsOnly' }));
