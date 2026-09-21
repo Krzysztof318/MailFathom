@@ -235,6 +235,36 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
+    /// Two of one person's mailboxes on one server are provisioned from one credential, and a name is what a rotation
+    /// instruction calls it. Requiring a second name for the same material would leave one credential answering to two
+    /// names in the log, which is the ambiguity the uniqueness rule exists to prevent.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoMailboxesNamingOneCredentialIdentically_ServesBoth()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+        var second = SamWork with { DisplayName = "spare" };
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, EmptyRecord, AlexWork, second)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal(
+            [AlexWork.Id.ToString("D"), second.Id.ToString("D")],
+            served.MailAccounts.Select(account => account.AccountId));
+        Assert.Empty(heldBack.Current);
+    }
+
+    /// <summary>
     /// A conflict is introduced by the second declaration rather than by both, so the one recorded first is served and
     /// the one that collided with it is what an operator is told to correct.
     /// </summary>

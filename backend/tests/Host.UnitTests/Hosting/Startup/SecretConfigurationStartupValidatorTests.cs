@@ -503,6 +503,29 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     /// <summary>
+    /// A name means one credential, so its expiry is one fact, and the run that reports it is one that started — two
+    /// identical declarations being one credential written twice. Reporting the expiry once per declaration would tell
+    /// an operator that two credentials lapsed and leave a completed rotation looking half done.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnExpiredSecretDeclaredTwiceUnderOneName_IsReportedOnce()
+    {
+        // Arrange
+        var endpoint = EndpointAcceptingApiKeys();
+        AcceptKey(endpoint, ExpiredKeyNamed("workstation"));
+        AcceptKey(endpoint, ExpiredKeyNamed("workstation"));
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Single(
+            harness.ReportedMessages,
+            message => message.Contains("lifetime ended", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The endpoint tells the two credentials apart by shape, so a key that is a token naming a configured authorization
     /// server reaches that server's validator and the key comparison it exists for is never reached. Nothing about the
     /// deployment would look wrong: the key resolves, the profile is valid, and no client can ever authenticate.
@@ -911,6 +934,14 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         return endpoint;
     }
+
+    /// <summary>A key whose lifetime ended before <see cref="ValidatedAt" />, declared identically however often it is asked for.</summary>
+    private static ConfiguredSecret ExpiredKeyNamed(string name) => new()
+    {
+        Name = name,
+        SecretReference = "plaintext:one",
+        Lifetime = "2026-07-30T00:00:00Z",
+    };
 
     /// <summary>Adds one key held by an administrator of its own.</summary>
     private static void AcceptKey(AdminEndpointOptions endpoint, ConfiguredSecret key) =>

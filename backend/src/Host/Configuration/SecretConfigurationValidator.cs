@@ -276,8 +276,9 @@ internal sealed partial class SecretConfigurationValidator
     /// <remarks>
     /// A user's mailboxes are a record rather than a configuration key, so no reading of the files walks them and
     /// without this they would start a host clean and fail one connection at a time. The whole user is put through
-    /// one walk rather than one per account, because a repeated secret name is a refusal within the document that
-    /// declares it and judging each account alone would stop seeing the repeat.
+    /// one walk rather than one per account, because a name repeated by a declaration that disagrees with it is a
+    /// refusal within the document that declares it, and judging each account alone would stop seeing the repeat — as
+    /// it would stop seeing the ordinary case beside it, two mailboxes provisioned from one credential under one name.
     /// </remarks>
     internal async Task<IReadOnlyList<string>> FindUserMailAccountErrorsAsync(
         string userConfigurationPath,
@@ -700,6 +701,7 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>(DescribeDeclarationErrors(discovered));
 
         var now = this.timeProvider.GetUtcNow();
+        var expiriesAlreadyReported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var block in discovered.Blocks)
         {
@@ -729,7 +731,7 @@ internal sealed partial class SecretConfigurationValidator
                 this.LogSettingResolvedInline(block.ConfigurationPath);
             }
 
-            this.ReportExpiredLifetime(block, now);
+            this.ReportExpiredLifetime(block, now, expiriesAlreadyReported);
         }
 
         return errors;
@@ -770,7 +772,10 @@ internal sealed partial class SecretConfigurationValidator
     private static bool IsDatabaseSecretReference(string configuredValue) =>
         DatabaseSecretReference.TryParse(configuredValue, out _);
 
-    /// <summary>Records a secret whose configured lifetime has already ended.</summary>
+    /// <summary>Records a secret whose configured lifetime has already ended, once per name rather than once per declaration.</summary>
+    /// <param name="block">The discovered declaration to judge.</param>
+    /// <param name="now">The instant the lifetime is judged at.</param>
+    /// <param name="namesAlreadyReported">The names this walk has already warned about, which the walk owns so that one credential declared twice produces one warning.</param>
     /// <remarks>
     /// <para>
     /// The name and the path are both operator-chosen configuration identities and carry no material, which is what
@@ -781,15 +786,25 @@ internal sealed partial class SecretConfigurationValidator
     /// value safe to place in a log line unescaped, and a name carrying a newline would otherwise forge a second line
     /// here — in a run that reports the malformed declaration and fails anyway, so nothing is lost by staying silent.
     /// </para>
+    /// <para>
+    /// One name is one credential, because declarations sharing a name are accepted only when they are identical. A
+    /// warning per declaration would therefore report one expiry as several, which is the ambiguity the name exists to
+    /// remove. The first path to carry the name is the one reported, and every declaration of it expires with it.
+    /// </para>
     /// </remarks>
-    private void ReportExpiredLifetime(DiscoveredSecret block, DateTimeOffset now)
+    private void ReportExpiredLifetime(
+        DiscoveredSecret block,
+        DateTimeOffset now,
+        HashSet<string> namesAlreadyReported)
     {
         if (!SecretName.TryCreate(block.Secret.Name, out var secretName))
         {
             return;
         }
 
-        if (SecretLifetime.TryParse(block.Secret.Lifetime, out var lifetime) && lifetime.HasExpiredAt(now))
+        if (SecretLifetime.TryParse(block.Secret.Lifetime, out var lifetime)
+            && lifetime.HasExpiredAt(now)
+            && namesAlreadyReported.Add(secretName.Value!))
         {
             this.LogSecretExpired(block.ConfigurationPath, secretName.Value!, lifetime.ToString());
         }
@@ -807,8 +822,12 @@ internal sealed partial class SecretConfigurationValidator
             $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.",
         SecretDeclarationFailure.NameMalformed =>
             $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — a name may carry up to {SecretName.MaximumLength} letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit.",
-        SecretDeclarationFailure.NameDuplicated =>
-            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — another secret in this section already carries this name, so neither could be named unambiguously.",
+        SecretDeclarationFailure.NameReusedForAnotherReference =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — another secret in this section carries this name and names a different {nameof(ConfiguredSecret.SecretReference)}, so neither could be named unambiguously. Declarations sharing a name must be identical.",
+        SecretDeclarationFailure.NameReusedForAnotherLifetime =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — another secret in this section carries this name and states a different {nameof(ConfiguredSecret.Lifetime)}, so one name would state two expiries. Declarations sharing a name must be identical.",
+        SecretDeclarationFailure.NameReusedForAnotherPassword =>
+            $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Name)} — another secret in this section carries this name and names a different {nameof(ConfiguredSecret.Password)}, so one name would unseal two ways. Declarations sharing a name must be identical.",
         SecretDeclarationFailure.LifetimeMissing =>
             $"{error.ConfigurationPath}:{nameof(ConfiguredSecret.Lifetime)} — a blank lifetime states nothing; write '{SecretLifetime.NoLimitValue}' or the instant the secret expires.",
         _ =>
