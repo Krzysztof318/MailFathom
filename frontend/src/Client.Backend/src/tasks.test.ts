@@ -208,6 +208,16 @@ describe('recordTask', () => {
 
         expect(answer).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: 400 } });
     });
+
+    it('reads a 404 as the deployment being out of reach, this route naming no task to be gone', async () => {
+        const answer = await recordTask(session, answering({ status: 404, body: '' }), {
+            title: 'Answer the counter-proposal',
+            dueOn: null,
+            sourceMessageId: null,
+        });
+
+        expect(answer).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: 404 } });
+    });
 });
 
 describe('setTaskCompletion', () => {

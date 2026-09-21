@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ClientFailureReason, PersonalTask } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { onlySelected, withToggled } from '../contextMenu/rowSelection';
@@ -107,6 +107,10 @@ export function TaskList({
     const headings = useId();
     const [menu, setMenu] = useState<{ readonly task: PersonalTask; readonly at: MenuPoint } | null>(null);
 
+    // The rows by the task each draws, which is how the menu gives focus back to the row it was opened from. Closing a
+    // menu that left focus on the element it has just taken out of the document is where keyboard use silently stops.
+    const rows = useRef(new Map<string, HTMLLIElement>());
+
     const groups = groupedTasks(tasks, now);
     const counted = new Intl.NumberFormat(locale);
 
@@ -181,6 +185,13 @@ export function TaskList({
                                 onPress={(at) => {
                                     setMenu({ task, at });
                                 }}
+                                onElement={(element) => {
+                                    if (element === null) {
+                                        rows.current.delete(task.id);
+                                    } else {
+                                        rows.current.set(task.id, element);
+                                    }
+                                }}
                                 {...acts(task)}
                             />
                         ))}
@@ -229,6 +240,7 @@ export function TaskList({
                         onAskErasure([menu.task]);
                     }}
                     onClose={() => {
+                        rows.current.get(menu.task.id)?.focus();
                         setMenu(null);
                     }}
                     {...acts(menu.task)}

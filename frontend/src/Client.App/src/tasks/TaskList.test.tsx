@@ -177,6 +177,17 @@ describe('TaskList', () => {
         expect(onSelected).toHaveBeenCalledWith(['a']);
     });
 
+    it('puts focus back on the row the menu was opened from once it closes', () => {
+        drawList({ tasks: [taskDue('a', 'Answer the tender', '2026-09-21')], onSelected: vi.fn() });
+
+        const row = screen.getByRole('listitem');
+
+        fireEvent.keyDown(row, { key: 'ContextMenu' });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Select tasks' }));
+
+        expect(document.activeElement).toBe(row);
+    });
+
     it('adds a row to the selection it is already holding rather than replacing it', () => {
         const onSelected = vi.fn();
 

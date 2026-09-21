@@ -192,8 +192,7 @@ export function recordTask(
  * States whether one task stands completed.
  *
  * A `404` here is `missing` rather than `unavailable`, which is the reading `failureReasonForStatus` leaves to a route
- * that names one thing: a task erased while somebody had the list open is let go of, where a deployment that is down
- * is retried.
+ * that names one thing.
  */
 export function setTaskCompletion(
     session: ClientSession,
@@ -202,7 +201,7 @@ export function setTaskCompletion(
     completed: boolean,
 ): Promise<ClientResult<PersonalTask>> {
     return spanned(`POST ${tasksRoute}/{taskId}/completion`, async () =>
-        taskOf(
+        namedTaskOf(
             await send(transport, {
                 method: 'POST',
                 path: routeFor(session, taskCompletionRoute(taskId)),
@@ -221,7 +220,7 @@ export function acceptTask(
     taskId: string,
 ): Promise<ClientResult<PersonalTask>> {
     return spanned(`POST ${tasksRoute}/{taskId}/acceptance`, async () =>
-        taskOf(
+        namedTaskOf(
             await send(transport, {
                 method: 'POST',
                 path: routeFor(session, taskAcceptanceRoute(taskId)),
@@ -383,15 +382,12 @@ function bodyOf(response: ClientResponse): unknown {
     }
 }
 
-// The three writes that answer with one task read the same way, including the `404` a route naming one task has its
-// own reading of.
+// The three writes that answer with one task read the same way, and take the general reading of a `404` — the route
+// that creates a task names nothing that could be gone, so a deployment answering it that way is one this client
+// cannot reach rather than a task somebody erased.
 function taskOf(response: ClientResponse | null): ClientResult<PersonalTask> {
     if (response === null) {
         return failed('unavailable', null);
-    }
-
-    if (response.status === 404) {
-        return failed('missing', response.status);
     }
 
     if (response.status !== 200) {
@@ -401,6 +397,12 @@ function taskOf(response: ClientResponse | null): ClientResult<PersonalTask> {
     const task = parseTask(bodyOf(response));
 
     return task === null ? failed('unreadable', response.status) : read(task);
+}
+
+// The two whose route does name one task, which is what lets a `404` be read as that task being gone: one erased
+// while somebody had the list open is let go of, where a deployment that is down is retried.
+function namedTaskOf(response: ClientResponse | null): ClientResult<PersonalTask> {
+    return response !== null && response.status === 404 ? failed('missing', response.status) : taskOf(response);
 }
 
 function parsePage(value: unknown, asked: number): PersonalTaskPage | null {

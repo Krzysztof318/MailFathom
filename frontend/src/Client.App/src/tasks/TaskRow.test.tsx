@@ -42,6 +42,7 @@ function drawRow({
     onOpenSource,
     onSchedule = vi.fn(),
     onPress = vi.fn(),
+    onElement = vi.fn(),
 }: {
     task?: PersonalTask;
     selected?: boolean;
@@ -53,6 +54,7 @@ function drawRow({
     onOpenSource?: (() => void) | undefined;
     onSchedule?: () => void;
     onPress?: (at: { readonly x: number; readonly y: number }) => void;
+    onElement?: (element: HTMLLIElement | null) => void;
 } = {}): void {
     process.env['TZ'] = 'Europe/Warsaw';
 
@@ -71,6 +73,7 @@ function drawRow({
                     onOpenSource={onOpenSource}
                     onSchedule={onSchedule}
                     onPress={onPress}
+                    onElement={onElement}
                 />
             </ul>
         </LocalizationProvider>,
@@ -92,6 +95,7 @@ function rowShown({ scheduled }: { readonly scheduled: boolean }) {
         onOpenSource: undefined,
         onSchedule: vi.fn(),
         onPress: vi.fn(),
+        onElement: vi.fn(),
     };
 }
 

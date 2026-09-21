@@ -56,6 +56,7 @@ export function TaskRow({
     onOpenSource,
     onSchedule,
     onPress,
+    onElement,
 }: {
     readonly task: PersonalTask;
 
@@ -86,6 +87,9 @@ export function TaskRow({
 
     /** Opens this row's own menu at the point the gesture happened. */
     readonly onPress: (at: MenuPoint) => void;
+
+    /** Hands the list this row's element, which is what lets it put focus back here when the menu closes. */
+    readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { locale, translate } = useLocalization();
     const press = useRowPress(onPress);
@@ -119,6 +123,8 @@ export function TaskRow({
 
     return (
         <li
+            ref={onElement}
+            tabIndex={-1}
             className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border p-3 transition ${
                 selected ? 'border-accent-line bg-accent-soft' : 'border-line bg-panel hover:bg-hover'
             } ${task.completed ? 'opacity-60' : ''}`}
