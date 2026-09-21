@@ -81,6 +81,21 @@ describe('parseBlockEvidence', () => {
         expect(parseBlockEvidence(evidence({ citations: ['c-1', 'c-1'] }))).toBeNull();
     });
 
+    it('refuses a side naming one source twice, which would draw it once and lose the other', () => {
+        expect(
+            parseBlockEvidence(
+                evidence({
+                    support: 'Conflicting',
+                    citations: ['c-1', 'c-2'],
+                    conflictingClaims: [
+                        { statement: 'The rate is 1 200', sources: ['c-1', 'c-1'] },
+                        { statement: 'The rate is 1 350', sources: ['c-2'] },
+                    ],
+                }),
+            ),
+        ).toBeNull();
+    });
+
     it('refuses more sides of a disagreement than one block may present', () => {
         const conflictingClaims = Array.from({ length: 7 }, (_, at) => ({
             statement: `Side ${String(at)}`,

@@ -308,7 +308,7 @@ function parseConflictingClaims(value: unknown, citations: readonly string[]): r
             return null;
         }
 
-        if (sources.some((source) => !restedOn.has(source))) {
+        if (sources.some((source) => !restedOn.has(source)) || new Set(sources).size !== sources.length) {
             return null;
         }
 
