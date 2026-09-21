@@ -12,6 +12,7 @@ import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
 import * as messages from '../../../../tests/fixtures/messages';
 import * as notifications from '../../../../tests/fixtures/notifications';
+import * as tasks from '../../../../tests/fixtures/tasks';
 import {
     fixtureAnswer,
     fixtureDeployment,
@@ -73,6 +74,7 @@ const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/contacts', contacts.assertedContactPage],
     ['/contacts/collected', contacts.collectedContactPage],
     [`/contacts/${contacts.assertedContact.id}/correspondence`, contacts.contactCorrespondence],
+    ['/tasks/today/layout', tasks.daysArranged],
 ];
 
 const writtenRoutes: readonly (readonly [string, unknown])[] = [
@@ -91,6 +93,9 @@ const writtenRoutes: readonly (readonly [string, unknown])[] = [
     ['/calendar/drafts', calendar.calendarEventDrafted],
     ['/contacts', contacts.contactWritten],
     [`/contacts/${contacts.collectedContact.id}/promotion`, contacts.contactPromoted],
+    ['/tasks', tasks.taskWritten],
+    ['/tasks/task-tender/completion', tasks.taskCompleted],
+    ['/tasks/task-signatures/acceptance', tasks.taskAccepted],
 ];
 
 afterEach(() => {
@@ -211,6 +216,48 @@ describe('fixtureAnswer', () => {
     it('answers one event and taking a proposed one onto the calendar with the event the write left behind', () => {
         expect(stated(answered('/calendar/calendar-1'))).toStrictEqual(calendar.calendarEventWritten);
         expect(stated(posted('/calendar/calendar-1/acceptance'))).toStrictEqual(calendar.calendarEventWritten);
+    });
+
+    // A task list is grouped under *Today*, *This week* and *Later*, so the corpus states what is due against the day
+    // it is being read on. What proves it is the same read on two different days: a fixed set of dates would answer
+    // both identically and every row would fall under the last heading on every day but one.
+    it('dates what the task list answers against the day it is read on', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 8, 21, 9));
+
+        expect(stated(answered('/tasks?pageSize=50'))).toStrictEqual(tasks.committedTasks('2026-09-21'));
+        expect(stated(answered('/tasks/proposed?pageSize=50'))).toStrictEqual(tasks.proposedTasks('2026-09-21'));
+
+        vi.setSystemTime(new Date(2026, 8, 28, 9));
+
+        expect(stated(answered('/tasks?pageSize=50'))).toStrictEqual(tasks.committedTasks('2026-09-28'));
+    });
+
+    // The path the day is arranged at has the list's own as a prefix and is read and written at the same address, so
+    // both orderings are what a task route can get wrong without anything else noticing.
+    it('tells the arranged day apart from the list, and its write apart from its read', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 8, 21, 9));
+
+        expect(stated(answered('/tasks/today/layout'))).toStrictEqual(tasks.daysArranged);
+        expect(stated(posted('/tasks/today/layout'))).toStrictEqual(tasks.dayArrangement('2026-09-21'));
+    });
+
+    it('answers a day it had nothing left to arrange with that rather than with a failure', () => {
+        expect(stated(answered('/tasks/today/layout', { emptyCollections: true }, 1, 'POST', '{}'))).toStrictEqual(
+            tasks.dayNotArranged,
+        );
+    });
+
+    it('answers both halves of the list empty where the deployment is set to hold nothing', () => {
+        expect(stated(answered('/tasks?pageSize=50', { emptyCollections: true }))).toStrictEqual(tasks.emptyTaskPage);
+        expect(stated(answered('/tasks/proposed?pageSize=50', { emptyCollections: true }))).toStrictEqual(
+            tasks.emptyTaskPage,
+        );
+    });
+
+    it('answers erasing a task with what was removed rather than with the task', () => {
+        expect(stated(answered('/tasks/task-racking', {}, 1, 'DELETE'))).toStrictEqual(tasks.taskErased);
     });
 
     it('answers a route the corpus states nothing for as nothing being there', () => {

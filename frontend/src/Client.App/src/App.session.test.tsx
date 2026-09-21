@@ -65,18 +65,14 @@ describe('App session', () => {
         ]);
     });
 
-    // The calendar is reached under reading mail rather than under a grant of its own, so a credential narrowed to
-    // asking is offered no calendar to open — and pressing one would have been refused by every route behind it.
-    it('withholds the calendar from a credential that may not read mail', async () => {
+    // The calendar and the task list are both reached under reading mail rather than under a grant of their own, so a
+    // credential narrowed to asking is offered neither — and pressing one would have been refused by every route
+    // behind it.
+    it('withholds the calendar and the tasks from a credential that may not read mail', async () => {
         renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
-        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
-            'Discover',
-            'Cases',
-            'Agent',
-            'Tasks',
-        ]);
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Discover', 'Cases', 'Agent']);
     });
 
     it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {

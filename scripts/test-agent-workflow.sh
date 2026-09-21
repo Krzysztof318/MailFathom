@@ -9814,6 +9814,17 @@ notifications.ts emptyNotificationPage GET /api/client/notifications
 notifications.ts unreadNotificationCount GET /api/client/notifications/unread-count
 notifications.ts notificationMarkedRead POST /api/client/notifications/{notificationId}/read-state
 notifications.ts everyNotificationMarkedRead POST /api/client/notifications/read
+tasks.ts task GET /api/client/tasks
+tasks.ts committedTasks GET /api/client/tasks
+tasks.ts proposedTasks GET /api/client/tasks/proposed
+tasks.ts emptyTaskPage GET /api/client/tasks
+tasks.ts taskWritten POST /api/client/tasks
+tasks.ts taskCompleted POST /api/client/tasks/{taskId}/completion
+tasks.ts taskAccepted POST /api/client/tasks/{taskId}/acceptance
+tasks.ts taskErased DELETE /api/client/tasks/{taskId}
+tasks.ts daysArranged GET /api/client/tasks/today/layout
+tasks.ts dayArrangement POST /api/client/tasks/today/layout
+tasks.ts dayNotArranged POST /api/client/tasks/today/layout
 BINDINGS
 }
 

@@ -20,6 +20,7 @@ import * as drafts from '../../../../tests/fixtures/drafts';
 import * as mail from '../../../../tests/fixtures/mail';
 import * as messages from '../../../../tests/fixtures/messages';
 import * as notifications from '../../../../tests/fixtures/notifications';
+import * as tasks from '../../../../tests/fixtures/tasks';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 
 // A deployment answered out of the corpus, so `pnpm dev:fixtures` serves a populated client with no database, no mail
@@ -108,10 +109,12 @@ export function fixtureDeploymentState(): FixtureDeploymentState {
  * What the fixture deployment answers one request with, or `null` where it answered nothing at all.
  *
  * It is a function of the request, the options and one drawn value rather than of a generator, so the whole of the
- * option handling is provable without one. The exchange route is the exception and states it: minting a session reads
- * the clock for the instant it ends and the corpus's own record of what it has already minted, neither of which a
- * caller decides. `null` is what {@link fixtureDeployment} turns into a rejected promise, which is what `send` reads
- * as a deployment that could not be reached.
+ * option handling is provable without one. Two routes are the exception and both state it: minting a session reads the
+ * clock for the instant it ends and the corpus's own record of what it has already minted, neither of which a caller
+ * decides, and the task routes read it for the day they answer about — a task list is grouped under *today*, *this
+ * week* and *later*, and nothing in a request for one says which day that is. `null` is what
+ * {@link fixtureDeployment} turns into a rejected promise, which is what `send` reads as a deployment that could not
+ * be reached.
  *
  * @param draw A value in `[0, 1)` the caller decided, which is what `failureRate` is compared against.
  */
@@ -355,8 +358,59 @@ function answerFor(
         changeAnswer(route, options) ??
         contactAnswer(route, request, options) ??
         draftAnswer(route, request) ??
+        taskAnswer(route, request, options) ??
         messageAnswer(route, asked) ?? { status: 404, body: '', headers: {} }
     );
+}
+
+/**
+ * What the task list, the two writes over one task, and the day's arrangement answer with.
+ *
+ * The order is the one the routes above are written in: `/tasks/today/layout` and `/tasks/proposed` are read before
+ * `/tasks`, which is a prefix of both. Which day is answered about is the deployment's own reading of the clock rather
+ * than anything the request states, for the reason {@link fixtureAnswer} gives.
+ */
+function taskAnswer(
+    route: string,
+    request: ClientRequest,
+    options: Readonly<FixtureDeploymentOptions>,
+): ClientResponse | null {
+    if (!route.startsWith('/tasks')) {
+        return null;
+    }
+
+    if (route === '/tasks/today/layout') {
+        // The read is whether this deployment arranges a day at all, and the write is the suggestion itself. A
+        // deployment with nothing left to place answers that rather than failing, which is its own sentence on the
+        // panel and is what the empty corpus reaches.
+        if (request.method !== 'POST') {
+            return answering(tasks.daysArranged);
+        }
+
+        return answering(options.emptyCollections ? tasks.dayNotArranged : tasks.dayArrangement(dayHere()));
+    }
+
+    if (request.method === 'DELETE') {
+        return answering(tasks.taskErased);
+    }
+
+    if (route.endsWith('/completion')) {
+        return answering(tasks.taskCompleted);
+    }
+
+    if (route.endsWith('/acceptance')) {
+        return answering(tasks.taskAccepted);
+    }
+
+    if (request.method === 'POST') {
+        return answering(tasks.taskWritten);
+    }
+
+    if (route === '/tasks/proposed') {
+        return answering(options.emptyCollections ? tasks.emptyTaskPage : tasks.proposedTasks(dayHere()));
+    }
+
+    return answering(options.emptyCollections ? tasks.emptyTaskPage : tasks.committedTasks(dayHere()));
 }
 
 /**
@@ -399,6 +453,13 @@ function calendarAnswer(
     }
 
     return answering(calendar.calendarEventWritten);
+}
+
+/** The day the machine running this is on, as a calendar day is spelled, which is the day a task list is grouped by. */
+function dayHere(): string {
+    const now = new Date();
+
+    return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**

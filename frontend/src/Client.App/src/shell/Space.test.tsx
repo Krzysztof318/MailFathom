@@ -16,6 +16,7 @@ const handedToMail = 'The mail this space was handed.';
 const handedTheFolders = 'The folder tree this space was handed.';
 const handedTheTabs = 'The tab strip this space was handed.';
 const handedToTheCalendar = 'the calendar handed to the frame';
+const handedToTasks = 'The task list this space was handed.';
 const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
@@ -49,6 +50,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                             list={<p>{handedTheList}</p>}
                             mail={<p>{handedToMail}</p>}
                             tabs={<p>{handedTheTabs}</p>}
+                            tasks={<p>{handedToTasks}</p>}
                             people={<p>{handedToPeople}</p>}
                             calendar={<p>{handedToTheCalendar}</p>}
                             person="reader"
@@ -139,6 +141,31 @@ describe('Space', () => {
 
         expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
         expect(screen.getByRole('main', { name: 'People' })).toBeDefined();
+    });
+
+    it('shows what the frame composed for Tasks in the Tasks space', () => {
+        render(inStrictMode('tasks'));
+
+        expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedToTasks)).toBeDefined();
+    });
+
+    it('hands the question and the connection to Tasks when it is in front, and to nothing when it is not', () => {
+        const { rerender } = render(inStrictMode('tasks'));
+
+        expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedTheIntent)).toBeDefined();
+
+        rerender(inStrictMode('cases'));
+
+        expect(within(screen.getByLabelText('Tasks')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('Tasks')).getByText(handedToTasks)).toBeDefined();
+    });
+
+    it('does not call the Tasks space unbuilt either', () => {
+        render(inStrictMode('tasks'));
+
+        expect(
+            within(screen.getByRole('main', { name: 'Tasks' })).queryByText(/This space is not built yet\./),
+        ).toBeNull();
     });
 
     it('shows what the frame composed for People in the People space', () => {

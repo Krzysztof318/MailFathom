@@ -48,6 +48,20 @@ function calendarWindowAt(deployment: string): unknown {
     return expect.stringMatching(new RegExp(asked, 'u'));
 }
 
+/**
+ * Waits until the sign-in screen has asked a typed deployment what it offers.
+ *
+ * That pair of reads is behind a timer rather than a render — the screen waits for the typing to settle — and pressing
+ * *Connect* unmounts the screen and clears the timer with it. So a test that types an address and signs in at once
+ * races it, and whether those two routes appear in the list below depends on how long the sign-in happened to take.
+ * Waiting for them first makes the order these lists assert a fact rather than a coin toss.
+ */
+async function askedWhatItOffers(deployment: string): Promise<void> {
+    await waitFor(() => {
+        expect(routesAsked()).toContain(`${deployment}/api/client/sign-in-methods`);
+    });
+}
+
 describe('App deployment', () => {
     // The folder tree, the inbox's first page and the phrasing the search row offers are in every one of these lists
     // although the client opens on Discover: the Mail space is drawn behind whichever space is in front, so it reads on
@@ -66,6 +80,17 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/folders',
                 'https://elsewhere.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://elsewhere.example.invalid/api/client/emails/search/phrasing',
+
+                // The Tasks space reads on landing for the reason the Mail space does, and what it reads is the two halves of
+                // the list, the reader's own day, and whether this deployment arranges one at all. The day is two instants
+                // rather than a constant, so the window is asserted by its shape: which two they are is `tasks/dayInstants.ts`'s
+                // and has a test of its own.
+                'https://elsewhere.example.invalid/api/client/tasks?pageSize=50',
+                'https://elsewhere.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/elsewhere\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://elsewhere.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://elsewhere.example.invalid'),
                 'https://elsewhere.example.invalid/api/client/calendar/drafts',
                 'https://elsewhere.example.invalid/api/client/replies/drafting',
@@ -141,17 +166,26 @@ describe('App deployment', () => {
         renderApp(nothingAdopted, null);
 
         typeAddress('mail.example.test');
+        await askedWhatItOffers('https://mail.example.test');
         signIn();
         await framed();
 
         await waitFor(() => {
             expect(routesAsked()).toEqual([
+                'https://mail.example.test/api/client/sign-in-methods',
+                'https://mail.example.test/.well-known/oauth-protected-resource/api/client',
                 'https://mail.example.test/api/client/session',
                 'https://mail.example.test/api/client/session/token',
                 'https://mail.example.test/api/client/accounts',
                 'https://mail.example.test/api/client/folders',
                 'https://mail.example.test/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://mail.example.test/api/client/emails/search/phrasing',
+                'https://mail.example.test/api/client/tasks?pageSize=50',
+                'https://mail.example.test/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/mail\.example\.test\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://mail.example.test/api/client/tasks/today/layout',
                 calendarWindowAt('https://mail.example.test'),
                 'https://mail.example.test/api/client/calendar/drafts',
                 'https://mail.example.test/api/client/replies/drafting',
@@ -331,6 +365,7 @@ describe('App deployment', () => {
         await signOut();
         fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
         typeAddress('second.example.invalid');
+        await askedWhatItOffers('https://second.example.invalid');
         signIn();
         await framed();
 
@@ -341,6 +376,12 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/folders',
                 'https://first.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://first.example.invalid/api/client/emails/search/phrasing',
+                'https://first.example.invalid/api/client/tasks?pageSize=50',
+                'https://first.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/first\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://first.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://first.example.invalid'),
                 'https://first.example.invalid/api/client/calendar/drafts',
                 'https://first.example.invalid/api/client/replies/drafting',
@@ -355,12 +396,20 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/sign-in-methods',
                 'https://first.example.invalid/.well-known/oauth-protected-resource/api/client',
 
+                'https://second.example.invalid/api/client/sign-in-methods',
+                'https://second.example.invalid/.well-known/oauth-protected-resource/api/client',
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/session/token',
                 'https://second.example.invalid/api/client/accounts',
                 'https://second.example.invalid/api/client/folders',
                 'https://second.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
                 'https://second.example.invalid/api/client/emails/search/phrasing',
+                'https://second.example.invalid/api/client/tasks?pageSize=50',
+                'https://second.example.invalid/api/client/tasks/proposed?pageSize=50',
+                expect.stringMatching(
+                    /^https:\/\/second\.example\.invalid\/api\/client\/calendar\?from=.+&until=.+&origin=Asserted&count=100$/,
+                ),
+                'https://second.example.invalid/api/client/tasks/today/layout',
                 calendarWindowAt('https://second.example.invalid'),
                 'https://second.example.invalid/api/client/calendar/drafts',
                 'https://second.example.invalid/api/client/replies/drafting',
