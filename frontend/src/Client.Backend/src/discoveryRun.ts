@@ -7,18 +7,26 @@ import { asRecord } from './json';
 import {
     parseAttachmentEntries,
     parseBlockEvidence,
+    parseComposedDraft,
+    parseConversationStanding,
     parseDeclaredSource,
     parseEvidenceEntries,
     parseFactTableColumns,
     parseFactTableRows,
+    parsePersonEntries,
+    parseSuggestedAction,
     parseSynthesizedAnswer,
     parseTimelineEntries,
     type AttachmentEntry,
     type BlockEvidence,
+    type ComposedDraft,
+    type ConversationStanding,
     type DeclaredSource,
     type EvidenceEntry,
     type FactTableColumn,
     type FactTableRow,
+    type PersonEntry,
+    type SuggestedAction,
     type SynthesizedAnswer,
     type TimelineEntry,
 } from './presentationBlocks';
@@ -127,15 +135,43 @@ export type AnswerBlock =
           readonly rows: readonly FactTableRow[];
       })
     | (NamedBlock & {
+          readonly type: 'people';
+          readonly evidence: BlockEvidence;
+          readonly entries: readonly PersonEntry[];
+      })
+    | (NamedBlock & {
+          readonly type: 'threadState';
+          readonly evidence: BlockEvidence;
+          readonly standing: ConversationStanding;
+      })
+    | (NamedBlock & {
           readonly type: 'attachmentGallery';
           readonly evidence: BlockEvidence;
           readonly entries: readonly AttachmentEntry[];
       })
     | (NamedBlock & {
+          readonly type: 'draft';
+          readonly evidence: BlockEvidence;
+          readonly draft: ComposedDraft;
+      })
+    | (NamedBlock & {
+          readonly type: 'suggestedAction';
+          readonly evidence: BlockEvidence;
+          readonly suggestion: SuggestedAction;
+      })
+    | (NamedBlock & {
           /** The type the catalogue carries, or `null` where the run named one this contract does not. */
           readonly type: Exclude<
               AnswerBlockType,
-              'answer' | 'evidenceList' | 'timeline' | 'factTable' | 'attachmentGallery'
+              | 'answer'
+              | 'evidenceList'
+              | 'timeline'
+              | 'factTable'
+              | 'people'
+              | 'threadState'
+              | 'attachmentGallery'
+              | 'draft'
+              | 'suggestedAction'
           > | null;
       });
 
@@ -583,11 +619,39 @@ function parseBlock(value: unknown): AnswerBlock | null {
             return rows === null ? null : { type: named, named, evidence, columns, rows };
         }
 
+        case 'people': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const entries = parsePersonEntries(record['entries']);
+
+            return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'threadState': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const standing = parseConversationStanding(record);
+
+            return evidence === null || standing === null ? null : { type: named, named, evidence, standing };
+        }
+
         case 'attachmentGallery': {
             const evidence = parseBlockEvidence(record['evidence']);
             const entries = parseAttachmentEntries(record['entries']);
 
             return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'draft': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const draft = parseComposedDraft(record);
+
+            return evidence === null || draft === null ? null : { type: named, named, evidence, draft };
+        }
+
+        case 'suggestedAction': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const suggestion = parseSuggestedAction(record);
+
+            return evidence === null || suggestion === null ? null : { type: named, named, evidence, suggestion };
         }
 
         default:

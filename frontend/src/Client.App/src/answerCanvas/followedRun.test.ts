@@ -3,8 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import type { ClientResult, DiscoveryRunEvent, DiscoveryRunSpend, RunTail } from '@mailfathom/client-backend';
+import type { AnswerBlock, ClientResult, DiscoveryRunEvent, DiscoveryRunSpend, RunTail } from '@mailfathom/client-backend';
 import { answerAfter, nothingRead } from './followedRun';
+
+// What these tests read is the run's own bookkeeping — the order blocks arrived in, the sources they may rest on, the
+// cursor — and never what a block holds, so the fixture is a block this build cannot draw at all: every type the
+// contract carries now has a renderer, and a payload here would be one more thing to keep in step for nothing.
+function arrived(named: string): AnswerBlock {
+    return { type: null, named };
+}
 
 function answering(events: readonly DiscoveryRunEvent[], running = false): ClientResult<RunTail<DiscoveryRunEvent>> {
     return { outcome: 'read', value: { running, events } };
@@ -35,26 +42,26 @@ describe('answerAfter', () => {
         const answer = answerAfter(
             nothingRead,
             answering([
-                { kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } },
-                { kind: 'block', sequence: 3, block: { type: 'people', named: 'people' } },
+                { kind: 'block', sequence: 2, block: arrived('RiskScore') },
+                { kind: 'block', sequence: 3, block: arrived('Sentiment') },
             ]),
         );
 
-        expect(answer.blocks.map((arrived) => arrived.sequence)).toEqual([2, 3]);
+        expect(answer.blocks.map((block) => block.sequence)).toEqual([2, 3]);
     });
 
     it('adds what a later read brought to what an earlier one did', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }], true),
         );
 
         const second = answerAfter(
             first,
-            answering([{ kind: 'block', sequence: 3, block: { type: 'people', named: 'people' } }]),
+            answering([{ kind: 'block', sequence: 3, block: arrived('Sentiment') }]),
         );
 
-        expect(second.blocks.map((arrived) => arrived.block.named)).toEqual(['threadState', 'people']);
+        expect(second.blocks.map((block) => block.block.named)).toEqual(['RiskScore', 'Sentiment']);
     });
 
     it('keeps every source the run declared, so a block drawn later can still name what it rests on', () => {
@@ -69,7 +76,7 @@ describe('answerAfter', () => {
         const first = answerAfter(nothingRead, answering([{ kind: 'citation', sequence: 1, source: declared }], true));
         const second = answerAfter(
             first,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }]),
+            answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }]),
         );
 
         expect(second.sources.get('c-1')).toEqual(declared);
@@ -132,7 +139,7 @@ describe('answerAfter', () => {
     it('keeps the blocks that had arrived when the run ended badly, and says which ending it was', () => {
         const working = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }], true),
         );
 
         const ended = answerAfter(
@@ -166,7 +173,7 @@ describe('answerAfter', () => {
     it('says the deployment is out of reach and keeps what had arrived', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 1, block: { type: 'threadState', named: 'threadState' } }], true),
+            answering([{ kind: 'block', sequence: 1, block: arrived('RiskScore') }], true),
         );
 
         const second = answerAfter(first, { outcome: 'failed', failure: { reason: 'unavailable', status: null } });

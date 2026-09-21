@@ -590,6 +590,73 @@ describe('readDiscoveryRunTail', () => {
         ]);
     });
 
+    it('reads where a conversation stands off the block that carries it rather than off a member of its own', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 8,
+                        block: {
+                            type: 'threadState',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            participants: [{ displayName: 'Anna Kowalska', address: null }],
+                            agreements: [{ text: 'SLA cut from 4 h to 2 h', sources: ['c-1'] }],
+                            openQuestions: [],
+                            commitments: [],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+
+        expect(
+            event?.kind === 'block' && event.block.type === 'threadState' ? event.block.standing.agreements : null,
+        ).toEqual([{ text: 'SLA cut from 4 h to 2 h', sources: ['c-1'] }]);
+    });
+
+    it('refuses a run offering a step that would send mail without being confirmed', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 9,
+                        block: {
+                            type: 'suggestedAction',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            action: 'ReplyToThread',
+                            reason: 'They have been waiting two days.',
+                            impact: 'SendsMail',
+                            requiresConfirmation: false,
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
     it('refuses a block whose own payload it cannot read rather than drawing the type as unknown', async () => {
         const answered = await readDiscoveryRunTail(
             session,

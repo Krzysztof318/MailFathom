@@ -19,14 +19,21 @@ import { initialsOf } from './initials';
 // the person opened — and they are places here rather than a second component, because a person recognised by their
 // letters is the same circle wherever it stands.
 
-/** Where the avatar stands: a row of a list, the head of a message drawn as a card, or an opened person's own page. */
-export type SenderAvatarPlace = 'row' | 'card' | 'contact' | 'person';
+/**
+ * Where the avatar stands: a row of a list, the head of a message drawn as a card, an opened person's own page, or one
+ * of the two places a block of an AI answer draws somebody.
+ */
+export type SenderAvatarPlace = 'row' | 'card' | 'contact' | 'person' | 'answerRow' | 'answerStack';
 
 const places: Readonly<Record<SenderAvatarPlace, string>> = {
     row: 'size-8.5 text-xs workspace:size-5.5 workspace:text-2xs',
     card: 'size-7.5 text-xs',
     contact: 'size-8 text-xs',
     person: 'size-13 text-lg',
+    answerRow: 'size-8 text-xs',
+    // The participants of a conversation are drawn as one overlapping run of circles rather than a list of names, which
+    // is what the ring in the panel's own colour and the negative margin are: each circle sits over the one before it.
+    answerStack: 'size-6.5 text-2xs -me-1.75 border-2 border-panel',
 };
 
 /** The circle a sender is recognised by, drawn only where there are letters to put in it. */

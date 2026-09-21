@@ -133,9 +133,9 @@ describe('Timeline', () => {
         expect(screen.getByText('No events in the period this question is about.')).toBeDefined();
     });
 
-    it('names a block registered under the wrong type rather than drawing somebody else’s data as a chronology', () => {
-        renderTimeline({ type: 'people', named: 'people' });
+    it('names a block it is not the renderer for rather than drawing somebody else’s data as a chronology', () => {
+        renderTimeline({ type: null, named: 'RiskScore' });
 
-        expect(screen.getByText('type: people')).toBeDefined();
+        expect(screen.getByText('type: RiskScore')).toBeDefined();
     });
 });
