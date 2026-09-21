@@ -295,7 +295,6 @@ export {
     type MailSemanticSearch,
 } from './mailSearch';
 export {
-    calendarDayOf,
     mailSearchPhrasingRoute,
     phraseNotRead,
     readMailSearchPhrase,
@@ -389,6 +388,15 @@ export {
     replaceOwnPortrait,
     type PortraitImageType,
 } from './ownPortrait';
+export {
+    changeOwnTimeZone,
+    longestTimeZoneAnswer,
+    ownTimeZoneRoute,
+    readOwnTimeZone,
+    reportedTimeZone,
+    type OwnTimeZone,
+    type OwnTimeZoneChange,
+} from './ownTimeZone';
 export { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
 export {
     followRun,

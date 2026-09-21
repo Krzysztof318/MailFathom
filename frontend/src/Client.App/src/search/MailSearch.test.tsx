@@ -137,15 +137,7 @@ function deployment(options: {
 // rather than being one, which is what lets this file prove the composition without mounting a second screen.
 const mailInScope = 'The mail in this folder';
 
-// The clock a test that is not about the clock hands over. Declared once rather than defaulted inline, so a screen
-// rendered twice is handed the same function and the effect that reads it does not restart.
-const whenTheSuiteRuns = (): Date => new Date();
-
-function searchUnder(
-    transport: MailFathomTransport,
-    scope: MailScope = everything,
-    now: () => Date = whenTheSuiteRuns,
-): ReactElement {
+function searchUnder(transport: MailFathomTransport, scope: MailScope = everything): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
@@ -157,7 +149,6 @@ function searchUnder(
                     online={true}
                     onOpen={() => undefined}
                     onOpenDraft={null}
-                    now={now}
                 >
                     <p>{mailInScope}</p>
                 </MailSearch>
@@ -258,12 +249,14 @@ describe('MailSearch', () => {
         expect(search?.path).toContain('unread=true');
     });
 
-    // What *yesterday* means is decided where somebody is standing, so the day travels with the sentence rather than
-    // being taken at the other end. A late evening is the hour that would resolve to the wrong day if it were.
-    it('sends the day its caller is standing on rather than the day the deployment is', async () => {
+    // What *yesterday* means is decided by the zone this person's own record states, which the deployment reads for
+    // itself — so the sentence travels alone and the screen states no day of its own. A client that sent one would be
+    // handing the deployment a second answer to a question it has already settled, and the two would disagree for
+    // anybody whose browser reports another zone.
+    it('sends the sentence alone, the day being the deployment’s to resolve', async () => {
         const { transport, asked } = deployment({ readsPhrases: true });
 
-        render(searchUnder(transport, everything, () => new Date(2026, 2, 14, 23, 30)));
+        render(searchUnder(transport));
         await screen.findByPlaceholderText('Search, or describe what you need');
         searchFor('mail from Nordwind last week');
 
@@ -271,7 +264,7 @@ describe('MailSearch', () => {
 
         const read = asked.find((request) => request.method === 'POST');
 
-        expect(JSON.parse(read?.body ?? '{}')).toMatchObject({ askedOn: '2026-03-14' });
+        expect(JSON.parse(read?.body ?? '{}')).toStrictEqual({ phrase: 'mail from Nordwind last week' });
     });
 
     it('runs the search again with one criterion no longer ranking it', async () => {

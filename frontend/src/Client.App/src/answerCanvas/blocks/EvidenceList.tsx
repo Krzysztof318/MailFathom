@@ -8,6 +8,7 @@ import { Icon } from '../../controls/Icon';
 import { wordRecentInstant } from '../../localization/instants';
 import type { Locale } from '../../localization/locale';
 import { useLocalization, type Translate } from '../../localization/useLocalization';
+import { useReadingZone } from '../../localization/useReadingZone';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { useAnswerSources } from '../answerSources';
 import { evidenceCounts, freshnessWords, sourceKinds, sourceMediums, supportVerdicts } from './blockWording';
@@ -78,10 +79,11 @@ export function EvidenceList({ block }: { readonly block: AnswerBlock }) {
 function EvidenceItem({ entry, now }: { readonly entry: EvidenceEntry; readonly now: number }) {
     const { locale, translate } = useLocalization();
     const { sources, follow } = useAnswerSources();
+    const timeZone = useReadingZone();
 
     const declared = sources.get(entry.source);
     const relevance = new Intl.NumberFormat(locale, { style: 'percent' }).format(entry.relevance);
-    const freshness = wordFreshness(entry.freshness, locale, now, translate);
+    const freshness = wordFreshness(entry.freshness, locale, now, timeZone, translate);
     const name = declared?.label ?? translate('answer.sourcePrivateName');
 
     const said = (
@@ -182,8 +184,14 @@ function SourceBadge({ source }: { readonly source: DeclaredSource }) {
  * the two halves are one answer, and saying the word without the date it is about would state a currency the entry
  * did not carry.
  */
-function wordFreshness(freshness: SourceFreshness, locale: Locale, now: number, translate: Translate): string {
-    const at = wordRecentInstant(freshness.observedAt, locale, now);
+function wordFreshness(
+    freshness: SourceFreshness,
+    locale: Locale,
+    now: number,
+    timeZone: string | null,
+    translate: Translate,
+): string {
+    const at = wordRecentInstant(freshness.observedAt, locale, now, timeZone);
 
     return at === null || freshness.staleness === 'Unknown'
         ? translate(freshnessWords.Unknown)

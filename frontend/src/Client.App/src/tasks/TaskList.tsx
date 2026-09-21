@@ -9,6 +9,7 @@ import { onlySelected, withToggled } from '../contextMenu/rowSelection';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { TaskRow } from './TaskRow';
 import { TaskRowMenu } from './TaskRowMenu';
 import { groupedTasks, type TaskGroupName } from './taskGrouping';
@@ -104,6 +105,7 @@ export function TaskList({
     readonly onReadAgain: () => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const headings = useId();
     const [menu, setMenu] = useState<{ readonly task: PersonalTask; readonly at: MenuPoint } | null>(null);
 
@@ -111,7 +113,7 @@ export function TaskList({
     // menu that left focus on the element it has just taken out of the document is where keyboard use silently stops.
     const rows = useRef(new Map<string, HTMLLIElement>());
 
-    const groups = groupedTasks(tasks, now);
+    const groups = groupedTasks(tasks, now, timeZone);
     const counted = new Intl.NumberFormat(locale);
 
     // Whether a scroll has reached the rows already read, which is what asks the deployment for the page after them.

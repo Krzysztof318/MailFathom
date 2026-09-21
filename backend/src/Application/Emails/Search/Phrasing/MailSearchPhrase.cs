@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Emails.Search.Phrasing;
 
-/// <summary>A sentence somebody typed to describe the mail they are looking for, and the day they typed it on.</summary>
+/// <summary>A sentence somebody typed to describe the mail they are looking for, and the instant they typed it on.</summary>
 /// <remarks>
 /// <para>
 /// The text is the same value a search is asked with, because it is the same field: somebody types into one box, and
@@ -13,13 +13,14 @@ namespace MailFathom.Application.Emails.Search.Phrasing;
 /// almost-identical rule about how long a thing somebody types may be.
 /// </para>
 /// <para>
-/// The day travels beside it because a sentence is full of time and none of it is absolute: <em>last quarter</em>,
+/// The instant travels beside it because a sentence is full of time and none of it is absolute: <em>last quarter</em>,
 /// <em>since Tuesday</em> and <em>this year</em> mean something only against the day the person is standing on, and
-/// that is their day rather than the deployment's. It is a calendar day rather than an instant so no zone arithmetic
-/// happens here at all — the client sends the day it is showing them, the reading answers in calendar days, and the
-/// client turns those back into the range it already turns its own date controls into.
+/// that is their day rather than the deployment's. It is resolved from this deployment's own clock and the zone that
+/// person's record carries rather than sent by the client, so what reaches a provider's prompt is a value this
+/// deployment holds. The reading still answers in calendar days, which is what the client turns back into the range it
+/// already turns its own date controls into.
 /// </para>
 /// </remarks>
 /// <param name="Text">What was typed, bounded and checked exactly as a search's own text is.</param>
-/// <param name="AskedOn">The reader's own calendar day, which every relative time expression is resolved against.</param>
-public sealed record MailSearchPhrase(EmailSearchQueryText Text, DateOnly AskedOn);
+/// <param name="AskedAt">The instant the reader is standing on, which every relative time expression is resolved against.</param>
+public sealed record MailSearchPhrase(EmailSearchQueryText Text, DateTimeOffset AskedAt);

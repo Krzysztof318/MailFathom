@@ -22,4 +22,16 @@ internal sealed record ServedMailUser(
     MailUserId User,
     string DisplayName,
     IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts,
-    MailUserLanguage Language = MailUserLanguage.English);
+    MailUserLanguage Language = MailUserLanguage.English)
+{
+    /// <summary>Gets the zone this person's own record states, or <see langword="null" /> where it states none.</summary>
+    /// <remarks>
+    /// A property rather than a positional value, for the reason
+    /// <see cref="Application.Access.MailUserRecord.EndpointAccess" /> is one: every composition that has nothing to
+    /// say about a zone says nothing rather than repeating an answer. It stays nothing rather than falling to
+    /// <see cref="MailUserTimeZone.Coordinated" /> here, because a person who chose UTC and a person nobody has asked
+    /// yet are answered differently — the first is left alone and the second is offered the zone their client reports —
+    /// and the roster is the last place holding both facts.
+    /// </remarks>
+    public MailUserTimeZone? TimeZone { get; init; }
+}

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Search.Phrasing;
 
 namespace MailFathom.AI.Search;
@@ -15,8 +16,8 @@ namespace MailFathom.AI.Search;
 /// kinds and says nothing about presentation.
 /// </para>
 /// <para>
-/// Nothing of the mailbox is in the turn. What leaves this deployment is the sentence somebody typed and the calendar
-/// day they typed it on, so the reading costs one short exchange and cannot be talked into retrieving anything: the
+/// Nothing of the mailbox is in the turn. What leaves this deployment is the sentence somebody typed and the instant
+/// they typed it on, so the reading costs one short exchange and cannot be talked into retrieving anything: the
 /// agent is composed with no tool at all.
 /// </para>
 /// <para>
@@ -43,9 +44,9 @@ internal static class MailSearchPhraseInstructions
             one sender, or more than one recipient, omit that field altogether and leave what it named in "criteria":
             either address written alone would hide the other's mail, which is the one thing a filter must never do.
           "receivedFrom" and "receivedTo" take a calendar day as "YYYY-MM-DD", inclusive at both ends, and are how
-            every expression of time is answered. The turn names today's date; resolve "last quarter", "since Tuesday"
-            and "this year" against it and write the days you resolved them to, so the person can see what you
-            understood and correct it.
+            every expression of time is answered. The turn names the current date and time; resolve "last quarter",
+            "since Tuesday" and "this year" against it and write the days you resolved them to, so the person can see
+            what you understood and correct it.
           "unread", "flagged" and "hasAttachments" are true only where the sentence asks for unread mail, for flagged
             or starred mail, or for mail carrying files. There is no way to ask for the opposite of any of them, so
             write nothing rather than false.
@@ -69,17 +70,16 @@ internal static class MailSearchPhraseInstructions
 
     /// <summary>Composes the one turn a sentence is put to the agent as.</summary>
     /// <param name="phrase">The sentence, already guarded for anything the deployment withholds from a provider.</param>
-    /// <param name="askedOn">The reader's own calendar day, which every relative time expression is resolved against.</param>
+    /// <param name="askedAt">The instant the reader is standing on, which every relative time expression is resolved against.</param>
     /// <returns>The turn text.</returns>
     /// <remarks>
-    /// The day is stated in the turn rather than in the instruction because the instruction is composed once per
-    /// process and a day is not: an agent carrying yesterday's date in its own instruction would resolve
-    /// <em>today</em> to yesterday for every search until the next restart.
+    /// The anchor is <see cref="AgentTimeAnchor" />'s rather than a wording of this operation's own, and it is stated on
+    /// the turn rather than in the instruction for the reasons that type holds.
     /// </remarks>
-    internal static string ComposeReadingTurn(string phrase, DateOnly askedOn) => string.Create(
+    internal static string ComposeReadingTurn(string phrase, DateTimeOffset askedAt) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        Today is {askedOn:yyyy-MM-dd}.
+        {AgentTimeAnchor.Stated(askedAt)}
 
         Sentence: {phrase}
         """);

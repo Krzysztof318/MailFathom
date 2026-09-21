@@ -322,6 +322,12 @@ public static class ServiceCollectionExtensions
         // arrived first.
         services.AddScoped<AccessAuthorization>();
 
+        // The wall clock the acting person is standing on, which every operation resolving a relative period states as
+        // its anchor. Scoped because the person is the request's, over a zone reader and a clock that are both the
+        // deployment's; the zone reader itself is the composition root's, for the reason the language reader beside it
+        // is registered there.
+        services.AddScoped<MailUserClock>();
+
         // The record a refused caller is never told about. A singleton for the reason every other publisher here is
         // one: the counter it holds is a fact about the process, and a scoped instance would create an instrument per
         // request.

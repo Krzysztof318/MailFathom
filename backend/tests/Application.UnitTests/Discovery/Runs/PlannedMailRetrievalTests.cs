@@ -307,7 +307,7 @@ public sealed class PlannedMailRetrievalTests
         };
 
     private static MailQuestion Question(MailboxScope scope) =>
-        new(MailQuestionText.Create("was the invoice attached"), scope);
+        new(MailQuestionText.Create("was the invoice attached"), scope, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     private static RetrievalPlan PlanOf(int sufficientPassages, params string[] queries) => RetrievalPlan.Create(
         Bounds,

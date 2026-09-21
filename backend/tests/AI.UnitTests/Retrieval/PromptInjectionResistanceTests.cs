@@ -164,7 +164,8 @@ public sealed class PromptInjectionResistanceTests
                 knowledgeSearch,
                 OnePrimaryAccount,
                 new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-                SensitiveContentEgressGuards.Inactive()),
+                SensitiveContentEgressGuards.Inactive(),
+                DateTimeOffset.UnixEpoch),
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text;
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Domain.Calendar;
 
@@ -96,7 +97,7 @@ internal static class CalendarEventExtractionInstructions
 
         var turn = new StringBuilder();
 
-        turn.Append(CultureInfo.InvariantCulture, $"{Anchored(receivedAt)}\n\n");
+        turn.Append(CultureInfo.InvariantCulture, $"{AgentTimeAnchor.Stated(receivedAt)}\n\n");
         turn.Append(CultureInfo.InvariantCulture, $"A message from this mailbox.\n\nSubject: {subject ?? "(none)"}\n\n");
 
         foreach (var (passage, ordinal) in passages.Select(static (passage, ordinal) => (passage, ordinal)))
@@ -111,27 +112,14 @@ internal static class CalendarEventExtractionInstructions
     /// <param name="description">The sentence, already guarded for anything the deployment withholds from a provider.</param>
     /// <param name="writtenAt">The instant whoever typed it is standing on, which every relative day and hour is resolved against.</param>
     /// <returns>The turn text.</returns>
-    /// <remarks>
-    /// The instant is stated in the turn rather than in the instruction because the instruction is composed once per
-    /// process and an instant is not: an agent carrying yesterday in its own instruction would resolve
-    /// <em>tomorrow</em> to today for every sentence until the next restart.
-    /// </remarks>
     internal static string ComposeDescriptionTurn(string description, DateTimeOffset writtenAt) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {Anchored(writtenAt)}
+        {AgentTimeAnchor.Stated(writtenAt)}
 
         A sentence somebody typed to describe one event they want.
 
         Sentence: {description}
         """);
 
-    /// <summary>States the instant a turn's relative days and hours are resolved against.</summary>
-    /// <remarks>
-    /// Written without its offset, because what the model is being given is the local wall clock the text belongs to
-    /// and what it is being asked for is the same. Handing it an offset would invite it to write one back.
-    /// </remarks>
-    private static string Anchored(DateTimeOffset instant) => string.Create(
-        CultureInfo.InvariantCulture,
-        $"Now, where this text was written: {instant:yyyy-MM-dd'T'HH:mm} ({instant:dddd}).");
 }

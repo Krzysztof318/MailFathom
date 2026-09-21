@@ -25,13 +25,20 @@ internal sealed record DiscoveryLookupDocument
     [JsonPropertyName("subjectFragment")]
     public string? SubjectFragment { get; init; }
 
-    /// <summary>Gets the instant mail must have been received at or after.</summary>
+    /// <summary>Gets the wall clock mail must have been received at or after, as the model wrote it.</summary>
+    /// <remarks>
+    /// Carried as text rather than as a <see cref="DateTimeOffset" /> so that nothing supplies a zone on the model's
+    /// behalf. What it writes is a wall clock against the anchor its turn stated, and only the reading knows whose
+    /// wall clock that is; a binder given the same characters would answer an instant belonging to nobody in this
+    /// deployment. <see cref="Orchestration.AnchoredInstant" /> is where it becomes one.
+    /// </remarks>
     [JsonPropertyName("receivedOnOrAfter")]
-    public DateTimeOffset? ReceivedOnOrAfter { get; init; }
+    public string? ReceivedOnOrAfter { get; init; }
 
-    /// <summary>Gets the instant mail must have been received before.</summary>
+    /// <summary>Gets the wall clock mail must have been received before, as the model wrote it.</summary>
+    /// <remarks>Read exactly as <see cref="ReceivedOnOrAfter" /> is, and for the same reason.</remarks>
     [JsonPropertyName("receivedBefore")]
-    public DateTimeOffset? ReceivedBefore { get; init; }
+    public string? ReceivedBefore { get; init; }
 
     /// <summary>Gets the read state mail must carry.</summary>
     [JsonPropertyName("isRemotelySeen")]

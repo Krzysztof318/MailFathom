@@ -290,6 +290,78 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: null), relinked);
     }
 
+    /// <summary>The zone a person states about their own days is written onto the record they already hold.</summary>
+    [Fact]
+    public async Task ChangeOwnTimeZoneAsync_ARecordStatingAnotherZone_CommitsTheOneStated()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
+
+        // Act
+        var changed = await harness.Records.ChangeOwnTimeZoneAsync(
+            Zone("Asia/Tokyo"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(changed);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(json => json!.Contains("Asia/Tokyo", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
+            7,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A re-submitted or double-clicked choice changes nothing, so it commits nothing: a write here bumps the record's
+    /// version and republishes the roster across every replica, which is a cost to pay for a change rather than for a
+    /// repeat.
+    /// </summary>
+    [Fact]
+    public async Task ChangeOwnTimeZoneAsync_ARecordAlreadyStatingThatZone_IsHeldWithoutCommitting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
+
+        // Act
+        var changed = await harness.Records.ChangeOwnTimeZoneAsync(
+            Zone("Europe/Warsaw"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(changed);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A record stating nothing is read in UTC and still states nothing, so choosing UTC over it is a change rather
+    /// than a repeat: it is what takes the record off the default a client proposes against.
+    /// </summary>
+    [Fact]
+    public async Task ChangeOwnTimeZoneAsync_ARecordStatingNoZoneAndTheCoordinatedZoneChosen_IsCommitted()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
+
+        // Act
+        var changed = await harness.Records.ChangeOwnTimeZoneAsync(
+            MailUserTimeZone.Coordinated,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(changed);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(json => json!.Contains(MailUserTimeZone.Coordinated.Id, StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
+            1,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>The relink is an entry point of its own, so it holds the grant itself rather than trusting whoever called it to have checked.</summary>
     [Fact]
     public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnMail_IsRefusedBeforeTheRecordIsRead()
@@ -797,6 +869,12 @@ public sealed class UserRecordAdministrationTests
               }
               """,
             Version: 1);
+
+    /// <summary>Reads a zone the way the endpoint reaching this use case reads one, so a test cannot state an unknown one.</summary>
+    private static MailUserTimeZone Zone(string zoneId) =>
+        MailUserTimeZone.TryRead(zoneId, out var zone)
+            ? zone
+            : throw new InvalidOperationException($"This host knows no time zone called '{zoneId}'.");
 
     /// <summary>The service over a substituted row and the real binder, so a candidate is judged the way a start judges one.</summary>
     private sealed class RecordHarness

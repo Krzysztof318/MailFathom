@@ -29,11 +29,13 @@ internal static class DiscoveryPlanReading
     /// <param name="answerText">What the agent wrote, which may be empty, fenced, or surrounded by prose.</param>
     /// <param name="question">The question, whose words are the lookup of last resort.</param>
     /// <param name="retrievalBounds">What this deployment's retrieval returns at most.</param>
+    /// <param name="askedAt">The instant the turn stated, whose offset every written received bound belongs to.</param>
     /// <returns>The plan, and whether it was read from the answer or fell back.</returns>
     internal static DiscoveryPlanReadingOutcome Read(
         string? answerText,
         MailQuestionText question,
-        EmailKnowledgeBounds retrievalBounds)
+        EmailKnowledgeBounds retrievalBounds,
+        DateTimeOffset askedAt)
     {
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(retrievalBounds);
@@ -47,7 +49,7 @@ internal static class DiscoveryPlanReading
         [
             .. (document.Lookups ?? [])
                 .Where(static lookup => lookup is not null)
-                .Select(ToQuery)
+                .Select(lookup => ToQuery(lookup, askedAt))
                 .OfType<EmailKnowledgeQuery>()
                 .Take(RetrievalPlan.MaximumLookups),
         ];
@@ -112,11 +114,19 @@ internal static class DiscoveryPlanReading
 
     /// <summary>Turns one proposed lookup into a query, or into nothing where its words could not be searched for.</summary>
     /// <remarks>
+    /// <para>
     /// Only the query text decides whether a lookup survives, because it is the only part without which there is
     /// nothing to rank. A filter the deployment refuses — an address that is not one, a range that ends before it
     /// starts — is left in place and skips its own lookup at retrieval, where the refusal names which filter it was.
+    /// </para>
+    /// <para>
+    /// A received bound is read against the anchor rather than bound from the document, so <em>this week</em> resolved
+    /// by the model reaches retrieval as the week the asking person is actually in. One it wrote in some other form is
+    /// dropped rather than guessed at, which widens that lookup and hides no mail — the opposite of reading it in a
+    /// zone nobody named, which narrows it onto the wrong hours while looking exactly like a bound that worked.
+    /// </para>
     /// </remarks>
-    private static EmailKnowledgeQuery? ToQuery(DiscoveryLookupDocument lookup)
+    private static EmailKnowledgeQuery? ToQuery(DiscoveryLookupDocument lookup, DateTimeOffset askedAt)
     {
         if (string.IsNullOrWhiteSpace(lookup.QueryText))
         {
@@ -133,8 +143,8 @@ internal static class DiscoveryPlanReading
                 SenderAddress = lookup.SenderAddress,
                 RecipientAddress = lookup.RecipientAddress,
                 SubjectFragment = lookup.SubjectFragment,
-                ReceivedOnOrAfter = lookup.ReceivedOnOrAfter,
-                ReceivedBefore = lookup.ReceivedBefore,
+                ReceivedOnOrAfter = AnchoredInstant.Read(lookup.ReceivedOnOrAfter, askedAt),
+                ReceivedBefore = AnchoredInstant.Read(lookup.ReceivedBefore, askedAt),
                 IsRemotelySeen = lookup.IsRemotelySeen,
                 IsRemotelyFlagged = lookup.IsRemotelyFlagged,
                 Keyword = lookup.Keyword,

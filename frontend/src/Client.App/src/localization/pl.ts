@@ -306,6 +306,13 @@ export const pl: Catalogue = {
         'To zdjęcie nie zostało zapisane na wdrożeniu, więc nadal jesteś rysowany tak jak wcześniej.',
     'settings.profileHeld':
         'Imię, nazwisko i zdjęcie przechowuje wdrożenie, na które się logujesz, więc idą za Tobą między maszynami. Żadne z nich nie trafia na Twój serwer poczty.',
+    'settings.timeZone': 'Strefa czasowa',
+    'settings.timeZoneExplanation':
+        'W tej strefie zapisywana jest każda pokazywana Ci data i to ona rozstrzyga, co znaczy „w tym tygodniu” i „od wtorku”, gdy pytasz o swoją pocztę.',
+    'settings.timeZoneNotAcceptable':
+        'Ta strefa czasowa nie została przyjęta, więc Twoje daty są nadal zapisywane w poprzedniej.',
+    'settings.timeZoneNotStored':
+        'Ta strefa czasowa nie została zapisana na wdrożeniu, więc Twoje daty są nadal zapisywane w poprzedniej.',
     'settings.messageView': 'Widok wiadomości',
     'settings.messageViewCleaned': 'Uproszczony przez AI',
     'settings.messageViewReduced': 'Uproszczony',

@@ -22,6 +22,7 @@ import { SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { MessageMarkupFrame } from '../messageBody/MessageMarkupFrame';
 
 // The second surface ADR 0024 takes: what the sender actually sent, drawn away from the reading pane for the reader
@@ -109,6 +110,7 @@ export function FullHtmlSurface({
     readonly onClose: () => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
     const [described, setDescribed] = useState<{ read: HeadRead; result: ClientResult<MailMessage> } | null>(null);
     const [answer, setAnswer] = useState<{ read: Read; result: ClientResult<MailBody> } | null>(null);
@@ -198,7 +200,7 @@ export function FullHtmlSurface({
     const drawn = answer?.read === read ? answer.result : null;
     const message = describing?.outcome === 'read' ? describing.value : null;
     const author = message?.headers.participants.find((participant) => participant.role === 'From') ?? null;
-    const sentAt = message === null ? null : wordInstant(message.headers.sentAt, locale, 'full');
+    const sentAt = message === null ? null : wordInstant(message.headers.sentAt, locale, 'full', timeZone);
 
     // **One failure state for two reads.** Either read failing leaves this surface unable to be what it is — the head
     // names the message and the body is the message — so a reader is told once, with one way out, rather than being

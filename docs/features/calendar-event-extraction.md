@@ -56,7 +56,7 @@ offset the text was written in, so neither is asked to guess the other's half.
 | Half | The instant every relative day is resolved against, and whose offset an hour is read in |
 | --- | --- |
 | Mail | When the message arrived, from its own metadata |
-| A typed sentence | The instant the client sends beside the sentence, carrying the offset the person is standing in |
+| A typed sentence | This deployment's own clock, read in the [time zone the asking person's record states](../operations/configuration-sources.md#the-zone-this-persons-days-are-read-in--timezone) |
 
 Reading the message's own arrival rather than the current time is what makes the same message, read again next month,
 resolve *Friday* to the same day it did the first time. A message that carries no arrival instant is read into nothing

@@ -128,6 +128,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
         var turn = DiscoveryPlanningInstructions.ComposePlanningTurn(
             questionText,
             question.Scope,
+            question.AskedAt,
             this.retrievalBounds);
 
         ChatRequestBounds.Require(
@@ -137,7 +138,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
             this.plan.MaximumRequestImageOctets);
 
         var answer = await this.AskAsync(turn, cancellationToken);
-        var outcome = DiscoveryPlanReading.Read(answer?.Text, question.Text, this.retrievalBounds);
+        var outcome = DiscoveryPlanReading.Read(answer?.Text, question.Text, this.retrievalBounds, question.AskedAt);
 
         // The model that answered where one did, and the model the plan was asked of where none could.
         var answeringAlias = answer?.Alias ?? endpoint.Alias;

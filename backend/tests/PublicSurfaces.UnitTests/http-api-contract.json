@@ -477,14 +477,9 @@
         "type": "object"
       },
       "ClientCalendarEventDraftRequest": {
+        "additionalProperties": false,
         "properties": {
           "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "writtenAt": {
             "type": [
               "null",
               "string"
@@ -492,8 +487,7 @@
           }
         },
         "required": [
-          "description",
-          "writtenAt"
+          "description"
         ],
         "type": "object"
       },
@@ -2514,13 +2508,8 @@
         "type": "object"
       },
       "ClientMailSearchPhraseRequest": {
+        "additionalProperties": false,
         "properties": {
-          "askedOn": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "phrase": {
             "type": [
               "null",
@@ -2529,8 +2518,7 @@
           }
         },
         "required": [
-          "phrase",
-          "askedOn"
+          "phrase"
         ],
         "type": "object"
       },
@@ -4047,6 +4035,33 @@
           "origin",
           "completed",
           "sourceMessageId"
+        ],
+        "type": "object"
+      },
+      "ClientTimeZoneRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientTimeZoneResponse": {
+        "properties": {
+          "isDefault": {
+            "type": "boolean"
+          },
+          "timeZone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeZone",
+          "isDefault"
         ],
         "type": "object"
       },
@@ -17310,6 +17325,72 @@
             "description": "OK"
           },
           "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/time-zone": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTimeZoneResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientTimeZoneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientTimeZoneResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
             "description": "Not Found"
           }
         },

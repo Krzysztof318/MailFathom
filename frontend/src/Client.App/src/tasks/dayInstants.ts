@@ -2,10 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The three places this screen has to turn a reader's day into the instants the wire takes. The deployment keeps no
-// timezone for anybody — every calendar route states two instants and the day layout states two more — so which
-// moments are somebody's day is the client's to say, and it says it in the zone the runtime reports rather than in one
-// anybody named.
+// The three places this screen has to turn a reader's day into the instants the wire takes. Every calendar route states
+// two instants and the day layout states two more, so which moments are somebody's day is the client's to say.
+//
+// It says it in the zone the runtime reports, which the reader's record may now disagree with: the record is what the
+// deployment anchors a relative period on and what every wording here is placed in, and a reader whose record states
+// another zone has this screen's day boundaries drawn from their machine rather than from it. That is a placement
+// rather than a wording and it reaches the calendar's own span the same way, so it is one correction against both
+// rather than a second reading invented here.
 //
 // They are together rather than beside whichever caller reached for one first, because all three are the same reading
 // of the same thing and a second copy of it is how two of them come to disagree about when a day ends.

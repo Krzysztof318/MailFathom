@@ -111,6 +111,7 @@ internal static class ClientDiscoveryRunEndpoints
     /// <summary>Starts a run over the question, or reports what was wrong with it.</summary>
     /// <param name="request">The question and the mail it may be answered from.</param>
     /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting user.</param>
+    /// <param name="userClock">Reads the instant the acting person is standing on, which every relative period in the question is resolved against.</param>
     /// <param name="principals">Reports the principal the transport admitted, which the run executes under.</param>
     /// <param name="runs">Opens the run, which is where the deployment's bound on one person's concurrent runs is applied.</param>
     /// <param name="timeProvider">Stamps the run, which its retention and its ceiling are measured from.</param>
@@ -133,6 +134,7 @@ internal static class ClientDiscoveryRunEndpoints
     internal static async Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> Start(
         [FromBody] ClientDiscoveryRunRequest? request,
         [FromServices] MailboxScopeResolver scopeResolver,
+        [FromServices] MailUserClock userClock,
         [FromServices] IAuthorizedPrincipalSource principals,
         [FromServices] IDiscoveryRunStore runs,
         [FromServices] TimeProvider timeProvider,
@@ -140,6 +142,7 @@ internal static class ClientDiscoveryRunEndpoints
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(userClock);
         ArgumentNullException.ThrowIfNull(principals);
         ArgumentNullException.ThrowIfNull(runs);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -153,7 +156,7 @@ internal static class ClientDiscoveryRunEndpoints
         MailQuestion question;
         try
         {
-            question = QuestionOf(request, scopeResolver);
+            question = QuestionOf(request, scopeResolver, userClock);
         }
         catch (MailAccountNotAccessibleException)
         {
@@ -306,7 +309,10 @@ internal static class ClientDiscoveryRunEndpoints
     }
 
     /// <summary>Reads the question and the mail it may be answered from, refusing anything the request got wrong.</summary>
-    private static MailQuestion QuestionOf(ClientDiscoveryRunRequest? request, MailboxScopeResolver scopeResolver)
+    private static MailQuestion QuestionOf(
+        ClientDiscoveryRunRequest? request,
+        MailboxScopeResolver scopeResolver,
+        MailUserClock userClock)
     {
         var text = MailQuestionText.Create(request?.Question);
 
@@ -315,7 +321,7 @@ internal static class ClientDiscoveryRunEndpoints
             Folders(request?.Folders),
             JunkMailInclusion.Excluded);
 
-        return new MailQuestion(text, NarrowedTo(scope, request));
+        return new MailQuestion(text, NarrowedTo(scope, request), userClock.Now());
     }
 
     /// <summary>Narrows a resolved scope to what the question was actually asked about.</summary>

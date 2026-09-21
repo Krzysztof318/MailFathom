@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -50,7 +51,10 @@ internal static class DiscoveryPlanningInstructions
         words and does not translate them, so a mailbox that plausibly holds two languages is reached by a lookup per
         language. Put every other part of the question into the filters beside it rather than into those words:
         "senderAddress" and "recipientAddress" for a whole mail address, "subjectFragment" for text a subject contains,
-        "receivedOnOrAfter" and "receivedBefore" for an ISO 8601 instant bounding when mail arrived, "isRemotelySeen"
+        "receivedOnOrAfter" and "receivedBefore" for when mail arrived, each written as {AnchoredInstant.WrittenForm}
+        with no zone, no offset and no Z — the turn names the current date and time on that same clock, so resolve
+        "this week", "since Tuesday" and "last quarter" against it and write the moments you resolved them to rather
+        than leaving the period in the words — "isRemotelySeen"
         and "isRemotelyFlagged" for the read and starred states, "keyword" for a label, and "hasAttachments" for whether
         mail carries files. Omit a filter you have no reason to set; a filter narrows exactly, while the same words in
         the query only compete with every other word in it. A person the question names without an address has no
@@ -68,17 +72,26 @@ internal static class DiscoveryPlanningInstructions
     /// <summary>Composes the one turn a question is put to the agent as, describing the scope it was asked within.</summary>
     /// <param name="question">The question, already guarded for anything the deployment withholds from a provider.</param>
     /// <param name="scope">The scope bounding what may be read to answer it.</param>
+    /// <param name="askedAt">The instant whoever asked is standing on, which every relative period in the question is resolved against.</param>
     /// <param name="retrievalBounds">What this deployment's retrieval returns at most, which bounds what enough may be.</param>
     /// <returns>The turn text.</returns>
     /// <remarks>
+    /// <para>
     /// The scope reaches the model as what kind of thing was asked about and how much of it, never as an identifier. A
     /// question about four selected messages is planned differently from one about a whole mailbox — one broad lookup
     /// answers the first and several narrow ones the second — and the count is the whole of what the model needs to
     /// tell them apart.
+    /// </para>
+    /// <para>
+    /// The anchor is stated first and is <see cref="AgentTimeAnchor" />'s. Without it the two arrival filters take an
+    /// absolute instant the model would have had to recall, so a question naming a period was planned against a date
+    /// nobody supplied and came back as mail that does not exist rather than as an error.
+    /// </para>
     /// </remarks>
     internal static string ComposePlanningTurn(
         string question,
         MailboxScope scope,
+        DateTimeOffset askedAt,
         EmailKnowledgeBounds retrievalBounds)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -87,6 +100,8 @@ internal static class DiscoveryPlanningInstructions
         return string.Create(
             CultureInfo.InvariantCulture,
             $"""
+            {AgentTimeAnchor.Stated(askedAt)}
+
             Question: {question}
 
             Scope: {Describe(scope)}

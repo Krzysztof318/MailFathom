@@ -8,6 +8,7 @@ import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { BackToList } from '../mailSpace/BackToList';
 import { HeadActs } from '../mailSpace/HeadActs';
 import type { ActedMessage } from '../mailboxActs/useMailboxActs';
@@ -92,12 +93,13 @@ export function MessageHeaders({
 }) {
     const { locale, translate } = useLocalization();
     const twoPanes = useTwoPanes();
+    const timeZone = useReadingZone();
     const panelsHidden = useWorkspace().workspace.panelsHidden;
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
     const author = authors.length === 0 ? translate('message.noAuthor') : authors.map((one) => named(one)).join(', ');
-    const sentAt = wordInstant(headers.sentAt, locale, 'stamp');
+    const sentAt = wordInstant(headers.sentAt, locale, 'stamp', timeZone);
     const subject = subjectOfTheWhole ?? headers.subject ?? translate('message.noSubject');
     const held = messagesInThread ?? null;
 

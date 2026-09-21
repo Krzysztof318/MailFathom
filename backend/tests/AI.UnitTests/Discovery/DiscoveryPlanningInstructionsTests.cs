@@ -20,6 +20,9 @@ public sealed class DiscoveryPlanningInstructionsTests
 
     private static readonly EmailKnowledgeBounds Bounds = EmailKnowledgeBounds.Default;
 
+    /// <summary>The instant every question is asked at, which is the anchor the turn states.</summary>
+    private static readonly DateTimeOffset AskedAt = new(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2));
+
     /// <summary>Every name the reading parses is a name the instruction offered, or a model is being asked to guess.</summary>
     [Fact]
     public void Text_TheInstruction_NamesEveryIntentTheReadingCanRead()
@@ -52,7 +55,7 @@ public sealed class DiscoveryPlanningInstructionsTests
         var scope = Scope().NarrowedToEmails([Email("11111111-1111-1111-1111-111111111111")]);
 
         // Act
-        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, Bounds);
+        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, AskedAt, Bounds);
 
         // Assert
         Assert.Contains("1 individually selected messages", turn, StringComparison.Ordinal);
@@ -66,7 +69,7 @@ public sealed class DiscoveryPlanningInstructionsTests
             EmailThreadId.Create(new Guid("22222222-2222-2222-2222-222222222222")));
 
         // Act
-        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, Bounds);
+        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, AskedAt, Bounds);
 
         // Assert
         Assert.Contains("one conversation", turn, StringComparison.Ordinal);
@@ -76,7 +79,7 @@ public sealed class DiscoveryPlanningInstructionsTests
     public void ComposePlanningTurn_AQuestionAboutTheWholeMailbox_SaysHowManyAccountsItReaches()
     {
         // Act
-        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", Scope(), Bounds);
+        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", Scope(), AskedAt, Bounds);
 
         // Assert
         Assert.Contains("every folder of 1 mail accounts", turn, StringComparison.Ordinal);
@@ -93,7 +96,7 @@ public sealed class DiscoveryPlanningInstructionsTests
             .NarrowedToEmails([email]);
 
         // Act
-        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, Bounds);
+        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn("which quote", scope, AskedAt, Bounds);
 
         // Assert
         Assert.DoesNotContain(Primary.Value, turn, StringComparison.Ordinal);

@@ -7,6 +7,7 @@ import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import { wordInstantRange } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { inTimeOrder } from './calendarSpan';
 
 // The dates the reader's mail named that are not on their calendar yet, which the design project draws down the side
@@ -35,6 +36,7 @@ export function ProposedDates({
     readonly onDismiss: (proposal: CalendarEvent) => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
 
     return (
         <section
@@ -62,7 +64,7 @@ export function ProposedDates({
                             <p className="flex items-baseline gap-2.25">
                                 <span className="min-w-0 flex-1 text-sm text-pretty">{proposal.title}</span>
                                 <span className="shrink-0 text-xs font-semibold whitespace-nowrap text-accent-deep">
-                                    {wordInstantRange(proposal.start, proposal.end, locale, 'stamp')}
+                                    {wordInstantRange(proposal.start, proposal.end, locale, 'stamp', timeZone)}
                                 </span>
                             </p>
 

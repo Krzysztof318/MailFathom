@@ -24,6 +24,7 @@ import { Confirmation } from '../confirmation/Confirmation';
 import { Control } from '../controls/Control';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { DayCapacity } from './DayCapacity';
 import { NewTask, type TaskDraft } from './NewTask';
@@ -147,6 +148,7 @@ export function TasksSpace({
     readonly onOpenMessage: (messageId: string) => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const wide = useWideWorkspace();
 
     // Read once for the life of the screen, which is what `controls/ReceivedAt.tsx` does and for its reason: a heading
@@ -214,6 +216,7 @@ export function TasksSpace({
         groupedTasks(
             reading.tasks.filter((task) => !task.completed),
             now,
+            timeZone,
         ).find((group) => group.name === 'today')?.tasks.length ?? 0;
 
     // What a batch of writes left behind, as one of four sentences rather than as a success and a generic failure:

@@ -295,16 +295,21 @@ rule catches a string written into markup and nothing else, so everything below 
   that is spelled into a catalogue — a month name, a decimal separator, or a hand-written plural form there is a second
   copy of something the platform already knows and gets right in every language. `Intl.PluralRules` is what selects a
   form when a screen first counts something, which Polish needs and English hides.
-- **An instant is shown in the reader's own timezone, and no screen names one.** The service sends an instant with an
-  offset and what a reader is owed is that instant placed against _their_ day rather than against a server's or a
-  sender's, so nothing passes `timeZone` to `Intl` and every screen therefore renders in the zone the runtime reports.
-  `Client.App/src/localization/instants.ts` is where that is stated and the only place a screen gets the wording from,
-  because three screens word an instant and a second copy of the decision is how two of them come to disagree about
-  when the same message arrived. What a `<time>` element carries in `dateTime` is the instant the service sent,
-  unchanged — the human spelling and the machine-readable form are different things and neither replaces the other.
+- **An instant is shown in the zone the reader's own record states, and no screen decides which that is.** The service
+  sends an instant with an offset and what a reader is owed is that instant placed against _their_ day rather than
+  against a server's or a sender's — and which day that is comes from the deployment rather than from what the runtime
+  reports, because the same value is what the deployment anchors every relative period on. So the zone is read once at
+  the frame, published through `Client.App/src/localization/useReadingZone.ts`, and passed to every wording call;
+  `null` is the runtime's own zone and is what stands until a record has answered. A screen that named a zone of its
+  own, or that rendered UTC, would be wrong for every reader who is not sitting in it, and the failure is invisible in
+  review because the value still looks like a time.
+  `Client.App/src/localization/instants.ts` is the only place a screen gets the wording from, because several screens
+  word an instant and a second copy of the decision is how two of them come to disagree about when the same message
+  arrived. What a `<time>` element carries in `dateTime` is the instant the service sent, unchanged — the human
+  spelling and the machine-readable form are different things and neither replaces the other.
   **A calendar day that is a filter value is not an instant** and is read as local midnight, so the day somebody picked
   is the day the chip reads back; `wordCalendarDay` is that case and it has a function of its own for that reason.
-  A test proves it by pinning a zone and asserting the literal spelling, never by comparing against a formatter built
+  A test proves it by naming a zone and asserting the literal spelling, never by comparing against a formatter built
   the same way — that assertion passes for a screen that named `timeZone: 'UTC'` as happily as for one that did not.
 - **The list of languages is the one thing never translated.** Each is named in its own language, so somebody who has
   landed in one they cannot read finds their own.

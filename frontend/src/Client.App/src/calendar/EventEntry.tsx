@@ -9,6 +9,7 @@ import { useRowPress } from '../contextMenu/rowPress';
 import { Icon } from '../controls/Icon';
 import { wordInstantRange } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { eventShapes, timeShown, type EventShape } from './eventShapes';
 
 // One event wherever a view draws one, which is its own component for the reason a message row is: it is what carries
@@ -53,10 +54,11 @@ export function EventEntry({
     readonly onPress: (at: MenuPoint) => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const press = useRowPress(onPress);
     const look = eventShapes[shape];
 
-    const when = wordInstantRange(event.start, event.end, locale, 'time');
+    const when = wordInstantRange(event.start, event.end, locale, 'time', timeZone);
 
     return (
         <li

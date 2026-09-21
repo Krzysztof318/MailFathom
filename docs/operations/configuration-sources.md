@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs, backend/src/Application/Access/IMailUserTimeZones.cs, backend/src/Domain/Access/MailUserTimeZone.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON or YAML configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -168,12 +168,13 @@ At most **256** users may be recorded. A roster that long was generated rather t
 ### What a user's own record carries
 
 `mfctl user add` provisions the record naming the language and nothing else, so a user is recorded and served without
-anybody writing a line of it. What it can carry is two keys, and everything else about how their mail is read belongs
+anybody writing a line of it. What it can carry is three keys, and everything else about how their mail is read belongs
 to the mail accounts they are assigned:
 
 | Key | Required | What it is |
 | --- | --- | --- |
 | `Language` | Yes, of a record being written | `English` or `Polish`, read however it was capitalized. The language this deployment writes **for this person** in; [the language this person reads](#the-language-this-person-reads--language) holds the rule and both refusals |
+| `TimeZone` | No | The IANA zone this person's own days are read in, such as `Europe/Warsaw`. [The zone their days are read in](#the-zone-this-persons-days-are-read-in--timezone) holds the rule and its refusal; a record stating none is read in `UTC` |
 | `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
 
 ### The language this person reads — `Language`
@@ -216,6 +217,41 @@ where a record is rewritten and of no other write: a held record naming no langu
 administrator keeping somebody off an endpoint and a person changing their portrait are not refused over it, and the
 first save of the whole record states it. The operator's action after upgrading is a single `mfctl user edit` per
 person.
+
+### The zone this person's days are read in — `TimeZone`
+
+`TimeZone` is where this person is standing, and it settles what a relative period means for them. Every AI operation
+that resolves one states the anchor on its own turn out of this value — a search sentence read into filters, an event
+drafted from a typed description, a question asked over the MCP `ask_mail` tool, a Discover run started from the
+client — so *this week* and *since Tuesday* are their week and their Tuesday rather than the host's. The client draws
+every date on the screen in it too, which is what stops a client and its deployment disagreeing about which day a
+message arrived on.
+
+It is an IANA identifier, at most 64 characters, and it is resolved against the zone database of the machine this
+deployment runs on:
+
+```json
+{
+  "TimeZone": "Europe/Warsaw"
+}
+```
+
+`mfctl user add` provisions no zone, and both [`mfctl user edit`](admin-endpoint.md#users-and-their-records) and
+[the client's zone routes](client-endpoint.md#the-time-zone-a-persons-days-are-read-in) write it — the second being how
+a person states their own without an administrator. A client proposes the zone the browser reports the first time
+somebody signs in whose record still states none, so the ordinary deployment needs no operator action at all.
+
+One refusal, and it is stated rather than quietly read as `UTC`, because a value read in the wrong zone places every
+date and every relative period a day out with nothing having said so:
+
+```
+TimeZone states 'Europe/Warszawa', which is not a time zone this deployment knows. State an IANA identifier such as
+'Europe/Warsaw', at most 64 characters, or state none and be read in UTC.
+```
+
+**A record stating none is read in `UTC`**, which is the one answer every replica agrees on. That is an ordinary state
+rather than an unfinished one: a record committed before this release states no zone, is served without being refused,
+and reads in `UTC` until somebody states theirs.
 
 ### A configuration still declaring users
 

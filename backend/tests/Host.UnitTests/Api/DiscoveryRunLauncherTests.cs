@@ -34,7 +34,8 @@ public sealed class DiscoveryRunLauncherTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create([], []));
+        MailboxScope.Create([], []),
+        new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     /// <summary>A scope this process could not compose ends the run, rather than leaving a client re-reading one that never ends.</summary>
     [Fact]

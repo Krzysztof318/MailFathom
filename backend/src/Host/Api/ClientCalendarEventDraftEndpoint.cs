@@ -2,7 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
+using System.Text.Json.Serialization;
+using MailFathom.Application.Access;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Endpoints;
@@ -47,9 +48,6 @@ internal static class ClientCalendarEventDraftEndpoint
     /// <remarks>Generous against the bound the text itself carries and against the envelope around it, and small enough that a body is refused before it is read rather than after.</remarks>
     internal const int MaxDescriptionRequestBytes = 4 * 1024;
 
-    /// <summary>The form an instant is written in on this route, which is the one a client composes rather than types.</summary>
-    private const string WrittenInstantFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
-
     /// <summary>Maps the routes into the client group, so they inherit the group's requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
@@ -86,8 +84,9 @@ internal static class ClientCalendarEventDraftEndpoint
     }
 
     /// <summary>Reads one description, or reports what was wrong with the request.</summary>
-    /// <param name="request">The sentence and the instant whoever typed it is standing on.</param>
+    /// <param name="request">The sentence to read.</param>
     /// <param name="extractor">Reads the sentence, in whichever state this deployment left it.</param>
+    /// <param name="userClock">Reads the instant whoever typed it is standing on, which every relative day and hour is resolved against.</param>
     /// <param name="cancellationToken">Cancels the reading when the client disconnects.</param>
     /// <returns><c>200</c> with the draft or with the statement that none was read, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
     /// <remarks>
@@ -105,21 +104,18 @@ internal static class ClientCalendarEventDraftEndpoint
     internal static async Task<Results<Ok<ClientCalendarEventDraftResponse>, ProblemHttpResult>> DraftEventAsync(
         [FromBody] ClientCalendarEventDraftRequest? request,
         [FromServices] ICalendarEventExtractor extractor,
+        [FromServices] MailUserClock userClock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(extractor);
+        ArgumentNullException.ThrowIfNull(userClock);
 
         if (request is null)
         {
             return Refuse("The request carries no description to read.");
         }
 
-        if (!TryReadInstant(request.WrittenAt, out var writtenAt))
-        {
-            return Refuse("The instant the description was typed at is written as yyyy-mm-ddThh:mm:ss±hh:mm.");
-        }
-
-        if (!CalendarEventDescription.TryCreate(request.Description, writtenAt, out var description))
+        if (!CalendarEventDescription.TryCreate(request.Description, userClock.Now(), out var description))
         {
             return Refuse(
                 $"A description is non-blank and at most {CalendarEventDescription.MaximumTextLength} characters.");
@@ -141,19 +137,6 @@ internal static class ClientCalendarEventDraftEndpoint
     private static ProblemHttpResult Refuse(string stated) =>
         TypedResults.Problem(stated, statusCode: StatusCodes.Status400BadRequest);
 
-    /// <summary>Reads the instant a client states it is standing on, offset and all.</summary>
-    /// <remarks>
-    /// One format and the invariant culture, because the value is composed by a program rather than typed by a person.
-    /// The offset is required rather than optional: it is what turns <em>Thursday at three</em> into three o'clock
-    /// where the person is, and a value without one would be resolved in whichever zone the deployment happens to run.
-    /// </remarks>
-    private static bool TryReadInstant(string? written, out DateTimeOffset instant) =>
-        DateTimeOffset.TryParseExact(
-            written,
-            WrittenInstantFormat,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out instant);
 }
 
 /// <summary>What this deployment does with a description, which is what says whether a caller may offer the field.</summary>
@@ -165,15 +148,16 @@ internal static class ClientCalendarEventDraftEndpoint
 /// </remarks>
 internal sealed record ClientCalendarEventDraftingResponse(bool ReadsDescriptions);
 
-/// <summary>One description to read, and the instant whoever typed it is standing on.</summary>
+/// <summary>One description to read.</summary>
 /// <param name="Description">What was typed, which the deployment bounds as a sentence rather than as a body of text.</param>
-/// <param name="WrittenAt">The client's own instant with its own offset, which every relative day and hour is resolved against.</param>
 /// <remarks>
-/// The instant comes from the client rather than from the deployment's clock, and that is the point of it:
-/// <em>tomorrow at nine</em> means nine where whoever typed it is, and a deployment in another zone would draft an
-/// event at an hour they never asked for.
+/// The instant <em>tomorrow at nine</em> is resolved against is not here, deliberately. It used to arrive as a request
+/// field, which made an unverified client value part of what a provider's prompt is composed from; the deployment now
+/// reads it from its own clock and the zone that person's record carries, which still means nine where they are
+/// without taking a caller's word for where that is.
 /// </remarks>
-internal sealed record ClientCalendarEventDraftRequest(string? Description, string? WrittenAt);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ClientCalendarEventDraftRequest(string? Description);
 
 /// <summary>What one description was read as: the event it describes, or the statement that none was read.</summary>
 /// <param name="Drafted">Whether a draft was read at all, which is <see langword="false" /> where this deployment reads no description, the provider could not be reached, or the sentence described no occasion.</param>

@@ -36,6 +36,14 @@ internal sealed record MailSearchPhraseCase(
     /// <summary>The day every sentence is typed on, which a stated period is resolved against.</summary>
     public static readonly DateOnly AskedOn = new(2026, 9, 14);
 
+    /// <summary>The instant every sentence is typed at, which is the anchor the turn states.</summary>
+    /// <remarks>
+    /// Stated by the case rather than read from a clock, which is what keeps a run comparable with the one before it:
+    /// a case resolving <em>last month</em> against today would score differently every day it is run. Noon so the
+    /// day it names is the same one on either side of the zones a provider might read it in.
+    /// </remarks>
+    public static readonly DateTimeOffset AskedAt = new(AskedOn, new TimeOnly(12, 0), TimeSpan.Zero);
+
     private const string StatedSender = "billing@northwind.example";
 
     private const string SecondSender = "accounts@fabrikam.example";

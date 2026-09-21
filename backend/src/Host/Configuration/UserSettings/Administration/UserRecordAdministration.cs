@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
 using MailFathom.Application.StoredFiles;
@@ -60,7 +61,7 @@ internal sealed class UserRecordAdministration(
     IStoredFileStore files,
     ConfigurationChangeAnnouncements announcements)
 {
-    /// <summary>How many times a portrait link is composed again over a record another write moved underneath it.</summary>
+    /// <summary>How many times a one-property edit is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
 
     /// <summary>What a save refused over a redaction marker it cannot place is sent to.</summary>
@@ -75,7 +76,7 @@ internal sealed class UserRecordAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the deployment holds the record and it could not be handed on.</exception>
     /// <exception cref="FormatException">Thrown when the row is JSON but not an object of settings.</exception>
-    /// <exception cref="System.Text.Json.JsonException">Thrown when the row is not JSON, or is nested past what a document may be.</exception>
+    /// <exception cref="JsonException">Thrown when the row is not JSON, or is nested past what a document may be.</exception>
     internal Task<UserRecordReading?> ReadRecordAsync(MailUserId user, CancellationToken cancellationToken)
     {
         RequireNamed(user);
@@ -234,6 +235,80 @@ internal sealed class UserRecordAdministration(
         return outcome is null
             ? null
             : new UserEndpointAccessWrite(outcome, outcome.IsCommitted ? requested : standing);
+    }
+
+    /// <summary>Records the zone the signed-in person states their own days are read in.</summary>
+    /// <param name="zone">The zone, already resolved against the zones this host knows.</param>
+    /// <param name="cancellationToken">Cancels the reads and the commit.</param>
+    /// <returns><see langword="true" /> where the change was committed, <see langword="false" /> where this deployment holds no record for them.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="zone" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the record refused the zone for a reason a retry does not settle.</exception>
+    /// <remarks>
+    /// <para>
+    /// Asked for under the grant a signed-in person already holds rather than under the record's own write, for the
+    /// reason the portrait above is: what the zone decides is how that person's own days are read, which is not a
+    /// decision about which mailboxes this deployment connects to and under whose credentials. Somebody whose mailboxes
+    /// an administrator maintains still reads their mail in their own week.
+    /// </para>
+    /// <para>
+    /// Composed over whatever version is in force rather than over one a caller read, and judged as a record already
+    /// held, both for the reasons <see cref="RelinkOwnPortraitAsync" /> gives: nobody authored this change against a
+    /// version, and a record committed before a rule a write is held to existed must not stop a person correcting
+    /// their zone.
+    /// </para>
+    /// <para>
+    /// A record already stating the zone is answered without a commit, as <see cref="RelinkOwnPortraitAsync" /> answers
+    /// an unchanged portrait: a re-submitted or double-clicked choice would otherwise bump the record's version and
+    /// republish the roster across every replica for a change that changed nothing.
+    /// </para>
+    /// </remarks>
+    internal async Task<bool> ChangeOwnTimeZoneAsync(MailUserTimeZone zone, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(zone);
+
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        var user = authorization.RequireUser();
+
+        for (var attempt = 1; ; attempt++)
+        {
+            if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
+            {
+                return false;
+            }
+
+            if (StatedTimeZoneIdOf(inForce.Json) == zone.Id)
+            {
+                return true;
+            }
+
+            var outcome = await this.JudgeAndCommitAsync(
+                user,
+                inForce,
+                SettingsDocumentPatch.Apply(
+                    inForce.Json,
+                    [ConfigurationEdit.SetTo(nameof(UserAccountOptions.TimeZone), zone.Id)]),
+                UserRecordAuthority.User,
+                rewritesTheWholeRecord: false,
+                cancellationToken);
+
+            if (outcome is null)
+            {
+                return false;
+            }
+
+            if (outcome.IsSettled)
+            {
+                return true;
+            }
+
+            if (outcome.Refusal != MailFathomErrorCode.ConfigurationVersionSuperseded || attempt == MaximumRelinkAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"The user record refused the time zone: {string.Join(" ", outcome.Messages)}");
+            }
+        }
     }
 
     /// <summary>Points the signed-in user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
@@ -614,6 +689,37 @@ internal sealed class UserRecordAdministration(
         SecretReference.TryParse(configuredValue, out var reference, out _)
         && LastSegmentOf(reference.Target)
             .StartsWith(CredentialPrefixFor(user), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Reads the zone a stored record states, which is not the zone it is read in where it states none.</summary>
+    /// <param name="documentJson">The record as its row holds it.</param>
+    /// <returns>The identifier the record states, or <see langword="null" /> where it states none.</returns>
+    /// <remarks>
+    /// Read from the record a commit would be composed over rather than from the served snapshot, so what a change is
+    /// compared against is what it would replace. A record stating nothing is read in UTC and still states nothing, so
+    /// choosing UTC over it is a change rather than a repeat: it is what takes the record off the default, which is
+    /// the whole of what a client proposes against. The key is matched case-insensitively, because that is how the
+    /// configuration binder reads the same record; the value is compared as it was written, so a record carrying an
+    /// identifier in another casing is rewritten in the canonical one rather than left disagreeing with it.
+    /// </remarks>
+    private static string? StatedTimeZoneIdOf(string documentJson)
+    {
+        using var document = JsonDocument.Parse(documentJson);
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return document.RootElement
+            .EnumerateObject()
+            .Where(property => string.Equals(
+                    property.Name,
+                    nameof(UserAccountOptions.TimeZone),
+                    StringComparison.OrdinalIgnoreCase)
+                && property.Value.ValueKind == JsonValueKind.String)
+            .Select(property => property.Value.GetString())
+            .FirstOrDefault(stated => !string.IsNullOrWhiteSpace(stated));
+    }
 
     /// <summary>Names what every credential provisioned for one user is called, whichever scheme delivers it.</summary>
     private static string CredentialPrefixFor(MailUserId user) => $"user-{user.Value:D}-";

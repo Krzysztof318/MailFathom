@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Scheduling;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
 
@@ -73,6 +74,30 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     public string? Language { get; set; }
 
+    /// <summary>Gets or sets the zone this person's own days are read in, as an IANA identifier such as <c>Europe/Warsaw</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// What it answers is what <em>this week</em>, <em>since Tuesday</em> and <em>tomorrow at nine</em> mean when
+    /// something is composed or resolved for this person — a search sentence read into a period, an event drafted from
+    /// a typed description, a question asked about a stretch of mail. It is the person's rather than a mailbox's for
+    /// the reason <see cref="Language" /> is: everything derived from a mailbox already carries a better anchor of its
+    /// own, because a message's arrival instant holds the sender's own offset.
+    /// </para>
+    /// <para>
+    /// Absent is an ordinary state rather than an unfinished one, which is where this differs from the language beside
+    /// it. A language has no absence because text composed for somebody comes out in some language whether or not
+    /// anybody chose it; a zone has one reachable answer that is the same on every replica —
+    /// <see cref="MailUserTimeZone.Coordinated" /> — so a record that states nothing is read in UTC rather than in
+    /// whichever zone the host happens to run in, and a record held from before this property existed keeps working.
+    /// </para>
+    /// <para>
+    /// Carried as the written identifier rather than as a resolved zone, for the reason the language is: the binder
+    /// reports an unknown value as a refusal naming what to correct, while a typed property would have made the same
+    /// mistake a binding failure with the configuration binder's own sentence in place of that one.
+    /// </para>
+    /// </remarks>
+    public string? TimeZone { get; set; }
+
     /// <summary>Gets or sets the mail accounts this user is assigned, which may be none.</summary>
     /// <remarks>
     /// Zero is an ordinary state rather than an unfinished one: a user is provisioned before their first mailbox is
@@ -111,6 +136,16 @@ internal sealed class UserAccountOptions : IValidatableObject
             .FirstOrDefault()
         : null;
 
+    /// <summary>Gets the zone this record states, or <see langword="null" /> where it states none.</summary>
+    /// <remarks>
+    /// Nothing rather than <see cref="MailUserTimeZone.Coordinated" />, for the reason <see cref="ReadingLanguage" />
+    /// answers nothing: a record stating no zone and a record stating the coordinated one are different facts, and
+    /// collapsing them here would leave nothing able to tell a person who chose UTC from a person nobody has asked yet.
+    /// The reader that wants one value for both falls back itself.
+    /// </remarks>
+    internal MailUserTimeZone? ReadingTimeZone =>
+        MailUserTimeZone.TryRead(this.TimeZone, out var zone) ? zone : null;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
 
@@ -127,6 +162,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     internal IEnumerable<ValidationResult> FindRefusals() =>
         this.FindUnwritableLanguageError()
+            .Concat(this.FindUnknownTimeZoneError())
             .Concat(UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts)));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
@@ -191,6 +227,24 @@ internal sealed class UserAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"{nameof(this.Language)} is not stated, and every user record names the language MailFathom writes for that person in — the card beside a contact of theirs, a message that answers no correspondence. State {PublishedLanguages}.",
                 [nameof(this.Language)]);
+        }
+    }
+
+    /// <summary>Reports a zone this host does not know, or an identifier no zone could have.</summary>
+    /// <returns>One result where <see cref="TimeZone" /> states something this host cannot resolve, empty where it names a zone or nothing at all.</returns>
+    /// <remarks>
+    /// A refusal rather than a fall back to UTC, because the two are different facts: a record stating nothing has
+    /// asked for nothing, while one naming <c>Europe/Warszawa</c> has asked for something and would otherwise be
+    /// answered in a zone an hour or two off without anybody being told. The refusal names the form to write rather
+    /// than listing the zones, of which a host carries several hundred.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindUnknownTimeZoneError()
+    {
+        if (!string.IsNullOrWhiteSpace(this.TimeZone) && !MailUserTimeZone.TryRead(this.TimeZone, out _))
+        {
+            yield return new ValidationResult(
+                $"{nameof(this.TimeZone)} states '{this.TimeZone}', which is not a time zone this deployment knows. State an IANA identifier such as 'Europe/Warsaw', at most {ZonedInstant.MaximumZoneIdLength} characters, or state none and be read in UTC.",
+                [nameof(this.TimeZone)]);
         }
     }
 

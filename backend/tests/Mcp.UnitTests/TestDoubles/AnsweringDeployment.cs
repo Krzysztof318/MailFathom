@@ -93,7 +93,8 @@ internal static class AnsweringDeployment
             Substitute.For<IMailAnsweringAuditTrail>(),
             new FakeTimeProvider(Now),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            MailUserClocks.Reading(Now));
     }
 
     /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>

@@ -261,7 +261,8 @@ public sealed class MailAnsweringAgentCompositionTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            DateTimeOffset.UnixEpoch);
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             plan,
@@ -349,7 +350,8 @@ public sealed class MailAnsweringAgentCompositionTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            DateTimeOffset.UnixEpoch);
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             plan,
@@ -513,7 +515,8 @@ public sealed class MailAnsweringAgentCompositionTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(100, 8, 80_000)),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            DateTimeOffset.UnixEpoch);
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
@@ -562,7 +565,8 @@ public sealed class MailAnsweringAgentCompositionTests
             knowledgeSearch,
             scope,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            DateTimeOffset.UnixEpoch);
 
         return MailAnsweringAgentComposition.Compose(
             chatClient,

@@ -9,6 +9,7 @@ import { pressedByFinger, useRowPress } from '../contextMenu/rowPress';
 import { Icon } from '../controls/Icon';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { wordNotificationAge } from './notificationAge';
 import { notificationKindLabels, notificationTones } from './notificationKinds';
 import { wordNotification } from './notificationWords';
@@ -61,10 +62,11 @@ export function NotificationRow({
     readonly onPress: (at: MenuPoint) => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const press = useRowPress(onPress);
     const tone = notificationTones[notification.kind];
     const age = wordNotificationAge(notification.occurredAt, locale, now);
-    const at = wordInstant(notification.occurredAt, locale, 'full');
+    const at = wordInstant(notification.occurredAt, locale, 'full', timeZone);
     const said = wordNotification(notification, locale, translate);
 
     // A modifier held under a pointer is what picks a row out where there is no selection yet, which is the one

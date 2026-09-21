@@ -65,6 +65,10 @@ internal sealed partial record MailAnsweringScenario(
     int MinimumTaskAdherence,
     MailAccountLanguage? AnswersIn = null)
 {
+    /// <summary>The instant every question is asked at, which is the anchor the turn states and a written bound is read against.</summary>
+    /// <remarks>Stated by the scenario rather than read from a clock, for the reason every evaluation input is fixed: a case resolving <em>this week</em> against today would score differently every day it is run.</remarks>
+    private static readonly DateTimeOffset AskedAt = new(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
+
     /// <summary>The check that the agent looked mail up at all.</summary>
     public const string SearchedMetricName = "Searched mail";
 
@@ -314,13 +318,16 @@ internal sealed partial record MailAnsweringScenario(
             search,
             CorpusKnowledgeSearch.Scope,
             runLedger,
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            AskedAt);
 
-        var answer = await AskAsync(cachedModel, plan, retrieval, runLedger, this.Question, cancellationToken);
+        var turn = $"{AgentTimeAnchor.Stated(AskedAt)}\n\n{this.Question}";
+
+        var answer = await AskAsync(cachedModel, plan, retrieval, runLedger, turn, cancellationToken);
         var searchTool = retrieval.CreateSearchTool();
 
         var verdict = await scenarioRun.EvaluateAsync(
-            [new ChatMessage(ChatRole.System, MailAnsweringInstructions.Text), new ChatMessage(ChatRole.User, this.Question)],
+            [new ChatMessage(ChatRole.System, MailAnsweringInstructions.Text), new ChatMessage(ChatRole.User, turn)],
             answer ?? new ChatResponse(),
             [
                 new IntentResolutionEvaluatorContext(searchTool),
@@ -355,7 +362,7 @@ internal sealed partial record MailAnsweringScenario(
         ChatGenerationPlan plan,
         ScopedMailKnowledgeRetrieval retrieval,
         MailAnsweringRunLedger runLedger,
-        string question,
+        string turn,
         CancellationToken cancellationToken)
     {
         var agent = MailAnsweringAgentComposition.Compose(
@@ -367,7 +374,7 @@ internal sealed partial record MailAnsweringScenario(
 
         try
         {
-            var response = await agent.RunAsync(question, session: null, options: null, cancellationToken);
+            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
             return response.AsChatResponse();
         }

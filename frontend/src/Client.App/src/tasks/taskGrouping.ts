@@ -2,15 +2,17 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { calendarDayOf, type PersonalTask } from '@mailfathom/client-backend';
+import type { PersonalTask } from '@mailfathom/client-backend';
+import { calendarDayIn, dayFrom } from '../localization/instants';
 
 // When work is due, as the three headings the design project draws the list under. It is a rendering decision and
 // therefore the application's: the deployment answers one ordered walk, soonest due first with the undated last, and
 // which heading a day falls under is what a reader is shown rather than something the service has an opinion about.
 //
 // **A day is read against the reader's own day.** A task's due date is a calendar day somebody picked rather than an
-// instant, so it is compared as one — the same reading `wordCalendarDay` gives it, and the reason neither passes a
-// timezone to anything: the reader's runtime is where their day is.
+// instant, so it is compared as one — the same reading `wordCalendarDay` gives it. Which day is theirs comes from the
+// zone their record states rather than from the one their machine reports, because the row under a heading words the
+// same day with `wordDueDay` and two readings of *today* is how a row saying *today* comes to stand under *This week*.
 //
 // **Overdue work stands under *Today*.** The design draws three groups and none of them is *Overdue*, and today is
 // when something that was due on Tuesday has to be done. A fourth heading would be a screen this project does not
@@ -73,15 +75,16 @@ export function inDueOrder(
  *
  * @param tasks The tasks, in the order the deployment walked them.
  * @param now When the reader is reading, which decides what *today* is.
+ * @param timeZone The zone the reader's record states, or `null` for the runtime's own.
  * @returns The headings that have something under them, in the order they are drawn.
  */
-export function groupedTasks(tasks: readonly PersonalTask[], now: number): readonly TaskGroup[] {
-    const at = new Date(now);
-    const today = calendarDayOf(at);
-
-    // Built by moving the day rather than by adding milliseconds, so a week that crosses a daylight-saving change is
-    // still six days rather than six days less an hour.
-    const weekAhead = calendarDayOf(new Date(at.getFullYear(), at.getMonth(), at.getDate() + daysInTheWeekAhead));
+export function groupedTasks(
+    tasks: readonly PersonalTask[],
+    now: number,
+    timeZone: string | null,
+): readonly TaskGroup[] {
+    const today = calendarDayIn(now, timeZone);
+    const weekAhead = dayFrom(today, daysInTheWeekAhead);
 
     return groupOrder
         .map((name) => ({ name, tasks: tasks.filter((task) => groupOf(task, today, weekAhead) === name) }))

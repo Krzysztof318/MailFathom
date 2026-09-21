@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientTimeZoneEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -1001,7 +1001,7 @@ GET /api/client/emails/search/phrasing
 POST /api/client/emails/search/phrasing
 Content-Type: application/json
 
-{ "phrase": "unread mail from the supplier about the racking, since August", "askedOn": "2026-09-09" }
+{ "phrase": "unread mail from the supplier about the racking, since August" }
 ```
 
 ```json
@@ -1039,9 +1039,11 @@ criterion off widens what ranks well rather than what can be found. `unaccounted
 was made of, quoted from it — said rather than dropped, because a sentence half of which was silently discarded is a
 search nobody can correct.
 
-**The two days are calendar days and `askedOn` is the client's own.** Every relative expression — *last quarter*,
-*since Tuesday* — is resolved against the day the person typing is standing on rather than against the deployment's
-clock, and the days it resolved to come back so they can be seen and moved.
+**The two days are calendar days, and the day they were resolved against is the caller's own.** Every relative
+expression — *last quarter*, *since Tuesday* — is resolved against the day the person asking is standing on, which this
+deployment reads from the time zone their user record states rather than from anything the client sends; the days it
+resolved to come back so they can be seen and moved. [The zone routes](#the-time-zone-a-persons-days-are-read-in) are
+where that value is read and corrected.
 
 **`read: false` is the plain word search rather than a failure.** It is what a deployment reading no sentence answers,
 and what this one answers while its provider is unreachable or wrote something unreadable; a client searches the typed
@@ -1051,8 +1053,10 @@ provider answers `429`, because falling back there would spend the search on a c
 **The sentence travels in a body**, which is why reading one is a `POST` for an operation that changes nothing: what
 somebody is looking for in their own mailbox is the most revealing value this surface carries, and a query string is
 the part of a request that reaches an access log by default — here and on every proxy in front of this deployment. A
-body over 4 KiB is refused before it is read, a blank or over-long sentence and an `askedOn` that is not `yyyy-mm-dd`
-are refused with `400`, and a refusal never echoes what was sent.
+body over 4 KiB is refused before it is read, a blank or over-long sentence is refused with `400`, and a refusal never
+echoes what was sent. The body is strict — a key nothing binds is refused with `400` — so a client still sending the
+day it asked on is told, rather than having the field dropped and the sentence read against this deployment's own
+clock.
 
 **Both routes are published under `mailfathom.mail.ask`** rather than under the reading grant, because that is what
 they do: a sentence leaves this deployment for a chat provider and is charged to the same allowance a question is. A
@@ -2134,6 +2138,50 @@ that authenticated, resolved from the request rather than out of the body or the
 grant because it writes the same row an administrator maintains, and the read is the grant every signed-in person
 already holds — somebody whose mailboxes an administrator maintains still sees their own name.
 
+### The time zone a person's days are read in
+
+These two are how a client learns which zone to draw a date in, and how a person corrects it. The value decides two
+things rather than one: what every date on the screen is written in, and what this deployment resolves a relative
+period against when it reads a search sentence, drafts an event out of a typed description, or answers a question
+about a stretch of mail.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/time-zone` | Hands over the zone this deployment reads the signed-in person's days in, and says whether that is still the default |
+| `POST /api/client/time-zone` | Records the zone they stated theirs is |
+
+```json
+{ "timeZone": "Europe/Warsaw", "isDefault": false }
+```
+
+**The zone is read here rather than sent with every request.** An operation resolving *this week* on somebody's behalf
+runs where the mail is, so the anchor it states has to be a value this deployment holds — an MCP caller asking
+`ask_mail` sends no browser and no clock, and a client that sent one would be a second answer to a question the record
+has already settled. `TimeZone` in [the user record](configuration-sources.md) is where it lives; a record stating none
+is read in `UTC`.
+
+**`isDefault` is stated rather than left to be inferred, and it says whether the record states a zone at all** — not
+whether the answer reads as `UTC`. What it decides is whether a client may propose the zone the browser reports for
+somebody who has never been asked, and a client comparing the identifier against `UTC` instead would propose over
+somebody who chose the coordinated zone deliberately. So a record stating nothing is answered `"UTC"` with
+`"isDefault": true`, and a person who chose `UTC` is answered the same identifier with `"isDefault": false`. The write
+answers `false` whichever zone was named, the record stating one from that moment.
+
+**The identifier is an IANA zone name this deployment knows**, such as `Europe/Warsaw`, at most 64 characters. A name
+no zone database here carries, and an offset such as `+02:00`, are refused with `400` naming the form it takes —
+because a value quietly read as `UTC` would place every date and every relative period a day out with nothing having
+said so. The body is bounded like every other on this surface, and one past the bound is answered `413`.
+
+**Neither route names a user**, exactly as no record route does: the zone read and written is that of the credential
+that authenticated. A deployment holding no record for that person answers the write `404`. A write naming the zone the
+record already states is answered as a write that landed and commits nothing: the record's version is what a roster
+republish across every replica is keyed on, which is a cost to pay for a change rather than for a re-submitted choice.
+
+**Both routes are `mailfathom.mail.read`.** The write is under the reading grant for the reason
+[the portrait routes](#the-portrait-routes) are: which zone somebody's own days are read in is not a decision about
+which mailboxes this deployment connects to and under whose credentials, so gating it on the record's own write would
+refuse a change about nothing but themselves to somebody whose mailboxes an administrator maintains.
+
 ### The preferences routes
 
 These two hold what a person set about their own client, so that it follows them rather than the machine they set it
@@ -2497,10 +2545,7 @@ GET /api/client/calendar/drafts
 POST /api/client/calendar/drafts
 Content-Type: application/json
 
-{
-  "description": "racking survey on Thursday at half past ten, an hour",
-  "writtenAt": "2026-09-21T09:30:00+02:00"
-}
+{ "description": "racking survey on Thursday at half past ten, an hour" }
 ```
 
 ```json
@@ -2525,10 +2570,12 @@ enough to hold.
 [`Chat:CalendarEventExtraction:Enabled`](configuration-ai.md#reading-a-calendar-event-out-of-text--chatcalendareventextraction)
 off answers; the two are one answer for the reason the drafting read above gives.
 
-**`writtenAt` is the instant the person is standing on, and it carries their offset.** Every relative day and hour in
-the sentence — *tomorrow*, *Thursday*, *the week after next* — is resolved against it, and the offset is what makes
-*half past ten* their half past ten rather than the deployment's. It is required, and an instant written without an
-offset is refused with `400` rather than resolved in whichever zone this process happens to run in.
+**The instant the sentence is resolved against is the caller's own, and this deployment reads it rather than being
+told.** Every relative day and hour in the sentence — *tomorrow*, *Thursday*, *the week after next* — is resolved
+against the moment the person asking is standing on, which is this process's clock read in the time zone their user
+record states; that zone is what makes *half past ten* their half past ten rather than the deployment's.
+[The zone routes](#the-time-zone-a-persons-days-are-read-in) are where it is read and corrected, and a record stating
+none is read in `UTC`.
 
 **`drafted: false` is an ordinary answer rather than a failure.** A sentence naming no occasion, a deployment
 reading none, and a provider that could not be reached are one answer, because there is nothing a caller could
@@ -2539,7 +2586,9 @@ sent for the rest of the period will be read, and that is a condition a caller h
 **Everything travels in a body**, for the reason drafting does: what somebody is arranging is the most revealing value
 this route carries, and a query string is the part of a request that reaches an access log by default. A body over
 4 KiB is refused before it is read, a missing or over-long `description` is refused with `400`, and a refusal never
-echoes what was typed.
+echoes what was typed. The body is strict — a key nothing binds is refused with `400` — so a client still sending the
+instant it wrote at is told, rather than having the field dropped and the description read against this deployment's
+own clock.
 
 **Both routes are published under `mailfathom.mail.ask`**, because the sentence leaves this deployment for a chat
 provider and the call is charged to the same allowance a question is. Nothing about a description or a drafted event

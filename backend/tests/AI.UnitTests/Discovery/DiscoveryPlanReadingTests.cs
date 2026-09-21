@@ -20,6 +20,14 @@ public sealed class DiscoveryPlanReadingTests
 {
     private static readonly EmailKnowledgeBounds Bounds = EmailKnowledgeBounds.Default;
 
+    /// <summary>The instant the turn stated, which every bound a model writes is read against.</summary>
+    /// <remarks>
+    /// Deliberately not UTC. A bound the model writes carries no zone, so an anchor at offset zero would make a reading
+    /// that reattached nothing indistinguishable from one that reattached the right thing — which is what the bound
+    /// cases here exist to tell apart.
+    /// </remarks>
+    private static readonly DateTimeOffset AskedAt = new(2026, 7, 8, 9, 30, 0, TimeSpan.FromHours(2));
+
     private static readonly MailQuestionText Question =
         MailQuestionText.Create("which supplier quoted least for the racking");
 
@@ -39,7 +47,7 @@ public sealed class DiscoveryPlanReadingTests
             """;
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.True(outcome.WasRead);
@@ -50,6 +58,61 @@ public sealed class DiscoveryPlanReadingTests
         Assert.Equal("sales@example.test", outcome.Plan.Retrieval.Lookups[0].SenderAddress);
         Assert.True(outcome.Plan.Retrieval.Lookups[0].HasAttachments);
         Assert.Equal(8, outcome.Plan.Retrieval.SufficientPassages);
+    }
+
+    /// <summary>
+    /// The planner resolved <em>this week</em> against the wall clock its turn stated, so the days it wrote back are
+    /// that person's days and the reading is what puts them back on their own offset. Read any other way they are the
+    /// same numbers against somebody else's day, which is the drift the anchor exists to remove.
+    /// </summary>
+    [Fact]
+    public void Read_ALookupBoundedByDates_ReadsEachBoundAgainstTheAnchorTheTurnStated()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "intent": "findFact",
+              "lookups": [
+                {
+                  "queryText": "invoice",
+                  "receivedOnOrAfter": "2026-07-06T00:00",
+                  "receivedBefore": "2026-07-13T00:00"
+                }
+              ]
+            }
+            """;
+
+        // Act
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
+
+        // Assert
+        var lookup = Assert.Single(outcome.Plan.Retrieval.Lookups);
+
+        Assert.Equal(new DateTimeOffset(2026, 7, 6, 0, 0, 0, AskedAt.Offset), lookup.ReceivedOnOrAfter);
+        Assert.Equal(new DateTimeOffset(2026, 7, 13, 0, 0, 0, AskedAt.Offset), lookup.ReceivedBefore);
+    }
+
+    /// <summary>
+    /// A model that wrote a zone invented one, because its turn stated none. The lookup still runs — its words are
+    /// what the question was about — and it runs unbounded rather than bounded by a week somebody else was having.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-07-06T00:00Z")]
+    [InlineData("2026-07-06T00:00+05:00")]
+    [InlineData("the sixth of July")]
+    public void Read_ALookupBoundedByAnInstantThisBuildCannotBelieve_RunsTheLookupUnbounded(string written)
+    {
+        // Arrange
+        var answer = $$"""{"intent": "findFact", "lookups": [{"queryText": "invoice", "receivedOnOrAfter": "{{written}}"}]}""";
+
+        // Act
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
+
+        // Assert
+        var lookup = Assert.Single(outcome.Plan.Retrieval.Lookups);
+
+        Assert.Equal("invoice", lookup.QueryText);
+        Assert.Null(lookup.ReceivedOnOrAfter);
     }
 
     /// <summary>A model told to answer with one object still fences it.</summary>
@@ -64,7 +127,7 @@ public sealed class DiscoveryPlanReadingTests
             "```");
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.True(outcome.WasRead);
@@ -81,7 +144,7 @@ public sealed class DiscoveryPlanReadingTests
             """Here is the plan: {"intent": "findFact", "lookups": [{"queryText": "invoice"}]} — I hope it helps.""";
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.True(outcome.WasRead);
@@ -96,7 +159,7 @@ public sealed class DiscoveryPlanReadingTests
         const string answer = """{"intent": "summarise", "lookups": [{"queryText": "invoice"}]}""";
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.True(outcome.WasRead);
@@ -117,7 +180,7 @@ public sealed class DiscoveryPlanReadingTests
     public void Read_AnAnswerThisBuildCannotBelieve_FallsBackToTheQuestionsOwnWords(string? answer)
     {
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.False(outcome.WasRead);
@@ -136,7 +199,7 @@ public sealed class DiscoveryPlanReadingTests
             """;
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.True(outcome.WasRead);
@@ -154,7 +217,7 @@ public sealed class DiscoveryPlanReadingTests
         var answer = $$"""{"intent": "findFact", "lookups": [{{string.Join(",", wordings)}}]}""";
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.Equal(RetrievalPlan.MaximumLookups, outcome.Plan.Retrieval.Lookups.Count);
@@ -171,7 +234,7 @@ public sealed class DiscoveryPlanReadingTests
         var answer = $$"""{"intent": "findFact", "sufficientPassages": {{asked}}, "lookups": [{"queryText": "invoice"}]}""";
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.Equal(expected, outcome.Plan.Retrieval.SufficientPassages);
@@ -186,7 +249,7 @@ public sealed class DiscoveryPlanReadingTests
             """;
 
         // Act
-        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var outcome = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.Equal(Bounds.MaximumPassages, outcome.Plan.Retrieval.SufficientPassages);
@@ -202,8 +265,8 @@ public sealed class DiscoveryPlanReadingTests
             """;
 
         // Act
-        var first = DiscoveryPlanReading.Read(answer, Question, Bounds);
-        var second = DiscoveryPlanReading.Read(answer, Question, Bounds);
+        var first = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
+        var second = DiscoveryPlanReading.Read(answer, Question, Bounds, AskedAt);
 
         // Assert
         Assert.Equal(first.Plan.Intent, second.Plan.Intent);

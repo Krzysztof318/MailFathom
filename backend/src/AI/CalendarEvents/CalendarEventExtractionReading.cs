@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using System.Text.Json;
 using MailFathom.AI.Orchestration;
 using MailFathom.Application.Calendar.Extraction;
@@ -34,14 +33,6 @@ namespace MailFathom.AI.CalendarEvents;
 /// </remarks>
 internal static class CalendarEventExtractionReading
 {
-    /// <summary>The forms a written instant is accepted in, all of them local and none carrying a zone.</summary>
-    /// <remarks>
-    /// The seconds are admitted although nothing asks for them, because writing <c>:00</c> onto an instant is the one
-    /// departure from the stated form that says nothing about whether the model understood the date. Anything else —
-    /// a <c>Z</c>, an offset, a day alone, a month name — is a reading that failed.
-    /// </remarks>
-    private static readonly string[] WrittenInstantFormats = ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"];
-
     /// <summary>Reads the events out of an agent's answer.</summary>
     /// <param name="answerText">What the agent wrote, which may be empty, fenced, or surrounded by prose.</param>
     /// <param name="anchor">The instant the text belongs to, whose offset every written time is read in.</param>
@@ -74,38 +65,14 @@ internal static class CalendarEventExtractionReading
     {
         if (written is null
             || !CalendarEventTitle.TryCreate(written.Title, out var title)
-            || ToInstant(written.Start, anchor) is not { } start)
+            || AnchoredInstant.Read(written.Start, anchor) is not { } start)
         {
             return null;
         }
 
-        var end = ToInstant(written.End, anchor);
+        var end = AnchoredInstant.Read(written.End, anchor);
 
         return new ExtractedCalendarEvent(title, start, end > start ? end : null);
-    }
-
-    /// <summary>Reads one written local time into the instant it names where the text was written.</summary>
-    /// <remarks>
-    /// The two guarded days at the ends of the range are what applying an offset can push past: a local time within a
-    /// day of either bound of <see cref="DateTime" /> has no instant in some zones, and constructing one raises rather
-    /// than answering. A model writing a year one date has misread the text, so refusing it is the accurate reading
-    /// as well as the safe one.
-    /// </remarks>
-    private static DateTimeOffset? ToInstant(string? written, DateTimeOffset anchor)
-    {
-        if (!DateTime.TryParseExact(
-            written,
-            WrittenInstantFormats,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var local))
-        {
-            return null;
-        }
-
-        return local >= DateTime.MinValue.AddDays(1) && local <= DateTime.MaxValue.AddDays(-1)
-            ? new DateTimeOffset(local, anchor.Offset)
-            : null;
     }
 
     private static CalendarEventExtractionDocument? ReadDocument(string? answerText)

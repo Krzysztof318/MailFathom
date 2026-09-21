@@ -20,7 +20,7 @@ namespace MailFathom.AI.Search;
 /// <summary>Reads a typed sentence into the search it describes, by putting it to a composed agent and reading what came back.</summary>
 /// <remarks>
 /// <para>
-/// One call, no tools, no mail. What leaves this deployment is the sentence somebody typed and the calendar day they
+/// One call, no tools, no mail. What leaves this deployment is the sentence somebody typed and the instant they
 /// typed it on, so the reading costs a single short exchange and cannot be talked into retrieving anything.
 /// </para>
 /// <para>
@@ -120,7 +120,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
             phrase.Text.Value,
             cancellationToken);
 
-        var turn = MailSearchPhraseInstructions.ComposeReadingTurn(phraseText, phrase.AskedOn);
+        var turn = MailSearchPhraseInstructions.ComposeReadingTurn(phraseText, phrase.AskedAt);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],

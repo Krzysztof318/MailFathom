@@ -51,7 +51,11 @@ const nobody: OwnProfileInForce = {
     nameNotAcceptable: false,
     nameNotStated: false,
     pictureNotStated: false,
+    timeZone: null,
+    timeZoneNotAcceptable: false,
+    timeZoneNotStated: false,
     correctName: () => undefined,
+    chooseTimeZone: () => undefined,
     choosePicture: () => undefined,
     removePicture: () => undefined,
 };
