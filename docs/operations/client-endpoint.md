@@ -3437,7 +3437,7 @@ the conversation and everything said in it, `204`, and `404` once there is nothi
 the run where the write belongs to one, and the place reached — never the question, a block, a status line, or a
 title. A client reads the conversation from its cursor when it hears one, on mount, and after every reconnect, so a
 client with no channel loses latency rather than any of the conversation.
-[ADR 0035](../decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) is why
+[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) is why
 it is delivered this way, and [the schema](../architecture/stored-email-schema.md#an-agent-conversation-and-what-was-said-in-it)
 what the record holds.
 
