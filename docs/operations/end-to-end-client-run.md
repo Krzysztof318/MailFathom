@@ -8,8 +8,8 @@ the real client against it in a real browser.
 It exists because nothing else does that. The client's browser suite answers every request from the page's own routing,
 which is what keeps it fast and hermetic and what makes it silent on whether the client and the service agree; the
 service's integration suite starts a composed host and proves the pipeline behind the HTTP boundary, and stops there.
-Between them sits the question of whether a person can sign in, see their mail, open a message and search it — and that
-question is what this run answers.
+Between them sits the question of whether a person can sign in, read the mail the deployment synchronized, and work the
+calendar, the task list and the address book it holds for them — and that question is what this run answers.
 
 ## It gates nothing
 
@@ -55,7 +55,7 @@ that never reached the mailbox and a client that cannot draw a list are two diff
 | The credential | `POST /api/admin/users/{id}/credentials` on [the administrative endpoint](admin-endpoint.md), so the password this run signs in with was made the way an operator makes one |
 | The mail | `SyntheticMail replay` of `backend/tools/SyntheticMail/corpora/office-en.zip` into the mailbox over SMTP |
 | The synchronization | Polling [the folders route](client-endpoint.md) until the account's run reports no failed folder and at least one synchronized one |
-| The client | The end-to-end Playwright suite, against the origin the deployment serves |
+| The client | The end-to-end Playwright suite, against the origin the deployment serves — whose global setup writes the sample calendar, task list and address book over the client API before the first browser opens |
 
 Everything created is removed when the run ends, whether it passed, failed, or was interrupted: the containers and their
 volumes are named under this run's own identifier and deleted by name, so a concurrent integration suite keeps its own.
@@ -77,10 +77,29 @@ of a filled mailbox takes as long as it takes.
 ## What the specs assert
 
 `frontend/tests/end-to-end/` holds them and `frontend/playwright.end-to-end.config.ts` runs them. They cover the path a
-person takes: signing in, the mail list, opening a message, the conversation it belongs to, a search over the mailbox,
-and signing out — asserted by role and by the words a person reads, as the client's unit and browser suites are. Its
-fourth suite is the exception that proves nothing about this one: the desktop suite reaches its WebView over the
-WebDriver protocol, which has no locator for a role and a name at all.
+person takes through each of the client's four built spaces: signing in, the mail list, opening a message, the
+conversation it belongs to, a search over the mailbox, and signing out; the calendar in each of its four views and an
+event written, amended and deleted; the task list under its three headings, the day beside it, and a task written,
+marked done and deleted; the address book, somebody opened out of it, and a contact written and deleted. Everything is
+asserted by role and by the words a person reads, as the client's unit and browser suites are. Its fourth suite is the
+exception that proves nothing about this one: the desktop suite reaches its WebView over the WebDriver protocol, which
+has no locator for a role and a name at all.
+
+**Only Mail arrives by itself, so the other three are seeded.** Mail reaches the deployment because it was delivered to
+a mail server and synchronized out of it; a calendar, a task list and an address book are written by the person who
+owns them, so a deployment nobody has used holds none of them. `frontend/tests/end-to-end/seed.ts` is this repository's
+sample set — three people, five events and five tasks, every name invented and every host a reserved one — and the
+suite's global setup writes it over the client API with the credential the run provisioned, before the first browser
+opens. Every day in it is an offset from the day the run happens on, stated in UTC against the zone the configuration
+pins, so *Today*, *This week* and *Later* are each reachable whichever weekday a run lands on. Each of the three spaces
+also writes one record of its own through its screen and removes it again, which is where the client's own write path
+is held to account and what keeps the files runnable in any order.
+
+**Discover is held to being a placeholder.** The client opens there, `routing/spaces.ts` leaves it out of
+`implementedSpaces`, and nothing in the client reads the discovery routes — so there is no answer to ask this
+deployment for, and configuring a chat provider would not produce one. What the spec holds is that the space is
+reachable, that it says it is not built rather than drawing an empty frame, and that the question field the frame
+composes for every space stands on it.
 
 **They route nothing.** The bundle the deployment serves reaches the surface that deployment serves, over one origin,
 and every answer comes from mail that arrived at a mail server and was synchronized out of it. A `page.route` here would

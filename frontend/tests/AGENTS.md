@@ -350,6 +350,27 @@ the way an operator stands one up, with mail that arrived at a mail server and w
   or sentence in it is a value to write down: what is written is the roles and the words the client itself draws, and
   what the deployment must have produced for them to mean anything. A spec restating a subject would be asserting
   against the archive rather than against the service.
+- **The other three spaces are seeded, and what seeds them may be named.** Only Mail arrives by itself: the run replays
+  a corpus into a mailbox and MailFathom synchronizes it, while a calendar, a task list and an address book are written
+  by the person who owns them — so a deployment nobody has used holds none of them, and a spec reaching one of those
+  spaces would be asserting against an empty screen. `end-to-end/seed.ts` is the sample set and the write that puts it
+  there, named as the configuration's global setup, and it is the one place in this directory a value may be written
+  down twice: the rule above turns on the mail being _generated_, and this is stated, so a spec reading the same
+  declaration asserts that what the deployment took is what the client draws. Every day in it is an offset from the day
+  the run happens on, stated in UTC against the zone the configuration pins, so the three headings the task list draws
+  and the week the calendar opens on are reachable whenever a run happens.
+- **It seeds over the client API and writes through the screens.** Seeding is the same surface the client writes
+  through, reached with the credential the run provisioned — not a shortcut past the client, because each of the three
+  spaces also has one spec that creates a record through its own screen, reads it back after a reload, and removes it
+  again. A spec that had to build its own furniture first would assert against what it had just done, and the order the
+  files happen to run in would become part of what they prove; a spec that left its record behind would do the same to
+  the file after it.
+- **Discover is held to being a placeholder, and to nothing else.** `routing/spaces.ts` leaves it out of
+  `implementedSpaces`, nothing in `Client.App` reads the discovery routes, and the components that will one day draw an
+  answer are mounted by nothing — so there is no answer to ask a deployment for, whatever provider it configures. What
+  `discover.spec.ts` holds is that the space is where the client opens, that it says it is not built rather than
+  drawing an empty frame, and that the question field the frame composes stands on it. That file is what changes when
+  the space is built.
 - **It keeps its traces and its screenshots**, which is the one place this directory's privacy rule reads the other
   way. Every message a run reads is fabricated, delivered into a container that is destroyed with the run, so a capture
   shows nobody's mailbox and a trace carries a credential that exists for the length of one run. The pull-request suite
