@@ -31,9 +31,11 @@ export const pl: Catalogue = {
     'discover.suggestion.owed': 'Na co wciąż czekam na odpowiedź?',
     'discover.suggestion.agreed': 'Jaką stawkę ustaliliśmy?',
     'discover.suggestion.files': 'Która wersja umowy jest najnowszą, jaką ktoś mi przysłał?',
-    'discover.notAsked.unauthenticated': 'Sesja skończyła się, zanim pytanie zostało wysłane. Zaloguj się i zapytaj ponownie.',
+    'discover.notAsked.unauthenticated':
+        'Sesja skończyła się, zanim pytanie zostało wysłane. Zaloguj się i zapytaj ponownie.',
     'discover.notAsked.unauthorized': 'To konto nie może zadawać pytań o pocztę.',
-    'discover.notAsked.unavailable': 'To pytanie nie dotarło do serwera. Nic nie zostało przeczytane, więc można zapytać ponownie.',
+    'discover.notAsked.unavailable':
+        'To pytanie nie dotarło do serwera. Nic nie zostało przeczytane, więc można zapytać ponownie.',
     'discover.notAsked.unreadable':
         'Serwer nie przyjął tego pytania i nie podał, co zmienić — to usterka warta zgłoszenia.',
     'answerCanvas.blocks': 'Bloki odpowiedzi',

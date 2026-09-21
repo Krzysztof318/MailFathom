@@ -227,16 +227,20 @@ export function runTail(since: number) {
 export function runWorkingTail(since: number) {
     return {
         running: true,
-        events: runPublished
-            .filter((event) => sequenceOf(event) > since)
-            .filter((event) => sequenceOf(event) <= 6),
+        events: runPublished.filter((event) => sequenceOf(event) > since).filter((event) => sequenceOf(event) <= 6),
     };
 }
 
 /** A run a person stopped, which ends every bit as legitimately as one that finished. */
 export const runStopped = {
     running: false,
-    events: [started, ...citations, retrieval, answerBlock, { event: 'failed', sequence: 7, failure: 'Cancelled', ...spent }],
+    events: [
+        started,
+        ...citations,
+        retrieval,
+        answerBlock,
+        { event: 'failed', sequence: 7, failure: 'Cancelled', ...spent },
+    ],
 };
 
 /** A run that ended for a reason it does not publish, which is the one ending that reads as a fault. */

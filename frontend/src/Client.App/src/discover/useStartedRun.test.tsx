@@ -20,7 +20,10 @@ function asked(question: string): AskedQuestion {
     return { question, scope: { kind: 'mail', scope: { kind: 'everything' } } };
 }
 
-function accepting(runs: readonly string[]): { readonly transport: MailFathomTransport; readonly asks: ClientRequest[] } {
+function accepting(runs: readonly string[]): {
+    readonly transport: MailFathomTransport;
+    readonly asks: ClientRequest[];
+} {
     const asks: ClientRequest[] = [];
 
     return {

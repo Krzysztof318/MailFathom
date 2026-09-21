@@ -814,7 +814,13 @@ describe('readDiscoveryRunTail', () => {
 });
 
 describe('startDiscoveryRun', () => {
-    const asked = { question: 'What did we agree the rate would be?', accounts: [], folders: [], thread: null, emails: [] };
+    const asked = {
+        question: 'What did we agree the rate would be?',
+        accounts: [],
+        folders: [],
+        thread: null,
+        emails: [],
+    };
 
     it('asks the question and its scope in one request, so a run never reads mail nobody chose', async () => {
         const { transport, requests } = recording({ status: 202, body: JSON.stringify({ runId }) });

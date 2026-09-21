@@ -103,7 +103,7 @@ export function DiscoverSpace({
     const answer = useFollowedRun(session, transport, started.run, schedule);
     const stopping = useRunStopping(session, transport, started.run);
 
-    const source = checking === null ? null : answer.sources.get(checking) ?? null;
+    const source = checking === null ? null : (answer.sources.get(checking) ?? null);
 
     function ask(question: string): void {
         revise({

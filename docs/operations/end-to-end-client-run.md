@@ -103,11 +103,11 @@ pins, so *Today*, *This week* and *Later* are each reachable whichever weekday a
 also writes one record of its own through its screen and removes it again, which is where the client's own write path
 is held to account and what keeps the files runnable in any order.
 
-**Discover is held to being a placeholder.** The client opens there, `routing/spaces.ts` leaves it out of
-`implementedSpaces`, and nothing in the client reads the discovery routes — so there is no answer to ask this
-deployment for, and configuring a chat provider would not produce one. What the spec holds is that the space is
-reachable, that it says it is not built rather than drawing an empty frame, and that the question field the frame
-composes for every space stands on it.
+**Discover is held to the screen somebody lands on, and not to an answer.** The client opens there and the space is
+built, so pressing one of the questions it offers starts a real run — but composing an answer needs a chat provider and
+this run configures none, so a spec that waited for a block would be waiting on a model nothing here provides. What the
+spec holds is that landing reaches the screen rather than the note every unbuilt space carries, that the questions it
+offers are there to press, and that the question field the frame composes for every space stands on it.
 
 **They route nothing.** The bundle the deployment serves reaches the surface that deployment serves, over one origin,
 and every answer comes from mail that arrived at a mail server and was synchronized out of it. A `page.route` here would

@@ -141,10 +141,12 @@ export function Space({
                                 : 'overflow-y-auto px-4 py-6 workspace:px-8'
                         } ${inFront ? 'flex-1' : 'invisible absolute inset-0'}`}
                     >
-                        {/* No built space carries a title, which is how the design project draws each of them: the
-                            columns are what the space is, and a heading over them would be a word above the thing the
-                            word names. Every region still carries its name, because a landmark a reader moves to is
-                            announced by it. */}
+                        {/* A built space whose columns are what it is carries no title here, which is how the design
+                            project draws each of them: a heading over the columns would be a word above the thing the
+                            word names. Discover is the exception the project draws rather than one this frame takes —
+                            it heads its own screen, beside what the deployment is doing and the way back to asking —
+                            so the title is that space's and never this one's. Every region still carries its name,
+                            because a landmark a reader moves to is announced by it. */}
                         {isDiscover ? (
                             /* Drawn whether or not it is in front, exactly as every other space is, so a run being
                                followed survives a visit to the mail. Which of the frame's two regions it was handed is

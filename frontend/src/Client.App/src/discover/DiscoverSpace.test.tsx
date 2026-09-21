@@ -116,7 +116,9 @@ describe('DiscoverSpace', () => {
             expect(screen.getByText(theAnswer)).toBeDefined();
         });
 
-        expect(JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}')).toMatchObject({ question });
+        expect(JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}')).toMatchObject({
+            question,
+        });
     });
 
     it('draws a run that has ended as ended rather than as still working', async () => {

@@ -34,7 +34,8 @@ export const en = {
     'discover.suggestion.files': 'Which version of the contract is the latest one anybody sent me?',
     'discover.notAsked.unauthenticated': 'The session ended before this question was sent. Sign in again and ask it.',
     'discover.notAsked.unauthorized': 'This account is not allowed to ask questions about mail.',
-    'discover.notAsked.unavailable': 'This question did not reach the server. Nothing was read, so asking again is safe.',
+    'discover.notAsked.unavailable':
+        'This question did not reach the server. Nothing was read, so asking again is safe.',
     'discover.notAsked.unreadable':
         'The server would not take this question and did not say what to change, which is a defect worth reporting.',
     'answerCanvas.blocks': 'Answer blocks',
