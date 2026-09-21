@@ -414,6 +414,8 @@ describe('parseTask', () => {
         ['an origin the surface does not publish', { ...asserted, origin: 'Invented' }],
         ['a completion that is not a flag', { ...asserted, completed: 'no' }],
         ['a day that is not written down', { ...asserted, dueOn: 20260921 }],
+        ['an instant where the day it falls on belongs', { ...asserted, dueOn: '2026-09-21T10:00:00Z' }],
+        ['a day written in another order', { ...asserted, dueOn: '21-09-2026' }],
         ['a citation that is not an identity', { ...asserted, sourceMessageId: 12 }],
         ['a line past the bound the deployment states', { ...asserted, title: 'x'.repeat(longestTaskTitle + 1) }],
         ['an array where a record belongs', []],

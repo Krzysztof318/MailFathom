@@ -531,7 +531,10 @@ export function parseTask(value: unknown): PersonalTask | null {
         return null;
     }
 
-    if (dueOn !== null && typeof dueOn !== 'string') {
+    // The day is held to its own spelling rather than to being a string, because what reads it compares it against
+    // another `yyyy-mm-dd` day as text: an instant where a day was expected sorts after the day it falls on, so a task
+    // due today would be grouped under a later week rather than refused.
+    if (dueOn !== null && !isCalendarDay(dueOn)) {
         return null;
     }
 
@@ -551,4 +554,10 @@ export function parseTask(value: unknown): PersonalTask | null {
 /** Whether the value is one of the two origins this surface publishes. */
 export function isTaskOrigin(value: unknown): value is PersonalTaskOrigin {
     return typeof value === 'string' && taskOrigins.includes(value as PersonalTaskOrigin);
+}
+
+const calendarDayPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+function isCalendarDay(value: unknown): value is string {
+    return typeof value === 'string' && calendarDayPattern.test(value);
 }
