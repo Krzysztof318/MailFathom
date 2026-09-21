@@ -2,13 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Runtime.Serialization;
 using System.Text;
 using Ical.Net;
 using Ical.Net.DataTypes;
 using MailFathom.Application.Calendar.Import;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Scheduling;
+using MailFathom.Infrastructure.Documents;
 
 namespace MailFathom.Infrastructure.Calendar;
 
@@ -84,10 +84,13 @@ internal sealed class CalendarFileReader : ICalendarFileReader
 
     /// <summary>Parses the octets, or reports that they are not iCalendar this reader can finish.</summary>
     /// <remarks>
-    /// The failures named are the ones a parser meets in input nobody validated: a malformed property value, a
-    /// recurrence rule with no frequency, a number the format cannot hold, a component nesting the serializer will not
-    /// accept. None of them is a fault in this deployment, and a person who picked the wrong file out of a folder is
-    /// entitled to be told so rather than to a failed request.
+    /// The catch is deliberately wide, for the reason
+    /// <see cref="BoundedAttachmentTextExtractor" />'s own reading of a hostile document gives: a parser handed
+    /// adversarial input raises whatever its reading of that input produces — a malformed property value, a recurrence
+    /// rule with no frequency, a number the format cannot hold, an index out of a range it derived — and enumerating
+    /// those is a list that goes stale the first time the library is updated, while everything it misses becomes a
+    /// failed request rather than the refusal the port promises. What must never be swallowed is the short, stable list
+    /// instead: cancellation belongs to whoever asked for it, and a process out of memory is not a fact about one file.
     /// </remarks>
     private static CalendarCollection? Parsed(string text)
     {
@@ -95,14 +98,7 @@ internal sealed class CalendarFileReader : ICalendarFileReader
         {
             return CalendarCollection.Load(new StringReader(text));
         }
-        catch (Exception unreadable)
-            when (unreadable is SerializationException
-                or ArgumentException
-                or FormatException
-                or InvalidOperationException
-                or OverflowException
-                or IndexOutOfRangeException
-                or KeyNotFoundException)
+        catch (Exception unreadable) when (unreadable is not OperationCanceledException and not OutOfMemoryException)
         {
             return null;
         }

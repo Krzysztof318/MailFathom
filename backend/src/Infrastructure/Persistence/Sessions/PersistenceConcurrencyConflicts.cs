@@ -197,9 +197,18 @@ internal static class PersistenceConcurrencyConflicts
     /// expunge instead of ending the erasing run on a violation it could not have avoided.
     /// </para>
     /// <para>
-    /// The last is where a delete that only flagged a message left it on the server. Two runs of one folder both read
+    /// The next is where a delete that only flagged a message left it on the server. Two runs of one folder both read
     /// the flag on a delete neither has settled, and both record the occurrence the settlement follows, so the loser
     /// violates the occurrence index. The retry re-reads, finds the delete settled by the winner, and records nothing.
+    /// </para>
+    /// <para>
+    /// The last is one imported calendar entry offered twice at once — a double click, a second tab, a client retrying
+    /// after a dropped answer. Each import reads which of the file's identifiers this calendar already holds inside its
+    /// own transaction, so both read nothing and both insert, and the loser violates the partial index. That index's
+    /// own documentation says it is the whole of what closes that window, which is only true while this list names it:
+    /// unrecognized, the loser would leave the import an unhandled failure rather than the count the summary promises.
+    /// The retry re-reads, finds the winner's events under those identifiers, and writes none of them again — which is
+    /// the same <c>AlreadyOnTheCalendar</c> answer importing the file twice in sequence already gives.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -239,6 +248,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName
                 or PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName
                 or PersistenceConstraintNames.CalendarEventReminderPrimaryKeyConstraintName
-                or PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName,
+                or PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName
+                or PersistenceConstraintNames.CalendarEventImportedUidUniqueIndexName,
         };
 }

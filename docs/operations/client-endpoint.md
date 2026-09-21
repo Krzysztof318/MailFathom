@@ -3217,13 +3217,22 @@ opens at a different instant in every zone. Name the IANA identifier the person 
 nothing reads both in the coordinated zone, and naming one this deployment does not know is refused with `400` rather
 than quietly read in another.
 
-**An entry this deployment has no event for is skipped and counted rather than failing the file.** The reasons are
-`Recurring` for an entry carrying `RRULE`, `RDATE`, or `RECURRENCE-ID` — a MailFathom event is a single occasion and
-nothing here expands a series — `NoStart`, `UnreadableTitle`, `UnreadableIdentifier` for an entry naming no `UID` or
-one this deployment will not hold, `UnknownTimeZone`, `EndNotAfterStart`, `DateOutOfRange` for a start or a duration
-naming an instant no calendar here can hold, `AlreadyOnTheCalendar`, and
-`RepeatedInTheFile`. Each arrives as a count, never as the entries themselves: which eight entries recur is a list of
-somebody's appointments, and that eight of them do is what a person deciding needs.
+**An entry this deployment has no event for is skipped and counted rather than failing the file.** There are nine
+reasons, and each says one thing about the entry:
+
+- `Recurring` — it carries `RRULE`, `RDATE`, or `RECURRENCE-ID`. A MailFathom event is a single occasion and nothing
+  here expands a series into one.
+- `NoStart` — it names no start, so there is no day to put it on.
+- `UnreadableTitle` — its `SUMMARY` is blank, too long, or made of characters that render as nothing.
+- `UnreadableIdentifier` — it names no `UID`, or one this deployment will not hold.
+- `UnknownTimeZone` — a `TZID` on its start or its end names a zone this deployment does not carry.
+- `EndNotAfterStart` — its end is not after its start.
+- `DateOutOfRange` — its start, or its start plus its `DURATION`, names an instant no calendar here can hold.
+- `AlreadyOnTheCalendar` — this calendar already holds an event under that identifier.
+- `RepeatedInTheFile` — the file names that identifier more than once, and only the first of them is read.
+
+Each arrives as a count, never as the entries themselves: which eight entries recur is a list of somebody's
+appointments, and that eight of them do is what a person deciding needs.
 
 **Importing the same file twice creates nothing the second time.** Every entry carries a `UID`, an imported event
 keeps it, and an entry whose identifier this calendar already holds is counted under `AlreadyOnTheCalendar` instead of
