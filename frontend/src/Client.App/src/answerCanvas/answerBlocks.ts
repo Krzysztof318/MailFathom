@@ -5,9 +5,13 @@
 import type { ComponentType } from 'react';
 import type { AnswerBlock, AnswerBlockType } from '@mailfathom/client-backend';
 import { AttachmentGallery } from './blocks/AttachmentGallery';
+import { Draft } from './blocks/Draft';
 import { EvidenceList } from './blocks/EvidenceList';
 import { FactTable } from './blocks/FactTable';
+import { People } from './blocks/People';
+import { SuggestedAction } from './blocks/SuggestedAction';
 import { SynthesizedAnswer } from './blocks/SynthesizedAnswer';
+import { ThreadState } from './blocks/ThreadState';
 import { Timeline } from './blocks/Timeline';
 
 // What a block is drawn as, and which component draws which type. It sits apart from the canvas and from the card
@@ -40,5 +44,9 @@ export const answerBlockRenderers: AnswerBlockRenderers = {
     evidenceList: EvidenceList,
     timeline: Timeline,
     factTable: FactTable,
+    people: People,
+    threadState: ThreadState,
     attachmentGallery: AttachmentGallery,
+    draft: Draft,
+    suggestedAction: SuggestedAction,
 };

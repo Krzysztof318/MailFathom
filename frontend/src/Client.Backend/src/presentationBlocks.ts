@@ -222,10 +222,131 @@ export interface AttachmentEntry {
     readonly availability: AttachmentAvailability;
 }
 
+/** Somebody the correspondence names, by the name a reader recognizes and the address a client may act on. */
+export interface BlockParticipant {
+    /** The name a reader recognizes them by, which is never used as an identity. */
+    readonly displayName: string;
+
+    /** Their address, and `null` where the correspondence identifies them without one. */
+    readonly address: string | null;
+}
+
+/** One person or organization a question is about, and where they stand in the correspondence. */
+export interface PersonEntry {
+    readonly person: BlockParticipant;
+
+    /** Where they stand in the correspondence, as it reads rather than as anything knows it. */
+    readonly relationship: string;
+
+    /** When they were last in contact, and `null` where no message establishes it. */
+    readonly lastContactAt: string | null;
+
+    /** The sources this entry rests on, which a reader follows to see why the run says they are who it says. */
+    readonly sources: readonly string[];
+}
+
+/** One thing a conversation settled or left open. */
+export interface ThreadStatement {
+    readonly text: string;
+    readonly sources: readonly string[];
+}
+
+/** Something somebody undertook to do, and when they said they would. */
+export interface ThreadCommitment {
+    readonly text: string;
+
+    /** Who undertook it, and `null` where the correspondence does not say. */
+    readonly owedBy: BlockParticipant | null;
+
+    /** When it was said to be due, and `null` where nothing says. */
+    readonly dueAt: string | null;
+
+    readonly sources: readonly string[];
+}
+
+/**
+ * Where a conversation stands: who is taking part, what was agreed, what is open, and who owes what.
+ *
+ * Three lists rather than one, because the three read differently: somebody scanning for what they still owe should not
+ * have to find it among what was settled. Any of the three is legitimately empty, and all three being empty at once is
+ * a conversation this run found nothing to say about rather than a block to refuse.
+ */
+export interface ConversationStanding {
+    readonly participants: readonly BlockParticipant[];
+    readonly agreements: readonly ThreadStatement[];
+    readonly openQuestions: readonly ThreadStatement[];
+    readonly commitments: readonly ThreadCommitment[];
+}
+
+/** What has become of a draft a run composed, every member of which is local: the set holds none meaning sent. */
+export type DraftDisposition = 'Composed' | 'Saved' | 'Queued';
+
+const dispositions: readonly DraftDisposition[] = ['Composed', 'Saved', 'Queued'];
+
+/** Text to be sent, where the answer to the question is a message rather than a fact about one. */
+export interface ComposedDraft {
+    /**
+     * Who it is addressed to, as addresses.
+     *
+     * An address alone rather than a name beside one, because that is all a plan publishes: the contract writes every
+     * address as the bare text a message wrote, and the display name a reader sees belongs to whichever block carries
+     * the person. A draft carries no such block, so the address is what a screen has to show.
+     */
+    readonly recipients: readonly string[];
+
+    readonly subject: string;
+
+    /** Its body, as plain text. */
+    readonly body: string;
+
+    readonly disposition: DraftDisposition;
+}
+
+/** The closed set of next steps a plan may suggest, so that nothing is proposed no client wrote a control for. */
+export type SuggestedActionKind =
+    'ReplyToThread' | 'ForwardEmail' | 'ComposeEmail' | 'FlagEmail' | 'OpenThread' | 'SearchAgain' | 'CreateMailRule';
+
+const actionKinds: readonly SuggestedActionKind[] = [
+    'ReplyToThread',
+    'ForwardEmail',
+    'ComposeEmail',
+    'FlagEmail',
+    'OpenThread',
+    'SearchAgain',
+    'CreateMailRule',
+];
+
+/** What taking a suggested action would change, ordered by what it costs to undo. */
+export type SuggestedActionImpact = 'ReadsOnly' | 'ChangesMailbox' | 'SendsMail';
+
+const impacts: readonly SuggestedActionImpact[] = ['ReadsOnly', 'ChangesMailbox', 'SendsMail'];
+
+/** A next step somebody may take, with what it would change and why it is being suggested. */
+export interface SuggestedAction {
+    readonly action: SuggestedActionKind;
+
+    /** Why it is being suggested, in the words the run wrote. */
+    readonly reason: string;
+
+    readonly impact: SuggestedActionImpact;
+
+    /**
+     * Whether it must be confirmed before it is taken, as the run stated it rather than as this client derived it.
+     *
+     * Stated rather than computed, because the two answer different questions: an action that changes nothing may still
+     * need confirming where the run is unsure the suggestion fits. What a screen may never do is offer it *without*
+     * confirmation because this member said so — which is why an action that leaves the deployment is refused below
+     * when it claims otherwise.
+     */
+    readonly requiresConfirmation: boolean;
+}
+
 // The service's own bounds, restated because this side of the boundary refuses what it will not draw rather than
 // trusting the side that composed it. Each is the constant the contract names: a block rests on at most twenty-four
 // sources, presents at most six sides of a disagreement, lists at most fifty messages, events, or files, compares
-// across at most eight columns, and every free text it carries is one presentation text.
+// across at most eight columns, names at most thirty people and thirty participants, says at most twenty-five things
+// about a conversation per list, addresses a draft to at most twenty recipients, and every free text it carries is one
+// presentation text.
 const mostCitations = 24;
 const mostConflictingClaims = 6;
 const mostEvidenceEntries = 50;
@@ -233,9 +354,17 @@ const mostTimelineEntries = 50;
 const mostFactTableColumns = 8;
 const mostFactTableRows = 50;
 const mostAttachmentEntries = 50;
+const mostPersonEntries = 30;
+const mostParticipants = 30;
+const mostStatements = 25;
+const mostRecipients = 20;
 const longestText = 4000;
 const longestCitationId = 32;
 const longestIdentity = 256;
+
+// What RFC 5321 leaves room for, which is the bound the contract itself states for an address: sixty-four octets of
+// local part, the separator, and two hundred and fifty-five of domain.
+const longestAddress = 320;
 
 /** What the correspondence does for one block, or `null` where what arrived is not evidence this client can read. */
 export function parseBlockEvidence(value: unknown): BlockEvidence | null {
@@ -390,6 +519,92 @@ export function parseAttachmentEntries(value: unknown): readonly AttachmentEntry
     return parsedItems(value, mostAttachmentEntries, parseAttachmentEntry);
 }
 
+/**
+ * The people a block names, or `null` where what arrived is not a set of people this client can draw.
+ *
+ * A block naming nobody is read rather than refused, for the reason a list of messages holding nothing is: the contract
+ * composes none, so an empty one is a deployment that broke its own promise — and refusing it here would discard the
+ * whole tail, which is every block the run had already composed. Drawn as a block that found nobody, it costs the
+ * reader one empty card and keeps the answer.
+ */
+export function parsePersonEntries(value: unknown): readonly PersonEntry[] | null {
+    return parsedItems(value, mostPersonEntries, parsePersonEntry);
+}
+
+/** Where a conversation stands, or `null` where what arrived is not a standing this client can draw. */
+export function parseConversationStanding(value: unknown): ConversationStanding | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const participants = parsedItems(record['participants'], mostParticipants, parseParticipant);
+    const agreements = parsedItems(record['agreements'], mostStatements, parseThreadStatement);
+    const openQuestions = parsedItems(record['openQuestions'], mostStatements, parseThreadStatement);
+    const commitments = parsedItems(record['commitments'], mostStatements, parseThreadCommitment);
+
+    return participants === null || agreements === null || openQuestions === null || commitments === null
+        ? null
+        : { participants, agreements, openQuestions, commitments };
+}
+
+/**
+ * A draft a run composed, or `null` where what arrived is not one this client can draw.
+ *
+ * A draft addressed to nobody, or carrying no subject or no body, is refused rather than drawn: the three are what a
+ * message is, and a card offering somebody text to check with the recipients missing is worse than the block being
+ * absent. A recipient named twice is not refused here: `DraftBlock` already refuses one, comparing addresses in the form
+ * this side cannot reproduce — `ToUpperInvariant` is simple case mapping where JavaScript's is the full mapping, so a
+ * second comparison here would refuse a pair of mailboxes the service compared and accepted, and take the whole run
+ * tail with it.
+ */
+export function parseComposedDraft(value: unknown): ComposedDraft | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const recipients = parsedItems(record['recipients'], mostRecipients, parseAddress);
+    const subject = parseText(record['subject']);
+    const body = parseText(record['body']);
+    const disposition = oneOf(record['disposition'], dispositions);
+
+    return recipients === null || recipients.length === 0 || subject === null || body === null || disposition === null
+        ? null
+        : { recipients, subject, body, disposition };
+}
+
+/**
+ * A next step a run suggested, or `null` where what arrived is not one this client may offer.
+ *
+ * The one refusal that is about safety rather than shape: an action whose impact says mail leaves the deployment and
+ * which claims it needs no confirming is not drawn at all. Nothing here can recall a sent message, so a suggestion that
+ * arrived saying it may be sent unasked is either a deployment that broke its own rule or something that reached the
+ * plan on the way — and a screen that drew it would be one control away from acting on it.
+ *
+ * It refuses exactly what `SuggestedActionBlock` refuses and nothing beyond it. A step that changes something in the
+ * mailbox and states no confirmation is one the service permits — the flag is the producer's answer rather than a
+ * function of the impact — so refusing it here would collapse the whole run tail into `unreadable` over a block the
+ * renderer already draws as needing confirmation, and the cursor would fetch the same tail and fail the same way.
+ */
+export function parseSuggestedAction(value: unknown): SuggestedAction | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const action = oneOf(record['action'], actionKinds);
+    const reason = parseText(record['reason']);
+    const impact = oneOf(record['impact'], impacts);
+    const requiresConfirmation = record['requiresConfirmation'];
+
+    if (action === null || reason === null || impact === null || typeof requiresConfirmation !== 'boolean') {
+        return null;
+    }
+
+    return impact === 'SendsMail' && !requiresConfirmation ? null : { action, reason, impact, requiresConfirmation };
+}
+
 function parseTimelineEntry(value: unknown): TimelineEntry | null {
     const record = asRecord(value);
     if (record === null) {
@@ -467,6 +682,96 @@ function parseAttachmentEntry(value: unknown): AttachmentEntry | null {
     return typeof sizeOctets === 'number' && Number.isSafeInteger(sizeOctets) && sizeOctets >= 0
         ? { source, name, mediaType, sizeOctets, availability }
         : null;
+}
+
+function parsePersonEntry(value: unknown): PersonEntry | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const person = parseParticipant(record);
+    const relationship = parseText(record['relationship']);
+    const lastContact = parseStatedInstant(record['lastContactAt']);
+    const sources = parseSources(record['sources']);
+
+    return person === null || relationship === null || lastContact === null || sources === null
+        ? null
+        : { person, relationship, lastContactAt: lastContact.at, sources };
+}
+
+function parseThreadStatement(value: unknown): ThreadStatement | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const text = parseText(record['text']);
+    const sources = parseSources(record['sources']);
+
+    return text === null || sources === null ? null : { text, sources };
+}
+
+function parseThreadCommitment(value: unknown): ThreadCommitment | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const text = parseText(record['text']);
+    const due = parseStatedInstant(record['dueAt']);
+    const sources = parseSources(record['sources']);
+
+    if (text === null || due === null || sources === null) {
+        return null;
+    }
+
+    // Absent and present as nothing are the same fact here, as they are for an instant nothing stated: the
+    // correspondence did not say who keeps the commitment, and a client that invented a name for it would be asserting
+    // what the mail did not.
+    const named = record['owedBy'];
+    const owedBy = named === undefined || named === null ? null : parseParticipant(named);
+
+    return named !== undefined && named !== null && owedBy === null ? null : { text, owedBy, dueAt: due.at, sources };
+}
+
+/**
+ * Somebody the correspondence names, read from the record that names them.
+ *
+ * The display name is the block's own presentation text and the address is the bare address beside it — so the name a
+ * reader sees is the block's rather than whatever a header happened to write, which is why the contract publishes the
+ * name here and never inside the address.
+ */
+function parseParticipant(value: unknown): BlockParticipant | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const displayName = parseText(record['displayName']);
+    if (displayName === null) {
+        return null;
+    }
+
+    const named = record['address'];
+    if (named === undefined || named === null) {
+        return { displayName, address: null };
+    }
+
+    const address = parseAddress(named);
+
+    return address === null ? null : { displayName, address };
+}
+
+/**
+ * One mail address as the contract publishes it, or `null` where what arrived is not one.
+ *
+ * A string rather than a record, because that is the whole of what an address is on this wire: the contract writes the
+ * bare text a message wrote and publishes neither the comparison form, which is an internal key, nor a display name,
+ * which belongs to whichever block carries the person. The bound is the one the contract itself states.
+ */
+function parseAddress(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestAddress ? value : null;
 }
 
 /**
@@ -626,6 +931,24 @@ function parseFreshness(value: unknown): SourceFreshness | null {
 /** An instant as the service wrote it, left as it arrived: what it says is read where it is worded, never here. */
 function parseInstant(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 && value.length <= longestText ? value : null;
+}
+
+/**
+ * An instant the correspondence may legitimately not have stated, or `null` where it stated one this client cannot read.
+ *
+ * The two are one value in what a block carries — a last contact nothing established and a due date nobody wrote are
+ * both `null` — which is exactly why they are told apart here. Nothing said is the correspondence being silent, and
+ * something said that is not an instant is a producer that broke the contract, so the answer is wrapped rather than
+ * flattened: a bare `null` could not say which of the two happened.
+ */
+function parseStatedInstant(value: unknown): { readonly at: string | null } | null {
+    if (value === undefined || value === null) {
+        return { at: null };
+    }
+
+    const at = parseInstant(value);
+
+    return at === null ? null : { at };
 }
 
 function parseCitationIds(value: unknown, most: number): readonly string[] | null {

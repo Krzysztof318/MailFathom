@@ -7,15 +7,18 @@ import type {
     AttachmentAvailability,
     BlockSupport,
     CitedSourceKind,
+    DraftDisposition,
     FactTableColumn,
     SourceMedium,
     SourceStaleness,
+    SuggestedActionImpact,
+    SuggestedActionKind,
 } from '@mailfathom/client-backend';
 import type { IconName } from '../../controls/icons';
 import type { MessageKey } from '../../localization/en';
 
-// What a block says about its own honesty, in one place. Two renderers read it today and the other seven will, so a
-// verdict that meant one thing on an answer and another on a list of messages is exactly what this exists to stop —
+// What a block says about its own honesty, in one place. Every renderer in the catalogue reads it, so a verdict that
+// meant one thing on an answer and another on a list of messages is exactly what this exists to stop —
 // the design project draws one legend for the whole catalogue, and a legend is a promise that the chip means the same
 // thing wherever it appears.
 //
@@ -214,4 +217,63 @@ export const attachmentAvailabilities: Readonly<
     },
     NotStored: { label: 'answer.attachmentNotStored', icon: 'cloud_off', tint: warned },
     Removed: { label: 'answer.attachmentRemoved', icon: 'history', tint: warned },
+};
+
+/** The same forms for the people a block names. */
+export const personCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'answer.peopleCount.other',
+    one: 'answer.peopleCount.one',
+    two: 'answer.peopleCount.other',
+    few: 'answer.peopleCount.few',
+    many: 'answer.peopleCount.many',
+    other: 'answer.peopleCount.other',
+};
+
+/** The same forms for the people taking part in a conversation. */
+export const participantCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'threadStanding.participantCount.other',
+    one: 'threadStanding.participantCount.one',
+    two: 'threadStanding.participantCount.other',
+    few: 'threadStanding.participantCount.few',
+    many: 'threadStanding.participantCount.many',
+    other: 'threadStanding.participantCount.other',
+};
+
+/**
+ * What has become of a draft locally, which is the whole of what a draft block may say about itself.
+ *
+ * Each of the three says what it is *and* that nothing was sent, in one sentence rather than a state beside a
+ * reassurance: the set the contract closed this over holds no member meaning sent, and a reader looking at text
+ * addressed to somebody else is owed that where the text is rather than in a legend.
+ */
+export const draftDispositions: Readonly<Record<DraftDisposition, MessageKey>> = {
+    Composed: 'draft.composed',
+    Saved: 'draft.saved',
+    Queued: 'draft.queued',
+};
+
+/** What each suggested step is called and drawn as, one entry per member of the set the contract closed it over. */
+export const suggestedActions: Readonly<
+    Record<SuggestedActionKind, { readonly label: MessageKey; readonly icon: IconName }>
+> = {
+    ReplyToThread: { label: 'suggestedAction.replyToThread', icon: 'reply' },
+    ForwardEmail: { label: 'suggestedAction.forwardEmail', icon: 'forward' },
+    ComposeEmail: { label: 'suggestedAction.composeEmail', icon: 'edit_square' },
+    FlagEmail: { label: 'suggestedAction.flagEmail', icon: 'flag' },
+    OpenThread: { label: 'suggestedAction.openThread', icon: 'topic' },
+    SearchAgain: { label: 'suggestedAction.searchAgain', icon: 'search' },
+    CreateMailRule: { label: 'suggestedAction.createMailRule', icon: 'tune' },
+};
+
+/**
+ * What taking a step would change, said as what it costs to undo rather than as the member's own name.
+ *
+ * The design draws this as one *Effect:* line, and what makes the line worth reading is the undoing: opening a thread
+ * costs nothing, filing a message is reversible by whoever filed it, and a message that has left the deployment cannot
+ * be recalled by anything here.
+ */
+export const actionImpacts: Readonly<Record<SuggestedActionImpact, MessageKey>> = {
+    ReadsOnly: 'suggestedAction.readsOnly',
+    ChangesMailbox: 'suggestedAction.changesMailbox',
+    SendsMail: 'suggestedAction.sendsMail',
 };

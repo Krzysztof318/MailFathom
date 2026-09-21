@@ -7,18 +7,26 @@ import { asRecord } from './json';
 import {
     parseAttachmentEntries,
     parseBlockEvidence,
+    parseComposedDraft,
+    parseConversationStanding,
     parseDeclaredSource,
     parseEvidenceEntries,
     parseFactTableColumns,
     parseFactTableRows,
+    parsePersonEntries,
+    parseSuggestedAction,
     parseSynthesizedAnswer,
     parseTimelineEntries,
     type AttachmentEntry,
     type BlockEvidence,
+    type ComposedDraft,
+    type ConversationStanding,
     type DeclaredSource,
     type EvidenceEntry,
     type FactTableColumn,
     type FactTableRow,
+    type PersonEntry,
+    type SuggestedAction,
     type SynthesizedAnswer,
     type TimelineEntry,
 } from './presentationBlocks';
@@ -97,9 +105,10 @@ interface NamedBlock {
  * holding has the block's own members with nothing to check for absence: what a block of a given type carries is the
  * contract's answer rather than each screen's guess.
  *
- * A type the catalogue carries and this contract does not read in detail arrives named and nothing more — the same
- * shape a type the catalogue does not carry at all arrives in — because the reader owes the same sentence in both
- * cases and a payload nothing draws is a payload nothing has to be refused over.
+ * Every type the catalogue carries is read in full here, so the last member is a type this contract does not carry at
+ * all: a run written by a newer service. It arrives named and nothing more, which is the whole of what a reader is
+ * owed — and it is the member that keeps one unfamiliar block from discarding the answer around it. A tenth type added
+ * to the catalogue and not read here would fail to compile in `parseBlock` rather than arriving as one of these.
  */
 export type AnswerBlock =
     | (NamedBlock & {
@@ -127,16 +136,33 @@ export type AnswerBlock =
           readonly rows: readonly FactTableRow[];
       })
     | (NamedBlock & {
+          readonly type: 'people';
+          readonly evidence: BlockEvidence;
+          readonly entries: readonly PersonEntry[];
+      })
+    | (NamedBlock & {
+          readonly type: 'threadState';
+          readonly evidence: BlockEvidence;
+          readonly standing: ConversationStanding;
+      })
+    | (NamedBlock & {
           readonly type: 'attachmentGallery';
           readonly evidence: BlockEvidence;
           readonly entries: readonly AttachmentEntry[];
       })
     | (NamedBlock & {
-          /** The type the catalogue carries, or `null` where the run named one this contract does not. */
-          readonly type: Exclude<
-              AnswerBlockType,
-              'answer' | 'evidenceList' | 'timeline' | 'factTable' | 'attachmentGallery'
-          > | null;
+          readonly type: 'draft';
+          readonly evidence: BlockEvidence;
+          readonly draft: ComposedDraft;
+      })
+    | (NamedBlock & {
+          readonly type: 'suggestedAction';
+          readonly evidence: BlockEvidence;
+          readonly suggestion: SuggestedAction;
+      })
+    | (NamedBlock & {
+          /** `null`, the run having named a type this contract does not carry. */
+          readonly type: null;
       });
 
 /**
@@ -583,11 +609,39 @@ function parseBlock(value: unknown): AnswerBlock | null {
             return rows === null ? null : { type: named, named, evidence, columns, rows };
         }
 
+        case 'people': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const entries = parsePersonEntries(record['entries']);
+
+            return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'threadState': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const standing = parseConversationStanding(record);
+
+            return evidence === null || standing === null ? null : { type: named, named, evidence, standing };
+        }
+
         case 'attachmentGallery': {
             const evidence = parseBlockEvidence(record['evidence']);
             const entries = parseAttachmentEntries(record['entries']);
 
             return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'draft': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const draft = parseComposedDraft(record);
+
+            return evidence === null || draft === null ? null : { type: named, named, evidence, draft };
+        }
+
+        case 'suggestedAction': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const suggestion = parseSuggestedAction(record);
+
+            return evidence === null || suggestion === null ? null : { type: named, named, evidence, suggestion };
         }
 
         default:

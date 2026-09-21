@@ -117,9 +117,9 @@ describe('SynthesizedAnswer', () => {
         expect(screen.getByText('2 citations')).toBeDefined();
     });
 
-    it('names a block registered under the wrong type rather than drawing somebody else’s data as an answer', () => {
-        renderAnswer({ type: 'threadState', named: 'threadState' });
+    it('names a block it is not the renderer for rather than drawing somebody else’s data as an answer', () => {
+        renderAnswer({ type: null, named: 'RiskScore' });
 
-        expect(screen.getByText('type: threadState')).toBeDefined();
+        expect(screen.getByText('type: RiskScore')).toBeDefined();
     });
 });

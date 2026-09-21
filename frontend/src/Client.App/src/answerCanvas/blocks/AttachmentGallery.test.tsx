@@ -120,9 +120,9 @@ describe('AttachmentGallery', () => {
         expect(screen.getByText('Messages in this scope had no attachments.')).toBeDefined();
     });
 
-    it('names a block registered under the wrong type rather than drawing somebody else’s data as files', () => {
-        renderGallery({ type: 'people', named: 'people' });
+    it('names a block it is not the renderer for rather than drawing somebody else’s data as files', () => {
+        renderGallery({ type: null, named: 'RiskScore' });
 
-        expect(screen.getByText('type: people')).toBeDefined();
+        expect(screen.getByText('type: RiskScore')).toBeDefined();
     });
 });

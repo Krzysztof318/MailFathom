@@ -6,10 +6,14 @@ import { describe, expect, it } from 'vitest';
 import {
     parseAttachmentEntries,
     parseBlockEvidence,
+    parseComposedDraft,
+    parseConversationStanding,
     parseDeclaredSource,
     parseEvidenceEntries,
     parseFactTableColumns,
     parseFactTableRows,
+    parsePersonEntries,
+    parseSuggestedAction,
     parseSynthesizedAnswer,
     parseTimelineEntries,
 } from './presentationBlocks';
@@ -413,5 +417,212 @@ describe('parseAttachmentEntries', () => {
 
     it('refuses more files than one gallery may hold', () => {
         expect(parseAttachmentEntries(Array.from({ length: 51 }, () => file))).toBeNull();
+    });
+});
+
+describe('parsePersonEntries', () => {
+    const anna = {
+        displayName: 'Anna Kowalska',
+        address: 'anna@contoso.example',
+        relationship: 'Contoso · waiting for a reply',
+        lastContactAt: '2026-09-20T08:47:00+00:00',
+        sources: ['c-1'],
+    };
+
+    it('reads who somebody is, where they stand, and what says so', () => {
+        expect(parsePersonEntries([anna])).toEqual([
+            {
+                person: { displayName: 'Anna Kowalska', address: 'anna@contoso.example' },
+                relationship: 'Contoso · waiting for a reply',
+                lastContactAt: '2026-09-20T08:47:00+00:00',
+                sources: ['c-1'],
+            },
+        ]);
+    });
+
+    it('reads somebody the correspondence named without an address, which an organization often is', () => {
+        expect(parsePersonEntries([{ ...anna, address: null }])?.[0]?.person.address).toBeNull();
+    });
+
+    it('reads an unestablished last contact as unestablished rather than as a date', () => {
+        expect(parsePersonEntries([{ ...anna, lastContactAt: null }])?.[0]?.lastContactAt).toBeNull();
+    });
+
+    it('refuses a last contact that is not an instant, which would be drawn as though nothing was stated', () => {
+        expect(parsePersonEntries([{ ...anna, lastContactAt: 0 }])).toBeNull();
+    });
+
+    it('refuses an address that arrived as a record rather than as the text a message wrote', () => {
+        expect(parsePersonEntries([{ ...anna, address: { address: 'anna@contoso.example' } }])).toBeNull();
+    });
+
+    it('refuses an entry naming nobody, the name being what a reader recognises them by', () => {
+        expect(parsePersonEntries([{ ...anna, displayName: '' }])).toBeNull();
+    });
+
+    it('refuses more people than one block may name', () => {
+        expect(parsePersonEntries(Array.from({ length: 31 }, () => anna))).toBeNull();
+    });
+
+    it('reads a block that found nobody as one that found nobody rather than refusing the whole tail', () => {
+        expect(parsePersonEntries([])).toEqual([]);
+    });
+});
+
+describe('parseConversationStanding', () => {
+    const owed = {
+        text: 'Counter-proposal with the cap',
+        owedBy: { displayName: 'Karolina Kowalska', address: null },
+        dueAt: '2026-08-28T00:00:00+00:00',
+        sources: ['c-1'],
+    };
+
+    const standing = {
+        participants: [{ displayName: 'Karolina Kowalska', address: null }],
+        agreements: [{ text: 'SLA cut from 4 h to 2 h', sources: ['c-1'] }],
+        openQuestions: [{ text: 'Do we accept a 5% cap?', sources: [] }],
+        commitments: [owed],
+    };
+
+    it('reads the three things a conversation says about itself and who is taking part', () => {
+        const parsed = parseConversationStanding(standing);
+
+        expect(parsed?.participants).toEqual([{ displayName: 'Karolina Kowalska', address: null }]);
+        expect(parsed?.agreements.map((statement) => statement.text)).toEqual(['SLA cut from 4 h to 2 h']);
+        expect(parsed?.openQuestions.map((statement) => statement.text)).toEqual(['Do we accept a 5% cap?']);
+        expect(parsed?.commitments.map((commitment) => commitment.text)).toEqual(['Counter-proposal with the cap']);
+    });
+
+    it('reads a commitment nobody was named for, which is how one is usually made', () => {
+        const parsed = parseConversationStanding({ ...standing, commitments: [{ ...owed, owedBy: null }] });
+
+        expect(parsed?.commitments[0]?.owedBy).toBeNull();
+    });
+
+    it('reads a conversation that settled nothing, which is an ordinary conversation', () => {
+        expect(parseConversationStanding({ ...standing, agreements: [], openQuestions: [], commitments: [] })).toEqual({
+            participants: [{ displayName: 'Karolina Kowalska', address: null }],
+            agreements: [],
+            openQuestions: [],
+            commitments: [],
+        });
+    });
+
+    it('refuses a statement resting on a citation nothing could name', () => {
+        expect(parseConversationStanding({ ...standing, agreements: [{ text: 'Agreed', sources: [''] }] })).toBeNull();
+    });
+
+    it('refuses more participants than one standing may name', () => {
+        expect(
+            parseConversationStanding({
+                ...standing,
+                participants: Array.from({ length: 31 }, () => ({ displayName: 'Karolina Kowalska', address: null })),
+            }),
+        ).toBeNull();
+    });
+
+    it('refuses more statements in one list than the contract composes', () => {
+        expect(
+            parseConversationStanding({
+                ...standing,
+                agreements: Array.from({ length: 26 }, () => ({ text: 'Agreed', sources: [] })),
+            }),
+        ).toBeNull();
+    });
+});
+
+describe('parseComposedDraft', () => {
+    const draft = {
+        recipients: ['anna@contoso.example'],
+        subject: 'Re: proposed terms for 2027',
+        body: 'We accept shortening the response time.',
+        disposition: 'Composed',
+    };
+
+    it('reads who it is addressed to, what it says, and what has become of it locally', () => {
+        expect(parseComposedDraft(draft)).toEqual({
+            recipients: ['anna@contoso.example'],
+            subject: 'Re: proposed terms for 2027',
+            body: 'We accept shortening the response time.',
+            disposition: 'Composed',
+        });
+    });
+
+    it('refuses a draft addressed to nobody, the recipients being part of what a message is', () => {
+        expect(parseComposedDraft({ ...draft, recipients: [] })).toBeNull();
+    });
+
+    it('refuses a recipient that is not an address, the addresses being what the draft is sent to', () => {
+        expect(parseComposedDraft({ ...draft, recipients: [{ address: 'anna@contoso.example' }] })).toBeNull();
+    });
+
+    it('reads a draft naming one mailbox twice, the service having compared them in a form this side cannot', () => {
+        const parsed = parseComposedDraft({
+            ...draft,
+            recipients: ['anna@contoso.example', 'Anna@Contoso.example'],
+        });
+
+        expect(parsed?.recipients).toEqual(['anna@contoso.example', 'Anna@Contoso.example']);
+    });
+
+    it('refuses more recipients than one draft may name', () => {
+        expect(
+            parseComposedDraft({
+                ...draft,
+                recipients: Array.from({ length: 21 }, (_, at) => `anna-${String(at)}@a.test`),
+            }),
+        ).toBeNull();
+    });
+
+    it.each(['subject', 'body'])('refuses a draft carrying no %s', (member) => {
+        expect(parseComposedDraft({ ...draft, [member]: '' })).toBeNull();
+    });
+
+    it('refuses a disposition outside the set, every member of which is local', () => {
+        expect(parseComposedDraft({ ...draft, disposition: 'Sent' })).toBeNull();
+    });
+});
+
+describe('parseSuggestedAction', () => {
+    const suggestion = {
+        action: 'ReplyToThread',
+        reason: 'The decision is due on 28.08 and they have been waiting two days.',
+        impact: 'SendsMail',
+        requiresConfirmation: true,
+    };
+
+    it('reads the step, why it is suggested, and what taking it would change', () => {
+        expect(parseSuggestedAction(suggestion)).toEqual({
+            action: 'ReplyToThread',
+            reason: 'The decision is due on 28.08 and they have been waiting two days.',
+            impact: 'SendsMail',
+            requiresConfirmation: true,
+        });
+    });
+
+    it('refuses a step that sends mail and claims it needs no confirming, nothing here recalling one', () => {
+        expect(parseSuggestedAction({ ...suggestion, requiresConfirmation: false })).toBeNull();
+    });
+
+    it('reads a reversible step stating no confirmation, which the service permits and the screen still confirms', () => {
+        expect(parseSuggestedAction({ ...suggestion, impact: 'ChangesMailbox', requiresConfirmation: false })).toEqual({
+            ...suggestion,
+            impact: 'ChangesMailbox',
+            requiresConfirmation: false,
+        });
+    });
+
+    it('reads a step that only shows somebody something and asks for no confirmation', () => {
+        const parsed = parseSuggestedAction({ ...suggestion, impact: 'ReadsOnly', requiresConfirmation: false });
+
+        expect(parsed?.requiresConfirmation).toBe(false);
+    });
+
+    it('refuses a step outside the set, nothing having written a control for one', () => {
+        expect(parseSuggestedAction({ ...suggestion, action: 'DeleteEverything' })).toBeNull();
+    });
+
+    it('refuses a step giving no reason, the reason being what makes agreeing informed', () => {
+        expect(parseSuggestedAction({ ...suggestion, reason: '' })).toBeNull();
     });
 });
