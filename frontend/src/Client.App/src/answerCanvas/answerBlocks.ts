@@ -4,6 +4,8 @@
 
 import type { ComponentType } from 'react';
 import type { AnswerBlock, AnswerBlockType } from '@mailfathom/client-backend';
+import { EvidenceList } from './blocks/EvidenceList';
+import { SynthesizedAnswer } from './blocks/SynthesizedAnswer';
 
 // What a block is drawn as, and which component draws which type. It sits apart from the canvas and from the card
 // because both read it and neither owns it: adding a renderer is registering one here rather than editing the host,
@@ -26,9 +28,11 @@ export type AnswerBlockRenderers = Partial<Readonly<Record<AnswerBlockType, Answ
 /**
  * The renderers this build carries.
  *
- * It is empty while the renderers are being written, and a type with no entry is drawn exactly as a type the contract
- * does not carry is: named to the reader, with the rest of the answer standing. That is the same sentence for the two
- * reasons a client cannot draw a block — it was built before the type existed, or before the renderer did — and
- * neither is something a reader can act on differently.
+ * A type with no entry is drawn exactly as a type the contract does not carry is: named to the reader, with the rest
+ * of the answer standing. That is the same sentence for the two reasons a client cannot draw a block — it was built
+ * before the type existed, or before the renderer did — and neither is something a reader can act on differently.
  */
-export const answerBlockRenderers: AnswerBlockRenderers = {};
+export const answerBlockRenderers: AnswerBlockRenderers = {
+    answer: SynthesizedAnswer,
+    evidenceList: EvidenceList,
+};

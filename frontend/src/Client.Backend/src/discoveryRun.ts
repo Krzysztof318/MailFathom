@@ -4,6 +4,16 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
+import {
+    parseBlockEvidence,
+    parseDeclaredSource,
+    parseEvidenceEntries,
+    parseSynthesizedAnswer,
+    type BlockEvidence,
+    type DeclaredSource,
+    type EvidenceEntry,
+    type SynthesizedAnswer,
+} from './presentationBlocks';
 import type { RunTail } from './runFollowing';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
@@ -25,11 +35,11 @@ import { send, type MailFathomTransport } from './transport';
 // refusing it among them, neither of which is a fault. All of it is counts, instants, and names an operator chose:
 // nothing about the mail travels on any of them.
 //
-// **Nothing here decides what a block looks like.** A block arrives named by its type and nothing more: what each type
-// carries is read by the renderer that draws it, and a type this build has no renderer for is named to the reader
-// rather than dropped. That is the same forward compatibility one revision further down, and it is why an event kind
-// this client does not know is carried as `other` instead of being skipped — a sequence dropped on the floor is a
-// cursor that never advances past it.
+// **Nothing here decides what a block looks like.** A block arrives named by its type and carrying what that type
+// holds; what a verdict, a confidence, or a relevance is called, and which of them is drawn as a warning, is the
+// screen's. A type this build reads no payload for is named to the reader rather than dropped, which is the same
+// forward compatibility one revision further down — and it is why an event kind this client does not know is carried
+// as `other` instead of being skipped: a sequence dropped on the floor is a cursor that never advances past it.
 
 /** The route one run is read at, relative to the client prefix. */
 export function discoveryRunRoute(runId: string): string {
@@ -60,20 +70,44 @@ export const answerBlockTypes = [
 /** One of the block types this contract carries. */
 export type AnswerBlockType = (typeof answerBlockTypes)[number];
 
-/** One block of an answer, named by its type. */
-export interface AnswerBlock {
-    /** The type the catalogue carries, or `null` where the run named one this contract does not. */
-    readonly type: AnswerBlockType | null;
-
-    /**
-     * What the run called the block, whichever of the two it is.
-     *
-     * It is carried even for a type the catalogue does carry, because it is what a screen names to a reader when this
-     * build has nothing to draw it with — and a screen that had to spell a type it did not recognise out of a value it
-     * had refused would have nothing to spell.
-     */
+/**
+ * What every block carries whatever its type is.
+ *
+ * `named` is carried even for a type the catalogue does carry, because it is what a screen names to a reader when this
+ * build has nothing to draw it with — and a screen that had to spell a type it did not recognise out of a value it had
+ * refused would have nothing to spell.
+ */
+interface NamedBlock {
+    /** What the run called the block, whichever of the two it is. */
     readonly named: string;
 }
+
+/**
+ * One block of an answer, named by its type and carrying whatever that type holds.
+ *
+ * It is a union rather than one shape with optional members, so a renderer that has established which type it is
+ * holding has the block's own members with nothing to check for absence: what a block of a given type carries is the
+ * contract's answer rather than each screen's guess.
+ *
+ * A type the catalogue carries and this contract does not read in detail arrives named and nothing more — the same
+ * shape a type the catalogue does not carry at all arrives in — because the reader owes the same sentence in both
+ * cases and a payload nothing draws is a payload nothing has to be refused over.
+ */
+export type AnswerBlock =
+    | (NamedBlock & {
+          readonly type: 'answer';
+          readonly evidence: BlockEvidence;
+          readonly answer: SynthesizedAnswer;
+      })
+    | (NamedBlock & {
+          readonly type: 'evidenceList';
+          readonly evidence: BlockEvidence;
+          readonly entries: readonly EvidenceEntry[];
+      })
+    | (NamedBlock & {
+          /** The type the catalogue carries, or `null` where the run named one this contract does not. */
+          readonly type: Exclude<AnswerBlockType, 'answer' | 'evidenceList'> | null;
+      });
 
 /**
  * What one question may spend on this deployment, which is what every count a run reports is read against.
@@ -172,6 +206,7 @@ export type DiscoveryRunEvent =
           /** The model name the operator declared for publication, and empty where they declared none. */
           readonly publishedModel: string;
       }
+    | { readonly kind: 'citation'; readonly sequence: number; readonly source: DeclaredSource }
     | { readonly kind: 'block'; readonly sequence: number; readonly block: AnswerBlock }
     | {
           readonly kind: 'retrieval';
@@ -356,6 +391,12 @@ function parseEvent(value: unknown): DiscoveryRunEvent | null {
                 : { kind: 'started', sequence, planSchemaVersion, ceilings, endpointAlias, publishedModel };
         }
 
+        case 'citation': {
+            const source = parseDeclaredSource(record['citation']);
+
+            return source === null ? null : { kind: 'citation', sequence, source };
+        }
+
         case 'block': {
             const block = parseBlock(record['block']);
 
@@ -470,7 +511,31 @@ function parseBlock(value: unknown): AnswerBlock | null {
         return null;
     }
 
-    return { type: isBlockType(named) ? named : null, named };
+    if (!isBlockType(named)) {
+        return { type: null, named };
+    }
+
+    // A block whose own payload this client cannot read is refused rather than drawn named: the type is one this build
+    // has a renderer for, so drawing it as unknown would tell the reader their client is behind when what happened is
+    // that the deployment sent something neither of them can stand behind. A refused tail is read again as itself.
+    switch (named) {
+        case 'answer': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const answer = parseSynthesizedAnswer(record);
+
+            return evidence === null || answer === null ? null : { type: named, named, evidence, answer };
+        }
+
+        case 'evidenceList': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const entries = parseEvidenceEntries(record['entries']);
+
+            return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        default:
+            return { type: named, named };
+    }
 }
 
 function isBlockType(value: string): value is AnswerBlockType {
