@@ -4,34 +4,39 @@
 
 using System.Globalization;
 using MailFathom.Application.Access;
-using MailFathom.Application.Calendar;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Notifications;
+using MailFathom.Application.Reminders;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Notifications;
+using MailFathom.Domain.Reminders;
+using MailFathom.Domain.Tasks;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
-namespace MailFathom.Application.UnitTests.Calendar;
+namespace MailFathom.Application.UnitTests.Reminders;
 
 /// <summary>
 /// Covers the pass that announces reminders. What it has to hold is that a reminder is announced exactly once however
-/// often the pass runs, that an event moved to a new time becomes due again there and one moved back onto an announced
-/// time stays quiet, that a reminder nobody could still act on is passed over rather than delivered in a burst, and
-/// that a replica refused the lease announces nothing.
+/// often the pass runs, that a record moved to a new time becomes due again there and one moved back onto an
+/// announced time stays quiet, that a reminder nobody could still act on is passed over rather than delivered in a
+/// burst, that a replica refused the lease announces nothing, and that every kind of reminder is announced by this
+/// one pass in the shape its own kind takes.
 /// </summary>
-public sealed class CalendarReminderSweepTests
+public sealed class ReminderSweepTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 21, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly CalendarEventId Standup =
-        CalendarEventId.Create(new Guid("0197a3c0-0000-7000-8000-000000000001"));
+    private static readonly Guid Standup = new("0197a3c0-0000-7000-8000-000000000001");
 
-    private readonly StubCalendarReminderSchedule schedule = new();
+    private static readonly Guid CounterProposal = new("0197a3c0-0000-7000-8000-000000000002");
+
+    private readonly StubReminderSchedule schedule = new();
+    private readonly StubReminderSchedule tasks = new();
     private readonly InMemoryNotificationStore notifications = new();
 
     [Fact]
@@ -52,7 +57,68 @@ public sealed class CalendarReminderSweepTests
         Assert.Equal("Standup", raised.Title);
         Assert.Equal(NotificationCause.CalendarReminderDue, raised.Statement!.Cause);
         Assert.Equal(15, raised.Statement.Counted);
-        Assert.Equal(Standup, raised.Target.CalendarEvent);
+        Assert.Equal(CalendarEventId.Create(Standup), raised.Target.CalendarEvent);
+    }
+
+    /// <summary>
+    /// The whole of what stage 10 adds: the same pass, the same ordering, and a notification of the task kind that
+    /// leads to the task rather than to an event.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ATaskReminderThatHasComeDue_AnnouncesItAsATaskAndLeadsToIt()
+    {
+        // Arrange
+        this.tasks.Holding(DueTask(Now.AddMinutes(-1), minutesBefore: 240));
+
+        // Act
+        var announced = await this.SweepingBoth().RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, announced);
+
+        var raised = Assert.Single(this.notifications.Recorded);
+        Assert.Equal(NotificationKind.Task, raised.Kind);
+        Assert.Equal("Send the counter-proposal", raised.Title);
+        Assert.Equal(NotificationCause.TaskReminderDue, raised.Statement!.Cause);
+        Assert.Equal(240, raised.Statement.Counted);
+        Assert.Equal(PersonalTaskId.Create(CounterProposal), raised.Target.PersonalTask);
+    }
+
+    /// <summary>One pass over every kind rather than one pass per kind, which is why there is a single worker.</summary>
+    [Fact]
+    public async Task RunAsync_RemindersOfBothKinds_AnnouncesEveryOneInOnePass()
+    {
+        // Arrange
+        this.schedule.Holding(Due(Now.AddMinutes(-1), minutesBefore: 15));
+        this.tasks.Holding(DueTask(Now.AddMinutes(-1), minutesBefore: 240));
+
+        // Act
+        var announced = await this.SweepingBoth().RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, announced);
+        Assert.Equal(
+            [NotificationKind.Calendar, NotificationKind.Task],
+            this.notifications.Recorded.Select(raised => raised.Kind));
+    }
+
+    /// <summary>
+    /// An identity is unique within its kind rather than across the deployment, so the key has to name the kind as
+    /// well — otherwise a task and an event sharing one would fold into a single statement and one of them would
+    /// never be said.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ATaskAndAnEventUnderOneIdentity_AnnouncesBoth()
+    {
+        // Arrange
+        this.schedule.Holding(Due(Now.AddMinutes(-1), minutesBefore: 15));
+        this.tasks.Holding(DueTask(Now.AddMinutes(-1), minutesBefore: 15) with { Identity = Standup });
+
+        // Act
+        await this.SweepingBoth().RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, this.notifications.Recorded.Count);
     }
 
     /// <summary>The whole reason the claim is recorded: a pass that runs every minute says one thing once.</summary>
@@ -126,7 +192,7 @@ public sealed class CalendarReminderSweepTests
     public async Task RunAsync_AReminderLongerOverdueThanIsWorthSaying_IsPassedOverInSilence()
     {
         // Arrange
-        this.schedule.Holding(Due(Now - CalendarReminderSweep.LongestLateAnnouncement.Add(TimeSpan.FromMinutes(1)), 15));
+        this.schedule.Holding(Due(Now - ReminderSweep.LongestLateAnnouncement.Add(TimeSpan.FromMinutes(1)), 15));
 
         // Act
         var announced = await this.Sweeping().RunAsync(TestContext.Current.CancellationToken);
@@ -172,7 +238,7 @@ public sealed class CalendarReminderSweepTests
     public async Task RunAsync_Always_AsksForNoMoreThanOnePassMayAnnounce()
     {
         // Arrange
-        var schedule = Substitute.For<ICalendarReminderSchedule>();
+        var schedule = Substitute.For<IReminderSchedule>();
         schedule
             .ReadDueAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
@@ -183,8 +249,8 @@ public sealed class CalendarReminderSweepTests
         // Assert
         await schedule.Received(1).ReadDueAsync(
             Now,
-            Now - CalendarReminderSweep.LongestLateAnnouncement,
-            CalendarReminderSweep.MaximumRemindersPerRun,
+            Now - ReminderSweep.LongestLateAnnouncement,
+            ReminderSweep.MaximumRemindersPerRun,
             Arg.Any<CancellationToken>());
     }
 
@@ -211,9 +277,9 @@ public sealed class CalendarReminderSweepTests
     public async Task RunAsync_ACallerRatherThanTheProcess_IsRefused()
     {
         // Arrange
-        var sweep = new CalendarReminderSweep(
+        var sweep = new ReminderSweep(
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
-            this.schedule,
+            [this.schedule],
             new NotificationRaiser(this.notifications, ClientSignalPublishers.ReachingNobody),
             new GrantingLeaseRunner(),
             new FakeTimeProvider(Now));
@@ -246,37 +312,55 @@ public sealed class CalendarReminderSweepTests
         Assert.Equal(said, Assert.Single(this.notifications.Recorded).Body);
     }
 
-    private static DueCalendarReminder Due(DateTimeOffset dueAt, int minutesBefore) => new(
+    private static DueReminder Due(DateTimeOffset dueAt, int minutesBefore) => new(
         SyntheticMailUser.Deployment,
+        ReminderSubject.CalendarEvent,
         Standup,
-        CalendarEventTitle.Create("Standup"),
-        CalendarReminder.Create(minutesBefore),
+        "Standup",
+        Reminder.Create(minutesBefore),
+        dueAt);
+
+    private static DueReminder DueTask(DateTimeOffset dueAt, int minutesBefore) => new(
+        SyntheticMailUser.Deployment,
+        ReminderSubject.PersonalTask,
+        CounterProposal,
+        "Send the counter-proposal",
+        Reminder.Create(minutesBefore),
         dueAt);
 
     /// <summary>The row a pass would have written before it ended, which is what the repeat is folded into.</summary>
-    private static Notification AlreadyStanding(DueCalendarReminder due) => Notification.Compose(
+    private static Notification AlreadyStanding(DueReminder due) => Notification.Compose(
         NotificationId.Create(Guid.CreateVersion7(due.DueAt)),
         due.Owner,
         NotificationKind.Calendar,
-        due.Title.Value,
+        due.Headline,
         "15 minutes left.",
         NotificationStatement.CalendarReminderDue(due.Reminder.MinutesBefore),
         source: null,
-        NotificationTarget.ToCalendarEvent(due.Event),
+        NotificationTarget.ToCalendarEvent(CalendarEventId.Create(due.Identity)),
         NotificationDeduplicationKey.For(
             "calendar-reminder",
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"{due.Event.Value}:{due.Reminder.MinutesBefore}:{due.DueAt:O}")),
+                $"{due.Identity}:{due.Reminder.MinutesBefore}:{due.DueAt:O}")),
         due.DueAt);
 
-    private CalendarReminderSweep Sweeping(
+    private ReminderSweep Sweeping(
         FakeTimeProvider? clock = null,
-        ICalendarReminderSchedule? schedule = null,
+        IReminderSchedule? schedule = null,
+        IWorkLeaseRunner? leases = null) =>
+        this.SweepingOver([schedule ?? (IReminderSchedule)this.schedule], clock, leases);
+
+    /// <summary>The pass as the deployment composes it, holding the calendar's schedule and the task list's.</summary>
+    private ReminderSweep SweepingBoth() => this.SweepingOver([this.schedule, this.tasks]);
+
+    private ReminderSweep SweepingOver(
+        IReadOnlyList<IReminderSchedule> schedules,
+        FakeTimeProvider? clock = null,
         IWorkLeaseRunner? leases = null) =>
         new(
             AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
-            schedule ?? this.schedule,
+            schedules,
             new NotificationRaiser(this.notifications, ClientSignalPublishers.ReachingNobody),
             leases ?? new GrantingLeaseRunner(),
             clock ?? new FakeTimeProvider(Now));
@@ -304,28 +388,28 @@ public sealed class CalendarReminderSweepTests
     /// a double that claimed unconditionally would pass a sweep that announced a moved event twice. What it does not
     /// model is the race two replicas settle on the database, which the integration suite proves.
     /// </remarks>
-    private sealed class StubCalendarReminderSchedule : ICalendarReminderSchedule
+    private sealed class StubReminderSchedule : IReminderSchedule
     {
         private readonly List<StandingReminder> standing = [];
 
-        public void Holding(DueCalendarReminder due) => this.standing.Add(new StandingReminder(due));
+        public void Holding(DueReminder due) => this.standing.Add(new StandingReminder(due));
 
-        public void Deleted(CalendarEventId calendarEvent) =>
-            this.standing.RemoveAll(reminder => reminder.Due.Event == calendarEvent);
+        public void Deleted(Guid identity) =>
+            this.standing.RemoveAll(reminder => reminder.Due.Identity == identity);
 
-        public void Moved(CalendarEventId calendarEvent, int minutesBefore, DateTimeOffset dueAt)
+        public void Moved(Guid identity, int minutesBefore, DateTimeOffset dueAt)
         {
-            foreach (var reminder in this.Matching(calendarEvent, minutesBefore))
+            foreach (var reminder in this.Matching(identity, minutesBefore))
             {
                 reminder.Due = reminder.Due with { DueAt = dueAt };
                 reminder.RaisedForDueAt = null;
             }
         }
 
-        public bool IsClaimed(CalendarEventId calendarEvent, int minutesBefore) =>
-            this.Matching(calendarEvent, minutesBefore).All(reminder => reminder.RaisedForDueAt is not null);
+        public bool IsClaimed(Guid identity, int minutesBefore) =>
+            this.Matching(identity, minutesBefore).All(reminder => reminder.RaisedForDueAt is not null);
 
-        public Task<IReadOnlyList<DueCalendarReminder>> ReadDueAsync(
+        public Task<IReadOnlyList<DueReminder>> ReadDueAsync(
             DateTimeOffset asOf,
             DateTimeOffset notDueBefore,
             int limit,
@@ -333,7 +417,7 @@ public sealed class CalendarReminderSweepTests
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-            return Task.FromResult<IReadOnlyList<DueCalendarReminder>>(
+            return Task.FromResult<IReadOnlyList<DueReminder>>(
             [
                 .. this.standing
                     .Where(reminder => reminder.RaisedForDueAt is null
@@ -345,11 +429,11 @@ public sealed class CalendarReminderSweepTests
             ]);
         }
 
-        public Task<bool> MarkRaisedAsync(DueCalendarReminder due, CancellationToken cancellationToken)
+        public Task<bool> MarkRaisedAsync(DueReminder due, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(due);
 
-            var held = this.standing.SingleOrDefault(reminder => reminder.Due.Event == due.Event
+            var held = this.standing.SingleOrDefault(reminder => reminder.Due.Identity == due.Identity
                 && reminder.Due.Reminder == due.Reminder
                 && reminder.Due.DueAt == due.DueAt
                 && reminder.RaisedForDueAt is null);
@@ -364,13 +448,13 @@ public sealed class CalendarReminderSweepTests
             return Task.FromResult(true);
         }
 
-        private IEnumerable<StandingReminder> Matching(CalendarEventId calendarEvent, int minutesBefore) =>
-            this.standing.Where(reminder => reminder.Due.Event == calendarEvent
+        private IEnumerable<StandingReminder> Matching(Guid identity, int minutesBefore) =>
+            this.standing.Where(reminder => reminder.Due.Identity == identity
                 && reminder.Due.Reminder.MinutesBefore == minutesBefore);
 
-        private sealed class StandingReminder(DueCalendarReminder due)
+        private sealed class StandingReminder(DueReminder due)
         {
-            public DueCalendarReminder Due { get; set; } = due;
+            public DueReminder Due { get; set; } = due;
 
             public DateTimeOffset? RaisedForDueAt { get; set; }
         }

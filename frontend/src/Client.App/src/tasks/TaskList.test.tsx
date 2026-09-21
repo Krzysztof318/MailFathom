@@ -20,7 +20,16 @@ afterEach(() => {
 const readingAt = Date.parse('2026-09-21T09:00:00+02:00');
 
 function taskDue(id: string, title: string, dueOn: string | null): PersonalTask {
-    return { id, title, dueOn, origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title,
+        dueOn,
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 function drawList({
@@ -63,6 +72,7 @@ function drawList({
                 onToggleCompleted={vi.fn()}
                 onAccept={vi.fn()}
                 onOpenSource={vi.fn()}
+                onReminders={vi.fn()}
                 onSchedule={vi.fn()}
                 onAskErasure={vi.fn()}
                 onReadMore={onReadMore}
@@ -186,6 +196,31 @@ describe('TaskList', () => {
         fireEvent.click(screen.getByRole('menuitem', { name: 'Select tasks' }));
 
         expect(document.activeElement).toBe(row);
+    });
+
+    it('offers reminders on a dated task and none on one nobody dated', () => {
+        drawList({
+            tasks: [taskDue('a', 'Answer the tender', '2026-09-21'), taskDue('b', 'File the return', null)],
+        });
+
+        expect(screen.queryByRole('button', { name: 'Add a reminder to Answer the tender' })).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add a reminder to File the return' })).toBeNull();
+    });
+
+    it('offers reminders in the row menu of a dated task and not in an undated one', () => {
+        drawList({ tasks: [taskDue('a', 'Answer the tender', '2026-09-21')], onSelected: vi.fn() });
+
+        fireEvent.keyDown(screen.getByRole('listitem'), { key: 'ContextMenu' });
+
+        expect(screen.queryByRole('menuitem', { name: 'Reminders' })).not.toBeNull();
+    });
+
+    it('leaves reminders out of the row menu of a task nobody dated', () => {
+        drawList({ tasks: [taskDue('b', 'File the return', null)], onSelected: vi.fn() });
+
+        fireEvent.keyDown(screen.getByRole('listitem'), { key: 'ContextMenu' });
+
+        expect(screen.queryByRole('menuitem', { name: 'Reminders' })).toBeNull();
     });
 
     it('adds a row to the selection it is already holding rather than replacing it', () => {

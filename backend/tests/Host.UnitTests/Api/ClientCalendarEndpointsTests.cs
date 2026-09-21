@@ -7,6 +7,7 @@ using MailFathom.Application.Calendar;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
+using MailFathom.Domain.Reminders;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -444,7 +445,7 @@ public sealed class ClientCalendarEndpointsTests
                 Monday,
                 End: null,
                 IsAllDay: false,
-                [CalendarReminder.MaximumMinutesBefore + 1],
+                [Reminder.MaximumMinutesBefore + 1],
                 SourceMessage: null),
             this.Calendar(),
             TestContext.Current.CancellationToken);

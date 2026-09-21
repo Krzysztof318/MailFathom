@@ -6,6 +6,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
+using MailFathom.Domain.Tasks;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Notifications;
@@ -13,9 +14,9 @@ namespace MailFathom.Infrastructure.Persistence.Notifications;
 /// <summary>Turns a notification into the row it is stored as.</summary>
 /// <remarks>
 /// The target is flattened into a column per shape here rather than being modelled as one, because the shape a row
-/// carries is what a reader filters and joins on: a column per shape lets the message and the calendar event each be
-/// a foreign key, which is what erases a notification with the record it leads to, and a serialized target could be
-/// neither.
+/// carries is what a reader filters and joins on: a column per shape lets the message, the calendar event, and the
+/// task each be a foreign key, which is what erases a notification with the record it leads to, and a serialized
+/// target could be neither.
 /// </remarks>
 internal static class NotificationMapping
 {
@@ -57,6 +58,8 @@ internal static class NotificationMapping
             NotificationTarget.ToScreen(screen),
         NotificationTargetKind.CalendarEvent when entity.TargetCalendarEventId is { } calendarEvent =>
             NotificationTarget.ToCalendarEvent(CalendarEventId.Create(calendarEvent)),
+        NotificationTargetKind.PersonalTask when entity.TargetPersonalTaskId is { } task =>
+            NotificationTarget.ToPersonalTask(PersonalTaskId.Create(task)),
         _ => throw new ArgumentOutOfRangeException(
             nameof(entity),
             entity.TargetKind,
@@ -86,6 +89,7 @@ internal static class NotificationMapping
             TargetStoredEmailId = notification.Target.Message?.Value,
             TargetScreen = notification.Target.Screen,
             TargetCalendarEventId = notification.Target.CalendarEvent?.Value,
+            TargetPersonalTaskId = notification.Target.PersonalTask?.Value,
             DeduplicationKey = notification.DeduplicationKey.Value,
             OccurredAt = notification.OccurredAt,
             IsRead = notification.IsRead,

@@ -11,6 +11,7 @@ import { Icon } from '../controls/Icon';
 import { wordCalendarDay, wordDueDay } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
+import { wordReminderCount } from '../reminders/reminderWords';
 
 // One thing a person owes, as the design project draws a task: the box that completes it, the line it is drawn with,
 // the mark saying it came out of mail, the way back to the message it came out of, the day it is due, and the act that
@@ -32,12 +33,16 @@ import { useReadingZone } from '../localization/useReadingZone';
 // keyboard adds a fifth row to four and how a screen reader is told which rows are held. Starting the selection where
 // no modifier key is being held is the menu's *Select tasks*, exactly as the design draws it.
 //
-// **Three things the design draws are not drawn here, and each is a record this deployment does not keep.** A task
-// carries no estimate, so the duration beside the day is absent; it carries no reminders, which
-// [#1572](https://github.com/Krzysztof318/MailFathom/issues/1572) is the issue for and which the panel #1610 already
-// built is waiting on; and it cites a message by identity alone rather than by subject, so the link back is named for
-// what it does instead of for the thread it reaches — the row deliberately carries no subject, because a task list is
-// not a second place somebody's mail is drawn.
+// **Two things the design draws are not drawn here, and each is a record this deployment does not keep.** A task
+// carries no estimate, so the duration beside the day is absent; and it cites a message by identity alone rather than
+// by subject, so the link back is named for what it does instead of for the thread it reaches — the row deliberately
+// carries no subject, because a task list is not a second place somebody's mail is drawn.
+//
+// **What announces a task is drawn where the design draws it**, first in the block at the end of the row, as the pill
+// the design gives it: the bell filled where something is set and outlined where nothing is, and the count beside it
+// only once there is more than one, a single reminder being what the filled bell already says. It is absent on a task
+// nobody dated, because a lead is measured back from the due day and the deployment refuses one stated against no day
+// — a control that could only be refused is not one this row draws.
 //
 // **The day is written short and said long.** The design gives it the width of two words at the end of the row, which
 // a spelled-out date does not fit, so what is drawn is `localization/instants.ts`'s own short wording. A bare *today*
@@ -55,6 +60,7 @@ export function TaskRow({
     onToggleCompleted,
     onAccept,
     onOpenSource,
+    onReminders,
     onSchedule,
     onPress,
     onElement,
@@ -84,6 +90,9 @@ export function TaskRow({
     /** Opens the message this task cites, or `undefined` where it cites none. */
     readonly onOpenSource: (() => void) | undefined;
 
+    /** Opens what announces this task, or `undefined` for one nobody dated, which can announce nothing. */
+    readonly onReminders: (() => void) | undefined;
+
     readonly onSchedule: () => void;
 
     /** Opens this row's own menu at the point the gesture happened. */
@@ -94,6 +103,7 @@ export function TaskRow({
 }) {
     const { locale, translate } = useLocalization();
     const timeZone = useReadingZone();
+    const counted = new Intl.NumberFormat(locale);
     const press = useRowPress(onPress);
 
     // The act that puts a task in the day and the chip that says it is there are the same place on the row, so the
@@ -213,6 +223,31 @@ export function TaskRow({
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
+                {onReminders === undefined ? null : (
+                    <button
+                        type="button"
+                        aria-label={translate(
+                            task.reminders.length === 0 ? 'tasks.addReminder' : 'tasks.remindersOnRow',
+                            {
+                                title: task.title,
+                                count: wordReminderCount(task.reminders.length, locale, translate),
+                            },
+                        )}
+                        className={`flex items-center gap-1 rounded-xl border px-2.25 py-1 text-xs font-semibold transition hover:border-accent hover:text-accent-deep ${
+                            task.reminders.length === 0
+                                ? 'border-line bg-sunken text-muted'
+                                : 'border-accent-line bg-accent-soft text-accent-deep'
+                        }`}
+                        onClick={onReminders}
+                    >
+                        <Icon
+                            name={task.reminders.length === 0 ? 'notifications' : 'notifications_active'}
+                            className="size-4"
+                        />
+                        {task.reminders.length > 1 ? counted.format(task.reminders.length) : null}
+                    </button>
+                )}
+
                 {task.dueOn === null ? (
                     <span className="text-sm whitespace-nowrap text-faint">{translate('tasks.noDay')}</span>
                 ) : (

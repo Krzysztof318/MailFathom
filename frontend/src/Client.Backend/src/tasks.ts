@@ -4,6 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
+import { isReminderInstantList, isReminderSet } from './reminders';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
@@ -60,6 +61,12 @@ export interface PersonalTask {
     /** The day it is due on as `yyyy-mm-dd`, or `null` where nobody has said when. */
     readonly dueOn: string | null;
 
+    /** What announces it, in minutes before nine in the morning on the due day, longest lead first. */
+    readonly reminders: readonly number[];
+
+    /** The instants those leads fall at, in the same order, which the deployment states and this client draws. */
+    readonly remindsAt: readonly string[];
+
     readonly origin: PersonalTaskOrigin;
     readonly completed: boolean;
 
@@ -80,12 +87,30 @@ export interface PersonalTaskPage {
     readonly nextCursor: string | null;
 }
 
-/** The line and the day a person states for one task of their own. */
+/**
+ * The line, the day, and what announces it that a person states for one task of their own.
+ *
+ * A revision states the same document as a creation, which is what makes turning the last reminder off a task stated
+ * with none rather than a field left out. `reviseTask` therefore takes this record whole and never the part that
+ * changed.
+ */
 export interface PersonalTaskRecord {
     readonly title: string;
 
     /** The day it is due on as `yyyy-mm-dd`, or `null` to say nothing about when. */
     readonly dueOn: string | null;
+
+    /** What is to announce it, in minutes before nine in the morning on the due day, which `isReminderSet` is the bar for. */
+    readonly reminders: readonly number[];
+
+    /**
+     * The whole-minute UTC offset the due day runs in, which `dueDayOffsetMinutes` reads and a record stating no lead
+     * may leave `null`.
+     *
+     * It travels with the leads because the deployment keeps no timezone for anybody: a day names no instant until a
+     * client says which offset it is read in.
+     */
+    readonly dueDayOffsetMinutes: number | null;
 
     /** The message the task cites, or `null` where it cites none. */
     readonly sourceMessageId: string | null;
@@ -180,6 +205,31 @@ export function recordTask(
             await send(transport, {
                 method: 'POST',
                 path: routeFor(session, tasksRoute),
+                headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+                body: JSON.stringify(record),
+                longestAnswer: longestTaskAnswer,
+            }),
+        ),
+    );
+}
+
+/**
+ * Revises one task to the record the caller states, which is the whole record rather than the part that changed.
+ *
+ * A `404` here is `missing` for the reason completion's is: the route names one task, so a deployment answering that
+ * way is one somebody erased while this screen had it open.
+ */
+export function reviseTask(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    taskId: string,
+    record: PersonalTaskRecord,
+): Promise<ClientResult<PersonalTask>> {
+    return spanned(`PUT ${tasksRoute}/{taskId}`, async () =>
+        namedTaskOf(
+            await send(transport, {
+                method: 'PUT',
+                path: routeFor(session, taskRoute(taskId)),
                 headers: { ...headersFor(session), 'Content-Type': 'application/json' },
                 body: JSON.stringify(record),
                 longestAnswer: longestTaskAnswer,
@@ -519,6 +569,8 @@ export function parseTask(value: unknown): PersonalTask | null {
     const id = record['id'];
     const title = record['title'];
     const dueOn = record['dueOn'] ?? null;
+    const reminders = record['reminders'];
+    const remindsAt = record['remindsAt'];
     const origin = record['origin'];
     const completed = record['completed'];
     const sourceMessageId = record['sourceMessageId'] ?? null;
@@ -548,7 +600,21 @@ export function parseTask(value: unknown): PersonalTask | null {
         return null;
     }
 
-    return { id, title, dueOn, origin, completed, sourceMessageId };
+    // An announcement the contract says cannot exist — more than a task may carry, a lead further ahead than one may
+    // state, or the same lead twice — is a body this client refuses rather than a set it draws, exactly as it is for an
+    // event: the panel enforces the same three rules before it writes, so an answer breaking them describes a task
+    // nothing here could have made.
+    if (!isReminderSet(reminders) || !isReminderInstantList(remindsAt)) {
+        return null;
+    }
+
+    // A lead with no instant beside it, or an instant with no lead, would leave a row drawing one count and announcing
+    // another — and a task announcing anything at all was dated, which is what the deployment refuses to write.
+    if (reminders.length !== remindsAt.length || (dueOn === null && reminders.length > 0)) {
+        return null;
+    }
+
+    return { id, title, dueOn, reminders, remindsAt, origin, completed, sourceMessageId };
 }
 
 /** Whether the value is one of the two origins this surface publishes. */

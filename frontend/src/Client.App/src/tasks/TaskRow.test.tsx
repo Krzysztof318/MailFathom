@@ -24,6 +24,8 @@ function taskOf(held: Partial<PersonalTask> = {}): PersonalTask {
         id: 'a',
         title: 'Answer the tender',
         dueOn: '2026-09-24',
+        reminders: [],
+        remindsAt: [],
         origin: 'Asserted',
         completed: false,
         sourceMessageId: null,
@@ -40,6 +42,7 @@ function drawRow({
     onToggleCompleted = vi.fn(),
     onAccept,
     onOpenSource,
+    onReminders,
     onSchedule = vi.fn(),
     onPress = vi.fn(),
     onElement = vi.fn(),
@@ -52,6 +55,7 @@ function drawRow({
     onToggleCompleted?: () => void;
     onAccept?: (() => void) | undefined;
     onOpenSource?: (() => void) | undefined;
+    onReminders?: (() => void) | undefined;
     onSchedule?: () => void;
     onPress?: (at: { readonly x: number; readonly y: number }) => void;
     onElement?: (element: HTMLLIElement | null) => void;
@@ -71,6 +75,7 @@ function drawRow({
                     onToggleCompleted={onToggleCompleted}
                     onAccept={onAccept}
                     onOpenSource={onOpenSource}
+                    onReminders={onReminders}
                     onSchedule={onSchedule}
                     onPress={onPress}
                     onElement={onElement}
@@ -93,6 +98,7 @@ function rowShown({ scheduled }: { readonly scheduled: boolean }) {
         onToggleCompleted: vi.fn(),
         onAccept: undefined,
         onOpenSource: undefined,
+        onReminders: vi.fn(),
         onSchedule: vi.fn(),
         onPress: vi.fn(),
         onElement: vi.fn(),
@@ -239,6 +245,54 @@ describe('TaskRow', () => {
         drawRow({ task: taskOf({ dueOn: null }) });
 
         expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
+    });
+
+    // The three shapes the design gives the pill, each named by what somebody listening is told rather than by the
+    // glyph: nothing set, one set, and more than one — which is the only case the count is drawn beside the bell in.
+    it('offers a reminder to be added to a task that announces nothing', () => {
+        drawRow({ onReminders: vi.fn() });
+
+        expect(screen.getByRole('button', { name: 'Add a reminder to Answer the tender' })).toBeDefined();
+    });
+
+    it('draws no count for a single reminder, which the filled bell already says', () => {
+        drawRow({ task: taskOf({ reminders: [60], remindsAt: ['2026-09-24T08:00:00+02:00'] }), onReminders: vi.fn() });
+
+        const pill = screen.getByRole('button', { name: 'Reminders for Answer the tender: 1 reminder' });
+
+        expect(pill.textContent).toBe('');
+    });
+
+    it('draws how many there are once there is more than one', () => {
+        drawRow({
+            task: taskOf({
+                reminders: [1440, 60],
+                remindsAt: ['2026-09-23T09:00:00+02:00', '2026-09-24T08:00:00+02:00'],
+            }),
+            onReminders: vi.fn(),
+        });
+
+        const pill = screen.getByRole('button', { name: 'Reminders for Answer the tender: 2 reminders' });
+
+        expect(pill.textContent).toBe('2');
+    });
+
+    it('opens what announces the task from the pill', () => {
+        const onReminders = vi.fn();
+
+        drawRow({ onReminders });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add a reminder to Answer the tender' }));
+
+        expect(onReminders).toHaveBeenCalledOnce();
+    });
+
+    // A lead is measured back from the due day, so a task nobody dated can announce nothing and the deployment refuses
+    // one that tried — a control that could only be refused is not one this row draws.
+    it('draws no reminder pill for a task nobody dated', () => {
+        drawRow({ task: taskOf({ dueOn: null }) });
+
+        expect(screen.queryByRole('button', { name: 'Add a reminder to Answer the tender' })).toBeNull();
     });
 
     // The mark is drawn as something to press only while a selection is held, which is what gives somebody with a

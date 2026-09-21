@@ -134,6 +134,24 @@ public sealed class CalendarEventModelTests
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
     }
 
+    /// <summary>
+    /// Why the key is named rather than left to the convention: two revisions of one event both read that a lead has no
+    /// row and both insert one, and the loser is recognized by the constraint its insert violated. A name only EF Core
+    /// knew about would leave that race ending as a provider failure instead of the retry from a fresh read.
+    /// </summary>
+    [Fact]
+    public void CalendarEventReminderModel_ItsKey_IsNamedSoALosingWriterIsRecognized()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var key = EntityTypeOf<CalendarEventReminderEntity>(context).FindPrimaryKey()!;
+
+        // Assert
+        Assert.Equal(PersistenceConstraintNames.CalendarEventReminderPrimaryKeyConstraintName, key.GetName());
+    }
+
     private static IIndex IndexNamed(IEntityType entityType, string name) =>
         Assert.Single(entityType.GetIndexes(), candidate => candidate.GetDatabaseName() == name);
 

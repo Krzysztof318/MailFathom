@@ -832,8 +832,9 @@ move is running one replica at a time publishes it, and a granted claim is count
 that finds the move held counts a refused claim on each of its own intervals. None is counted while no move is running,
 because a replica asks for the lease only once it has read that a move is waiting for a pass.
 
-The calendar's reminder pass holds the one scope `calendar-reminders`, for the length of a pass and never between
-them, so on the gauge it is a series that appears on whichever replica is sweeping and leaves when the sweep ends.
+The [reminder](../features/reminders.md) pass holds the one scope `reminders`, for the length of a pass and never
+between them, so on the gauge it is a series that appears on whichever replica is sweeping and leaves when the sweep
+ends. One pass covers every kind of record that carries reminders, so the scope names no one of them.
 Unlike the move above, a replica asks on every interval whether anything is due, so a granted claim is counted about
 once a minute on one replica and a refused claim about once a minute on each of the others — a steady stream of
 refusals here is the ordinary reading of a deployment with more than one replica rather than contention worth acting

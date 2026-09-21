@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 
 namespace MailFathom.Domain.Calendar;
 
@@ -31,14 +32,6 @@ namespace MailFathom.Domain.Calendar;
 /// </remarks>
 public sealed class CalendarEvent
 {
-    /// <summary>The most reminders one event may carry.</summary>
-    /// <remarks>
-    /// Above every preset the client offers together, so nothing a person can press reaches it, and bounded at all
-    /// because each reminder is a row a run reads and a notification it may write: an event carrying a thousand of
-    /// them would be one person's way of filling somebody's notification centre.
-    /// </remarks>
-    public const int MaximumReminderCount = 16;
-
     /// <summary>The hour an all-day event's reminders are measured back from, in the offset the event carries.</summary>
     public const int AllDayReminderHour = 9;
 
@@ -48,7 +41,7 @@ public sealed class CalendarEvent
         DateTimeOffset start,
         DateTimeOffset? end,
         bool isAllDay,
-        IReadOnlyList<CalendarReminder> reminders,
+        IReadOnlyList<Reminder> reminders,
         CalendarEventOrigin origin,
         StoredEmailId? sourceMessage,
         ImportedCalendarEventUid? importedUid,
@@ -102,7 +95,7 @@ public sealed class CalendarEvent
     /// order the set is read back in and is the calendar's rather than the writer's, so two writers stating the same
     /// leads produce the same event.
     /// </remarks>
-    public IReadOnlyList<CalendarReminder> Reminders { get; }
+    public IReadOnlyList<Reminder> Reminders { get; }
 
     /// <summary>Gets the instant every reminder on this event is measured back from.</summary>
     /// <remarks>
@@ -153,7 +146,7 @@ public sealed class CalendarEvent
     /// <param name="amendedAt">When it was last amended, which is <paramref name="recordedAt" /> for a new event.</param>
     /// <returns>The event.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="reminders" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> names no declared value, when <paramref name="end" /> is not after <paramref name="start" />, or when more than <see cref="MaximumReminderCount" /> reminders are supplied.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> names no declared value, when <paramref name="end" /> is not after <paramref name="start" />, or when more than <see cref="Reminder.MaximumCount" /> reminders are supplied.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="id" />, <paramref name="title" />, or a supplied <paramref name="importedUid" /> is the default of its type, when a proposal is supplied with <paramref name="importedUid" />, or when one lead is supplied twice.</exception>
     /// <remarks>
     /// An end at the same instant as the start is refused rather than kept as an event of no length: an entry naming
@@ -166,7 +159,7 @@ public sealed class CalendarEvent
         DateTimeOffset start,
         DateTimeOffset? end,
         bool isAllDay,
-        IReadOnlyCollection<CalendarReminder> reminders,
+        IReadOnlyCollection<Reminder> reminders,
         CalendarEventOrigin origin,
         StoredEmailId? sourceMessage,
         ImportedCalendarEventUid? importedUid,
@@ -219,7 +212,7 @@ public sealed class CalendarEvent
             start,
             end,
             isAllDay,
-            Ordered(reminders),
+            Reminder.Ordered(reminders),
             origin,
             sourceMessage,
             importedUid,
@@ -236,7 +229,7 @@ public sealed class CalendarEvent
     /// <param name="amendedAt">When the amendment happened.</param>
     /// <returns>The amended event.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="reminders" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="end" /> is not after <paramref name="start" />, or when more than <see cref="MaximumReminderCount" /> reminders are supplied.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="end" /> is not after <paramref name="start" />, or when more than <see cref="Reminder.MaximumCount" /> reminders are supplied.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is the default of its type, or when one lead is supplied twice.</exception>
     /// <remarks>
     /// An amendment states the event as it is to stand rather than the difference from the one held, which is what
@@ -250,7 +243,7 @@ public sealed class CalendarEvent
         DateTimeOffset start,
         DateTimeOffset? end,
         bool isAllDay,
-        IReadOnlyCollection<CalendarReminder> reminders,
+        IReadOnlyCollection<Reminder> reminders,
         DateTimeOffset amendedAt) =>
         Create(
             this.Id,
@@ -302,28 +295,7 @@ public sealed class CalendarEvent
     /// Derived rather than stored on the reminder, which is what makes a moved event reminded at its new time without
     /// anything rewriting what the person chose.
     /// </remarks>
-    public DateTimeOffset RemindsAt(CalendarReminder reminder) => this.AnchorsRemindersAt - reminder.Lead;
-
-    /// <summary>Puts a stated set of reminders into the order the calendar keeps them in, refusing a set it will not hold.</summary>
-    /// <remarks>
-    /// Longest lead first, because that is the order a person reads their own reminders in — the earliest warning is
-    /// the one furthest from the event. The order is the calendar's rather than the writer's so that two writers
-    /// stating the same leads produce the same event, and a repeated lead is refused rather than folded away: it is a
-    /// caller stating one reminder twice, and answering as though it had asked for one would hide the mistake.
-    /// </remarks>
-    private static CalendarReminder[] Ordered(IReadOnlyCollection<CalendarReminder> reminders)
-    {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(reminders.Count, MaximumReminderCount, nameof(reminders));
-
-        var ordered = reminders.OrderByDescending(reminder => reminder.MinutesBefore).ToArray();
-
-        if (ordered.Distinct().Count() != ordered.Length)
-        {
-            throw new ArgumentException("An event states each reminder lead once.", nameof(reminders));
-        }
-
-        return ordered;
-    }
+    public DateTimeOffset RemindsAt(Reminder reminder) => this.AnchorsRemindersAt - reminder.Lead;
 
     private static void RequireEndAfterStart(DateTimeOffset start, DateTimeOffset? end)
     {

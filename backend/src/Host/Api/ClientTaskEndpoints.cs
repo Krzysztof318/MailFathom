@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Application.Tasks;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Domain.Tasks;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -98,10 +99,10 @@ internal static class ClientTaskEndpoints
 
     /// <summary>The greatest request body a task write reads before refusing it.</summary>
     /// <remarks>
-    /// A full request is a title bounded at <see cref="PersonalTask.MaximumTitleLength" /> characters, a day, and an
-    /// identifier, which stands well inside this even where every character of the title is several bytes. A body over
-    /// it was never a task document, and it is answered <c>413</c> before the handler is reached, as every other write
-    /// on this surface is.
+    /// A full request is a title bounded at <see cref="PersonalTask.MaximumTitleLength" /> characters, a day, an
+    /// identifier, and a short list of whole numbers, which stands well inside this even where every character of the
+    /// title is several bytes. A body over it was never a task document, and it is answered <c>413</c> before the
+    /// handler is reached, as every other write on this surface is.
     /// </remarks>
     internal const int MaxWriteRequestBytes = 2 * 1024;
 
@@ -303,13 +304,18 @@ internal static class ClientTaskEndpoints
             return NoDay();
         }
 
+        if (!TryReadAnnouncement(request, dueOn, out var announcement))
+        {
+            return NoReminders();
+        }
+
         // The all-zero identifier addresses no message and the domain refuses to wrap one, so it is read as a task
         // citing nothing rather than becoming a failed request: a caller that sent it named no message.
         StoredEmailId? cited = request.SourceMessageId is { } message && message != Guid.Empty
             ? StoredEmailId.Create(message)
             : null;
 
-        var written = await tasks.RecordAsync(title, dueOn, cited, cancellationToken);
+        var written = await tasks.RecordAsync(title, dueOn, announcement, cited, cancellationToken);
 
         return TypedResults.Ok(ClientTaskResponse.For(written));
     }
@@ -354,7 +360,12 @@ internal static class ClientTaskEndpoints
             return NoDay();
         }
 
-        return await tasks.ReviseAsync(identity, title, dueOn, cancellationToken) is { } revised
+        if (!TryReadAnnouncement(request, dueOn, out var announcement))
+        {
+            return NoReminders();
+        }
+
+        return await tasks.ReviseAsync(identity, title, dueOn, announcement, cancellationToken) is { } revised
             ? TypedResults.Ok(ClientTaskResponse.For(revised))
             : TypedResults.NotFound();
     }
@@ -507,6 +518,53 @@ internal static class ClientTaskEndpoints
         return true;
     }
 
+    /// <summary>Reads what a request states announces the task, refusing what no task may carry.</summary>
+    /// <remarks>
+    /// Asked here rather than caught out of the domain, for the reason the title and the day are: a lead somebody
+    /// typed is something this surface reports on, and the record raising for it would be a fault in the deployment
+    /// rather than an answer to them. A request naming no lead announces nothing, whatever offset it states, so a
+    /// client that always sends its own offset is not thereby asking to be reminded.
+    /// </remarks>
+    private static bool TryReadAnnouncement(
+        ClientTaskRecordRequest request,
+        DateOnly? dueOn,
+        out TaskAnnouncement announcement)
+    {
+        announcement = TaskAnnouncement.Silent;
+
+        var stated = request.Reminders ?? [];
+
+        if (stated.Count == 0)
+        {
+            return true;
+        }
+
+        if (dueOn is null
+            || request.DueDayOffsetMinutes is not { } offsetMinutes
+            || !IsStatableOffset(offsetMinutes)
+            || stated.Count > Reminder.MaximumCount
+            || stated.Any(minutesBefore => !Reminder.IsStatable(minutesBefore))
+            || stated.Distinct().Count() != stated.Count)
+        {
+            return false;
+        }
+
+        announcement = new TaskAnnouncement(
+            TimeSpan.FromMinutes(offsetMinutes),
+            [.. stated.Select(Reminder.Create)]);
+
+        return true;
+    }
+
+    /// <summary>Reports whether a stated offset is one a UTC offset can be.</summary>
+    /// <remarks>
+    /// Twelve hours behind and fourteen ahead is what the world's zones run, which is narrower than the band
+    /// <see cref="DateTimeOffset" /> admits either way and is the bound the domain holds the same value to. A whole
+    /// number of minutes is what every real zone states. Bounded here because the value reaches a constructor that
+    /// throws rather than reports, and this is the trust boundary.
+    /// </remarks>
+    private static bool IsStatableOffset(int offsetMinutes) => offsetMinutes is >= -12 * 60 and <= 14 * 60;
+
     /// <summary>States that the request carried no task to write.</summary>
     private static ProblemHttpResult NoRecord() => Refuse("The request carries no task.");
 
@@ -516,6 +574,12 @@ internal static class ClientTaskEndpoints
 
     /// <summary>States that the request named a day this surface does not read.</summary>
     private static ProblemHttpResult NoDay() => Refuse($"A due day is written as {DayFormat}.");
+
+    /// <summary>States what a set of reminders has to be for the task to carry it.</summary>
+    private static ProblemHttpResult NoReminders() => Refuse(
+        $"A task carries at most {Reminder.MaximumCount} reminders, each stated once, as whole minutes between 0 and "
+        + $"{Reminder.MaximumMinutesBefore} before nine in the morning on its due day — and only where the task "
+        + "states a due day and the whole-minute UTC offset that day runs in.");
 
     /// <summary>States what a caller has to change, without echoing what they sent.</summary>
     /// <remarks>
@@ -529,6 +593,8 @@ internal static class ClientTaskEndpoints
 /// <summary>The line and the day a person states for one task of their own.</summary>
 /// <param name="Title">The line the list is drawn with, bounded at <see cref="PersonalTask.MaximumTitleLength" /> characters.</param>
 /// <param name="DueOn">The day it is due on as <c>yyyy-mm-dd</c>, or <see langword="null" /> where nobody has said when.</param>
+/// <param name="Reminders">The leads to announce it at, in minutes before nine in the morning on the due day, or nothing to announce nothing.</param>
+/// <param name="DueDayOffsetMinutes">The whole-minute UTC offset the person's due day runs in, which a request stating any lead carries and one stating none may omit.</param>
 /// <param name="SourceMessageId">The message the task cites, or <see langword="null" /> where it cites none.</param>
 /// <remarks>
 /// Bound strictly: a key nothing here binds fails the bind rather than being ignored, so a client that meant to state
@@ -536,11 +602,23 @@ internal static class ClientTaskEndpoints
 /// a rename that silently dropped the rest.
 /// <para>
 /// A revision states the same document as a creation, and the citation it carries is the one the task already holds:
-/// what a person edits is the line and the day, and a request restating the message is writing back what it read.
+/// what a person edits is the line, the day, and what announces it, and a request restating the message is writing
+/// back what it read. The reminders are part of that record, which is what makes turning the last one off a task
+/// stated with none rather than a field left out.
+/// </para>
+/// <para>
+/// The offset travels with the leads because this deployment keeps no timezone for anybody: a day names no instant
+/// until a client says which offset it is read in, exactly as a client states the window a day is arranged over. A
+/// person who has moved since they set a reminder moves its instant the next time they edit the task.
 /// </para>
 /// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-internal sealed record ClientTaskRecordRequest(string? Title, string? DueOn, Guid? SourceMessageId);
+internal sealed record ClientTaskRecordRequest(
+    string? Title,
+    string? DueOn,
+    IReadOnlyList<int>? Reminders,
+    int? DueDayOffsetMinutes,
+    Guid? SourceMessageId);
 
 /// <summary>The completion state a person states for one of their tasks.</summary>
 /// <param name="Completed">Whether the task is to stand completed.</param>
@@ -569,6 +647,8 @@ internal sealed record ClientTaskPageResponse(IReadOnlyList<ClientTaskResponse> 
 /// <param name="Id">What addresses the task, and what every route naming one names it by.</param>
 /// <param name="Title">The line the list is drawn with.</param>
 /// <param name="DueOn">The day it is due on as <c>yyyy-mm-dd</c>, or <see langword="null" /> where nobody has said when.</param>
+/// <param name="Reminders">The leads it is announced at, in minutes before nine in the morning on the due day, longest first, and empty where nothing announces it.</param>
+/// <param name="RemindsAt">The instants those leads fall at, in the same order, which a client draws rather than derives.</param>
 /// <param name="Origin">Whether the person committed to it or mail proposed it, as <c>Asserted</c> or <c>Proposed</c>.</param>
 /// <param name="Completed">Whether the person has done it.</param>
 /// <param name="SourceMessageId">The message the task was read out of or was written beside, or <see langword="null" /> where it cites none.</param>
@@ -577,11 +657,20 @@ internal sealed record ClientTaskPageResponse(IReadOnlyList<ClientTaskResponse> 
 /// at any size. The citation is an identity rather than a reading of the message, so a client that draws the link
 /// follows it over the routes that publish reading mail — and one whose message has since been erased finds nothing
 /// there, the task having outlived what it was read out of.
+/// <para>
+/// The instants the reminders fall at travel beside the leads rather than being left to the client to derive, because
+/// the hour a due day is measured back from is a rule this deployment owns: a client computing it would be the second
+/// place that rule is written, and the two would disagree the first time one of them changed. The offset those
+/// instants were derived in is not published, because a client states its own on every write and never reads one
+/// back.
+/// </para>
 /// </remarks>
 internal sealed record ClientTaskResponse(
     Guid Id,
     string Title,
     string? DueOn,
+    IReadOnlyList<int> Reminders,
+    IReadOnlyList<DateTimeOffset> RemindsAt,
     string Origin,
     bool Completed,
     Guid? SourceMessageId)
@@ -598,6 +687,8 @@ internal sealed record ClientTaskResponse(
             task.Id.Value,
             task.Title,
             task.DueOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            [.. task.Reminders.Select(reminder => reminder.MinutesBefore)],
+            [.. task.Reminders.Select(task.RemindsAt)],
             task.Origin.ToString(),
             task.IsCompleted,
             task.SourceMessage?.Value);

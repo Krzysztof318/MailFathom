@@ -18,4 +18,7 @@ public enum NotificationTargetKind
 
     /// <summary>The notification leads to one event of the person's own calendar.</summary>
     CalendarEvent = 3,
+
+    /// <summary>The notification leads to one task of the person's own list.</summary>
+    PersonalTask = 4,
 }

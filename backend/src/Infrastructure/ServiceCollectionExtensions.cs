@@ -86,6 +86,7 @@ using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Portraits;
 using MailFathom.Application.Preferences;
+using MailFathom.Application.Reminders;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -1415,11 +1416,18 @@ public static class ServiceCollectionExtensions
         // context directly.
         services.AddScoped<IPersonalTaskStore, PersistedPersonalTaskStore>();
         services.AddScoped<OwnTasks>();
+        // The other half of what the pass that announces reminders reads, registered against the same port as the
+        // calendar's so the pass holds both without naming either.
+        services.AddScoped<IReminderSchedule, PersonalTaskReminderSchedule>();
         // The producer of everything on the other half of that list, reached by the enrichment pass rather than by a
         // screen, and the reading a person asks for when they want the day arranged. Both are scoped like the store
         // they write and read through.
         services.AddScoped<MailDerivedTaskProposals>();
         services.AddScoped<TodayLayout>();
+        // The producer that turns a reminder that has come due into a notification, of whatever kind, under the
+        // lease on its own scope. Registered once beside the notifications rather than with either of the two
+        // records that carry reminders, because it belongs to neither.
+        services.AddScoped<ReminderSweep>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.
@@ -1500,12 +1508,10 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<ICalendarEventStore, CalendarEventStore>();
 
-        // The one reader over every calendar at once rather than one person's, which is what the pass that announces
-        // reminders asks. Scoped beside the context it reads, like the store above it.
-        services.AddScoped<ICalendarReminderSchedule, CalendarReminderSchedule>();
-
-        // The producer that turns a reminder that has come due into a notification, under the lease on its own scope.
-        services.AddScoped<CalendarReminderSweep>();
+        // The reader over every calendar at once rather than one person's, which is half of what the pass that
+        // announces reminders asks. Scoped beside the context it reads, like the store above it, and registered
+        // against the shared port so that pass reads it beside the task list's without knowing either exists.
+        services.AddScoped<IReminderSchedule, CalendarReminderSchedule>();
 
         // The use case a person reads and writes their own calendar through, scoped like the store beneath it: what it
         // acts for comes off the principal the scope authenticated.

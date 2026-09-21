@@ -10,7 +10,16 @@ import { WorkspaceProvider } from '../workspace/Workspace';
 import { TaskSelectionBar } from './TaskSelectionBar';
 
 function taskCalled(id: string, title: string): PersonalTask {
-    return { id, title, dueOn: '2026-09-24', origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title,
+        dueOn: '2026-09-24',
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 const picked = [taskCalled('a', 'Answer the tender'), taskCalled('b', 'Send the invoice')];

@@ -7,10 +7,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { ReminderPanel } from './ReminderPanel';
+import type { ReminderAnchor } from './reminderLeads';
 
 const opening = 'Open';
 
-function Editing({ allDay, held }: { readonly allDay: boolean; readonly held: readonly number[] }) {
+function Editing({ anchor, held }: { readonly anchor: ReminderAnchor; readonly held: readonly number[] }) {
     const panel = useRef<HTMLDialogElement>(null);
     const [reminders, setReminders] = useState(held);
 
@@ -28,7 +29,7 @@ function Editing({ allDay, held }: { readonly allDay: boolean; readonly held: re
             <ReminderPanel
                 panel={panel}
                 subject="Design review"
-                allDay={allDay}
+                anchor={anchor}
                 reminders={reminders}
                 onRemindersChanged={setReminders}
             />
@@ -36,10 +37,10 @@ function Editing({ allDay, held }: { readonly allDay: boolean; readonly held: re
     );
 }
 
-function open(held: readonly number[] = [15], allDay = false): void {
+function open(held: readonly number[] = [15], anchor: ReminderAnchor = 'eventTime'): void {
     render(
         <LocalizationProvider>
-            <Editing allDay={allDay} held={held} />
+            <Editing anchor={anchor} held={held} />
         </LocalizationProvider>,
     );
 
@@ -71,9 +72,31 @@ describe('ReminderPanel', () => {
     });
 
     it('names the hour a day is announced from, which is not the hour it begins at', () => {
-        open([], true);
+        open([], 'eventDay');
 
         expect(screen.getByRole('dialog').textContent).toContain('Design review — 09:00 on the day of the event');
+    });
+
+    it('names the hour a due date is announced from, which is the rule the deployment owns', () => {
+        open([], 'taskDueDate');
+
+        expect(screen.getByRole('dialog').textContent).toContain('Design review — 09:00 on the day it is due');
+    });
+
+    it('offers a due date the leads the design draws for one, and none of the ones around a clock time', () => {
+        open([], 'taskDueDate');
+
+        expect(screen.getByRole('button', { name: '4 hours before' }).getAttribute('aria-pressed')).toBe('false');
+        expect(screen.getByRole('button', { name: '2 days before' }).getAttribute('aria-pressed')).toBe('false');
+        expect(screen.queryByRole('button', { name: '5 min before' })).toBeNull();
+    });
+
+    it('says a task announcing nothing is a task rather than an event, because that is what it is about', () => {
+        open([], 'taskDueDate');
+
+        expect(screen.getByRole('dialog').textContent).toContain(
+            "No reminder — you won't be notified about this task.",
+        );
     });
 
     it('draws a lead the event already carries as pressed and one it does not as offered', () => {
@@ -84,7 +107,7 @@ describe('ReminderPanel', () => {
     });
 
     it('offers the wider leads on an event stated as a day, which has no hour to precede', () => {
-        open([], true);
+        open([], 'eventDay');
 
         expect(screen.getByRole('button', { name: 'on the day' }).getAttribute('aria-pressed')).toBe('false');
         expect(screen.queryByRole('button', { name: '5 min before' })).toBeNull();

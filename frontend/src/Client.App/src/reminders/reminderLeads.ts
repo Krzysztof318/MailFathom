@@ -10,18 +10,28 @@ import { isStatableReminderLead, isStatableReminderSet } from '@mailfathom/clien
 // nothing can be asserted about either.
 //
 // The numbers are the design project's own. A timed event offers the moment itself and the five leads somebody
-// reaches for around a meeting; an event stated as a day offers the wider set, because a day names no hour to be
-// five minutes ahead of.
+// reaches for around a meeting; a record stated as a day — an all-day event, and a task's due date — offers the
+// wider set, because a day names no hour to be five minutes ahead of.
 
 /** How many minutes there are in an hour and in a day, named so the thresholds below read as what they are. */
 const minutesPerHour = 60;
 const minutesPerDay = 24 * minutesPerHour;
 
+/**
+ * What a lead is measured back from, which is the one thing the panel needs to know about what it is attached to.
+ *
+ * Three rather than two, and the third is not a third set of presets: the design draws a task's due date with the
+ * same leads and the same word for a lead of none as an all-day event, and differs only in the sentence that says
+ * which hour they count back from. So the anchor is what the panel reads, and every difference between the three
+ * follows from it in one place rather than from a flag each caller has to get right.
+ */
+export type ReminderAnchor = 'eventTime' | 'eventDay' | 'taskDueDate';
+
 /** The leads offered on an event that names a clock time. */
 export const timedReminderPresets: readonly number[] = [0, 5, 15, 30, minutesPerHour, minutesPerDay];
 
-/** The leads offered on an event stated as a day, which has no hour for a five-minute warning to precede. */
-export const allDayReminderPresets: readonly number[] = [
+/** The leads offered on a record stated as a day, which has no hour for a five-minute warning to precede. */
+export const datedReminderPresets: readonly number[] = [
     0,
     minutesPerHour,
     4 * minutesPerHour,
@@ -88,9 +98,19 @@ export function reminderLeadFrom(count: number, unit: ReminderUnit): number | nu
     return isStatableReminderLead(minutesBefore) ? minutesBefore : null;
 }
 
-/** The leads the panel offers for an event, which is the wider set where the event states no clock time. */
-export function reminderPresetsFor(allDay: boolean): readonly number[] {
-    return allDay ? allDayReminderPresets : timedReminderPresets;
+/** The leads the panel offers, which is the wider set for everything a clock time is not named on. */
+export function reminderPresetsFor(anchor: ReminderAnchor): readonly number[] {
+    return anchor === 'eventTime' ? timedReminderPresets : datedReminderPresets;
+}
+
+/**
+ * Reports whether an anchor names a clock time, which is what a lead of none reads as and which presets are offered.
+ *
+ * A day and a due day answer alike here: both are announced at nine in the morning, and neither has a moment for a
+ * reminder to be five minutes ahead of.
+ */
+export function reminderAnchorNamesATime(anchor: ReminderAnchor): boolean {
+    return anchor === 'eventTime';
 }
 
 /**

@@ -72,14 +72,15 @@ export type NotificationScreen = 'Mail' | 'Settings';
 /**
  * Where opening a notification leads.
  *
- * Four closed shapes rather than a set of optional values, because which of them a producer chose is what a reader
+ * Five closed shapes rather than a set of optional values, because which of them a producer chose is what a reader
  * switches on: a notification that leads nowhere is a different thing from one whose record this client cannot name.
  */
 export type NotificationTarget =
     | { readonly kind: 'Nothing' }
     | { readonly kind: 'Message'; readonly storedEmailId: string }
     | { readonly kind: 'Screen'; readonly screen: NotificationScreen }
-    | { readonly kind: 'CalendarEvent'; readonly calendarEventId: string };
+    | { readonly kind: 'CalendarEvent'; readonly calendarEventId: string }
+    | { readonly kind: 'PersonalTask'; readonly taskId: string };
 
 /**
  * What a notification was raised for, as a closed set rather than as the sentence it is said in.
@@ -89,7 +90,7 @@ export type NotificationTarget =
  * `parseNotification` as no statement at all rather than as a value nothing can draw.
  */
 export type NotificationCause =
-    'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused' | 'CalendarReminderDue';
+    'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused' | 'CalendarReminderDue' | 'TaskReminderDue';
 
 /**
  * What a notification says, as the condition it was raised for and the numbers it is stated with.
@@ -174,6 +175,7 @@ const causes: readonly NotificationCause[] = [
     'SynchronizationIncomplete',
     'CredentialRefused',
     'CalendarReminderDue',
+    'TaskReminderDue',
 ];
 const screens: readonly NotificationScreen[] = ['Mail', 'Settings'];
 
@@ -424,6 +426,7 @@ const countsPerCause: Readonly<Record<NotificationCause, readonly ('counted' | '
     SynchronizationIncomplete: ['counted', 'outOf'],
     CredentialRefused: [],
     CalendarReminderDue: ['counted'],
+    TaskReminderDue: ['counted'],
 };
 
 /**
@@ -468,6 +471,7 @@ function parseTarget(value: unknown): NotificationTarget | null {
     const storedEmailId = record['messageId'] ?? null;
     const screen = record['screen'] ?? null;
     const calendarEventId = record['calendarEventId'] ?? null;
+    const taskId = record['taskId'] ?? null;
 
     switch (record['kind']) {
         case 'Nothing':
@@ -478,6 +482,8 @@ function parseTarget(value: unknown): NotificationTarget | null {
             return isScreen(screen) ? { kind: 'Screen', screen } : null;
         case 'CalendarEvent':
             return isNotificationIdentity(calendarEventId) ? { kind: 'CalendarEvent', calendarEventId } : null;
+        case 'PersonalTask':
+            return isNotificationIdentity(taskId) ? { kind: 'PersonalTask', taskId } : null;
         default:
             return null;
     }

@@ -12,17 +12,18 @@ import {
     reminderUnits,
     withReminderLead,
     withoutReminderLead,
+    type ReminderAnchor,
     type ReminderUnit,
 } from './reminderLeads';
 import { wordReminderCount, wordReminderLead } from './reminderWords';
 
-// What announces an event, and the one place a person decides it. Every surface that sets a reminder — the event
-// panel, the dialog an event is created in, and the task due date stage 10 attaches the same leads to — opens this
-// rather than drawing a set of chips of its own, which is the whole reason it takes the leads and answers with them
-// instead of knowing what it is attached to.
+// What announces a record, and the one place a person decides it. Every surface that sets a reminder — the event
+// panel, the dialog an event is created in, and the task a due date was put on — opens this rather than drawing a set
+// of chips of its own, which is the whole reason it takes the leads and answers with them instead of knowing what it
+// is attached to. What it does read about that record is one value: what a lead is measured back from.
 //
-// **An event carrying none says so in as many words.** A panel with no chips pressed reads as a control nobody has
-// touched; what the design project states instead is that nothing will be raised about this event, because that is a
+// **A record carrying none says so in as many words.** A panel with no chips pressed reads as a control nobody has
+// touched; what the design project states instead is that nothing will be raised about this record, because that is a
 // decision somebody made rather than a field they left.
 //
 // **The leads are the caller's state, and every act here answers with the whole set.** A panel that held its own copy
@@ -32,7 +33,7 @@ import { wordReminderCount, wordReminderLead } from './reminderWords';
 export function ReminderPanel({
     panel,
     subject,
-    allDay,
+    anchor,
     reminders,
     onRemindersChanged,
 }: {
@@ -44,11 +45,11 @@ export function ReminderPanel({
      */
     readonly panel: RefObject<HTMLDialogElement | null>;
 
-    /** What is being reminded about, which is the event's own name. */
+    /** What is being reminded about, which is the record's own name. */
     readonly subject: string;
 
-    /** Whether it is stated as a day rather than as a clock time, which decides both the presets and the anchor. */
-    readonly allDay: boolean;
+    /** What a lead is measured back from, which decides the presets, the word for a lead of none, and the sentence. */
+    readonly anchor: ReminderAnchor;
 
     /** The leads it is announced at, in minutes before it. */
     readonly reminders: readonly number[];
@@ -111,7 +112,7 @@ export function ReminderPanel({
                         <p className="text-base text-muted text-pretty">
                             {translate('reminders.about', {
                                 subject,
-                                anchor: translate(allDay ? 'reminders.anchor.allDay' : 'reminders.anchor.timed'),
+                                anchor: translate(`reminders.anchor.${anchor}`),
                             })}
                         </p>
                     </div>
@@ -122,7 +123,7 @@ export function ReminderPanel({
                 </div>
 
                 <ul className="flex flex-wrap gap-2">
-                    {reminderPresetsFor(allDay).map((preset) => {
+                    {reminderPresetsFor(anchor).map((preset) => {
                         const set = reminders.includes(preset);
 
                         return (
@@ -140,7 +141,7 @@ export function ReminderPanel({
                                     }}
                                 >
                                     <Icon name={set ? 'check' : 'add'} className="size-4 shrink-0" />
-                                    {wordReminderLead(preset, allDay, locale, translate)}
+                                    {wordReminderLead(preset, anchor, locale, translate)}
                                 </button>
                             </li>
                         );
@@ -193,11 +194,13 @@ export function ReminderPanel({
                 </div>
 
                 {reminders.length === 0 ? (
-                    <p className="text-base text-muted text-pretty">{translate('reminders.none')}</p>
+                    <p className="text-base text-muted text-pretty">
+                        {translate(anchor === 'taskDueDate' ? 'reminders.none.task' : 'reminders.none.event')}
+                    </p>
                 ) : (
                     <ul className="flex flex-wrap gap-1.5 border-t border-line-soft pt-3">
                         {reminders.map((lead) => {
-                            const said = wordReminderLead(lead, allDay, locale, translate);
+                            const said = wordReminderLead(lead, anchor, locale, translate);
 
                             return (
                                 <li

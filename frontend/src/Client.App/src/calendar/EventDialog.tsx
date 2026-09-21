@@ -12,10 +12,10 @@ import type { MessageKey } from '../localization/en';
 import { wordInstantRange } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
+import { ReminderPanel } from '../reminders/ReminderPanel';
+import { wordReminderCount } from '../reminders/reminderWords';
 import { EventFields } from './EventFields';
-import { ReminderPanel } from './ReminderPanel';
 import { draftOf, recordOf, type EventDraft } from './eventDraft';
-import { wordReminderCount } from './reminderWords';
 
 // One event opened, which is where it is read and where it is changed. The design project draws both in one surface —
 // the record, and an *Edit* beside *Delete* — so this holds the two rather than opening a second dialog over the
@@ -218,7 +218,7 @@ export function EventDialog({
             <ReminderPanel
                 panel={panel}
                 subject={event.title}
-                allDay={event.isAllDay}
+                anchor={event.isAllDay ? 'eventDay' : 'eventTime'}
                 reminders={draft.reminders}
                 onRemindersChanged={stateReminders}
             />

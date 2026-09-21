@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Calendar;
@@ -184,7 +185,7 @@ public sealed class CalendarEventTests
     public void Create_RemindersInAnyOrder_KeepsThemLongestLeadFirst()
     {
         // Act
-        var held = Compose(reminders: [Reminder(15), Reminder(1440), Reminder(0)]);
+        var held = Compose(reminders: [Lead(15), Lead(1440), Lead(0)]);
 
         // Assert
         Assert.Equal([1440, 15, 0], held.Reminders.Select(reminder => reminder.MinutesBefore));
@@ -195,7 +196,7 @@ public sealed class CalendarEventTests
     public void Create_OneLeadStatedTwice_IsRefused()
     {
         // Act
-        var refusal = Assert.Throws<ArgumentException>(() => Compose(reminders: [Reminder(15), Reminder(15)]));
+        var refusal = Assert.Throws<ArgumentException>(() => Compose(reminders: [Lead(15), Lead(15)]));
 
         // Assert
         Assert.Equal("reminders", refusal.ParamName);
@@ -207,8 +208,8 @@ public sealed class CalendarEventTests
     {
         // Arrange
         var tooMany = Enumerable
-            .Range(1, CalendarEvent.MaximumReminderCount + 1)
-            .Select(Reminder)
+            .Range(1, Reminder.MaximumCount + 1)
+            .Select(Lead)
             .ToArray();
 
         // Act
@@ -223,11 +224,11 @@ public sealed class CalendarEventTests
     public void RemindsAt_AnEventNamingAClockTime_MeasuresBackFromItsStart()
     {
         // Arrange
-        var held = Compose(reminders: [Reminder(15)]);
+        var held = Compose(reminders: [Lead(15)]);
 
         // Act, Assert
         Assert.Equal(Start, held.AnchorsRemindersAt);
-        Assert.Equal(Start.AddMinutes(-15), held.RemindsAt(Reminder(15)));
+        Assert.Equal(Start.AddMinutes(-15), held.RemindsAt(Lead(15)));
     }
 
     /// <summary>Measuring a day back from midnight announces it in the night before anybody is awake to be told.</summary>
@@ -235,12 +236,12 @@ public sealed class CalendarEventTests
     public void RemindsAt_AnEventStatedAsADay_MeasuresBackFromTheHourTheDesignSettled()
     {
         // Arrange
-        var held = Compose(isAllDay: true, reminders: [Reminder(60)]);
+        var held = Compose(isAllDay: true, reminders: [Lead(60)]);
         var morning = new DateTimeOffset(Start.Date.AddHours(CalendarEvent.AllDayReminderHour), Start.Offset);
 
         // Act, Assert
         Assert.Equal(morning, held.AnchorsRemindersAt);
-        Assert.Equal(morning.AddHours(-1), held.RemindsAt(Reminder(60)));
+        Assert.Equal(morning.AddHours(-1), held.RemindsAt(Lead(60)));
     }
 
     /// <summary>What announces an event survives somebody agreeing to it, exactly as its identity does.</summary>
@@ -248,7 +249,7 @@ public sealed class CalendarEventTests
     public void Accepted_AProposalCarryingReminders_KeepsThemAndHowTheyAreMeasured()
     {
         // Arrange
-        var proposed = Compose(origin: CalendarEventOrigin.Proposed, isAllDay: true, reminders: [Reminder(1440)]);
+        var proposed = Compose(origin: CalendarEventOrigin.Proposed, isAllDay: true, reminders: [Lead(1440)]);
 
         // Act
         var accepted = proposed.Accepted(RecordedAt.AddHours(1));
@@ -258,7 +259,7 @@ public sealed class CalendarEventTests
         Assert.Equal([1440], accepted.Reminders.Select(reminder => reminder.MinutesBefore));
     }
 
-    private static CalendarReminder Reminder(int minutesBefore) => CalendarReminder.Create(minutesBefore);
+    private static Reminder Lead(int minutesBefore) => Reminder.Create(minutesBefore);
 
     private static CalendarEvent Compose(
         DateTimeOffset? end = null,
@@ -266,7 +267,7 @@ public sealed class CalendarEventTests
         StoredEmailId? sourceMessage = null,
         ImportedCalendarEventUid? importedUid = null,
         bool isAllDay = false,
-        IReadOnlyCollection<CalendarReminder>? reminders = null) =>
+        IReadOnlyCollection<Reminder>? reminders = null) =>
         CalendarEvent.Create(
             CalendarEventId.Create(Guid.CreateVersion7()),
             CalendarEventTitle.Create("Design review"),

@@ -406,6 +406,10 @@ function taskAnswer(
         return answering(tasks.taskWritten);
     }
 
+    if (request.method === 'PUT') {
+        return answering(tasks.taskRevised);
+    }
+
     if (route === '/tasks/proposed') {
         return answering(options.emptyCollections ? tasks.emptyTaskPage : tasks.proposedTasks(dayHere()));
     }

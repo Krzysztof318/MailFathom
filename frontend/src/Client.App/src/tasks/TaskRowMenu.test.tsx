@@ -13,6 +13,8 @@ function taskOf(held: Partial<PersonalTask> = {}): PersonalTask {
         id: 'a',
         title: 'Answer the tender',
         dueOn: '2026-09-24',
+        reminders: [],
+        remindsAt: [],
         origin: 'Asserted',
         completed: false,
         sourceMessageId: null,
@@ -26,6 +28,7 @@ function menuOver({
     onToggleCompleted = vi.fn(),
     onAccept,
     onOpenSource,
+    onReminders,
     onSchedule = vi.fn(),
     onAskErasure = vi.fn(),
 }: {
@@ -34,6 +37,7 @@ function menuOver({
     onToggleCompleted?: () => void;
     onAccept?: (() => void) | undefined;
     onOpenSource?: (() => void) | undefined;
+    onReminders?: (() => void) | undefined;
     onSchedule?: () => void;
     onAskErasure?: () => void;
 } = {}): void {
@@ -46,6 +50,7 @@ function menuOver({
                 onToggleCompleted={onToggleCompleted}
                 onAccept={onAccept}
                 onOpenSource={onOpenSource}
+                onReminders={onReminders}
                 onSchedule={onSchedule}
                 onAskErasure={onAskErasure}
                 onClose={vi.fn()}
@@ -60,11 +65,12 @@ function drawn(): (string | null)[] {
 
 describe('TaskRowMenu', () => {
     it('carries the acts the design draws over a task somebody already owes', () => {
-        menuOver({ onOpenSource: vi.fn() });
+        menuOver({ onOpenSource: vi.fn(), onReminders: vi.fn() });
 
         expect(drawn()).toStrictEqual([
             'Select tasks',
             'Mark as done',
+            'Reminders',
             'Schedule in the calendar',
             'Open source thread',
             'Delete task',
@@ -88,6 +94,22 @@ describe('TaskRowMenu', () => {
         menuOver({ task: taskOf({ dueOn: null }) });
 
         expect(drawn()).not.toContain('Schedule in the calendar');
+    });
+
+    it('offers nothing to announce for a task nobody dated, a lead having no day to be measured back from', () => {
+        menuOver({ task: taskOf({ dueOn: null }) });
+
+        expect(drawn()).not.toContain('Reminders');
+    });
+
+    it('opens what announces the task from its own item', () => {
+        const onReminders = vi.fn();
+
+        menuOver({ onReminders });
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Reminders' }));
+
+        expect(onReminders).toHaveBeenCalledOnce();
     });
 
     it('offers no way back to a message where the task cites none', () => {

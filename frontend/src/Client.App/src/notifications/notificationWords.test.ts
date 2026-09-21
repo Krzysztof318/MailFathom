@@ -110,6 +110,28 @@ describe('wordNotification', () => {
         expect(wordNotification(reminder, locale, translating(locale)).title).toBe(title);
     });
 
+    // A task's due date announces the same way, because what a reminder is about is the headline and the target
+    // rather than a second sentence: the record it names is a task, and the row says so by leading to one.
+    it.each([
+        ['en', 'Reminder: Send the counter-proposal'],
+        ['pl', 'Przypomnienie: Send the counter-proposal'],
+    ] as const)('says a due task reminder in %s with the task it is about in the headline', (locale, title) => {
+        const reminder: ClientNotification = {
+            ...englishArrival,
+            kind: 'Task',
+            title: 'Send the counter-proposal',
+            body: '1 day left.',
+            target: { kind: 'PersonalTask', taskId: '0197a3c0-0000-7000-8000-000000000002' },
+            statement: { cause: 'TaskReminderDue', counted: 24 * 60, outOf: null },
+        };
+
+        expect(wordNotification(reminder, locale, translating(locale)).title).toBe(title);
+    });
+
+    it('says what is left before a task the same way it says it before an event', () => {
+        expect(said({ cause: 'TaskReminderDue', counted: 24 * 60, outOf: null }, 'en').body).toBe('1 day left.');
+    });
+
     // The lead is said in the coarsest whole unit that states it exactly, which is the same reading the panel a lead
     // was set in uses — so the row and the chip cannot come to word one lead two ways.
     it.each([

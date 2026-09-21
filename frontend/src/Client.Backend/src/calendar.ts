@@ -4,6 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
+import { isReminderInstantList, isReminderSet } from './reminders';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
@@ -150,36 +151,6 @@ export interface CalendarEventDraft {
     readonly title: string | null;
     readonly start: string | null;
     readonly end: string | null;
-}
-
-// What the deployment will accept as an event's reminders, which is a fact about the contract rather than about a
-// screen — so it is stated here once and the panel asks rather than carrying a second copy of the same three rules.
-// What carries a changed set to the deployment is the amendment below, an event's reminders being part of the event
-// rather than a record of their own.
-
-/** The most reminders one event carries, which is the deployment's own ceiling and a refusal rather than a clamp. */
-export const mostRemindersOnAnEvent = 16;
-
-/** The longest lead a reminder may state, in minutes before the event, which is four weeks. */
-export const longestReminderLead = 28 * 24 * 60;
-
-/**
- * Reports whether a set of leads is one an event may carry.
- *
- * The same three rules the deployment applies — how many, how far ahead, and each one once — so a panel refuses a
- * lead as it is added rather than only once the event is written.
- */
-export function isStatableReminderSet(reminders: readonly number[]): boolean {
-    return (
-        reminders.length <= mostRemindersOnAnEvent &&
-        reminders.every(isStatableReminderLead) &&
-        new Set(reminders).size === reminders.length
-    );
-}
-
-/** Reports whether one lead, in minutes before the event, is one a reminder may state. */
-export function isStatableReminderLead(minutesBefore: number): boolean {
-    return Number.isSafeInteger(minutesBefore) && minutesBefore >= 0 && minutesBefore <= longestReminderLead;
 }
 
 /**
@@ -612,26 +583,11 @@ export function parseCalendarEvent(value: unknown): CalendarEvent | null {
     // An announcement the contract says cannot exist — more than an event may carry, a lead further ahead than one may
     // state, or the same lead twice — is a body this client refuses rather than a set it draws: the panel enforces the
     // same three rules before it writes, so an answer breaking them describes an event nothing here could have made.
-    if (typeof isAllDay !== 'boolean' || !isReminderSet(reminders) || !isInstantList(remindsAt)) {
+    if (typeof isAllDay !== 'boolean' || !isReminderSet(reminders) || !isReminderInstantList(remindsAt)) {
         return null;
     }
 
     return { id, title, start, end, isAllDay, reminders, remindsAt, origin, sourceMessage, recordedAt, amendedAt };
-}
-
-function isReminderSet(value: unknown): value is readonly number[] {
-    return (
-        Array.isArray(value) &&
-        value.length <= mostRemindersOnAnEvent &&
-        value.every((lead) => typeof lead === 'number') &&
-        isStatableReminderSet(value)
-    );
-}
-
-function isInstantList(value: unknown): value is readonly string[] {
-    return (
-        Array.isArray(value) && value.length <= mostRemindersOnAnEvent && value.every((at) => typeof at === 'string')
-    );
 }
 
 /** Whether the value is one of the two origins this surface publishes. */

@@ -56,6 +56,8 @@ function taskCalled(id: string, title: string, held: Record<string, unknown> = {
         id,
         title,
         dueOn: '2026-09-24',
+        reminders: [],
+        remindsAt: [],
         origin: 'Asserted',
         completed: false,
         sourceMessageId: null,
@@ -137,7 +139,7 @@ function deployment({
                 answer = refuses.some((task) => path.endsWith(`/tasks/${task}`))
                     ? { status: 503, headers: {}, body: '' }
                     : { ...answered, body: JSON.stringify({ id: 'a', erased: true }) };
-            } else if (method === 'POST') {
+            } else if (method === 'POST' || method === 'PUT') {
                 answer = refuses.some((task) => path.includes(`/tasks/${task}`))
                     ? { status: 503, headers: {}, body: '' }
                     : { ...answered, body: JSON.stringify(taskCalled('a', 'Answer the tender')) };
@@ -535,7 +537,55 @@ describe('TasksSpace', () => {
         expect(JSON.parse(written?.body ?? 'null')).toStrictEqual({
             title: 'Answer the tender',
             dueOn: null,
+            reminders: [],
+            dueDayOffsetMinutes: null,
             sourceMessageId: null,
+        });
+    });
+
+    // The panel is the one place a reminder is decided, and what it answers is written as it is answered: there is no
+    // *Save* behind it, so the whole record goes back with the leads the reader chose.
+    it('writes what announces a task as the whole record, with the offset its due day runs in', async () => {
+        const { transport, sent } = deployment();
+
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Add a reminder to Answer the tender' }));
+        fireEvent.click(screen.getByRole('button', { name: '1 day before' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe('Reminders saved.');
+        });
+
+        const written = sent().find((request) => request.method === 'PUT');
+
+        expect(written?.path).toBe('https://mail.example.invalid/api/client/tasks/a');
+        expect(JSON.parse(written?.body ?? 'null')).toStrictEqual({
+            title: 'Answer the tender',
+            dueOn: '2026-09-24',
+            reminders: [24 * 60],
+            dueDayOffsetMinutes: 120,
+            sourceMessageId: null,
+        });
+    });
+
+    it('states a task announcing nothing as an empty set rather than as a field left out', async () => {
+        const { transport, sent } = deployment({
+            committed: [taskCalled('a', 'Answer the tender', { reminders: [60], remindsAt: ['2026-09-24T08:00:00Z'] })],
+        });
+
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Reminders for Answer the tender: 1 reminder' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Turn all off' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe('Reminders saved.');
+        });
+
+        expect(JSON.parse(sent().find((request) => request.method === 'PUT')?.body ?? 'null')).toMatchObject({
+            reminders: [],
+            dueDayOffsetMinutes: 120,
         });
     });
 

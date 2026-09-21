@@ -1,6 +1,6 @@
 # Calendar events
 
-<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs, backend/src/Infrastructure/Persistence/Entities/CalendarEventReminderEntity.cs, backend/src/Host/Hosting/Workers/CalendarReminderWorker.cs -->
+<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/CalendarEventMapping.cs, backend/src/Infrastructure/Persistence/Calendar/CalendarEventStore.cs, backend/src/Infrastructure/Persistence/Calendar/Configurations/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs -->
 
 MailFathom holds a calendar of its own: events a person put there, and dates their mail named that nobody has agreed
 to yet, in the same PostgreSQL database the mail is in. This page describes what an event is, the difference between
@@ -51,61 +51,18 @@ it was not accepted instead of being shown something other than what they wrote.
 
 ## Reminders
 
-A reminder is **a lead rather than an instant**: what somebody chose is *a quarter of an hour beforehand*, and the
-instant that falls at is derived from the event every time it is asked for. That is the whole reason moving an event
-carries its reminders with it — nothing rewrites what the person asked for, and the new instants follow from the new
-time.
-
-| Rule | What it is |
-| --- | --- |
-| The unit | Whole minutes, which is the coarsest unit the client offers and the finest anything acts on — a run looking for what has come due cannot be more precise than the interval it runs on |
-| No lead at all | Zero is a lead like any other and means the moment the event begins. It is not the absence of a reminder: an event nobody wants to be told about carries none |
-| The longest lead | Four weeks, which covers the far end of what somebody sets by hand on a quarterly commitment and bounds how far ahead of now a run has to look |
-| How many | Sixteen on one event, above every preset the client offers together, because each one is a notification somebody may be sent |
-| Each lead once | A set stating one lead twice is refused rather than folded, that being a caller stating one reminder twice |
+An event is announced by the leads it carries, on the mechanism [reminders](reminders.md) describes: what somebody
+chose is a lead rather than an instant, so moving an event carries its reminders with it and the new instants follow
+from the new time. That page holds the bounds a set of leads is held to, what a reminder raises, and how it comes to
+be raised exactly once.
 
 **An event stated as a day is announced from nine in the morning on it.** Its start is still the instant the day
-opens at; what the all-day statement decides is the anchor a lead is measured back from, because a person who wrote
-down a day never chose midnight and a reminder an hour before one would arrive in the night before anybody is awake
-to be told about it. The day is read in the offset the event itself carries rather than in a timezone this deployment
-would have to be told about.
+opens at; what the all-day statement decides is the anchor a lead is measured back from. The day is read in the
+offset the event itself carries rather than in a timezone this deployment would have to be told about.
 
-**An event carrying no reminder announces nothing, and that is a statement rather than an omission.** Turning the
-last one off is an amendment stating an event with none, exactly as amending anything else states the whole record.
-A proposal read out of mail carries none for the same reason it names no all-day statement: what somebody wants to be
-told about is theirs to set once they have agreed to the date, and a reading of a message is not where either is
-decided.
-
-## What a reminder raises, and exactly once
-
-A reminder comes due whether or not anybody has a client open, so what raises it is a pass over the deployment rather
-than anything a screen does: every minute, one replica takes the lease on the pass and writes a
-[notification](../operations/client-endpoint.md#the-notification-routes) for each reminder that has fallen. Every
-client then learns about it the way it learns about everything else — the one that was open, the one opened an hour
-later, and the second machine.
-
-**Exactly once comes from two rules rather than one.** The notification is written first and the claim recorded
-after it, so a pass that ends between them says nothing twice — the notification's own deduplication names the
-reminder and the instant it falls at, so the repeat folds into the statement already standing unread — and loses
-nothing either, the reminder still being unclaimed when the next pass reaches it. **The instant is half of that name
-rather than a detail of it**: a reminder that has become due at a new time is a different thing to be told, so it is
-said even where the statement about the old time has not been read yet, and a deduplication naming only the event
-and the lead would swallow it and then claim the reminder anyway. What the claim is recorded against is that same
-instant, which is what makes an event moved forward due again at its new time and an event moved back onto an
-announced time stay quiet.
-
-**Nothing long overdue is announced.** A deployment that was off for a day comes back to reminders nobody could have
-acted on, about events that have already happened, and delivering them would be a burst of statements in place of the
-one thing somebody wanted to be told. An hour is how late is still worth saying; anything older is left where it is
-and announced by nothing.
-
-**One pass announces at most two hundred reminders**, so a deployment whose calendars all name the same hour does not
-spend a pass on every one of them; what it does not reach comes due on the next.
-
-**What the notification carries is the event's own title and the lead**, and nothing else about the event. The title
-is what somebody being reminded needs to read first and there is nothing else a reminder is about; the lead travels
-as a number, so the client says *fifteen minutes left* in whatever language its reader has rather than reading a
-sentence the deployment composed. Following the notification leads to the event.
+**A proposal read out of mail carries no reminder**, for the same reason it names no all-day statement: what somebody
+wants to be told about is theirs to set once they have agreed to the date, and a reading of a message is not where
+either is decided.
 
 ## The calendar belongs to a person
 

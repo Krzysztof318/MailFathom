@@ -2,25 +2,31 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Application.Calendar;
+namespace MailFathom.Application.Reminders;
 
-/// <summary>Answers which reminders across every calendar have come due, and records the ones that have been announced.</summary>
+/// <summary>Answers which reminders of one kind have come due across the deployment, and records the ones announced.</summary>
 /// <remarks>
 /// <para>
 /// This is the one port here that is not one person's. A reminder comes due whether or not anybody is signed in, so
 /// what reads it is a run over the deployment rather than a request with a principal behind it — which is why the
-/// reads name no owner and why <see cref="CalendarReminderSweep" /> is the only caller, under the process identity and
-/// under a lease.
+/// reads name no owner and why <see cref="ReminderSweep" /> is the only caller, under the process identity and under
+/// a lease.
 /// </para>
 /// <para>
-/// A reminder is announced at most once per instant it falls at, and the instant is the claim: <see cref="MarkRaisedAsync" />
-/// records which one was announced rather than that something was, so an event moved to a new time has reminders that
-/// are due again on their own, and one moved back onto a time it already announced stays quiet. Nothing here holds a
-/// flag, because a flag would have to be cleared by whoever moved the event and a writer that forgot would silence
-/// the reminder for good.
+/// One implementation per kind of thing that carries reminders, because each reads a table of its own and answers
+/// for its own record's rules — which reminders a completed task raises, what an all-day event is measured from. The
+/// pass holds every implementation registered and reads each in turn, which is what lets a kind be added without a
+/// producer of its own.
+/// </para>
+/// <para>
+/// A reminder is announced at most once per instant it falls at, and the instant is the claim:
+/// <see cref="MarkRaisedAsync" /> records which one was announced rather than that something was, so a record moved
+/// to a new time has reminders that are due again on their own, and one moved back onto a time it already announced
+/// stays quiet. Nothing here holds a flag, because a flag would have to be cleared by whoever moved the record and a
+/// writer that forgot would silence the reminder for good.
 /// </para>
 /// </remarks>
-public interface ICalendarReminderSchedule
+public interface IReminderSchedule
 {
     /// <summary>Reads the reminders that have come due and have not been announced at the instant they now fall at.</summary>
     /// <param name="asOf">The instant a reminder must have fallen at or before to be due.</param>
@@ -32,9 +38,9 @@ public interface ICalendarReminderSchedule
     /// <remarks>
     /// The lower bound is what keeps a deployment that was off for a day from announcing that day's reminders the
     /// moment it comes back: a reminder nobody could have acted on is left where it is rather than delivered late in a
-    /// burst, and the event it was about has already happened.
+    /// burst, and the thing it was about has already happened.
     /// </remarks>
-    Task<IReadOnlyList<DueCalendarReminder>> ReadDueAsync(
+    Task<IReadOnlyList<DueReminder>> ReadDueAsync(
         DateTimeOffset asOf,
         DateTimeOffset notDueBefore,
         int limit,
@@ -49,5 +55,5 @@ public interface ICalendarReminderSchedule
     /// Conditional on the instant rather than unconditional, so two replicas reading one pass at the same time is the
     /// ordinary case it is meant to be: the one that loses is told so and writes nothing.
     /// </remarks>
-    Task<bool> MarkRaisedAsync(DueCalendarReminder due, CancellationToken cancellationToken);
+    Task<bool> MarkRaisedAsync(DueReminder due, CancellationToken cancellationToken);
 }

@@ -38,6 +38,16 @@ describe('followTarget', () => {
         expect(client.openMail).not.toHaveBeenCalled();
     });
 
+    // The same answer for the same reason: the Tasks screen that would open one has not shipped either.
+    it('goes to the tasks for a due reminder, which names a task no screen opens yet', () => {
+        const client = following();
+
+        followTarget({ kind: 'PersonalTask', taskId: 't-7' }, client);
+
+        expect(client.goTo).toHaveBeenCalledExactlyOnceWith('tasks');
+        expect(client.openMail).not.toHaveBeenCalled();
+    });
+
     it('leaves the reader where they were where the screen has no address in this client yet', () => {
         const client = following();
 

@@ -31,8 +31,40 @@ function dayAfter(day: string, days: number): string {
     return `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * The instants a set of leads falls at, which the deployment resolves and a client draws rather than derives.
+ *
+ * Nine in the morning on the due day is what a task's reminders are measured back from, and the offset is stated as
+ * Greenwich's for the reason the day's own arrangement states it: a corpus that read the machine's zone would answer
+ * a different instant on every machine that served it.
+ */
+function announcedAt(dueOn: string, reminders: readonly number[]): readonly string[] {
+    return reminders.map((lead) => {
+        const at = new Date(`${dueOn}T09:00:00+00:00`);
+
+        at.setUTCMinutes(at.getUTCMinutes() - lead);
+
+        return at.toISOString().replace('Z', '+00:00');
+    });
+}
+
 function task(id: string, title: string, dueOn: string | null, held: Record<string, unknown> = {}) {
-    return { id, title, dueOn, origin: 'Asserted', completed: false, sourceMessageId: null, ...held };
+    return {
+        id,
+        title,
+        dueOn,
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+        ...held,
+    };
+}
+
+/** A task that announces itself, which is the row drawn with the pill filled and the state a panel is opened onto. */
+function announcing(id: string, title: string, dueOn: string, reminders: readonly number[]) {
+    return task(id, title, dueOn, { reminders, remindsAt: announcedAt(dueOn, reminders) });
 }
 
 /**
@@ -41,14 +73,18 @@ function task(id: string, title: string, dueOn: string | null, held: Record<stri
  * Four rows rather than one, because the four are four different things to draw: work due today, work due later this
  * week, work nobody has dated, and work already done — and the last two cannot be reached from the first by any press.
  *
+ * Two of them announce themselves and two do not, which is what the row's own pill is drawn in both states from: one
+ * lead draws the filled bell alone and two draw the count beside it, so the three shapes are all reachable without
+ * pressing anything.
+ *
  * @param day The reader's own day, as a calendar day.
  * @returns One page of the committed half, which is the whole of it.
  */
 export function committedTasks(day: string) {
     return {
         tasks: [
-            task('task-tender', 'Answer the Nordwind tender', day),
-            task('task-return', 'File the quarterly return', dayAfter(day, 3)),
+            announcing('task-tender', 'Answer the Nordwind tender', day, [24 * 60, 0]),
+            announcing('task-return', 'File the quarterly return', dayAfter(day, 3), [0]),
             task('task-racking', 'Decide what to do about the racking quote', null),
             task('task-invoice', 'Send the August invoice', dayAfter(day, -2), { completed: true }),
         ],
@@ -86,6 +122,9 @@ export const taskWritten = task('task-written', 'Call the warehouse back', null)
 
 /** What marking a task done answers with. */
 export const taskCompleted = task('task-tender', 'Answer the Nordwind tender', '2026-09-21', { completed: true });
+
+/** What revising a task answers with, which is the record as the deployment now holds it. */
+export const taskRevised = announcing('task-tender', 'Answer the Nordwind tender', '2026-09-21', [24 * 60]);
 
 /** What taking a proposal on answers with: the same line, held now rather than offered. */
 export const taskAccepted = task('task-signatures', 'Send back the signed addendum', '2026-09-22', {

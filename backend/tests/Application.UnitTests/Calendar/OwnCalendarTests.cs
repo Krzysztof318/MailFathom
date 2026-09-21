@@ -9,6 +9,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -438,7 +439,7 @@ public sealed class OwnCalendarTests
         // Assert
         var created = written.Event!;
         Assert.Equal([1440, 15], created.Reminders.Select(reminder => reminder.MinutesBefore));
-        Assert.Equal(Monday.AddMinutes(-15), created.RemindsAt(CalendarReminder.Create(15)));
+        Assert.Equal(Monday.AddMinutes(-15), created.RemindsAt(Reminder.Create(15)));
     }
 
     /// <summary>A day nobody gave an hour to is announced from the morning of it rather than from the night before.</summary>
@@ -463,13 +464,13 @@ public sealed class OwnCalendarTests
         Assert.True(created.IsAllDay);
         Assert.Equal(
             theDay.AddHours(CalendarEvent.AllDayReminderHour - 1),
-            created.RemindsAt(CalendarReminder.Create(60)));
+            created.RemindsAt(Reminder.Create(60)));
     }
 
     /// <summary>A lead somebody typed is something this surface reports on, rather than a fault the domain raises.</summary>
     [Theory]
     [InlineData(-1)]
-    [InlineData(CalendarReminder.MaximumMinutesBefore + 1)]
+    [InlineData(Reminder.MaximumMinutesBefore + 1)]
     public async Task CreateAsync_ALeadNoReminderMayState_IsRefusedWithNothingWritten(int minutesBefore)
     {
         // Act
@@ -513,7 +514,7 @@ public sealed class OwnCalendarTests
             Monday,
             end: null,
             isAllDay: false,
-            reminders: [.. Enumerable.Range(1, CalendarEvent.MaximumReminderCount + 1)],
+            reminders: [.. Enumerable.Range(1, Reminder.MaximumCount + 1)],
             sourceMessage: null,
             TestContext.Current.CancellationToken);
 
@@ -532,7 +533,7 @@ public sealed class OwnCalendarTests
             Monday,
             end: null,
             isAllDay: false,
-            reminders: [CalendarReminder.Create(15)],
+            reminders: [Reminder.Create(15)],
             CalendarEventOrigin.Asserted,
             sourceMessage: null,
             importedUid: null,

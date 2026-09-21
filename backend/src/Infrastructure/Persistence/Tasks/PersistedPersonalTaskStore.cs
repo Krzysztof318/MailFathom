@@ -81,6 +81,7 @@ internal sealed class PersistedPersonalTaskStore(
         var userValue = user.Value;
         var rows = readContext.PersonalTasks
             .AsNoTracking()
+            .Include(task => task.Reminders)
             .Where(task => task.UserId == userValue);
 
         if (origin is { } named)
@@ -117,6 +118,7 @@ internal sealed class PersistedPersonalTaskStore(
 
         var stored = await readContext.PersonalTasks
             .AsNoTracking()
+            .Include(candidate => candidate.Reminders)
             .FirstOrDefaultAsync(
                 candidate => candidate.UserId == userValue && candidate.Id == identifier,
                 cancellationToken);
@@ -126,9 +128,9 @@ internal sealed class PersistedPersonalTaskStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Two columns rather than one, which is the only way this differs from the two state changes below it: the
-    /// addressing, the session, and the commit policy are the same, and the revision supplies the row it is written
-    /// against rather than being looked up from a second identity.
+    /// The three columns an edit states and the reminder rows behind them, which is the only way this differs from
+    /// the two state changes below it: the addressing, the session, and the commit policy are the same, and the
+    /// revision supplies the row it is written against rather than being looked up from a second identity.
     /// </remarks>
     public Task<PersonalTaskChangeOutcome> ReviseAsync(PersonalTask revision, CancellationToken cancellationToken)
     {
@@ -139,10 +141,15 @@ internal sealed class PersistedPersonalTaskStore(
                 session,
                 revision.User,
                 revision.Id,
-                stored =>
+                (writeContext, stored) =>
                 {
                     stored.Title = revision.Title;
                     stored.DueOn = revision.DueOn;
+                    stored.DueDayOffsetMinutes = revision.DueDayOffset is { } offset
+                        ? (int)offset.TotalMinutes
+                        : null;
+
+                    Reconcile(writeContext, stored, revision);
                 },
                 token),
             cancellationToken);
@@ -163,7 +170,7 @@ internal sealed class PersistedPersonalTaskStore(
                 session,
                 user,
                 task,
-                stored => stored.Origin = PersonalTaskOrigin.Asserted,
+                (_, stored) => stored.Origin = PersonalTaskOrigin.Asserted,
                 token),
             cancellationToken);
 
@@ -182,7 +189,7 @@ internal sealed class PersistedPersonalTaskStore(
                 session,
                 user,
                 task,
-                stored => stored.IsCompleted = isCompleted,
+                (_, stored) => stored.IsCompleted = isCompleted,
                 token),
             cancellationToken);
 
@@ -204,6 +211,43 @@ internal sealed class PersistedPersonalTaskStore(
             .ExecuteDeleteAsync(cancellationToken);
 
         return erased > 0;
+    }
+
+    /// <summary>Brings the held reminder rows to what the revision states, keeping what each one already announced.</summary>
+    /// <remarks>
+    /// Reconciled rather than replaced, because a row carries the claim that it has already been announced and
+    /// deleting it to write it back would announce every reminder a second time on the next pass. A lead the
+    /// revision keeps therefore keeps its row, and the claim on that row is cleared exactly when the instant the
+    /// reminder falls at has moved — which is what makes a due date somebody moved reminded on its new day and a
+    /// task merely renamed stay quiet.
+    /// </remarks>
+    private static void Reconcile(
+        MailFathomDbContext writeContext,
+        PersonalTaskEntity held,
+        PersonalTask revision)
+    {
+        var stated = revision.Reminders.Select(reminder => reminder.MinutesBefore).ToHashSet();
+
+        foreach (var dropped in held.Reminders.Where(row => !stated.Contains(row.MinutesBefore)).ToArray())
+        {
+            writeContext.PersonalTaskReminders.Remove(dropped);
+        }
+
+        foreach (var reminder in revision.Reminders)
+        {
+            var dueAt = revision.RemindsAt(reminder);
+            var row = held.Reminders.FirstOrDefault(row => row.MinutesBefore == reminder.MinutesBefore);
+
+            if (row is null)
+            {
+                held.Reminders.Add(PersonalTaskMapping.ToEntity(revision, reminder));
+            }
+            else if (row.DueAt != dueAt)
+            {
+                row.DueAt = dueAt;
+                row.RaisedForDueAt = null;
+            }
+        }
     }
 
     /// <summary>Narrows a person's tasks to the ones the order puts after a boundary.</summary>
@@ -234,31 +278,34 @@ internal sealed class PersistedPersonalTaskStore(
     /// <summary>Finds one of a person's tasks inside the session and applies a change to it.</summary>
     /// <remarks>
     /// Every state change here has the same two halves — address the row through the user as well as the identifier,
-    /// then move one column — so the addressing is written once and each caller supplies only the column it moves.
+    /// then move what the change states — so the addressing is written once and each caller supplies only that.
     /// Assigning a value the row already carries leaves the change tracker with nothing to write, which is what makes
-    /// a repeated request a read rather than a second write.
+    /// a repeated request a read rather than a second write. The context is handed to the change because a revision
+    /// removes reminder rows as well as moving columns, and the two changes that move one column ignore it.
     /// </remarks>
     private static async Task<PersonalTaskChangeOutcome> StageAsync(
         IPersistenceSession session,
         MailUserId user,
         PersonalTaskId task,
-        Action<PersonalTaskEntity> change,
+        Action<MailFathomDbContext, PersonalTaskEntity> change,
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var userValue = user.Value;
         var identifier = task.Value;
 
-        var stored = await writeContext.PersonalTasks.FirstOrDefaultAsync(
-            candidate => candidate.UserId == userValue && candidate.Id == identifier,
-            cancellationToken);
+        var stored = await writeContext.PersonalTasks
+            .Include(candidate => candidate.Reminders)
+            .FirstOrDefaultAsync(
+                candidate => candidate.UserId == userValue && candidate.Id == identifier,
+                cancellationToken);
 
         if (stored is null)
         {
             return PersonalTaskChangeOutcome.NotFound;
         }
 
-        change(stored);
+        change(writeContext, stored);
 
         return PersonalTaskChangeOutcome.Applied;
     }

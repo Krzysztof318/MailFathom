@@ -3552,13 +3552,21 @@
               "null",
               "string"
             ]
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "kind",
           "messageId",
           "screen",
-          "calendarEventId"
+          "calendarEventId",
+          "taskId"
         ],
         "type": "object"
       },
@@ -3972,10 +3980,33 @@
       "ClientTaskRecordRequest": {
         "additionalProperties": false,
         "properties": {
+          "dueDayOffsetMinutes": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "dueOn": {
             "type": [
               "null",
               "string"
+            ]
+          },
+          "reminders": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "type": [
+              "null",
+              "array"
             ]
           },
           "sourceMessageId": {
@@ -3995,6 +4026,8 @@
         "required": [
           "title",
           "dueOn",
+          "reminders",
+          "dueDayOffsetMinutes",
           "sourceMessageId"
         ],
         "type": "object"
@@ -4017,6 +4050,24 @@
           "origin": {
             "type": "string"
           },
+          "reminders": {
+            "items": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "type": "array"
+          },
+          "remindsAt": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "sourceMessageId": {
             "format": "uuid",
             "type": [
@@ -4032,6 +4083,8 @@
           "id",
           "title",
           "dueOn",
+          "reminders",
+          "remindsAt",
           "origin",
           "completed",
           "sourceMessageId"

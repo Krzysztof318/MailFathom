@@ -74,6 +74,24 @@ public sealed class NotificationModelTests
     }
 
     /// <summary>
+    /// Nor the task, which is the same promise about the third record a notification leads to: erasing a task takes
+    /// every reminder it raised with it, so nothing is left offering to open work nobody owes.
+    /// </summary>
+    [Fact]
+    public void Model_TheTaskANotificationLeadsTo_TakesTheNotificationWithItWhenItIsErased()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var foreignKey = ForeignKeyOn(context, nameof(NotificationEntity.TargetPersonalTaskId));
+
+        // Assert
+        Assert.Equal(nameof(PersonalTaskEntity), foreignKey.PrincipalEntityType.ClrType.Name);
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
+    }
+
+    /// <summary>
     /// This table names no mail account, so the erasure walk that enumerates the tables that do would never reach it.
     /// The cascade from the user row is what discharges an erasure request over it instead.
     /// </summary>

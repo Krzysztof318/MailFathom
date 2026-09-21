@@ -85,6 +85,22 @@ public sealed record NotificationStatement
         return new NotificationStatement(NotificationCause.CalendarReminderDue, minutesBefore, outOf: null);
     }
 
+    /// <summary>States that a reminder against a task's due date has come due, counting how far ahead of it the reminder falls.</summary>
+    /// <param name="minutesBefore">How many minutes before nine in the morning on the due day the reminder was set, which is zero at that hour itself.</param>
+    /// <returns>The statement.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="minutesBefore" /> is negative.</exception>
+    /// <remarks>
+    /// A cause of its own rather than the calendar's said about something else, because what a reader is being told
+    /// is about a task rather than a commitment in a diary, and a client draws the two differently. What it counts
+    /// is the same lead, said the same way, so the sentence a reader sees agrees with the one the panel set it in.
+    /// </remarks>
+    public static NotificationStatement TaskReminderDue(int minutesBefore)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(minutesBefore);
+
+        return new NotificationStatement(NotificationCause.TaskReminderDue, minutesBefore, outOf: null);
+    }
+
     /// <summary>Restores the statement a stored row holds, or nothing where the row names no cause.</summary>
     /// <param name="cause">The condition the row names, or <see langword="null" /> for a row written before a cause was kept.</param>
     /// <param name="counted">How many the cause counts.</param>

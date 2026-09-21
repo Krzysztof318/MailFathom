@@ -14,6 +14,7 @@ import {
     readOwnTasks,
     readProposedTasks,
     recordTask,
+    reviseTask,
     setTaskCompletion,
 } from './tasks';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
@@ -27,6 +28,8 @@ const asserted = {
     id: '0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90',
     title: 'Answer the counter-proposal',
     dueOn: '2026-09-21',
+    reminders: [1440, 0],
+    remindsAt: ['2026-09-20T09:00:00+02:00', '2026-09-21T09:00:00+02:00'],
     origin: 'Asserted',
     completed: false,
     sourceMessageId: null,
@@ -36,9 +39,19 @@ const proposed = {
     id: '0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91',
     title: 'Send the signed annex',
     dueOn: null,
+    reminders: [],
+    remindsAt: [],
     origin: 'Proposed',
     completed: false,
     sourceMessageId: '0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92',
+};
+
+const announced = {
+    title: 'Answer the counter-proposal',
+    dueOn: '2026-09-21',
+    reminders: [1440, 0],
+    dueDayOffsetMinutes: 120,
+    sourceMessageId: null,
 };
 
 const pageBody = JSON.stringify({ tasks: [asserted], nextCursor: 'page-two' });
@@ -102,6 +115,8 @@ describe('readOwnTasks', () => {
                         id: asserted.id,
                         title: 'Answer the counter-proposal',
                         dueOn: '2026-09-21',
+                        reminders: [1440, 0],
+                        remindsAt: ['2026-09-20T09:00:00+02:00', '2026-09-21T09:00:00+02:00'],
                         origin: 'Asserted',
                         completed: false,
                         sourceMessageId: null,
@@ -173,36 +188,42 @@ describe('readProposedTasks', () => {
 });
 
 describe('recordTask', () => {
-    it('states the line, the day and the message the task cites', async () => {
+    it('states the line, the day, what announces it and the message the task cites', async () => {
         const { transport, requests } = recording({ status: 200, body: JSON.stringify(asserted) });
 
-        await recordTask(session, transport, {
-            title: 'Answer the counter-proposal',
-            dueOn: '2026-09-21',
-            sourceMessageId: null,
-        });
+        await recordTask(session, transport, announced);
 
         expect(requests[0]?.method).toBe('POST');
         expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/tasks');
-        expect(requests[0]?.body).toBe(
-            JSON.stringify({ title: 'Answer the counter-proposal', dueOn: '2026-09-21', sourceMessageId: null }),
-        );
+        expect(requests[0]?.body).toBe(JSON.stringify(announced));
     });
 
-    it('reads the task as it was written', async () => {
-        const answer = await recordTask(session, answering({ status: 200, body: JSON.stringify(asserted) }), {
-            title: 'Answer the counter-proposal',
-            dueOn: '2026-09-21',
-            sourceMessageId: null,
-        });
+    it('states the offset the due day runs in beside the leads, the deployment keeping no timezone', async () => {
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify(asserted) });
 
-        expect(answer.outcome === 'read' && answer.value.origin).toBe('Asserted');
+        await recordTask(session, transport, announced);
+
+        expect(JSON.parse(requests[0]?.body ?? 'null')).toMatchObject({
+            reminders: [1440, 0],
+            dueDayOffsetMinutes: 120,
+        });
+    });
+
+    it('reads the task as it was written, with the instants its leads fall at', async () => {
+        const answer = await recordTask(session, answering({ status: 200, body: JSON.stringify(asserted) }), announced);
+
+        expect(answer.outcome === 'read' && answer.value.remindsAt).toEqual([
+            '2026-09-20T09:00:00+02:00',
+            '2026-09-21T09:00:00+02:00',
+        ]);
     });
 
     it('reads a refusal of what it stated as a body this client could not use', async () => {
         const answer = await recordTask(session, answering({ status: 400, body: '' }), {
             title: '',
             dueOn: null,
+            reminders: [],
+            dueDayOffsetMinutes: null,
             sourceMessageId: null,
         });
 
@@ -213,10 +234,44 @@ describe('recordTask', () => {
         const answer = await recordTask(session, answering({ status: 404, body: '' }), {
             title: 'Answer the counter-proposal',
             dueOn: null,
+            reminders: [],
+            dueDayOffsetMinutes: null,
             sourceMessageId: null,
         });
 
         expect(answer).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: 404 } });
+    });
+});
+
+describe('reviseTask', () => {
+    it('states the whole record at the route that names the one task', async () => {
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify(asserted) });
+
+        await reviseTask(session, transport, asserted.id, announced);
+
+        expect(requests[0]?.method).toBe('PUT');
+        expect(requests[0]?.path).toBe(`https://mail.example.invalid/api/client/tasks/${asserted.id}`);
+        expect(requests[0]?.body).toBe(JSON.stringify(announced));
+    });
+
+    it('states a task announcing nothing as an empty set rather than as a field left out', async () => {
+        const quiet = { ...asserted, reminders: [], remindsAt: [] };
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify(quiet) });
+
+        const answer = await reviseTask(session, transport, asserted.id, {
+            ...announced,
+            reminders: [],
+            dueDayOffsetMinutes: null,
+        });
+
+        expect(JSON.parse(requests[0]?.body ?? 'null')).toMatchObject({ reminders: [], dueDayOffsetMinutes: null });
+        expect(answer.outcome === 'read' && answer.value.reminders).toEqual([]);
+    });
+
+    it('reads a task somebody erased while the screen held it as missing rather than as a deployment that is down', async () => {
+        const answer = await reviseTask(session, answering({ status: 404, body: '' }), asserted.id, announced);
+
+        expect(answer).toEqual({ outcome: 'failed', failure: { reason: 'missing', status: 404 } });
     });
 });
 
@@ -406,12 +461,26 @@ describe('layOutToday', () => {
 });
 
 describe('parseTask', () => {
-    it('reads a task nobody has said a day for', () => {
-        expect(parseTask({ ...asserted, dueOn: null })?.dueOn).toBeNull();
+    it('reads a task nobody has said a day for, which announces nothing either', () => {
+        expect(parseTask({ ...asserted, dueOn: null, reminders: [], remindsAt: [] })?.dueOn).toBeNull();
+    });
+
+    it('reads the leads longest first beside the instants they fall at', () => {
+        expect(parseTask(asserted)?.reminders).toEqual([1440, 0]);
     });
 
     it.each([
         ['an origin the surface does not publish', { ...asserted, origin: 'Invented' }],
+        ['more leads than a task may carry', { ...asserted, reminders: Array.from({ length: 17 }, (_, at) => at) }],
+        ['a lead further ahead than one may state', { ...asserted, reminders: [28 * 24 * 60 + 1] }],
+        ['the same lead twice', { ...asserted, reminders: [60, 60] }],
+        ['a lead that is not a number', { ...asserted, reminders: ['60'] }],
+        ['an instant that is not written down', { ...asserted, remindsAt: [20260920] }],
+        [
+            'a lead with no instant beside it',
+            { ...asserted, reminders: [1440, 0], remindsAt: ['2026-09-20T09:00:00+02:00'] },
+        ],
+        ['leads against a day nobody stated', { ...asserted, dueOn: null }],
         ['a completion that is not a flag', { ...asserted, completed: 'no' }],
         ['a day that is not written down', { ...asserted, dueOn: 20260921 }],
         ['an instant where the day it falls on belongs', { ...asserted, dueOn: '2026-09-21T10:00:00Z' }],

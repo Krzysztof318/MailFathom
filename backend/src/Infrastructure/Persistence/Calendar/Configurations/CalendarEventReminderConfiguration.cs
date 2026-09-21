@@ -31,7 +31,8 @@ internal sealed class CalendarEventReminderConfiguration : IEntityTypeConfigurat
     public void Configure(EntityTypeBuilder<CalendarEventReminderEntity> entity)
     {
         entity.ToTable("calendar_event_reminders");
-        entity.HasKey(reminder => new { reminder.CalendarEventId, reminder.MinutesBefore });
+        entity.HasKey(reminder => new { reminder.CalendarEventId, reminder.MinutesBefore })
+            .HasName(PersistenceConstraintNames.CalendarEventReminderPrimaryKeyConstraintName);
 
         entity.Property(reminder => reminder.MinutesBefore).IsRequired();
         entity.Property(reminder => reminder.DueAt).IsRequired();

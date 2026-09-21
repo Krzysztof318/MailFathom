@@ -8,6 +8,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Tasks;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Domain.Tasks;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -180,7 +181,7 @@ public sealed class ClientTaskEndpointsTests
 
         // Act
         var result = await ClientTaskEndpoints.RecordAsync(
-            new ClientTaskRecordRequest("Answer the tender", "2026-09-21", MessageIdentifier),
+            new ClientTaskRecordRequest("Answer the tender", "2026-09-21", Reminders: null, DueDayOffsetMinutes: null, MessageIdentifier),
             SignedIn(store),
             TestContext.Current.CancellationToken);
 
@@ -206,7 +207,7 @@ public sealed class ClientTaskEndpointsTests
 
         // Act
         var result = await ClientTaskEndpoints.RecordAsync(
-            new ClientTaskRecordRequest("Answer the tender", DueOn: null, SourceMessageId: null),
+            new ClientTaskRecordRequest("Answer the tender", DueOn: null, Reminders: null, DueDayOffsetMinutes: null, SourceMessageId: null),
             SignedIn(store),
             TestContext.Current.CancellationToken);
 
@@ -230,7 +231,7 @@ public sealed class ClientTaskEndpointsTests
 
         // Act
         var result = await ClientTaskEndpoints.RecordAsync(
-            new ClientTaskRecordRequest(title, dueOn, SourceMessageId: null),
+            new ClientTaskRecordRequest(title, dueOn, Reminders: null, DueDayOffsetMinutes: null, SourceMessageId: null),
             SignedIn(store),
             TestContext.Current.CancellationToken);
 
@@ -253,6 +254,8 @@ public sealed class ClientTaskEndpointsTests
             new ClientTaskRecordRequest(
                 new string('x', PersonalTask.MaximumTitleLength + 1),
                 DueOn: null,
+                Reminders: null,
+                DueDayOffsetMinutes: null,
                 SourceMessageId: null),
             SignedIn(store),
             TestContext.Current.CancellationToken);
@@ -296,7 +299,7 @@ public sealed class ClientTaskEndpointsTests
         // Act
         var result = await ClientTaskEndpoints.ReviseAsync(
             TaskIdentifier,
-            new ClientTaskRecordRequest("Answer the tender today", "2026-09-22", SourceMessageId: null),
+            new ClientTaskRecordRequest("Answer the tender today", "2026-09-22", Reminders: null, DueDayOffsetMinutes: null, SourceMessageId: null),
             SignedIn(store),
             TestContext.Current.CancellationToken);
 
@@ -320,7 +323,7 @@ public sealed class ClientTaskEndpointsTests
         // Act
         var result = await ClientTaskEndpoints.ReviseAsync(
             TaskIdentifier,
-            new ClientTaskRecordRequest("Answer the tender today", DueOn: null, SourceMessageId: null),
+            new ClientTaskRecordRequest("Answer the tender today", DueOn: null, Reminders: null, DueDayOffsetMinutes: null, SourceMessageId: null),
             SignedIn(store),
             TestContext.Current.CancellationToken);
 
@@ -336,7 +339,7 @@ public sealed class ClientTaskEndpointsTests
         // Act
         var result = await ClientTaskEndpoints.ReviseAsync(
             Guid.Empty,
-            new ClientTaskRecordRequest("Answer the tender today", DueOn: null, SourceMessageId: null),
+            new ClientTaskRecordRequest("Answer the tender today", DueOn: null, Reminders: null, DueDayOffsetMinutes: null, SourceMessageId: null),
             SignedIn(Substitute.For<IPersonalTaskStore>()),
             TestContext.Current.CancellationToken);
 
@@ -655,15 +658,193 @@ public sealed class ClientTaskEndpointsTests
         store,
         new FakeTimeProvider(Stamped));
 
+    /// <summary>
+    /// The presets the design draws for a due date, written whole and answered with the instants they fall at — which
+    /// travel because the hour a due day is measured back from is this deployment's rule rather than a client's.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ATaskAnnouncedAtTheDueDatePresets_WritesThemAndSaysWhenEachFalls()
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+
+        // Act
+        var result = await ClientTaskEndpoints.RecordAsync(
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                "2026-09-21",
+                Reminders: [0, 60, 240, 1440, 2880],
+                DueDayOffsetMinutes: 120,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var written = Assert.IsType<Ok<ClientTaskResponse>>(result.Result).Value!;
+
+        Assert.Equal([2880, 1440, 240, 60, 0], written.Reminders);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 21, 9, 0, 0, TimeSpan.FromHours(2)),
+            written.RemindsAt[^1]);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 19, 9, 0, 0, TimeSpan.FromHours(2)),
+            written.RemindsAt[0]);
+    }
+
+    /// <summary>A task nobody dated announces nothing, whatever a client states, because a lead has nothing to measure from.</summary>
+    [Fact]
+    public async Task RecordAsync_RemindersOnATaskWithNoDay_RefusesNamingTheRule()
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+
+        // Act
+        var result = await ClientTaskEndpoints.RecordAsync(
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                DueOn: null,
+                Reminders: [60],
+                DueDayOffsetMinutes: 120,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            StatusCodes.Status400BadRequest,
+            Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+        await store.DidNotReceiveWithAnyArgs().AddAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Every rule a set of leads is held to is stated here rather than raised out of the record, because a lead
+    /// somebody typed is a client to inform rather than a producer to stop.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { -1 }, 120)]
+    [InlineData(new[] { Reminder.MaximumMinutesBefore + 1 }, 120)]
+    [InlineData(new[] { 60, 60 }, 120)]
+    [InlineData(new[] { 60 }, null)]
+    [InlineData(new[] { 60 }, 15 * 60)]
+    [InlineData(new[] { 60 }, -13 * 60)]
+    public async Task RecordAsync_ASetOfLeadsNoTaskMayCarry_RefusesWithoutEchoingIt(
+        int[] reminders,
+        int? dueDayOffsetMinutes)
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+
+        // Act
+        var result = await ClientTaskEndpoints.RecordAsync(
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                "2026-09-21",
+                reminders,
+                dueDayOffsetMinutes,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            StatusCodes.Status400BadRequest,
+            Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+        await store.DidNotReceiveWithAnyArgs().AddAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>More leads than one task may carry is the bound stated rather than the record raising for it.</summary>
+    [Fact]
+    public async Task RecordAsync_MoreLeadsThanOneTaskMayCarry_RefusesNamingTheBound()
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+
+        // Act
+        var result = await ClientTaskEndpoints.RecordAsync(
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                "2026-09-21",
+                [.. Enumerable.Range(1, Reminder.MaximumCount + 1)],
+                DueDayOffsetMinutes: 120,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            Reminder.MaximumCount.ToString(CultureInfo.InvariantCulture),
+            Assert.IsType<ProblemHttpResult>(result.Result).ProblemDetails.Detail,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Stating no lead is a task that announces nothing rather than a request to refuse, whatever offset it carries.</summary>
+    [Fact]
+    public async Task RecordAsync_ATaskStatingNoLead_AnnouncesNothing()
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+
+        // Act
+        var result = await ClientTaskEndpoints.RecordAsync(
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                "2026-09-21",
+                Reminders: [],
+                DueDayOffsetMinutes: 120,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var written = Assert.IsType<Ok<ClientTaskResponse>>(result.Result).Value!;
+
+        Assert.Empty(written.Reminders);
+        Assert.Empty(written.RemindsAt);
+    }
+
+    /// <summary>
+    /// Turning the last reminder off is an edit stating a task with none, which is what makes the reminders part of
+    /// the record an edit states rather than a field it may leave out.
+    /// </summary>
+    [Fact]
+    public async Task ReviseAsync_ARevisionStatingNoLead_WritesATaskThatAnnouncesNothing()
+    {
+        // Arrange
+        var store = Substitute.For<IPersonalTaskStore>();
+        store.FindAsync(User, PersonalTaskId.Create(TaskIdentifier), Arg.Any<CancellationToken>())
+            .Returns(Kept(new DateOnly(2026, 9, 21), reminders: [60]));
+        store.ReviseAsync(Arg.Any<PersonalTask>(), Arg.Any<CancellationToken>())
+            .Returns(PersonalTaskChangeOutcome.Applied);
+
+        // Act
+        var result = await ClientTaskEndpoints.ReviseAsync(
+            TaskIdentifier,
+            new ClientTaskRecordRequest(
+                "Answer the tender",
+                "2026-09-21",
+                Reminders: null,
+                DueDayOffsetMinutes: 120,
+                SourceMessageId: null),
+            SignedIn(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(Assert.IsType<Ok<ClientTaskResponse>>(result.Result).Value!.Reminders);
+    }
+
     private static PersonalTask Kept(
         DateOnly? dueOn,
         PersonalTaskOrigin origin = PersonalTaskOrigin.Asserted,
-        bool isCompleted = false) =>
+        bool isCompleted = false,
+        IReadOnlyCollection<int>? reminders = null) =>
         PersonalTask.Restore(
             PersonalTaskId.Create(TaskIdentifier),
             User,
             "Answer the tender",
             dueOn,
+            reminders is null or { Count: 0 }
+                ? TaskAnnouncement.Silent
+                : new TaskAnnouncement(TimeSpan.FromHours(2), [.. reminders.Select(Reminder.Create)]),
             origin,
             StoredEmailId.Create(MessageIdentifier),
             isCompleted);

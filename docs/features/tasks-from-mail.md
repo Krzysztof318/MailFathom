@@ -49,7 +49,7 @@ list or somebody else's calendar.
 |---|---|
 | Tasks | The person's own, on the half of the list they committed to, not yet completed, due on or before that day, soonest due first, at most 20 |
 | Commitments | The events on their own calendar during the window — not the dates their mail proposed — at most 50 |
-| The day | The two instants the client stated, at most 48 hours apart, because this deployment keeps no timezone for a person |
+| The day | The two instants the client stated, at most 48 hours apart, because nothing here reads a recorded zone to decide which hours a day covers |
 
 **What comes back is an offer.** Each placement names a task by identity, when it is suggested to begin, and how long
 it is suggested to take; beside them stands the list of tasks that do not realistically fit the day, so somebody is
@@ -120,7 +120,7 @@ same way. What the two routes make of each of these is
 
 - **Accepting anything automatically.** No pass, no schedule, and no arrangement moves a task onto the committed half
   of a list. A person does that, or it does not happen.
-- **Reminding, notifying, or chasing.** A due day is a column; nothing watches it.
+- **Chasing a task nobody asked to be reminded about.** A due day on its own is a column, and no pass reads it. What is watched is a [reminder](reminders.md) somebody put on that due day, which is the same mechanism a calendar event announces itself through.
 - **Writing an arrangement onto a calendar.** A placement is a suggestion about a day, not an event — putting one on a
   calendar is [a calendar act](calendar-events.md) somebody takes.
 - **Any external task protocol.** The list is native to this deployment in the strong sense: nothing synchronizes, and

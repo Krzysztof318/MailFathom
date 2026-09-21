@@ -82,6 +82,9 @@
 - name: Reading a calendar event out of text
   href: calendar-event-extraction.md
   description: Which occasions MailFathom reads out of an arriving message and out of a sentence somebody types, why a deadline is not one of them, which clock an hour is resolved in, and what the reading costs.
+- name: Reminders
+  href: reminders.md
+  description: What a reminder on a calendar event or on a task's due date is, what a lead is measured back from, what silences one, and how the pass that announces them raises each exactly once.
 - name: Tasks read out of mail
   href: tasks-from-mail.md
   description: How a message that asks its reader to do something becomes a task nobody has agreed to yet, and how the tasks owed today are arranged around what the day already holds when somebody asks for it.

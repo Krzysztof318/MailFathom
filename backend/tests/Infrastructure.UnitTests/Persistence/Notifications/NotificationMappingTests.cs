@@ -6,6 +6,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Notifications;
+using MailFathom.Domain.Tasks;
 using MailFathom.Infrastructure.Persistence.Notifications;
 using Xunit;
 
@@ -168,6 +169,42 @@ public sealed class NotificationMappingTests
         Assert.Equal(NotificationTargetKind.Screen, target.Kind);
         Assert.Null(target.Message);
         Assert.Equal(NotificationScreen.Settings, target.Screen);
+    }
+
+    /// <summary>The task a due reminder is about is the third foreign key, and it fills its own column alone.</summary>
+    [Fact]
+    public void ToEntity_ANotificationLeadingToATask_FillsTheTaskColumnAlone()
+    {
+        // Arrange
+        var task = PersonalTaskId.Create(Guid.NewGuid());
+
+        // Act
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToPersonalTask(task)));
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.PersonalTask, entity.TargetKind);
+        Assert.Equal(task.Value, entity.TargetPersonalTaskId);
+        Assert.Null(entity.TargetCalendarEventId);
+        Assert.Null(entity.TargetStoredEmailId);
+        Assert.Null(entity.TargetScreen);
+    }
+
+    /// <summary>A due reminder read back leads to the task it was raised about, which is what the centre opens from the row.</summary>
+    [Fact]
+    public void ToNotification_ARowLeadingToATask_ReadsTheTaskBackAsItsTarget()
+    {
+        // Arrange
+        var task = PersonalTaskId.Create(Guid.NewGuid());
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToPersonalTask(task)));
+
+        // Act
+        var target = NotificationMapping.ToNotification(entity).Target;
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.PersonalTask, target.Kind);
+        Assert.Equal(task, target.PersonalTask);
+        Assert.Null(target.CalendarEvent);
+        Assert.Null(target.Message);
     }
 
     /// <summary>A reminder read back leads to the event it was raised about, which is what the centre opens from the row.</summary>

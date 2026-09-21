@@ -6,6 +6,7 @@ using MailFathom.Application.Calendar;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Reminders;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -323,8 +324,8 @@ internal static class ClientCalendarEndpoints
         CalendarEventWriteOutcome.AlreadyOnTheCalendar =>
             "The event is already on the calendar, so there is no proposal left to accept.",
         CalendarEventWriteOutcome.RemindersRefused =>
-            $"An event carries at most {CalendarEvent.MaximumReminderCount} reminders, each stated once, as whole "
-            + $"minutes between 0 and {CalendarReminder.MaximumMinutesBefore} before it.",
+            $"An event carries at most {Reminder.MaximumCount} reminders, each stated once, as whole "
+            + $"minutes between 0 and {Reminder.MaximumMinutesBefore} before it.",
         _ => "The event cannot be written as stated.",
     };
 
