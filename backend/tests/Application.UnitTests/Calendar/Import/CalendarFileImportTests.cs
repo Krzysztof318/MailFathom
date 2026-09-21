@@ -33,6 +33,7 @@ public sealed class CalendarFileImportTests
     private readonly InMemoryCalendarEventStore store = new();
     private readonly FakeTimeProvider clock = new(Now);
     private readonly ICalendarFileReader reader = Substitute.For<ICalendarFileReader>();
+    private readonly Queue<PersistenceCommitResult> commits = new();
 
     [Fact]
     public async Task SummariseAsync_AFileWithEntriesInIt_ReportsWhatItWouldCreateAndWritesNothing()
@@ -89,6 +90,28 @@ public sealed class CalendarFileImportTests
         Assert.Equal(
             new CalendarImportSkipTally(CalendarImportSkipReason.AlreadyOnTheCalendar, 2),
             Assert.Single(again.Skipped));
+    }
+
+    /// <summary>
+    /// The race the imported identifier's unique index refuses: two imports of one file both read a calendar holding
+    /// neither entry, so the loser has to decide again from what the winner committed rather than replay the rows its
+    /// first read composed — which would violate that index on every attempt until they ran out, and reach the person
+    /// as a failed request instead of the count the summary promises.
+    /// </summary>
+    [Fact]
+    public async Task ImportAsync_AnAttemptWhoseCommitLostTheRace_ReadsWhatTheCalendarHoldsAgainRatherThanReplayingIt()
+    {
+        // Arrange
+        this.commits.Enqueue(PersistenceCommitResult.ConcurrencyConflict);
+        this.Reads(Entry("one", Monday), Entry("two", Monday.AddHours(2)));
+
+        // Act
+        var summary = await this.AdvancePastTheBackoffAsync(
+            this.SignedIn().ImportAsync(File(), zoneId: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(CalendarImportOutcome.Read, summary.Outcome);
+        Assert.Equal(2, this.store.ImportedUidReads);
     }
 
     /// <summary>Somebody else having imported the file says nothing about this person's calendar.</summary>
@@ -259,12 +282,36 @@ public sealed class CalendarFileImportTests
 
     private async Task<int> HeldCountAsync() => (await this.HeldAsync()).Count;
 
+    /// <summary>Advances the fake clock in steps until a retried import has ended, and reports what it answered.</summary>
+    /// <remarks>
+    /// The wait between two attempts is measured on the same clock this test fixes, so an import whose commit lost a
+    /// race never resumes unless that clock is moved. A step past the policy's own ceiling ends each wait whatever the
+    /// jitter drew, and the guard is what ends the loop on real time so a policy that stopped making progress fails
+    /// this test rather than spinning a clock nothing is waiting on.
+    /// </remarks>
+    private async Task<CalendarImportSummary> AdvancePastTheBackoffAsync(Task<CalendarImportSummary> import)
+    {
+        var guarded = import.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        while (!guarded.IsCompleted)
+        {
+            this.clock.Advance(TimeSpan.FromSeconds(2));
+
+            await Task.Yield();
+        }
+
+        return await guarded;
+    }
+
     private CalendarFileImport SignedIn() => this.ImportFor(MailFathomPermission.MailRead);
 
     private CalendarFileImport ImportFor(params MailFathomPermission[] granted)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
-        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
+        sessionFactory
+            .BeginSessionAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => new StagedSession(
+                this.commits.Count == 0 ? PersistenceCommitResult.Committed : this.commits.Dequeue()));
 
         return new CalendarFileImport(
             AccessAuthorizations.ForUserGranted(Person, granted),
@@ -274,11 +321,11 @@ public sealed class CalendarFileImportTests
             this.clock);
     }
 
-    /// <summary>A session that commits whatever was staged in it, which is what a write's ordinary path needs.</summary>
-    private sealed class CommittingSession : IPersistenceSession
+    /// <summary>A session that ends the way the test arranged, which is how a lost race is expressed here.</summary>
+    private sealed class StagedSession(PersistenceCommitResult result) : IPersistenceSession
     {
         public Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(PersistenceCommitResult.Committed);
+            Task.FromResult(result);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

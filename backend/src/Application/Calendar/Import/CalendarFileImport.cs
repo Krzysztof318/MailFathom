@@ -19,10 +19,12 @@ namespace MailFathom.Application.Calendar.Import;
 /// </para>
 /// <para>
 /// <b>A person sees the count before anything is written.</b> <see cref="SummariseAsync" /> and
-/// <see cref="ImportAsync" /> read the same file the same way and answer with the same summary; the first writes
+/// <see cref="ImportAsync" /> read the same file the same way and answer in the same terms; the first writes
 /// nothing, and the second is what the person's confirmation performs. That is the acceptance an imported event
 /// rests on rather than a courtesy, because a file somebody else prepared is exactly the case where what is about to
-/// be created is not obvious from having chosen it.
+/// be created is not obvious from having chosen it. The two counts differ only where the calendar moved between
+/// them — the same file imported elsewhere in the meantime — and then the confirmation's own count is the true one,
+/// because it is taken in the attempt that committed.
 /// </para>
 /// <para>
 /// <b>The confirmation carries the file again rather than a token.</b> Nothing is staged between the two acts, so
@@ -99,7 +101,18 @@ public sealed class CalendarFileImport
         string? zoneId,
         CancellationToken cancellationToken)
     {
-        var (summary, _) = await this.ReadAsync(file, zoneId, cancellationToken);
+        var (outcome, offered, skipped) = this.Offered(file, zoneId);
+
+        if (outcome is not CalendarImportOutcome.Read)
+        {
+            return CalendarImportSummary.Refused(outcome);
+        }
+
+        var (summary, _) = await this.ResolveAsync(
+            this.authorization.RequireUser(),
+            offered,
+            skipped,
+            cancellationToken);
 
         return summary;
     }
@@ -121,55 +134,73 @@ public sealed class CalendarFileImport
         string? zoneId,
         CancellationToken cancellationToken)
     {
-        var (summary, events) = await this.ReadAsync(file, zoneId, cancellationToken);
+        var (outcome, offered, skipped) = this.Offered(file, zoneId);
 
-        if (events.Count == 0)
+        if (outcome is not CalendarImportOutcome.Read)
         {
-            return summary;
+            return CalendarImportSummary.Refused(outcome);
         }
 
         var owner = this.authorization.RequireUser();
 
-        await this.concurrencyRetryPolicy.CommitAsync(
+        if (offered.Count == 0)
+        {
+            var (nothingToWrite, _) = await this.ResolveAsync(owner, offered, skipped, cancellationToken);
+
+            return nothingToWrite;
+        }
+
+        return await this.concurrencyRetryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
+                // Which of these the calendar already holds is decided inside the attempt rather than once above it,
+                // because that is the whole of what a second attempt has to decide again. Two imports of one file
+                // both read a calendar holding neither, so the loser meets the unique index — and an attempt
+                // replaying the rows the first read composed would meet it again on every attempt until they ran out,
+                // which is a failed request rather than the convergence the index exists to produce. Reading here,
+                // the winner's entries are counted as already held and this attempt writes only what is still
+                // missing.
+                var (summary, events) = await this.ResolveAsync(
+                    owner,
+                    offered,
+                    skipped,
+                    attemptCancellationToken);
+
                 foreach (var written in events)
                 {
                     await this.store.AddAsync(session, owner, written, attemptCancellationToken);
                 }
+
+                return summary;
             },
             cancellationToken);
-
-        return summary;
     }
 
-    /// <summary>Reads the file into the events it would write and the report a person decides from.</summary>
+    /// <summary>Reads the file into the entries it offers, or into why the whole of it is refused.</summary>
     /// <remarks>
-    /// The one reading both acts share, which is what makes a confirmation act on what was shown. The events are
-    /// composed here rather than at the write, so the summary's count and the rows an import stages are the same list
-    /// rather than two derivations of one file.
+    /// The one reading both acts share, which is what makes a confirmation act on what was shown. It reaches nothing
+    /// this deployment holds, so it answers the same way however often it is asked; what the calendar already holds is
+    /// <see cref="ResolveAsync" />'s question, and it is a separate one because its answer changes underneath a
+    /// competing import while this one does not.
     /// </remarks>
-    private async Task<(CalendarImportSummary Summary, IReadOnlyList<CalendarEvent> Events)> ReadAsync(
+    private (CalendarImportOutcome Outcome, IReadOnlyList<CalendarFileEntry> Offered, IReadOnlyList<CalendarImportSkipReason> Skipped) Offered(
         Stream file,
-        string? zoneId,
-        CancellationToken cancellationToken)
+        string? zoneId)
     {
         ArgumentNullException.ThrowIfNull(file);
 
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var owner = this.authorization.RequireUser();
-
         if (ZoneOf(zoneId) is not { } zone)
         {
-            return (CalendarImportSummary.Refused(CalendarImportOutcome.UnknownTimeZone), []);
+            return (CalendarImportOutcome.UnknownTimeZone, [], []);
         }
 
         var reading = this.reader.Read(file, zone);
 
         if (reading.Outcome is not CalendarImportOutcome.Read)
         {
-            return (CalendarImportSummary.Refused(reading.Outcome), []);
+            return (reading.Outcome, [], []);
         }
 
         var skipped = new List<CalendarImportSkipReason>(reading.Skipped);
@@ -188,13 +219,32 @@ public sealed class CalendarFileImport
             }
         }
 
+        return (CalendarImportOutcome.Read, offered, skipped);
+    }
+
+    /// <summary>Decides which of the offered entries this calendar does not already hold, and what the person is told.</summary>
+    /// <remarks>
+    /// The events are composed here rather than at the write, so the summary's count and the rows an import stages are
+    /// the same list rather than two derivations of one file. It is asked once per attempt, which is what lets an
+    /// attempt that lost a race converge instead of replaying rows the winner has already committed.
+    /// </remarks>
+    private async Task<(CalendarImportSummary Summary, IReadOnlyList<CalendarEvent> Events)> ResolveAsync(
+        MailUserId owner,
+        IReadOnlyList<CalendarFileEntry> offered,
+        IReadOnlyList<CalendarImportSkipReason> skippedByReading,
+        CancellationToken cancellationToken)
+    {
         // Asked once for the whole file rather than per entry, and only about the identifiers this file names: the
         // question is which of these the calendar already holds, and reading every imported identifier a person has
         // would be a query that grows with their calendar instead of with the file they chose.
-        IReadOnlySet<ImportedCalendarEventUid> held = seen.Count == 0
+        IReadOnlySet<ImportedCalendarEventUid> held = offered.Count == 0
             ? new HashSet<ImportedCalendarEventUid>()
-            : await this.store.ReadImportedUidsAsync(owner, seen, cancellationToken);
+            : await this.store.ReadImportedUidsAsync(
+                owner,
+                [.. offered.Select(entry => entry.Uid)],
+                cancellationToken);
 
+        var skipped = new List<CalendarImportSkipReason>(skippedByReading);
         var recordedAt = this.timeProvider.GetUtcNow();
         var events = new List<CalendarEvent>(offered.Count);
 

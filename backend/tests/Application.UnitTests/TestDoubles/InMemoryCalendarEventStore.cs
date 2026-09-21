@@ -23,6 +23,13 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     /// <summary>Gets the window the last range read was composed with.</summary>
     internal CalendarEventQuery? LastQuery { get; private set; }
 
+    /// <summary>Gets how often the imported identifiers this calendar holds have been asked for.</summary>
+    /// <remarks>
+    /// Counted because a caller that has to decide again from a fresh read — an import whose commit lost a race — is
+    /// only doing so if it asked again, and nothing else it produces distinguishes that from replaying its first read.
+    /// </remarks>
+    internal int ImportedUidReads { get; private set; }
+
     /// <summary>Puts an event into somebody's calendar without a session, which is how a test arranges one.</summary>
     /// <param name="owner">Whose calendar holds it.</param>
     /// <param name="calendarEvent">The event.</param>
@@ -68,6 +75,8 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(candidates);
+
+        this.ImportedUidReads++;
 
         IReadOnlySet<ImportedCalendarEventUid> alreadyHeld = this.held
             .Where(entry => entry.Key.Owner == owner.Value)

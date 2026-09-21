@@ -188,6 +188,9 @@ arrived under. An entry that states none is skipped rather than imported under o
 such an event would be created again on every reading of the same file. It exists for a single question, asked by whoever reads such a file: has this entry already been
 imported here. One calendar holds an identifier at most once, and the database is what enforces that rather than a
 check before the insert — two imports running at once both read nothing, so only the constraint closes that window.
+The import that loses that race decides again from a fresh read rather than repeating the one it arrived with, so the
+winner's entries are counted as already held and the person is told what a second import in sequence would have told
+them.
 
 Two calendars holding one identifier is ordinary rather than a conflict: two people handed the same file each keep
 their own copy of what it described.
