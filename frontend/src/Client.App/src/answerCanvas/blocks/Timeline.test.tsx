@@ -6,6 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AnswerBlock, BlockEvidence, DeclaredSource, TimelineEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
+import { ReadingZoneContext } from '../../localization/useReadingZone';
 import { AnswerSourcesContext } from '../answerSources';
 import { Timeline } from './Timeline';
 
@@ -42,15 +43,22 @@ function renderTimeline(
     {
         sources = [agreement, addendum],
         follow = null,
-    }: { sources?: readonly DeclaredSource[]; follow?: ((of: string) => void) | null } = {},
+        timeZone = null,
+    }: {
+        sources?: readonly DeclaredSource[];
+        follow?: ((of: string) => void) | null;
+        timeZone?: string | null;
+    } = {},
 ) {
     const declared = new Map(sources.map((source) => [source.id, source]));
 
     return render(
         <LocalizationProvider>
-            <AnswerSourcesContext value={{ sources: declared, follow }}>
-                <Timeline block={block} />
-            </AnswerSourcesContext>
+            <ReadingZoneContext value={timeZone}>
+                <AnswerSourcesContext value={{ sources: declared, follow }}>
+                    <Timeline block={block} />
+                </AnswerSourcesContext>
+            </ReadingZoneContext>
         </LocalizationProvider>,
     );
 }
@@ -67,6 +75,12 @@ describe('Timeline', () => {
         const { container } = renderTimeline(chronology([signed]));
 
         expect(container.querySelector('time')?.getAttribute('dateTime')).toBe('2021-04-12T09:30:00+00:00');
+    });
+
+    it("places an event on the day the reader's own record states rather than on the sender's", () => {
+        renderTimeline(chronology([signed]), { timeZone: 'Pacific/Auckland' });
+
+        expect(screen.getByText('4/12/21, 9:30 PM')).toBeDefined();
     });
 
     it('says a date it cannot read rather than drawing an empty line where one belongs', () => {

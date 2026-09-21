@@ -5,6 +5,7 @@
 import type { AnswerBlock, TimelineEntry } from '@mailfathom/client-backend';
 import { wordInstant } from '../../localization/instants';
 import { useLocalization } from '../../localization/useLocalization';
+import { useReadingZone } from '../../localization/useReadingZone';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { Citation } from './Citation';
 import { timelineCounts } from './blockWording';
@@ -78,10 +79,11 @@ function DatedEvent({
     readonly positionOf: (source: string) => number;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
 
     // The instant the run sent is what the element carries and the reader's own spelling of it is what is drawn, which
     // is the rule `localization/instants.ts` states: a date read against a server's day is wrong for everybody else.
-    const worded = wordInstant(entry.occurredAt, locale, 'stamp');
+    const worded = wordInstant(entry.occurredAt, locale, 'stamp', timeZone);
 
     return (
         <>
