@@ -49,6 +49,60 @@ public sealed class AgentConversationEntrySerializationTests
             read.Select(entry => entry.EntryName));
     }
 
+    /// <summary>The turn an entry belongs to is in the payload, and it is the one thing whose loss nothing else reports.</summary>
+    /// <remarks>
+    /// An identifier with no settable member and no converter is written as the object its properties describe and read
+    /// back as the empty one, in silence — every entry still returns as its own kind, so a test asserting the kind
+    /// passes over a conversation whose every turn has become the same turn. The fold is what would eventually notice,
+    /// by refusing the second turn as one already opened, and that is a failure a long way from its cause.
+    /// </remarks>
+    [Fact]
+    public void Serialize_TheTurnAnEntryBelongsTo_SurvivesTheRoundTrip()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        AgentConversationEntry[] partsOfAnAnswer =
+        [
+            new AgentStatusReported(message, PresentationText.Create("reading the attachments")),
+            new AgentCitationDeclared(message, PresentationPlanExample.Citations()[0]),
+            new AgentBlockComposed(message, AgentConversationExample.Reading()),
+            new AgentActionProposed(message, AgentConversationExample.Actionable()),
+            new AgentAnswerEnded(message, AgentAnswerOutcome.Completed),
+        ];
+
+        // Act
+        var read = partsOfAnAnswer.Select(RoundTrip).ToArray();
+        var question = Assert.IsType<AgentMessageWritten>(
+            RoundTrip(AgentConversationExample.Question(message, "Where did we land on the price?")));
+        var opening = Assert.IsType<AgentAnswerStarted>(RoundTrip(new AgentAnswerStarted(message)));
+
+        // Assert
+        Assert.All(read, entry => Assert.Equal(message, entry.ComposedInto));
+        Assert.Equal(message, question.MessageId);
+        Assert.Equal(message, opening.MessageId);
+    }
+
+    /// <summary>The place and the conversation are the row's, so the payload carries neither and the store stamps both.</summary>
+    [Fact]
+    public void Serialize_ThePlaceAndTheConversationTheStoreStamps_AreNotInThePayload()
+    {
+        // Arrange
+        AgentConversationEntry entry = new AgentAnswerStarted(AgentMessageId.New())
+        {
+            ConversationId = AgentConversationExample.Conversation,
+            Sequence = 7,
+        };
+
+        // Act
+        var written = JsonSerializer.Serialize(entry, AgentConversationEntryJsonContext.Default.AgentConversationEntry);
+
+        // Assert
+        Assert.DoesNotContain("sequence", written, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(AgentConversationExample.Conversation.Value.ToString(), written, StringComparison.OrdinalIgnoreCase);
+    }
+
+
     /// <summary>A block is itself polymorphic, so an entry carrying one nests two discriminators.</summary>
     [Fact]
     public void Serialize_AnEntryCarryingABlock_ReadsTheBlockBackAsItsOwnType()

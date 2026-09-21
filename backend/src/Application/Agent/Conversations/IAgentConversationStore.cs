@@ -50,6 +50,7 @@ public interface IAgentConversationStore
 
     /// <summary>Writes one entry into a conversation, giving it the next place in that conversation.</summary>
     /// <param name="id">The conversation the entry belongs to.</param>
+    /// <param name="user">The person whose conversation it has to be.</param>
     /// <param name="entry">What happened, carrying neither a conversation nor a place of its own.</param>
     /// <param name="now">The instant the entry was written, in UTC.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -63,13 +64,22 @@ public interface IAgentConversationStore
     /// writers against each other, which a conversation genuinely has: a person may type while a run is composing.
     /// </para>
     /// <para>
-    /// Nothing is written for a conversation that does not exist, for one that is full, for an entry belonging to an
-    /// answer that is not the one being composed, or for an answer opened while another is still being composed. Each
-    /// of those is a statement about the conversation rather than a fault, so the caller stops rather than retrying.
+    /// Nothing is written for a conversation that does not exist, for one that is not this person's, for one that is
+    /// full, for an entry belonging to an answer that is not the one being composed, or for an answer opened while
+    /// another is still being composed. Each of those is a statement about the conversation rather than a fault, so
+    /// the caller stops rather than retrying.
+    /// </para>
+    /// <para>
+    /// The person is checked here as everywhere else, and it is worth saying why the run's own writes are not the
+    /// exception they look like. This is the path a person's own typed question takes as much as the path a composing
+    /// run takes, so leaving the check to the caller would leave one write in this store — the only one somebody
+    /// outside the deployment can cause — resting on a route remembering to do what every sibling method does itself.
+    /// The run always knows whose conversation it is answering in, so nothing is bought by exempting it.
     /// </para>
     /// </remarks>
     Task<long?> AppendAsync(
         AgentConversationId id,
+        MailUserId user,
         AgentConversationEntry entry,
         DateTimeOffset now,
         CancellationToken cancellationToken);
@@ -138,18 +148,20 @@ public interface IAgentConversationStore
 
     /// <summary>Names a conversation, which the agent does once it has read the first question.</summary>
     /// <param name="id">The conversation to name.</param>
+    /// <param name="user">The person whose conversation it has to be.</param>
     /// <param name="title">What to call it, at most <see cref="AgentConversationBounds.MaximumTitleLength" /> characters.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see langword="true" /> when the conversation was named; <see langword="false" /> when there is no such conversation.</returns>
+    /// <returns><see langword="true" /> when the conversation was named; <see langword="false" /> where this person has no such conversation.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is the unspecified default or is longer than the bound.</exception>
     /// <remarks>
-    /// It takes no person, because the agent naming a conversation it is answering in is the deployment writing rather
-    /// than somebody acting on somebody else's record — the same reason appending takes none. It leaves the instant the
-    /// history is ordered by alone, a name being a fact about the conversation rather than a turn of it, and it writes
-    /// over whatever name the conversation held, so a later naming is the one that stands.
+    /// It leaves the instant the history is ordered by alone, a name being a fact about the conversation rather than a
+    /// turn of it, and it writes over whatever name the conversation held, so a later naming is the one that stands.
+    /// The person is checked as in every other method here: the agent naming a conversation always knows whose it is
+    /// answering in, so nothing is bought by making this the one write a caller could point anywhere.
     /// </remarks>
     Task<bool> TrySetTitleAsync(
         AgentConversationId id,
+        MailUserId user,
         PresentationText title,
         CancellationToken cancellationToken);
 

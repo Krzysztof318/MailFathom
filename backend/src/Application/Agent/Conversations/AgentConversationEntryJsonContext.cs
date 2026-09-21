@@ -33,6 +33,7 @@ namespace MailFathom.Application.Agent.Conversations;
     UseStringEnumConverter = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     Converters = [
+        typeof(AgentMessageIdJsonConverter),
         typeof(StoredEmailIdJsonConverter),
         typeof(EmailChunkIdJsonConverter),
         typeof(EmailAddressJsonConverter),

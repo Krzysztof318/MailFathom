@@ -85,6 +85,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
                     WHEN @endsTheAnswer THEN NULL
                     ELSE c."{AgentConversationEntity.ComposingMessageIdColumnName}" END
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
+              AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
               AND c."{AgentConversationEntity.SequenceColumnName}" < @mostEntries
               AND (NOT @opensTheAnswer OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" IS NULL)
               AND (@composedInto IS NULL OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" = @composedInto)
@@ -130,9 +131,8 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// arriving together would each read the offer as unanswered and each write an acceptance.
     /// </para>
     /// <para>
-    /// The person is checked here and not in appending, because this is somebody acting on their own record while
-    /// appending is the deployment writing into it. A conversation that is not theirs answers exactly as one that never
-    /// existed does.
+    /// The person is checked here as in every other statement: a conversation that is not theirs answers exactly as
+    /// one that never existed does, which is one answer for every way the move was not this caller's to make.
     /// </para>
     /// </remarks>
     private const string ResolveProposalStatement = $"""
@@ -228,7 +228,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     private const string SetTitleStatement = $"""
         UPDATE "{AgentConversationEntity.TableName}"
         SET "{AgentConversationEntity.TitleColumnName}" = @title
-        WHERE "{AgentConversationEntity.IdColumnName}" = @id;
+        WHERE "{AgentConversationEntity.IdColumnName}" = @id AND "{AgentConversationEntity.UserIdColumnName}" = @userId;
         """;
 
     /// <summary>Removes a conversation this person holds, and everything it held with it through the cascade.</summary>
@@ -255,6 +255,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<long?> AppendAsync(
         AgentConversationId id,
+        MailUserId user,
         AgentConversationEntry entry,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -270,6 +271,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         await using var command = dataSource.CreateCommand(AppendEntryStatement);
         command.Parameters.AddWithValue("id", id.Value);
+        command.Parameters.AddWithValue("userId", user.Value);
         command.Parameters.AddWithValue("kind", entry.EntryName);
         command.Parameters.Add(Payload(entry));
         command.Parameters.AddWithValue("now", now.ToUniversalTime());
@@ -414,6 +416,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<bool> TrySetTitleAsync(
         AgentConversationId id,
+        MailUserId user,
         PresentationText title,
         CancellationToken cancellationToken)
     {
@@ -431,6 +434,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         await using var command = dataSource.CreateCommand(SetTitleStatement);
         command.Parameters.AddWithValue("id", id.Value);
+        command.Parameters.AddWithValue("userId", user.Value);
         command.Parameters.AddWithValue("title", title.Value);
 
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;

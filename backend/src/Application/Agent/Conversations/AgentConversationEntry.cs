@@ -48,12 +48,20 @@ public abstract record AgentConversationEntry
     /// <summary>Gets the conversation this happened in.</summary>
     /// <remarks>
     /// Carried on the entry rather than left to the read it arrived over, so a client holding several conversations
-    /// never has to infer which one an entry belongs to from where it read it.
+    /// never has to infer which one an entry belongs to from where it read it. It is the row's rather than the
+    /// payload's, for the reason <see cref="Sequence" /> is.
     /// </remarks>
+    [JsonIgnore]
     public AgentConversationId ConversationId { get; init; }
 
     /// <summary>Gets the place this holds in the conversation, counted from one.</summary>
-    /// <remarks>Zero is what an entry that has not been written yet carries, and no written entry ever has it.</remarks>
+    /// <remarks>
+    /// Zero is what an entry that has not been written yet carries, and no written entry ever has it. Both this and
+    /// <see cref="ConversationId" /> stay out of the stored payload: the place is derived inside the statement that
+    /// writes the row, so an entry is serialized before either is known, and the store stamps both from the row it
+    /// read them off. A payload carrying its own copy could only ever disagree with the row.
+    /// </remarks>
+    [JsonIgnore]
     public long Sequence { get; init; }
 
     /// <summary>Gets the name this entry is written under, which is the value the type discriminator carries.</summary>
