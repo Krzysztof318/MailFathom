@@ -441,6 +441,20 @@ describe('readDiscoveryRunTail', () => {
         expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
+    it('refuses a declared source it cannot read rather than drawing a block that names it', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([{ event: 'citation', sequence: 2, citation: { id: 'c-1', label: 'Agreement' } }]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
     it('carries an event kind this contract does not name so the cursor moves past it', async () => {
         const answered = await readDiscoveryRunTail(
             session,

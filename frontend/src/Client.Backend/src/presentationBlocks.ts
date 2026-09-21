@@ -151,7 +151,9 @@ export function parseBlockEvidence(value: unknown): BlockEvidence | null {
 
     const conflictingClaims = parseConflictingClaims(record['conflictingClaims'], citations);
 
-    return conflictingClaims === null ? null : { support, citations, freshness, conflictingClaims };
+    return conflictingClaims === null || !matchesVerdict(support, citations, freshness, conflictingClaims)
+        ? null
+        : { support, citations, freshness, conflictingClaims };
 }
 
 /** One source a run declared, or `null` where what arrived is not a declaration this client can read. */
@@ -241,6 +243,41 @@ function parseEvidenceEntry(value: unknown): EvidenceEntry | null {
     return typeof relevance === 'number' && Number.isFinite(relevance) && relevance >= 0 && relevance <= 1
         ? { source, fragment, relevance, freshness }
         : null;
+}
+
+/**
+ * Whether what the block says about itself holds together, which is the shape the plan composes each verdict under.
+ *
+ * A verdict is drawn as a chip and the sides of a disagreement are drawn as a list, each read from a different member,
+ * so a block whose members disagree with each other draws two contradictory things at once — a settled *supported*
+ * over a list of sources that do not agree, or a *supported* over nothing that backs it. The plan refuses every one of
+ * these, and so does this: what is stated here is that rule and not a stricter one of this client's own.
+ */
+function matchesVerdict(
+    support: BlockSupport,
+    citations: readonly string[],
+    freshness: SourceFreshness,
+    conflictingClaims: readonly ConflictingClaim[],
+): boolean {
+    if (support === 'Conflicting') {
+        // A conflict is between sources and is presented as both of its sides, so neither half of it can be one thing.
+        return citations.length >= 2 && conflictingClaims.length >= 2;
+    }
+
+    if (conflictingClaims.length > 0) {
+        return false;
+    }
+
+    switch (support) {
+        case 'Supported':
+            return citations.length > 0 && freshness.staleness !== 'Stale';
+
+        case 'Unsupported':
+            return citations.length === 0;
+
+        case 'Stale':
+            return citations.length > 0 && freshness.staleness === 'Stale';
+    }
 }
 
 /**

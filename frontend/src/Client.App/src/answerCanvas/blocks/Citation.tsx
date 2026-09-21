@@ -44,8 +44,11 @@ export function Citation({ source, position }: { readonly source: string; readon
               }
             : undefined;
 
+    // Two different reasons a citation cannot be followed, and each says its own sentence rather than one wrapping the
+    // other: a source this client was never given is already an explanation, and saying *not built yet* over it would
+    // report the whole capability as missing on a screen where every other citation follows perfectly well.
     const unfollowable = following === undefined;
-    const why = unfollowable ? translate('control.notBuiltYet', { control: named }) : named;
+    const why = unfollowable && declared !== undefined ? translate('control.notBuiltYet', { control: named }) : named;
 
     return (
         <button

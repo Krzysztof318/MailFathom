@@ -81,6 +81,37 @@ describe('parseBlockEvidence', () => {
         expect(parseBlockEvidence(evidence({ citations: ['c-1', 'c-1'] }))).toBeNull();
     });
 
+    it('refuses more sides of a disagreement than one block may present', () => {
+        const conflictingClaims = Array.from({ length: 7 }, (_, at) => ({
+            statement: `Side ${String(at)}`,
+            sources: ['c-1'],
+        }));
+
+        expect(
+            parseBlockEvidence(evidence({ support: 'Conflicting', citations: ['c-1', 'c-2'], conflictingClaims })),
+        ).toBeNull();
+    });
+
+    it.each([
+        ['a supported block backed by nothing', { citations: [] }],
+        ['a supported block read from a copy known to be behind', { freshness: { staleness: 'Stale' } }],
+        ['an unsupported block naming the source it is supposed not to have', { support: 'Unsupported' }],
+        [
+            'a settled block presenting sides of a disagreement',
+            { conflictingClaims: [{ statement: 'A', sources: ['c-1'] }] },
+        ],
+        [
+            'a conflict presented as one side',
+            {
+                support: 'Conflicting',
+                citations: ['c-1', 'c-2'],
+                conflictingClaims: [{ statement: 'A', sources: ['c-1'] }],
+            },
+        ],
+    ])('refuses %s, which says two things at once', (_case, over) => {
+        expect(parseBlockEvidence(evidence(over))).toBeNull();
+    });
+
     it('refuses a verdict this contract does not carry rather than reading it as a settled one', () => {
         expect(parseBlockEvidence(evidence({ support: 'ProbablyFine' }))).toBeNull();
     });

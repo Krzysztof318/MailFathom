@@ -60,7 +60,9 @@ describe('Citation', () => {
     it('says a source this client was never given rather than drawing the fact uncited', () => {
         renderCitation({ declared: false, follow: vi.fn() });
 
-        expect(screen.getByRole('button').getAttribute('aria-label')).toContain(
+        // The reason is its own sentence rather than one wrapped in another: every other citation on the screen
+        // follows, so reporting this one as a capability nobody has built would be false as well as doubled.
+        expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
             'Citation 1 — this client was not given the source behind it',
         );
     });
