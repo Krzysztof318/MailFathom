@@ -72,11 +72,7 @@ describe('App session', () => {
         renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
-        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
-            'Discover',
-            'Cases',
-            'Agent',
-        ]);
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Discover', 'Cases', 'Agent']);
     });
 
     it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {

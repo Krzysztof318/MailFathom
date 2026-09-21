@@ -187,11 +187,7 @@ export function useTasks(session: ClientSession | null, transport: MailFathomTra
 // What one half stands at after an answer: appended where this was a further page, replaced where it was the first,
 // and left alone where the walk had already ended and nothing was asked. A failure is left alone as well, because the
 // caller has already turned it into the failure the whole read reports.
-function halfAfter(
-    carried: HeldHalf,
-    answer: ClientResult<PersonalTaskPage> | null,
-    continuing: boolean,
-): HeldHalf {
+function halfAfter(carried: HeldHalf, answer: ClientResult<PersonalTaskPage> | null, continuing: boolean): HeldHalf {
     if (answer === null || answer.outcome === 'failed') {
         return carried;
     }

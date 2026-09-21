@@ -164,9 +164,7 @@ export function TaskRow({
 
                 <div className="flex min-w-0 flex-col gap-1.5">
                     <div className="flex flex-wrap items-baseline gap-2">
-                        <span
-                            className={`text-base text-pretty ${task.completed ? 'text-muted line-through' : ''}`}
-                        >
+                        <span className={`text-base text-pretty ${task.completed ? 'text-muted line-through' : ''}`}>
                             {task.title}
                         </span>
 

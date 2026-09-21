@@ -147,7 +147,10 @@ function deployment({
 
 function drawSpace(
     transport: MailFathomTransport,
-    { asksDeployment = true, onOpenMessage = vi.fn() }: { asksDeployment?: boolean; onOpenMessage?: (id: string) => void } = {},
+    {
+        asksDeployment = true,
+        onOpenMessage = vi.fn(),
+    }: { asksDeployment?: boolean; onOpenMessage?: (id: string) => void } = {},
 ): void {
     render(
         <LocalizationProvider>
@@ -457,9 +460,7 @@ describe('TasksSpace', () => {
         drawSpace(transport);
 
         await waitFor(() => {
-            expect(
-                screen.getByText('Everything on the list is done. Turn on “Show done” to see it.'),
-            ).toBeDefined();
+            expect(screen.getByText('Everything on the list is done. Turn on “Show done” to see it.')).toBeDefined();
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Show done' }));
@@ -516,5 +517,21 @@ describe('TasksSpace', () => {
         await screen.findByText('Answer the tender');
 
         expect(screen.getByRole('button', { name: 'New task' })).toBeDefined();
+    });
+
+    // The sidebar stands beside the list where there is room and under it where there is not, and the difference
+    // between those two is a stylesheet's. What a test here can say is the part that would be a defect either way:
+    // that both panels are still in the document at the narrowest composition rather than dropped out of it.
+    it('keeps both sidebar panels reachable at a phone width rather than dropping them', async () => {
+        atWidth(phone);
+
+        const { transport } = deployment();
+
+        drawSpace(transport);
+
+        await screen.findByText('Answer the tender');
+
+        expect(screen.getByRole('heading', { name: "Today's calendar" })).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'Day capacity' })).toBeDefined();
     });
 });

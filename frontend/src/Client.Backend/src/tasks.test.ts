@@ -220,9 +220,7 @@ describe('setTaskCompletion', () => {
         await setTaskCompletion(session, transport, asserted.id, true);
 
         expect(requests[0]?.method).toBe('POST');
-        expect(requests[0]?.path).toBe(
-            `https://mail.example.invalid/api/client/tasks/${asserted.id}/completion`,
-        );
+        expect(requests[0]?.path).toBe(`https://mail.example.invalid/api/client/tasks/${asserted.id}/completion`);
         expect(requests[0]?.body).toBe(JSON.stringify({ completed: true }));
     });
 

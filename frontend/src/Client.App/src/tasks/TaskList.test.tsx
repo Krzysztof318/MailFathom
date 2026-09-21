@@ -79,10 +79,7 @@ function headings(): (string | null)[] {
 describe('TaskList', () => {
     it('groups what is due by when it is due, and draws no heading nothing stands under', () => {
         drawList({
-            tasks: [
-                taskDue('a', 'Answer the tender', '2026-09-21'),
-                taskDue('b', 'Send the invoice', '2026-09-25'),
-            ],
+            tasks: [taskDue('a', 'Answer the tender', '2026-09-21'), taskDue('b', 'Send the invoice', '2026-09-25')],
         });
 
         expect(headings()).toStrictEqual(['Today', 'This week']);
@@ -90,10 +87,7 @@ describe('TaskList', () => {
 
     it('draws each heading with how much stands under it', () => {
         drawList({
-            tasks: [
-                taskDue('a', 'Answer the tender', '2026-09-21'),
-                taskDue('b', 'File the return', '2026-09-21'),
-            ],
+            tasks: [taskDue('a', 'Answer the tender', '2026-09-21'), taskDue('b', 'File the return', '2026-09-21')],
         });
 
         expect(screen.getByText('2')).toBeDefined();
@@ -182,10 +176,7 @@ describe('TaskList', () => {
         const onSelected = vi.fn();
 
         drawList({
-            tasks: [
-                taskDue('a', 'Answer the tender', '2026-09-21'),
-                taskDue('b', 'File the return', '2026-09-21'),
-            ],
+            tasks: [taskDue('a', 'Answer the tender', '2026-09-21'), taskDue('b', 'File the return', '2026-09-21')],
             selected: ['a'],
             onSelected,
         });

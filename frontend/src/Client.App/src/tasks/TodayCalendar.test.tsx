@@ -37,9 +37,7 @@ function eventAt(id: string, title: string, start: string): CalendarEvent {
 function drawDay(day: Partial<TodayCalendarInForce> = {}): void {
     render(
         <LocalizationProvider>
-            <TodayCalendar
-                day={{ events: [], reading: false, failure: null, readAgain: vi.fn(), ...day }}
-            />
+            <TodayCalendar day={{ events: [], reading: false, failure: null, readAgain: vi.fn(), ...day }} />
         </LocalizationProvider>,
     );
 }

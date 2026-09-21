@@ -152,12 +152,13 @@ export function TaskList({
             }}
         >
             {groups.map((group) => (
-                <section key={group.name} aria-labelledby={`${headings}-${group.name}`} className="flex flex-col gap-2.25">
+                <section
+                    key={group.name}
+                    aria-labelledby={`${headings}-${group.name}`}
+                    className="flex flex-col gap-2.25"
+                >
                     <div className="flex items-center gap-2.25">
-                        <h2
-                            id={`${headings}-${group.name}`}
-                            className="text-xs tracking-widest text-muted uppercase"
-                        >
+                        <h2 id={`${headings}-${group.name}`} className="text-xs tracking-widest text-muted uppercase">
                             {translate(groupLabels[group.name])}
                         </h2>
                         <span className="rounded-4xl border border-line bg-rail px-1.75 text-xs text-muted">

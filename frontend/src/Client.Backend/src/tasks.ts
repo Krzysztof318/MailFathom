@@ -267,10 +267,7 @@ export function eraseTask(
  * A screen asks it because a control promising an arrangement over a deployment that composes none fails a person at
  * the one moment they trusted it.
  */
-export function arrangesDays(
-    session: ClientSession,
-    transport: MailFathomTransport,
-): Promise<ClientResult<boolean>> {
+export function arrangesDays(session: ClientSession, transport: MailFathomTransport): Promise<ClientResult<boolean>> {
     return spanned(`GET ${todayLayoutRoute}`, async () => {
         const response = await send(transport, {
             method: 'GET',

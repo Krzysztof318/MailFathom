@@ -197,7 +197,10 @@ export function TasksSpace({
         }
 
         void setTaskCompletion(session, transport, task.id, !task.completed).then((answer) => {
-            after([{ failed: answer.outcome === 'failed' }], task.completed ? 'tasks.markedNotDone' : 'tasks.markedDone');
+            after(
+                [{ failed: answer.outcome === 'failed' }],
+                task.completed ? 'tasks.markedNotDone' : 'tasks.markedDone',
+            );
         });
     }
 

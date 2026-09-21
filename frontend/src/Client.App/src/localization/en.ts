@@ -1453,12 +1453,14 @@ export const en = {
     'tasks.reading': 'Reading…',
     'tasks.readingMore': 'Reading more…',
     'tasks.readAgain': 'Try again',
-    'tasks.empty': 'Nothing is on the list. A task written down here, or one MailFathom reads out of your mail, appears under the day it is due.',
+    'tasks.empty':
+        'Nothing is on the list. A task written down here, or one MailFathom reads out of your mail, appears under the day it is due.',
     'tasks.allDone': 'Everything on the list is done. Turn on “Show done” to see it.',
     'tasks.failedUnauthenticated': 'Your session is no longer accepted, so the list could not be read. Sign in again.',
     'tasks.failedUnauthorized': 'This credential may not read your tasks.',
     'tasks.failedUnavailable': 'The deployment did not answer.',
-    'tasks.failedUnreadable': 'The deployment answered with something this client could not read. This is worth reporting as a defect.',
+    'tasks.failedUnreadable':
+        'The deployment answered with something this client could not read. This is worth reporting as a defect.',
     'tasks.fromMail': 'from mail',
     'tasks.openSource': 'Open the message this came from',
     'tasks.noDay': 'No day',
@@ -1501,10 +1503,12 @@ export const en = {
     'tasks.openTheCalendar': 'Open the calendar',
     'tasks.dayReading': 'Reading the day…',
     'tasks.dayEmpty': 'Nothing is in the calendar today.',
-    'tasks.dayFailedUnauthenticated': 'Your session is no longer accepted, so the day could not be read. Sign in again.',
+    'tasks.dayFailedUnauthenticated':
+        'Your session is no longer accepted, so the day could not be read. Sign in again.',
     'tasks.dayFailedUnauthorized': 'This credential may not read your calendar.',
     'tasks.dayFailedUnavailable': 'The deployment did not answer.',
-    'tasks.dayFailedUnreadable': 'The deployment answered with a day this client could not read. This is worth reporting as a defect.',
+    'tasks.dayFailedUnreadable':
+        'The deployment answered with a day this client could not read. This is worth reporting as a defect.',
     'tasks.authored': 'AI',
     'tasks.dayCapacity': 'Day capacity',
     'tasks.capacityTasks.one': 'One task is due today.',

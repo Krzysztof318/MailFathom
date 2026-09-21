@@ -103,9 +103,7 @@ describe('useTasks', () => {
 
     it('says it is reading until both halves have answered', () => {
         render(
-            <List
-                transport={answering({ committed: [pageOf([], null)], proposed: [pageOf([], null)] }).transport}
-            />,
+            <List transport={answering({ committed: [pageOf([], null)], proposed: [pageOf([], null)] }).transport} />,
         );
 
         expect(screen.getByText('reading')).toBeDefined();
@@ -186,7 +184,10 @@ describe('useTasks', () => {
 
     it('appends a further page rather than replacing what is already read', async () => {
         const deployment = answering({
-            committed: [pageOf([task('a', 'Answer the tender', '2026-09-22')], 'more-committed'), pageOf([task('c', 'File the return', '2026-09-25')], null)],
+            committed: [
+                pageOf([task('a', 'Answer the tender', '2026-09-22')], 'more-committed'),
+                pageOf([task('c', 'File the return', '2026-09-25')], null),
+            ],
             proposed: [pageOf([], null)],
         });
 

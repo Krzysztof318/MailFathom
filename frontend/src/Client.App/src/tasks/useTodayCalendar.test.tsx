@@ -117,7 +117,10 @@ describe('useTodayCalendar', () => {
     });
 
     it('says why the day did not answer, and reads it again when asked to', async () => {
-        const deployment = answering([503, JSON.stringify({ events: [event('a', 'Standup', '2026-09-21T07:00:00+00:00')] })]);
+        const deployment = answering([
+            503,
+            JSON.stringify({ events: [event('a', 'Standup', '2026-09-21T07:00:00+00:00')] }),
+        ]);
 
         render(<Day transport={deployment.transport} />);
 
