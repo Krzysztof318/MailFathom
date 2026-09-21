@@ -16,10 +16,11 @@ set -euo pipefail
 # administrative endpoint — which is why that endpoint is served rather than optional. A fresh database holds nobody,
 # and a user is the operator's to record first, so the run prints the commands that do both.
 #
-# It provisions no credential to sign in to that page with, and that is the current client rather than an omission: the
-# React client reads its own sample data and calls no endpoint yet, so a password would be a record nothing can present.
-# The client surface it is served on is served behind `password` all the same, because it is a mail-reading endpoint and
-# what will call it is a browser. docs/operations/client-endpoint.md is what provisions one by hand.
+# It provisions no credential to sign in to that page with, and that is the shape of a password rather than a gap in
+# the run: a username and password is a record beside a user in the running deployment, so there is nothing to write
+# into a file before anything is up. The page opens on its sign-in screen and reads this deployment's mail with the
+# session it is given, so the run prints the command that mints one — mfctl credential create --method password — for
+# the same reason it prints the one that mints the MCP key, and for the same endpoint.
 #
 # Usage:
 #   scripts/quick-start-compose.sh
@@ -406,9 +407,10 @@ The MailFathom client is the web interface onto the same mailbox, and it travels
 so preparing it is two settings rather than anything to install. It is served at
 http://127.0.0.1:$published_port/, on the port above.
 
-It is early: what the page draws today is its own sample data rather than this deployment's mail, so
-nothing signs in to it yet and no credential is prepared for one. The surface it will call is served
-behind a password all the same, because it reads mail. Pass --no-client to prepare neither.
+The page opens on a sign-in screen and reads this deployment's mail with the session it is given, so
+somebody needs a credential before it shows them anything. None is prepared here: a password is a
+record beside a user in the running deployment rather than a file, so what this run gives you at the
+end is the command that mints one. Pass --no-client to prepare neither the page nor the surface.
 
 Everything the page and that surface exchange crosses the same plain-HTTP hop everything else here
 does. On a port published to 127.0.0.1 that hop is this machine; it is reported at every startup, and
@@ -560,11 +562,11 @@ fi
 # The client's own surface, which is where the page a browser downloads is served from and what it will call back to. It
 # accepts one method and nothing else: a user's username and password is the one credential a person can present from
 # a browser without an authorization server behind it, and an evaluation has none. The entry names the method and holds
-# no credential — a record is minted over the administrative endpoint, and this script mints none, because the page does
-# not sign in yet. No port is stated, because the endpoints share the container's 8080 and that is the socket
-# compose.yaml publishes. The origin list is empty for the same reason the endpoint below states one: the page this
-# deployment serves is same-origin, so an absent list — which is every browser origin — would open the mail-reading
-# surface to sites that have no business calling it.
+# no credential — a record is minted over the administrative endpoint once the deployment is up, which is why this
+# script prints that command rather than writing a file. No port is stated, because the endpoints share the container's
+# 8080 and that is the socket compose.yaml publishes. The origin list is empty for the same reason the endpoint below
+# states one: the page this deployment serves is same-origin, so an absent list — which is every browser origin —
+# would open the mail-reading surface to sites that have no business calling it.
 client_section=''
 if [[ "$serve_client" == 'yes' ]]; then
   client_section=$(
@@ -755,9 +757,12 @@ report_connection() {
 
   if [[ "$serve_client" == 'yes' ]]; then
     printf '\nThe MailFathom client answers at http://127.0.0.1:%s/ — open it in a browser.\n' "$published_port" >&2
-    printf 'It is early: the page draws its own sample data rather than this mailbox, and nothing signs in to\n' >&2
-    printf 'it yet, so no credential was prepared for one. %s/operations/client-endpoint.html\n' \
-      "$documentation_base" >&2
+    printf 'It opens on a sign-in screen and reads this mailbox with the session it is given, so somebody\n' >&2
+    printf 'needs a credential before it shows them anything. Mint one for the user this deployment serves,\n' >&2
+    printf 'through the same administrative endpoint below that records them:\n\n' >&2
+    printf '  mfctl credential create --method password --username <name>\n\n' >&2
+    printf 'It reads the password without echo, and nothing here or in the deployment can report it back\n' >&2
+    printf 'afterwards. %s/operations/client-endpoint.html\n' "$documentation_base" >&2
   fi
 
   printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
@@ -839,9 +844,24 @@ This is a deployment to evaluate MailFathom with. Before it is one anybody depen
   Transport   Both ports are published on 127.0.0.1 and MailFathom terminates no TLS, so a client on
               another machine has nothing to connect to and nothing protecting it if it did. Every
               credential presented crosses that hop readable, which the host says at every startup.
+TEXT
+
+  if [[ "$serve_client" == 'yes' ]]; then
+    # Both surfaces answer on the container's 8080, and a socket whose surfaces disagree about TLS is refused at
+    # startup — so naming only one of them here is an instruction that produces a host which does not come up.
+    cat << TEXT >&2
+              Put a TLS-terminating proxy in front, or configure McpEndpoint:Https and
+              ClientEndpoint:Https together: they share this port, and a socket whose surfaces
+              disagree about TLS is refused at startup.
+              $documentation_base/operations/mcp-endpoint.html
+              $documentation_base/operations/client-endpoint.html
+TEXT
+  else
+    cat << TEXT >&2
               Put a TLS-terminating proxy in front, or configure McpEndpoint:Https.
               $documentation_base/operations/mcp-endpoint.html
 TEXT
+  fi
 
   if [[ "$relax_tls_policy" == 'yes' ]]; then
     cat << TEXT >&2

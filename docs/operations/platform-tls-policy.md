@@ -1,6 +1,6 @@
 # The platform TLS policy and legacy mail servers
 
-<!-- describes: deploy/openssl/**, backend/src/Infrastructure/Mail/**, backend/src/Infrastructure/Certificates/** -->
+<!-- describes: deploy/openssl/**, scripts/quick-start-compose.sh, backend/src/Infrastructure/Mail/**, backend/src/Infrastructure/Certificates/** -->
 
 Every TLS connection MailFathom makes is handshaked by the system OpenSSL, and OpenSSL refuses parameters its own
 security policy considers too weak before MailFathom sees the server at all. On Ubuntu that policy is compiled in at

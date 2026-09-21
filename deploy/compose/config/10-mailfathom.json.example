@@ -104,9 +104,10 @@
   // something an operator turned on, so a file copied verbatim serves no browser — only the MCP endpoint and the
   // administrative one. Uncomment it
   // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
-  // writes the first two. It provisions no credential, because the page it prepares reads its own sample data and
-  // calls nothing yet. The empty origin list is the same posture as the endpoint below and for the same reason: the
-  // page this deployment serves is same-origin, so no browser origin beyond it has any business calling the surface.
+  // writes the first two and prints the command for the third, which is minted against a running deployment rather
+  // than written into a file. The empty origin list is the same posture as the endpoint below and for the same
+  // reason: the page this deployment serves is same-origin, so no browser origin beyond it has any business calling
+  // the surface.
   // A downloaded desktop or Android head is such an origin — `tauri://localhost` or `http://tauri.localhost`, which
   // its webview enforces exactly as a browser would — so a deployment reached by one lists it here instead.
   //
