@@ -2,14 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { ReactNode } from 'react';
-import { understoodPlanSchemaVersion } from '@mailfathom/client-backend';
+import { useMemo, type ReactNode } from 'react';
+import { understoodPlanSchemaVersion, type DeclaredSource } from '@mailfathom/client-backend';
 import { Containment } from '../containment/Containment';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from './AnswerBlockCard';
 import { answerBlockRenderers, type AnswerBlockState, type AnswerBlockRenderers } from './answerBlocks';
+import { AnswerSourcesContext } from './answerSources';
 import type { ArrivedAnswerBlock, RunReadFailure } from './followedRun';
 
 // Where a presentation plan becomes a screen. It is a host rather than a switch statement, and three properties are
@@ -44,6 +45,8 @@ const readFailures: Readonly<Record<RunReadFailure, { readonly state: AnswerBloc
  * A presentation plan as far as it has been composed.
  *
  * @param blocks The blocks the run has published, in the order it published them.
+ * @param sources The sources the run has declared, which every block draws the citations it rests on out of.
+ * @param onFollowSource What following one source does, and nothing where this surface offers nowhere to follow it to.
  * @param running Whether more is still coming, which is what the place held at the end of the list stands for.
  * @param planSchemaVersion The revision the run's plan was written against, and `null` before the run has said.
  * @param failure Why the last read of the run did not answer, which is what the place still coming says instead of
@@ -55,6 +58,8 @@ const readFailures: Readonly<Record<RunReadFailure, { readonly state: AnswerBloc
  */
 export function AnswerCanvas({
     blocks,
+    sources,
+    onFollowSource = null,
     running,
     planSchemaVersion,
     failure = null,
@@ -63,6 +68,8 @@ export function AnswerCanvas({
     evidence,
 }: {
     readonly blocks: readonly ArrivedAnswerBlock[];
+    readonly sources: ReadonlyMap<string, DeclaredSource>;
+    readonly onFollowSource?: ((source: string) => void) | null;
     readonly running: boolean;
     readonly planSchemaVersion: number | null;
     readonly failure?: RunReadFailure | null;
@@ -75,67 +82,73 @@ export function AnswerCanvas({
     const ahead = planSchemaVersion !== null && planSchemaVersion > understoodPlanSchemaVersion;
     const unread = failure === null ? undefined : readFailures[failure];
 
+    // Memoized against the two values it is composed of rather than rebuilt per render, because every block renderer
+    // reads it: a fresh object each time would redraw the whole answer whenever anything above it rendered.
+    const declared = useMemo(() => ({ sources, follow: onFollowSource }), [sources, onFollowSource]);
+
     return (
-        <div className="flex flex-col gap-5.5 desktop:grid desktop:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] desktop:items-start">
-            <div className="flex min-w-0 flex-col gap-4">
-                {ahead ? (
-                    <p
-                        className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text"
-                        role="status"
-                    >
-                        <Icon className="mt-0.25 size-3.75" name="hourglass_top" />
+        <AnswerSourcesContext value={declared}>
+            <div className="flex flex-col gap-5.5 desktop:grid desktop:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] desktop:items-start">
+                <div className="flex min-w-0 flex-col gap-4">
+                    {ahead ? (
+                        <p
+                            className="flex items-start gap-1.75 rounded-md bg-warning-soft px-2.75 py-2 text-sm text-warning-text"
+                            role="status"
+                        >
+                            <Icon className="mt-0.25 size-3.75" name="hourglass_top" />
 
-                        {translate('answerCanvas.planAhead', {
-                            plan: String(planSchemaVersion),
-                            client: String(understoodPlanSchemaVersion),
-                        })}
-                    </p>
-                ) : null}
+                            {translate('answerCanvas.planAhead', {
+                                plan: String(planSchemaVersion),
+                                client: String(understoodPlanSchemaVersion),
+                            })}
+                        </p>
+                    ) : null}
 
-                {/* An ordered list, because the order the run composed the blocks in is the order the answer reads in:
+                    {/* An ordered list, because the order the run composed the blocks in is the order the answer reads in:
                     a screen reader is told how many there are and which one it is on, and the keyboard moves from one
                     card to the next without walking everything inside the one it is leaving. */}
-                {blocks.length === 0 && !running ? null : (
-                    <ol aria-label={translate('answerCanvas.blocks')} className="flex flex-col gap-4">
-                        {blocks.map((arrived) => (
-                            <li key={arrived.sequence}>
-                                {/* Contained one block at a time, and told which block it stands around: a boundary
+                    {blocks.length === 0 && !running ? null : (
+                        <ol aria-label={translate('answerCanvas.blocks')} className="flex flex-col gap-4">
+                            {blocks.map((arrived) => (
+                                <li key={arrived.sequence}>
+                                    {/* Contained one block at a time, and told which block it stands around: a boundary
                                     holds its failure until something clears it, so one drawing a different block later
                                     would otherwise go on saying that the first one failed. */}
-                                <Containment drawing={String(arrived.sequence)} region="answer_block">
-                                    <DrawnBlock block={arrived} renderers={renderers} />
-                                </Containment>
-                            </li>
-                        ))}
+                                    <Containment drawing={String(arrived.sequence)} region="answer_block">
+                                        <DrawnBlock block={arrived} renderers={renderers} />
+                                    </Containment>
+                                </li>
+                            ))}
 
-                        {running ? (
-                            <li>
-                                {/* Reading again is the way out of exactly one of the four, for the reason
+                            {running ? (
+                                <li>
+                                    {/* Reading again is the way out of exactly one of the four, for the reason
                                     `shell/ConnectionSummary.tsx` gives: a refused credential, a missing grant and an
                                     answer this client cannot parse each repeat identically on a second attempt, so
                                     offering the button there hands somebody an action that cannot work. */}
-                                <AnswerBlockCard
-                                    label={translate('answerCanvas.stillComing')}
-                                    note={unread === undefined ? undefined : translate(unread.note)}
-                                    state={unread?.state ?? 'loading'}
-                                    onRetry={failure === 'unavailable' ? onRetry : undefined}
-                                />
-                            </li>
-                        ) : null}
-                    </ol>
-                )}
+                                    <AnswerBlockCard
+                                        label={translate('answerCanvas.stillComing')}
+                                        note={unread === undefined ? undefined : translate(unread.note)}
+                                        state={unread?.state ?? 'loading'}
+                                        onRetry={failure === 'unavailable' ? onRetry : undefined}
+                                    />
+                                </li>
+                            ) : null}
+                        </ol>
+                    )}
 
-                {/* A run that ended having composed nothing is still an answer somebody waited for, so it says so
+                    {/* A run that ended having composed nothing is still an answer somebody waited for, so it says so
                     rather than leaving the space where the blocks would have been blank. */}
-                {!running && blocks.length === 0 ? (
-                    <p className="text-sm text-muted" role="status">
-                        {translate('answerCanvas.nothing')}
-                    </p>
-                ) : null}
-            </div>
+                    {!running && blocks.length === 0 ? (
+                        <p className="text-sm text-muted" role="status">
+                            {translate('answerCanvas.nothing')}
+                        </p>
+                    ) : null}
+                </div>
 
-            {evidence}
-        </div>
+                {evidence}
+            </div>
+        </AnswerSourcesContext>
     );
 }
 

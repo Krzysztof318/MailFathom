@@ -6,6 +6,7 @@ import type {
     AnswerBlock,
     ClientFailureReason,
     ClientResult,
+    DeclaredSource,
     DiscoveryRetrievalProgress,
     DiscoveryRunCeilings,
     DiscoveryRunEnding,
@@ -63,6 +64,15 @@ export interface FollowedAnswer {
     /** The blocks that have arrived, in the order the run published them. */
     readonly blocks: readonly ArrivedAnswerBlock[];
 
+    /**
+     * The sources the run has declared, by the name its blocks refer to each of them by.
+     *
+     * A run declares a source before anything names it, so a block drawn from this holds every source it rests on. It
+     * is kept beside the blocks rather than inside them because that is what the run publishes: two facts drawn from
+     * one message name one source, and a copy per block is how the same message comes to be drawn under two names.
+     */
+    readonly sources: ReadonlyMap<string, DeclaredSource>;
+
     /** Whether more is still coming. */
     readonly running: boolean;
 
@@ -96,6 +106,7 @@ export interface FollowedAnswer {
  */
 export const nothingRead: FollowedAnswer = {
     blocks: [],
+    sources: new Map(),
     running: true,
     planSchemaVersion: null,
     failure: null,
@@ -127,6 +138,7 @@ export function answerAfter(before: FollowedAnswer, tail: ClientResult<RunTail<D
     }
 
     const blocks = [...before.blocks];
+    const sources = new Map(before.sources);
     let planSchemaVersion = before.planSchemaVersion;
     let envelope = before.envelope;
     let retrieval = before.retrieval;
@@ -142,6 +154,8 @@ export function answerAfter(before: FollowedAnswer, tail: ClientResult<RunTail<D
                 endpointAlias: event.endpointAlias,
                 publishedModel: event.publishedModel,
             };
+        } else if (event.kind === 'citation') {
+            sources.set(event.source.id, event.source);
         } else if (event.kind === 'block') {
             blocks.push({ sequence: event.sequence, block: event.block });
         } else if (event.kind === 'retrieval') {
@@ -159,6 +173,7 @@ export function answerAfter(before: FollowedAnswer, tail: ClientResult<RunTail<D
 
     return {
         blocks,
+        sources,
         running: tail.value.running,
         planSchemaVersion,
         failure: null,

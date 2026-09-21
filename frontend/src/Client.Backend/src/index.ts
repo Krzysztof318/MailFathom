@@ -104,6 +104,20 @@ export {
     type DiscoveryRunSpend,
 } from './discoveryRun';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
+export type {
+    AnswerConfidence,
+    BlockEvidence,
+    BlockSupport,
+    CitedSourceKind,
+    ConflictingClaim,
+    DeclaredSource,
+    EvidenceEntry,
+    SourceFreshness,
+    SourceMedium,
+    SourceStaleness,
+    SynthesizedAnswer,
+    UnreadableSource,
+} from './presentationBlocks';
 export {
     type MailEnrichment,
     type MailEnrichmentAspect,

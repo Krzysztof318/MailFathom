@@ -277,18 +277,168 @@ describe('readDiscoveryRunTail', () => {
         });
     });
 
-    it('carries a citation as an event no answer is drawn out of', async () => {
+    it('reads a source the run declared, so a block naming it can be drawn', async () => {
         const answered = await readDiscoveryRunTail(
             session,
-            answering({ status: 200, body: bodyOf([{ event: 'citation', sequence: 9, citation: {} }]) }),
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'citation',
+                        sequence: 2,
+                        citation: {
+                            id: 'c-1',
+                            target: {
+                                kind: 'fragment',
+                                email: '0198f4a1-0000-7000-8000-000000000001',
+                                fragment: 'p-3',
+                            },
+                            label: 'Master agreement.pdf',
+                            medium: 'Written',
+                        },
+                    },
+                ]),
+            }),
             runId,
             0,
         );
 
         expect(answered).toEqual({
             outcome: 'read',
-            value: { running: false, events: [{ kind: 'other', sequence: 9 }] },
+            value: {
+                running: false,
+                events: [
+                    {
+                        kind: 'citation',
+                        sequence: 2,
+                        source: {
+                            id: 'c-1',
+                            kind: 'fragment',
+                            label: 'Master agreement.pdf',
+                            medium: 'Written',
+                            unreadable: null,
+                        },
+                    },
+                ],
+            },
         });
+    });
+
+    it('reads an answer with what it rests on and how far it is worth trusting', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 5,
+                        block: {
+                            type: 'answer',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            text: 'The rate was agreed in April.',
+                            confidence: 'High',
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({
+            outcome: 'read',
+            value: {
+                running: false,
+                events: [
+                    {
+                        kind: 'block',
+                        sequence: 5,
+                        block: {
+                            type: 'answer',
+                            named: 'answer',
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                                conflictingClaims: [],
+                            },
+                            answer: { text: 'The rate was agreed in April.', confidence: 'High' },
+                        },
+                    },
+                ],
+            },
+        });
+    });
+
+    it('reads each message an evidence list presents with the part of it worth reading', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 6,
+                        block: {
+                            type: 'evidenceList',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            entries: [
+                                {
+                                    source: 'c-1',
+                                    fragment: 'Monthly remuneration is EUR 1,200 net',
+                                    relevance: 0.94,
+                                    freshness: { staleness: 'Stale', observedAt: '2026-09-01T08:00:00+00:00' },
+                                },
+                            ],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+
+        expect(event?.kind === 'block' && event.block.type === 'evidenceList' ? event.block.entries : null).toEqual([
+            {
+                source: 'c-1',
+                fragment: 'Monthly remuneration is EUR 1,200 net',
+                relevance: 0.94,
+                freshness: { staleness: 'Stale', observedAt: '2026-09-01T08:00:00+00:00' },
+            },
+        ]);
+    });
+
+    it('refuses a block whose own payload it cannot read rather than drawing the type as unknown', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 7,
+                        block: { type: 'answer', version: 1, text: 'No evidence beside it.', confidence: 'High' },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
     it('carries an event kind this contract does not name so the cursor moves past it', async () => {

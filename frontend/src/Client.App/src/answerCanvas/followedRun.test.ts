@@ -26,6 +26,7 @@ describe('nothingRead', () => {
         expect(nothingRead.running).toBe(true);
         expect(nothingRead.ending).toBeNull();
         expect(nothingRead.blocks).toEqual([]);
+        expect(nothingRead.sources).toEqual(new Map());
     });
 });
 
@@ -34,7 +35,7 @@ describe('answerAfter', () => {
         const answer = answerAfter(
             nothingRead,
             answering([
-                { kind: 'block', sequence: 2, block: { type: 'answer', named: 'answer' } },
+                { kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } },
                 { kind: 'block', sequence: 3, block: { type: 'timeline', named: 'timeline' } },
             ]),
         );
@@ -45,7 +46,7 @@ describe('answerAfter', () => {
     it('adds what a later read brought to what an earlier one did', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'answer', named: 'answer' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }], true),
         );
 
         const second = answerAfter(
@@ -53,7 +54,25 @@ describe('answerAfter', () => {
             answering([{ kind: 'block', sequence: 3, block: { type: 'people', named: 'people' } }]),
         );
 
-        expect(second.blocks.map((arrived) => arrived.block.named)).toEqual(['answer', 'people']);
+        expect(second.blocks.map((arrived) => arrived.block.named)).toEqual(['factTable', 'people']);
+    });
+
+    it('keeps every source the run declared, so a block drawn later can still name what it rests on', () => {
+        const declared = {
+            id: 'c-1',
+            kind: 'email',
+            label: 'Master agreement',
+            medium: 'Written',
+            unreadable: null,
+        } as const;
+
+        const first = answerAfter(nothingRead, answering([{ kind: 'citation', sequence: 1, source: declared }], true));
+        const second = answerAfter(
+            first,
+            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }]),
+        );
+
+        expect(second.sources.get('c-1')).toEqual(declared);
     });
 
     it('reads the revision the plan was written against off the run that started', () => {
@@ -113,7 +132,7 @@ describe('answerAfter', () => {
     it('keeps the blocks that had arrived when the run ended badly, and says which ending it was', () => {
         const working = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'answer', named: 'answer' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }], true),
         );
 
         const ended = answerAfter(
@@ -147,7 +166,7 @@ describe('answerAfter', () => {
     it('says the deployment is out of reach and keeps what had arrived', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 1, block: { type: 'answer', named: 'answer' } }], true),
+            answering([{ kind: 'block', sequence: 1, block: { type: 'factTable', named: 'factTable' } }], true),
         );
 
         const second = answerAfter(first, { outcome: 'failed', failure: { reason: 'unavailable', status: null } });

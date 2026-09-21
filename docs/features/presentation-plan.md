@@ -8,8 +8,8 @@ answer is, in a form a client draws with ordinary typed UI and never evaluates.
 
 This page describes the contract as it stands: what a plan holds, what its parts mean, how a client that is behind the
 service reads one, how a citation in it is followed to the mail behind it, and what is deliberately not in it.
-How a run decides which blocks a plan holds is [the Discover run](discovery-run.md); rendering one is not described
-here, because no client draws a plan yet.
+How a run decides which blocks a plan holds is [the Discover run](discovery-run.md); how the client draws one is not
+described here, because what a block looks like is the client's rather than the contract's.
 
 ## Two properties the contract is built around
 
