@@ -430,7 +430,7 @@ export function TasksSpace({
             title: task.title,
             dueOn: task.dueOn,
             reminders,
-            dueDayOffsetMinutes: dueDayOffsetMinutes(task.dueOn),
+            dueDayOffsetMinutes: dueDayOffsetMinutes(task.dueOn, timeZone),
             sourceMessageId: task.sourceMessageId,
         }).then((answer) => {
             after([wrote(answer)], 'tasks.remindersWritten');

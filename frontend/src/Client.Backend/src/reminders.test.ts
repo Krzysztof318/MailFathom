@@ -85,26 +85,51 @@ describe('dueDayOffsetMinutes', () => {
     });
 
     it('reads the offset the due day runs in rather than the one today runs in', () => {
-        vi.stubEnv('TZ', 'Europe/Warsaw');
-
         // Summer time ends on the twenty-fifth of October 2026, so these two days run an hour apart — which is the
         // whole reason the offset is read at the day the reminders are anchored on rather than at the moment of
         // writing.
-        expect(dueDayOffsetMinutes('2026-10-24')).toBe(120);
-        expect(dueDayOffsetMinutes('2026-10-26')).toBe(60);
+        expect(dueDayOffsetMinutes('2026-10-24', 'Europe/Warsaw')).toBe(120);
+        expect(dueDayOffsetMinutes('2026-10-26', 'Europe/Warsaw')).toBe(60);
     });
 
     it('reads a zone behind Greenwich as the negative offset it is', () => {
+        expect(dueDayOffsetMinutes('2026-09-21', 'America/New_York')).toBe(-240);
+    });
+
+    it('reads the zone the record states rather than the one this machine runs in', () => {
         vi.stubEnv('TZ', 'America/New_York');
 
-        expect(dueDayOffsetMinutes('2026-09-21')).toBe(-240);
+        expect(dueDayOffsetMinutes('2026-09-21', 'Europe/Warsaw')).toBe(120);
+    });
+
+    it('reads the offset at the anchor rather than at the instant a first guess from UTC lands on', () => {
+        // Summer time begins in the Aleutians on the eighth of March 2026, and nine in the morning there is the
+        // previous evening in UTC — so a reading taken once, from UTC, would state the offset that ran the night
+        // before the change rather than the one the reminder is actually anchored in.
+        expect(dueDayOffsetMinutes('2026-03-08', 'America/Adak')).toBe(-540);
+    });
+
+    it('reads a zone at a half-hour offset as the whole minutes it is', () => {
+        expect(dueDayOffsetMinutes('2026-09-21', 'Asia/Kolkata')).toBe(330);
+    });
+
+    it('falls back to this runtime where the record names a zone it does not carry', () => {
+        vi.stubEnv('TZ', 'Europe/Warsaw');
+
+        expect(dueDayOffsetMinutes('2026-09-21', 'Somewhere/Nowhere')).toBe(120);
+    });
+
+    it('falls back to this runtime where the record states no zone at all', () => {
+        vi.stubEnv('TZ', 'Europe/Warsaw');
+
+        expect(dueDayOffsetMinutes('2026-09-21', null)).toBe(120);
     });
 
     it('answers nothing for a task nobody dated, which is what a record stating no lead carries', () => {
-        expect(dueDayOffsetMinutes(null)).toBeNull();
+        expect(dueDayOffsetMinutes(null, 'Europe/Warsaw')).toBeNull();
     });
 
     it('answers nothing for a day this client cannot place', () => {
-        expect(dueDayOffsetMinutes('the week after next')).toBeNull();
+        expect(dueDayOffsetMinutes('the week after next', 'Europe/Warsaw')).toBeNull();
     });
 });

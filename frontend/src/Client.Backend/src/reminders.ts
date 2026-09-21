@@ -63,19 +63,71 @@ export function isReminderInstantList(value: unknown): value is readonly string[
 /**
  * The whole-minute offset from UTC that a due day runs in, read at the hour the deployment anchors reminders at.
  *
- * The deployment keeps no timezone for a person, so a task's due day is anchored in the offset its client states
- * beside the leads. It is read at that anchor rather than at the moment of writing, because a due day three weeks out
- * may fall on the other side of a daylight-saving change from today — stating today's offset would put every reminder
- * on that task an hour out.
+ * **The zone is the one the reader's record states**, and the runtime's own where it states none — the same zone every
+ * date on the screen is placed in. A reminder resolved in the machine's zone while its due day was drawn in the
+ * record's would announce itself at an hour the reader never chose, and nothing on the screen would say why.
+ *
+ * It is read at the anchor rather than at the moment of writing, because a due day three weeks out may fall on the
+ * other side of a daylight-saving change from today, and stating today's offset would put every reminder on that task
+ * an hour out. It is read twice for the same reason: the first reading places nine in the morning from UTC, which for
+ * a zone far enough west lands on the day before, and the second places it from the offset the first one found.
+ *
+ * A zone this runtime's own database does not carry falls back to the runtime's own, on the reasoning
+ * `Client.App/src/localization/instants.ts` states where it words a date in one: the deployment's database is what
+ * validated the identifier, the two need not be the same build, and refusing here would leave a task unable to
+ * announce anything at all rather than announcing an hour out.
  *
  * Answers `null` for a day this client cannot place, which is also what a caller states when it sets no reminder.
  */
-export function dueDayOffsetMinutes(dueOn: string | null): number | null {
+export function dueDayOffsetMinutes(dueOn: string | null, timeZone: string | null): number | null {
     if (dueOn === null) {
         return null;
     }
 
-    const anchored = new Date(`${dueOn}T09:00:00`);
+    const fromUtc = Date.parse(`${dueOn}T09:00:00Z`);
 
-    return Number.isNaN(anchored.getTime()) ? null : -anchored.getTimezoneOffset();
+    if (Number.isNaN(fromUtc)) {
+        return null;
+    }
+
+    const named = offsetIn(fromUtc, timeZone);
+
+    if (named === null) {
+        const anchored = new Date(`${dueOn}T09:00:00`);
+
+        return Number.isNaN(anchored.getTime()) ? null : -anchored.getTimezoneOffset();
+    }
+
+    return offsetIn(fromUtc - named * 60_000, timeZone) ?? named;
+}
+
+/** The whole-minute offset a named zone runs at one instant, or `null` where none was named or this runtime has none. */
+function offsetIn(at: number, timeZone: string | null): number | null {
+    if (timeZone === null) {
+        return null;
+    }
+
+    let worded: string | undefined;
+
+    try {
+        worded = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+            .formatToParts(at)
+            .find((part) => part.type === 'timeZoneName')?.value;
+    } catch {
+        return null;
+    }
+
+    const stated = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/u.exec(worded ?? '');
+
+    if (stated === null) {
+        return null;
+    }
+
+    if (stated[1] === undefined) {
+        return 0;
+    }
+
+    const minutes = Number(stated[2]) * 60 + Number(stated[3]);
+
+    return stated[1] === '-' ? -minutes : minutes;
 }
