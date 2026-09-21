@@ -105,9 +105,10 @@ interface NamedBlock {
  * holding has the block's own members with nothing to check for absence: what a block of a given type carries is the
  * contract's answer rather than each screen's guess.
  *
- * A type the catalogue carries and this contract does not read in detail arrives named and nothing more — the same
- * shape a type the catalogue does not carry at all arrives in — because the reader owes the same sentence in both
- * cases and a payload nothing draws is a payload nothing has to be refused over.
+ * Every type the catalogue carries is read in full here, so the last member is a type this contract does not carry at
+ * all: a run written by a newer service. It arrives named and nothing more, which is the whole of what a reader is
+ * owed — and it is the member that keeps one unfamiliar block from discarding the answer around it. A tenth type added
+ * to the catalogue and not read here would fail to compile in `parseBlock` rather than arriving as one of these.
  */
 export type AnswerBlock =
     | (NamedBlock & {
@@ -160,19 +161,8 @@ export type AnswerBlock =
           readonly suggestion: SuggestedAction;
       })
     | (NamedBlock & {
-          /** The type the catalogue carries, or `null` where the run named one this contract does not. */
-          readonly type: Exclude<
-              AnswerBlockType,
-              | 'answer'
-              | 'evidenceList'
-              | 'timeline'
-              | 'factTable'
-              | 'people'
-              | 'threadState'
-              | 'attachmentGallery'
-              | 'draft'
-              | 'suggestedAction'
-          > | null;
+          /** `null`, the run having named a type this contract does not carry. */
+          readonly type: null;
       });
 
 /**

@@ -723,9 +723,7 @@ function parseThreadCommitment(value: unknown): ThreadCommitment | null {
     const named = record['owedBy'];
     const owedBy = named === undefined || named === null ? null : parseParticipant(named);
 
-    return named !== undefined && named !== null && owedBy === null
-        ? null
-        : { text, owedBy, dueAt: due.at, sources };
+    return named !== undefined && named !== null && owedBy === null ? null : { text, owedBy, dueAt: due.at, sources };
 }
 
 /**

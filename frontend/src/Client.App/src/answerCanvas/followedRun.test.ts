@@ -3,7 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import type { AnswerBlock, ClientResult, DiscoveryRunEvent, DiscoveryRunSpend, RunTail } from '@mailfathom/client-backend';
+import type {
+    AnswerBlock,
+    ClientResult,
+    DiscoveryRunEvent,
+    DiscoveryRunSpend,
+    RunTail,
+} from '@mailfathom/client-backend';
 import { answerAfter, nothingRead } from './followedRun';
 
 // What these tests read is the run's own bookkeeping — the order blocks arrived in, the sources they may rest on, the
@@ -56,10 +62,7 @@ describe('answerAfter', () => {
             answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }], true),
         );
 
-        const second = answerAfter(
-            first,
-            answering([{ kind: 'block', sequence: 3, block: arrived('Sentiment') }]),
-        );
+        const second = answerAfter(first, answering([{ kind: 'block', sequence: 3, block: arrived('Sentiment') }]));
 
         expect(second.blocks.map((block) => block.block.named)).toEqual(['RiskScore', 'Sentiment']);
     });
@@ -74,10 +77,7 @@ describe('answerAfter', () => {
         } as const;
 
         const first = answerAfter(nothingRead, answering([{ kind: 'citation', sequence: 1, source: declared }], true));
-        const second = answerAfter(
-            first,
-            answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }]),
-        );
+        const second = answerAfter(first, answering([{ kind: 'block', sequence: 2, block: arrived('RiskScore') }]));
 
         expect(second.sources.get('c-1')).toEqual(declared);
     });

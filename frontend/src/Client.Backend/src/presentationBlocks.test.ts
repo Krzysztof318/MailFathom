@@ -420,7 +420,6 @@ describe('parseAttachmentEntries', () => {
     });
 });
 
-
 describe('parsePersonEntries', () => {
     const anna = {
         displayName: 'Anna Kowalska',
