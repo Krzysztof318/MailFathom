@@ -75,6 +75,7 @@ function deployment({
     layout = { arranged: false, placements: [], notToday: [] },
     layoutStatus = 200,
     refuses = [],
+    holdsCalendarWrites = false,
 }: {
     committed?: readonly unknown[];
     proposed?: readonly unknown[];
@@ -85,6 +86,9 @@ function deployment({
 
     /** Which writes this deployment will not perform, which is how a batch is made to half succeed. */
     refuses?: readonly string[];
+
+    /** Whether a write to the calendar is left outstanding, which is how a second press is caught in flight. */
+    holdsCalendarWrites?: boolean;
 } = {}): {
     readonly transport: MailFathomTransport;
     readonly sent: () => readonly ClientRequest[];
@@ -106,6 +110,10 @@ function deployment({
                         ? { ...answered, body: JSON.stringify({ arrangesDays: arranges }) }
                         : { status: layoutStatus, headers: {}, body: JSON.stringify(layout) };
             } else if (path.includes('/calendar')) {
+                if (method === 'POST' && holdsCalendarWrites) {
+                    return new Promise<ClientResponse>(() => undefined);
+                }
+
                 answer =
                     method === 'POST'
                         ? {
@@ -284,6 +292,45 @@ describe('TasksSpace', () => {
             isAllDay: true,
             reminders: [],
             sourceMessage: null,
+        });
+    });
+
+    // A second press while the first batch is outstanding would write the same day-long event again, and the control
+    // stays pressable for as long as the calendar takes to answer.
+    it('writes the calendar once however many times the act is pressed while it is outstanding', async () => {
+        const { transport, sent } = deployment({ holdsCalendarWrites: true });
+
+        drawSpace(transport);
+
+        const act = await screen.findByRole('button', { name: 'Schedule' });
+
+        fireEvent.click(act);
+
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe('Putting it in the calendar…');
+        });
+
+        fireEvent.click(act);
+        fireEvent.click(act);
+
+        expect(
+            sent().filter((request) => request.method === 'POST' && request.path.endsWith('/calendar')),
+        ).toHaveLength(1);
+    });
+
+    // Which of the four it was decides what somebody does next, so a batch the deployment refused outright says it
+    // rather than leaving them with a sentence that fits every failure equally.
+    it('names why the deployment refused where it refused the whole of it', async () => {
+        const { transport } = deployment({ refuses: ['a'] });
+
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark Answer the tender as done' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe(
+                'The deployment did not accept that: unavailable. Nothing was changed.',
+            );
         });
     });
 

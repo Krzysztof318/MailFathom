@@ -152,11 +152,16 @@ describe('TaskList', () => {
 
         drawList({ tasks: [taskDue('a', 'Answer the tender', '2026-09-21')], onReadMore });
 
-        const scroller = screen.getByText('Answer the tender').closest('div.overflow-y-auto');
+        // Found by the group's own role and name and then by one hop outwards, which is what
+        // `messageList/MessageList.test.tsx` does for the same question: the scroller carries no role of its own, and
+        // a query for the utility class that makes it one would pass a renamed class and fail a working screen.
+        const scroller = screen.getByRole('region', { name: 'Today' }).parentElement;
 
-        expect(scroller).not.toBeNull();
+        if (scroller === null) {
+            throw new Error('The list draws no scroller around its groups.');
+        }
 
-        fireEvent.scroll(scroller ?? document.body);
+        fireEvent.scroll(scroller);
 
         expect(onReadMore).toHaveBeenCalled();
     });

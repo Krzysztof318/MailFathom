@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import type { PersonalTask } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { useRowPress } from '../contextMenu/rowPress';
@@ -90,6 +90,20 @@ export function TaskRow({
     const { locale, translate } = useLocalization();
     const press = useRowPress(onPress);
 
+    // The act that puts a task in the day and the chip that says it is there are the same place on the row, so the
+    // press removes the control holding focus. Where the press came from this row, focus goes to the chip that took
+    // its place; where the row was scheduled from the selection bar over the whole selection, nothing here held focus
+    // and nothing is moved.
+    const askedFromHere = useRef(false);
+    const chip = useRef<HTMLSpanElement | null>(null);
+
+    useEffect(() => {
+        if (scheduled && askedFromHere.current) {
+            askedFromHere.current = false;
+            chip.current?.focus();
+        }
+    }, [scheduled]);
+
     function pressed(event: KeyboardEvent): void {
         // The two the platform itself offers for a row's menu, so nothing this row holds is reachable only by gesture:
         // the dedicated key where a keyboard has one, and the chord where it does not.
@@ -157,7 +171,9 @@ export function TaskRow({
                 <input
                     type="checkbox"
                     checked={task.completed}
-                    aria-label={translate('tasks.completeRow', { title: task.title })}
+                    aria-label={translate(task.completed ? 'tasks.uncompleteRow' : 'tasks.completeRow', {
+                        title: task.title,
+                    })}
                     className="mt-0.5 size-5 shrink-0 accent-accent"
                     onChange={onToggleCompleted}
                 />
@@ -205,7 +221,11 @@ export function TaskRow({
                 )}
 
                 {task.dueOn === null || task.completed ? null : scheduled ? (
-                    <span className="rounded-4xl border border-line bg-rail px-2.5 py-1 text-sm text-muted">
+                    <span
+                        ref={chip}
+                        tabIndex={-1}
+                        className="rounded-4xl border border-line bg-rail px-2.5 py-1 text-sm text-muted"
+                    >
                         {translate('tasks.inTheCalendar')}
                     </span>
                 ) : (
@@ -213,7 +233,10 @@ export function TaskRow({
                         label={translate('tasks.schedule')}
                         icon="calendar_month"
                         shape="accentPill"
-                        onPress={onSchedule}
+                        onPress={() => {
+                            askedFromHere.current = true;
+                            onSchedule();
+                        }}
                     />
                 )}
             </div>

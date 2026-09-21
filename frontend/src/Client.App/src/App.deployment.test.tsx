@@ -41,6 +41,13 @@ resetsBetweenTests();
  * week of one year and the list would stop holding the day after it was written. What these lists are about is which
  * deployment each request went to, and `calendar/calendarSpan.test.ts` is where the span itself is proven.
  */
+function calendarWindowAt(deployment: string): unknown {
+    const origin = deployment.replaceAll('.', '\\.');
+    const asked = `^${origin}/api/client/calendar\\?from=[^&]+&until=[^&]+&count=200$`;
+
+    return expect.stringMatching(new RegExp(asked, 'u'));
+}
+
 /**
  * Waits until the sign-in screen has asked a typed deployment what it offers.
  *
@@ -53,13 +60,6 @@ async function askedWhatItOffers(deployment: string): Promise<void> {
     await waitFor(() => {
         expect(routesAsked()).toContain(`${deployment}/api/client/sign-in-methods`);
     });
-}
-
-function calendarWindowAt(deployment: string): unknown {
-    const origin = deployment.replaceAll('.', '\\.');
-    const asked = `^${origin}/api/client/calendar\\?from=[^&]+&until=[^&]+&count=200$`;
-
-    return expect.stringMatching(new RegExp(asked, 'u'));
 }
 
 describe('App deployment', () => {

@@ -77,6 +77,24 @@ function drawRow({
     );
 }
 
+// The props a row is drawn with, for the two cases that have to rerender the same row rather than render a second
+// one: `drawRow` renders and returns nothing, which is all every other case here needs.
+function rowShown({ scheduled }: { readonly scheduled: boolean }) {
+    return {
+        task: taskOf(),
+        now: readingAt,
+        selected: false,
+        selecting: false,
+        scheduled,
+        onToggleSelected: vi.fn(),
+        onToggleCompleted: vi.fn(),
+        onAccept: undefined,
+        onOpenSource: undefined,
+        onSchedule: vi.fn(),
+        onPress: vi.fn(),
+    };
+}
+
 describe('TaskRow', () => {
     // The spelling is written out rather than compared against a formatter built here, because an expectation built
     // the same way passes for a row that named a zone of its own as happily as for one that did not.
@@ -125,6 +143,14 @@ describe('TaskRow', () => {
         expect(screen.queryByRole('button', { name: 'Open the message this came from' })).toBeNull();
     });
 
+    // What the box does depends on the row it is on, so what it is called has to as well: a screen reader on a row
+    // already done would otherwise be told the control marks it done.
+    it('names the completion box for what pressing it would do on this row', () => {
+        drawRow({ task: taskOf({ completed: true }) });
+
+        expect(screen.getByRole('checkbox', { name: 'Mark Answer the tender as not done' })).toBeDefined();
+    });
+
     it('completes the task from the box the design draws beside it', () => {
         const onToggleCompleted = vi.fn();
 
@@ -150,6 +176,59 @@ describe('TaskRow', () => {
 
         expect(screen.getByText('In the calendar')).toBeDefined();
         expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
+    });
+
+    // The act and the chip that replaces it are the same place on the row, so the press removes the control that
+    // holds focus. Left alone it falls to the document body and somebody reading with a keyboard is nowhere.
+    it('moves focus to the chip when this row’s own act is replaced by it', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        const { rerender } = render(
+            <LocalizationProvider>
+                <ul>
+                    <TaskRow {...rowShown({ scheduled: false })} />
+                </ul>
+            </LocalizationProvider>,
+        );
+
+        const act = screen.getByRole('button', { name: 'Schedule' });
+
+        act.focus();
+        fireEvent.click(act);
+
+        rerender(
+            <LocalizationProvider>
+                <ul>
+                    <TaskRow {...rowShown({ scheduled: true })} />
+                </ul>
+            </LocalizationProvider>,
+        );
+
+        expect(document.activeElement).toBe(screen.getByText('In the calendar'));
+    });
+
+    // A row scheduled over the whole selection held no focus of its own, so nothing here takes it from wherever the
+    // selection bar left it.
+    it('takes no focus for a row the selection bar scheduled', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        const { rerender } = render(
+            <LocalizationProvider>
+                <ul>
+                    <TaskRow {...rowShown({ scheduled: false })} />
+                </ul>
+            </LocalizationProvider>,
+        );
+
+        rerender(
+            <LocalizationProvider>
+                <ul>
+                    <TaskRow {...rowShown({ scheduled: true })} />
+                </ul>
+            </LocalizationProvider>,
+        );
+
+        expect(document.activeElement).toBe(document.body);
     });
 
     it('offers nothing to schedule for a task with no day to put it on', () => {

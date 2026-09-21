@@ -67,6 +67,48 @@ function drawPanel({
 }
 
 describe('DayCapacity', () => {
+    // The control that asks for an arrangement is the one that is removed while the deployment composes one, so
+    // nothing but a deliberate move keeps a keyboard or a screen reader anywhere at all for the length of the wait.
+    it('puts focus on what is being waited for once the control that asked is gone', () => {
+        const { rerender } = render(
+            <LocalizationProvider>
+                <DayCapacity
+                    dueToday={3}
+                    eventsToday={2}
+                    offered
+                    arranging={false}
+                    layout={null}
+                    placed={[taskCalled('a', 'Answer the tender')]}
+                    applying={false}
+                    onArrange={vi.fn()}
+                    onApply={vi.fn()}
+                    onPutDown={vi.fn()}
+                />
+            </LocalizationProvider>,
+        );
+
+        screen.getByRole('button', { name: 'Lay out today' }).focus();
+
+        rerender(
+            <LocalizationProvider>
+                <DayCapacity
+                    dueToday={3}
+                    eventsToday={2}
+                    offered
+                    arranging
+                    layout={null}
+                    placed={[taskCalled('a', 'Answer the tender')]}
+                    applying={false}
+                    onArrange={vi.fn()}
+                    onApply={vi.fn()}
+                    onPutDown={vi.fn()}
+                />
+            </LocalizationProvider>,
+        );
+
+        expect(document.activeElement).toBe(screen.getByRole('status'));
+    });
+
     it('counts the day rather than composing a sentence about it', () => {
         drawPanel();
 

@@ -12,11 +12,13 @@ import {
     recordTask,
     setTaskCompletion,
     type CalendarEventWrite,
+    type ClientFailureReason,
     type ClientResult,
     type ClientSession,
     type DayLayout,
     type MailFathomTransport,
     type PersonalTask,
+    type PersonalTaskErasure,
 } from '@mailfathom/client-backend';
 import { Confirmation } from '../confirmation/Confirmation';
 import { Control } from '../controls/Control';
@@ -81,11 +83,50 @@ const erasureQuestions: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     other: 'tasks.eraseQuestion.other',
 };
 
-// Whether one event actually reached the calendar. A `ClientResult` says the request was answered; what the calendar
-// did with the record is the answer's own outcome, and every value but `Written` is a row this screen must not draw as
-// scheduled.
-function wasWritten(answer: ClientResult<CalendarEventWrite>): boolean {
-    return answer.outcome === 'read' && answer.value.outcome === 'Written';
+// What each of the four reasons a write can fail for is called where somebody reads it, which is the table every
+// screen in this client declares for itself.
+const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
+    unauthenticated: 'failure.unauthenticated',
+    unauthorized: 'failure.unauthorized',
+    unavailable: 'failure.unavailable',
+    unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
+};
+
+// What one write became. A deployment that refused names the reason it gave; a write the screen found nothing to
+// perform names none, which is a different thing from a refusal and must not be worded as one.
+interface TaskWrite {
+    readonly failed: boolean;
+    readonly reason: ClientFailureReason | null;
+}
+
+function wrote(answer: ClientResult<PersonalTask | PersonalTaskErasure>): TaskWrite {
+    return answer.outcome === 'failed'
+        ? { failed: true, reason: answer.failure.reason }
+        : { failed: false, reason: null };
+}
+
+// A calendar write refuses in two different ways, and only one of them names something a person can act on: the
+// request itself failed, or the calendar answered and did not take the record — every outcome but `Written` being a
+// row this screen must not draw as scheduled.
+function wroteToTheCalendar(answer: ClientResult<CalendarEventWrite>): TaskWrite {
+    return answer.outcome === 'failed'
+        ? { failed: true, reason: answer.failure.reason }
+        : { failed: answer.value.outcome !== 'Written', reason: null };
+}
+
+// The one reason a whole batch was refused for, or `null` where there is none to give: a batch refused two different
+// ways has no single answer, and one the screen itself found nothing to write for was never refused at all.
+function reasonBehind(refused: readonly TaskWrite[]): ClientFailureReason | null {
+    const reasons = new Set(refused.map((answer) => answer.reason));
+
+    if (reasons.size !== 1) {
+        return null;
+    }
+
+    const [only] = reasons;
+
+    return only ?? null;
 }
 
 export function TasksSpace({
@@ -122,6 +163,7 @@ export function TasksSpace({
         asked: null,
         answered: false,
     });
+    const [scheduling, setScheduling] = useState(false);
     const [arranging, setArranging] = useState(false);
     const [applying, setApplying] = useState(false);
     const [layout, setLayout] = useState<DayLayout | null>(null);
@@ -174,18 +216,35 @@ export function TasksSpace({
             now,
         ).find((group) => group.name === 'today')?.tasks.length ?? 0;
 
-    function after(answers: readonly { readonly failed: boolean }[], done: MessageKey): void {
-        const refused = answers.filter((answer) => answer.failed).length;
+    // What a batch of writes left behind, as one of four sentences rather than as a success and a generic failure:
+    // every one went through, some of them did, every one was refused for one reason a person can act on, or every
+    // one was refused with no single reason to name.
+    function saidAbout(refused: readonly TaskWrite[], asked: number, done: MessageKey): WriteSaid {
+        if (refused.length === 0) {
+            return { said: done };
+        }
 
+        if (refused.length < asked) {
+            return {
+                said: refusedCounted[new Intl.PluralRules(locale).select(refused.length)],
+                names: { count: new Intl.NumberFormat(locale).format(refused.length) },
+            };
+        }
+
+        const reason = reasonBehind(refused);
+
+        return reason === null
+            ? { said: 'tasks.writeFailed' }
+            : { said: 'tasks.writeFailedBecause', names: { reason: translate(failureLabels[reason]) } };
+    }
+
+    function after(answers: readonly TaskWrite[], done: MessageKey): void {
         setSaid(
-            refused === 0
-                ? { said: done }
-                : refused === answers.length
-                  ? { said: 'tasks.writeFailed' }
-                  : {
-                        said: refusedCounted[new Intl.PluralRules(locale).select(refused)],
-                        names: { count: new Intl.NumberFormat(locale).format(refused) },
-                    },
+            saidAbout(
+                answers.filter((answer) => answer.failed),
+                answers.length,
+                done,
+            ),
         );
 
         reading.readAgain();
@@ -197,10 +256,7 @@ export function TasksSpace({
         }
 
         void setTaskCompletion(session, transport, task.id, !task.completed).then((answer) => {
-            after(
-                [{ failed: answer.outcome === 'failed' }],
-                task.completed ? 'tasks.markedNotDone' : 'tasks.markedDone',
-            );
+            after([wrote(answer)], task.completed ? 'tasks.markedNotDone' : 'tasks.markedDone');
         });
     }
 
@@ -209,16 +265,12 @@ export function TasksSpace({
             return;
         }
 
-        void Promise.all(
-            tasks.map((task) =>
-                setTaskCompletion(session, transport, task.id, true).then((answer) => ({
-                    failed: answer.outcome === 'failed',
-                })),
-            ),
-        ).then((answers) => {
-            setSelected([]);
-            after(answers, 'tasks.markedDone');
-        });
+        void Promise.all(tasks.map((task) => setTaskCompletion(session, transport, task.id, true).then(wrote))).then(
+            (answers) => {
+                setSelected([]);
+                after(answers, 'tasks.markedDone');
+            },
+        );
     }
 
     function accept(task: PersonalTask): void {
@@ -227,7 +279,7 @@ export function TasksSpace({
         }
 
         void acceptTask(session, transport, task.id).then((answer) => {
-            after([{ failed: answer.outcome === 'failed' }], 'tasks.accepted');
+            after([wrote(answer)], 'tasks.accepted');
         });
     }
 
@@ -239,11 +291,7 @@ export function TasksSpace({
             return;
         }
 
-        void Promise.all(
-            tasks.map((task) =>
-                eraseTask(session, transport, task.id).then((answer) => ({ failed: answer.outcome === 'failed' })),
-            ),
-        ).then((answers) => {
+        void Promise.all(tasks.map((task) => eraseTask(session, transport, task.id).then(wrote))).then((answers) => {
             setSelected([]);
             setErasing([]);
             after(answers, 'tasks.erased');
@@ -256,18 +304,28 @@ export function TasksSpace({
     function schedule(tasks: readonly PersonalTask[]): void {
         const dated = tasks.filter((task) => task.dueOn !== null);
 
+        // Refused while one batch is still outstanding, for the reason `arrange` and `apply` refuse: the row's own
+        // act and the selection bar's stay pressable while the calendar is being written, and a second press would
+        // write the same day-long event a second time rather than doing nothing.
+        if (scheduling) {
+            return;
+        }
+
         if (session === null || dated.length === 0) {
             setSaid({ said: 'tasks.nothingToSchedule' });
 
             return;
         }
 
+        setScheduling(true);
+        setSaid({ said: 'tasks.scheduling' });
+
         void Promise.all(
             dated.map((task) => {
                 const start = startOfDay(task.dueOn ?? '');
 
                 return start === null
-                    ? Promise.resolve({ failed: true, id: task.id })
+                    ? Promise.resolve({ failed: true, reason: null, id: task.id })
                     : recordCalendarEvent(session, transport, {
                           title: task.title,
                           start,
@@ -275,9 +333,10 @@ export function TasksSpace({
                           isAllDay: true,
                           reminders: [],
                           sourceMessage: task.sourceMessageId,
-                      }).then((answer) => ({ failed: !wasWritten(answer), id: task.id }));
+                      }).then((answer) => ({ ...wroteToTheCalendar(answer), id: task.id }));
             }),
         ).then((answers) => {
+            setScheduling(false);
             setScheduled((standing) => [
                 ...standing,
                 ...answers.filter((answer) => !answer.failed).map((answer) => answer.id),
@@ -325,7 +384,7 @@ export function TasksSpace({
                 const task = reading.tasks.find((held) => held.id === placement.taskId);
 
                 return task === undefined || end === null
-                    ? Promise.resolve({ failed: true, id: placement.taskId })
+                    ? Promise.resolve({ failed: true, reason: null, id: placement.taskId })
                     : recordCalendarEvent(session, transport, {
                           title: task.title,
                           start: placement.startAt,
@@ -333,7 +392,7 @@ export function TasksSpace({
                           isAllDay: false,
                           reminders: [],
                           sourceMessage: task.sourceMessageId,
-                      }).then((answer) => ({ failed: !wasWritten(answer), id: placement.taskId }));
+                      }).then((answer) => ({ ...wroteToTheCalendar(answer), id: placement.taskId }));
             }),
         ).then((answers) => {
             setApplying(false);
@@ -357,7 +416,7 @@ export function TasksSpace({
             dueOn: draft.dueOn === '' ? null : draft.dueOn,
             sourceMessageId: null,
         }).then((answer) => {
-            after([{ failed: answer.outcome === 'failed' }], 'tasks.written');
+            after([wrote(answer)], 'tasks.written');
         });
     }
 

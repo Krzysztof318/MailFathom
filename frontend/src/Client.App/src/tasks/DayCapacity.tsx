@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useEffect, useRef } from 'react';
 import type { DayLayout, PersonalTask } from '@mailfathom/client-backend';
 import { Control } from '../controls/Control';
 import { SecondaryButton } from '../controls/SecondaryButton';
@@ -98,6 +99,17 @@ export function DayCapacity({
 }) {
     const { locale, translate } = useLocalization();
 
+    // The control that asks for an arrangement is removed while the deployment composes one, and it is the control
+    // that was pressed — so focus would fall to the document body and somebody reading with a keyboard or a screen
+    // reader would be left nowhere while they wait. The sentence that replaces it is what they are waiting for.
+    const arrangingSaid = useRef<HTMLParagraphElement | null>(null);
+
+    useEffect(() => {
+        if (arranging) {
+            arrangingSaid.current?.focus();
+        }
+    }, [arranging]);
+
     const counted = new Intl.NumberFormat(locale);
     const forms = new Intl.PluralRules(locale);
     const clock = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
@@ -123,7 +135,7 @@ export function DayCapacity({
             </p>
 
             {arranging ? (
-                <p role="status" className="text-sm text-accent-deep">
+                <p ref={arrangingSaid} tabIndex={-1} role="status" className="text-sm text-accent-deep">
                     {translate('tasks.arranging')}
                 </p>
             ) : null}

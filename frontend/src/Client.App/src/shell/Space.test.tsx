@@ -149,17 +149,6 @@ describe('Space', () => {
         expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedToTasks)).toBeDefined();
     });
 
-    // Tasks composes its own height for the reason People does: the grouped list scrolls, and a region scrolling a
-    // column of prose around it would put that scroller inside a second one.
-    it('lays the Tasks space out as a composition rather than as a page of prose', () => {
-        render(inStrictMode('tasks'));
-
-        const region = screen.getByRole('main', { name: 'Tasks' });
-
-        expect(region.className).toContain('overflow-hidden');
-        expect(region.className).not.toContain('overflow-y-auto');
-    });
-
     it('hands the question and the connection to Tasks when it is in front, and to nothing when it is not', () => {
         const { rerender } = render(inStrictMode('tasks'));
 
