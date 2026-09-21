@@ -20,6 +20,7 @@ export function Space({
     list,
     mail,
     tabs,
+    discover,
     tasks,
     people,
     calendar,
@@ -42,6 +43,17 @@ export function Space({
 
     /** The strip naming everything the Mail space has open, which only that space has anywhere to put. */
     readonly tabs: ReactNode;
+
+    /**
+     * The question being answered and the answer, which is the Discover space and nothing else.
+     *
+     * It is the one built space the frame's two regions are handed *into* rather than stood beneath, because the design
+     * project draws the field under this screen's own head: a space that took them at its foot would draw the field
+     * below the answer it composed. Which means the composition root decides whether this space was handed them, since
+     * it is the only place that knows both the address and what the space is built from — and the rule they are handed
+     * under is this file's own: the space in front gets them and no other does.
+     */
+    readonly discover: ReactNode;
 
     /** The task list and the day beside it, which is the Tasks space and nothing else. */
     readonly tasks: ReactNode;
@@ -102,6 +114,7 @@ export function Space({
             {offered.map((name) => {
                 const inFront = name === space;
                 const isMail = name === 'mail';
+                const isDiscover = name === 'discover';
                 const isTasks = name === 'tasks';
                 const isPeople = name === 'people';
 
@@ -112,7 +125,7 @@ export function Space({
 
                 // Which spaces compose their own height rather than scrolling a column of prose. Every built space
                 // does, and a placeholder does not — what it holds is a title and a sentence.
-                const composed = isMail || ownColumns !== null;
+                const composed = isMail || isDiscover || ownColumns !== null;
 
                 return (
                     <main
@@ -128,11 +141,18 @@ export function Space({
                                 : 'overflow-y-auto px-4 py-6 workspace:px-8'
                         } ${inFront ? 'flex-1' : 'invisible absolute inset-0'}`}
                     >
-                        {/* No built space carries a title, which is how the design project draws each of them: the
-                            columns are what the space is, and a heading over them would be a word above the thing the
-                            word names. Every region still carries its name, because a landmark a reader moves to is
-                            announced by it. */}
-                        {isMail ? (
+                        {/* A built space whose columns are what it is carries no title here, which is how the design
+                            project draws each of them: a heading over the columns would be a word above the thing the
+                            word names. Discover is the exception the project draws rather than one this frame takes —
+                            it heads its own screen, beside what the deployment is doing and the way back to asking —
+                            so the title is that space's and never this one's. Every region still carries its name,
+                            because a landmark a reader moves to is announced by it. */}
+                        {isDiscover ? (
+                            /* Drawn whether or not it is in front, exactly as every other space is, so a run being
+                               followed survives a visit to the mail. Which of the frame's two regions it was handed is
+                               decided where the address is known rather than here, for the prop's own reason. */
+                            discover
+                        ) : isMail ? (
                             /* The question and the connection are the two the frame composes for every space, so they
                                are handed to the one in front and to nothing else: two of either would be two live
                                copies of one control — a second field somebody's question could be typed into, and a

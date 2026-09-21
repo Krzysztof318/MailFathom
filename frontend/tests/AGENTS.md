@@ -365,12 +365,13 @@ the way an operator stands one up, with mail that arrived at a mail server and w
   again. A spec that had to build its own furniture first would assert against what it had just done, and the order the
   files happen to run in would become part of what they prove; a spec that left its record behind would do the same to
   the file after it.
-- **Discover is held to being a placeholder, and to nothing else.** `routing/spaces.ts` leaves it out of
-  `implementedSpaces`, nothing in `Client.App` reads the discovery routes, and the components that will one day draw an
-  answer are mounted by nothing — so there is no answer to ask a deployment for, whatever provider it configures. What
-  `discover.spec.ts` holds is that the space is where the client opens, that it says it is not built rather than
-  drawing an empty frame, and that the question field the frame composes stands on it. That file is what changes when
-  the space is built.
+- **Discover is held to the screen a deployment lands somebody on, and not to an answer.** The space is built and
+  pressing one of the questions it offers starts a real run, but composing an answer needs a chat provider and this run
+  configures none — so a spec that waited for a block would be waiting on a model nothing here provides, and one that
+  asserted a particular ending would be pinning which failure a deployment with no provider reports. What
+  `discover.spec.ts` holds is that landing reaches the screen rather than the note every unbuilt space carries, that the
+  questions it offers are there to press, and that the question field and its scope — the frame's rather than the
+  space's — stand on it. What would move that is a provider configured for the run, not a line in the file.
 - **It keeps its traces and its screenshots**, which is the one place this directory's privacy rule reads the other
   way. Every message a run reads is fabricated, delivered into a container that is destroyed with the run, so a capture
   shows nobody's mailbox and a trace carries a credential that exists for the length of one run. The pull-request suite

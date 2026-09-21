@@ -26,6 +26,18 @@ export const pl: Catalogue = {
     'shell.tabModeTooNarrow': 'dostępne na szerszym ekranie',
     'control.notBuiltYet': '{control} — jeszcze niezbudowane',
     'ai.badge': 'AI',
+    'discover.newQuestion': 'Nowe pytanie',
+    'discover.tryThis': 'Spróbuj',
+    'discover.suggestion.owed': 'Na co wciąż czekam na odpowiedź?',
+    'discover.suggestion.agreed': 'Jaką stawkę ustaliliśmy?',
+    'discover.suggestion.files': 'Która wersja umowy jest najnowszą, jaką ktoś mi przysłał?',
+    'discover.notAsked.unauthenticated':
+        'Sesja skończyła się, zanim pytanie zostało wysłane. Zaloguj się i zapytaj ponownie.',
+    'discover.notAsked.unauthorized': 'To konto nie może zadawać pytań o pocztę.',
+    'discover.notAsked.unavailable':
+        'Wdrożenie nie rozpoczęło uruchomienia dla tego pytania — może być niedostępne albo mogło odmówić tego, o co pytasz. Tak czy inaczej nic nie zostało przeczytane, więc można zapytać ponownie.',
+    'discover.notAsked.unreadable':
+        'Wdrożenie przyjęło to pytanie, ale odpowiedziało uruchomieniem, którego ten klient nie potrafi odczytać. Warto zgłosić to jako usterkę.',
     'answerCanvas.blocks': 'Bloki odpowiedzi',
     'answerCanvas.stillComing': 'Dalsza część odpowiedzi',
     'answerCanvas.nothing': 'To uruchomienie nie dało nic do pokazania.',

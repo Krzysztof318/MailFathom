@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { discoveryRunRoute, readDiscoveryRunTail, stopDiscoveryRun } from './discoveryRun';
+import { discoveryRunRoute, readDiscoveryRunTail, startDiscoveryRun, stopDiscoveryRun } from './discoveryRun';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -810,6 +810,90 @@ describe('readDiscoveryRunTail', () => {
         const answered = await readDiscoveryRunTail(session, answering({ status: 200, body }), runId, 0);
 
         expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+});
+
+describe('startDiscoveryRun', () => {
+    const asked = {
+        question: 'What did we agree the rate would be?',
+        accounts: [],
+        folders: [],
+        thread: null,
+        emails: [],
+    };
+
+    it('asks the question and its scope in one request, so a run never reads mail nobody chose', async () => {
+        const { transport, requests } = recording({ status: 202, body: JSON.stringify({ runId }) });
+
+        await startDiscoveryRun(session, transport, { ...asked, folders: ['role:Inbox'], emails: ['an-email'] });
+
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/discovery/runs');
+        expect(JSON.parse(requests[0]?.body ?? '')).toEqual({
+            question: 'What did we agree the rate would be?',
+            accounts: [],
+            folders: ['role:Inbox'],
+            thread: null,
+            emails: ['an-email'],
+        });
+    });
+
+    it('answers with the run to follow rather than with an answer', async () => {
+        const answered = await startDiscoveryRun(
+            session,
+            answering({ status: 202, body: JSON.stringify({ runId }) }),
+            asked,
+        );
+
+        expect(answered).toEqual({ outcome: 'read', value: runId });
+    });
+
+    it('carries the conversation a question was asked about', async () => {
+        const { transport, requests } = recording({ status: 202, body: JSON.stringify({ runId }) });
+
+        await startDiscoveryRun(session, transport, { ...asked, thread: 'a-thread' });
+
+        expect(JSON.parse(requests[0]?.body ?? '')).toMatchObject({ thread: 'a-thread' });
+    });
+
+    it.each([
+        ['an answer that is not a record', '[]'],
+        ['an answer naming no run', '{}'],
+        ['a run named as something other than a string', '{"runId":7}'],
+        ['a run named as nothing at all', '{"runId":""}'],
+        ['an answer that is not JSON', 'accepted'],
+    ])('refuses %s rather than following a run it cannot name', async (_unused, body) => {
+        const answered = await startDiscoveryRun(session, answering({ status: 202, body }), asked);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 202 } });
+    });
+
+    it('refuses an identifier longer than one a later read could put in a path', async () => {
+        const body = JSON.stringify({ runId: 'a'.repeat(129) });
+
+        const answered = await startDiscoveryRun(session, answering({ status: 202, body }), asked);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 202 } });
+    });
+
+    it.each([
+        // A question this client composed and the deployment refused is the shared reading of a refused request rather
+        // than one of this route's own: nothing about the answer was unreadable, and what a reader does is ask again.
+        [400, 'unavailable'],
+        [401, 'unauthenticated'],
+        [403, 'unauthorized'],
+        [200, 'unavailable'],
+        [500, 'unavailable'],
+    ])('reports %i as %s', async (status, reason) => {
+        const answered = await startDiscoveryRun(session, answering({ status, body: '' }), asked);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason, status } });
+    });
+
+    it('reports a deployment it could not reach', async () => {
+        const answered = await startDiscoveryRun(session, () => Promise.reject(new Error('down')), asked);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
 });
 

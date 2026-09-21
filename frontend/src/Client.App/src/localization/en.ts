@@ -27,6 +27,17 @@ export const en = {
     'shell.tabModeTooNarrow': 'available on a wider screen',
     'control.notBuiltYet': '{control} — not built yet',
     'ai.badge': 'AI',
+    'discover.newQuestion': 'New question',
+    'discover.tryThis': 'Try this',
+    'discover.suggestion.owed': 'What am I still owed an answer on?',
+    'discover.suggestion.agreed': 'What did we agree the rate would be?',
+    'discover.suggestion.files': 'Which version of the contract is the latest one anybody sent me?',
+    'discover.notAsked.unauthenticated': 'The session ended before this question was sent. Sign in again and ask it.',
+    'discover.notAsked.unauthorized': 'This account is not allowed to ask questions about mail.',
+    'discover.notAsked.unavailable':
+        'Your deployment did not start a run for this question — it may be offline, or it may have refused what was asked. Nothing was read either way, so asking again is safe.',
+    'discover.notAsked.unreadable':
+        'The deployment took this question but answered with a run this client could not read. This is worth reporting as a defect.',
     'answerCanvas.blocks': 'Answer blocks',
     'answerCanvas.stillComing': 'More of this answer',
     'answerCanvas.nothing': 'This run produced nothing to show.',

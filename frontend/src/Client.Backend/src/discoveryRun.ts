@@ -57,9 +57,12 @@ import { send, type MailFathomTransport } from './transport';
 // forward compatibility one revision further down — and it is why an event kind this client does not know is carried
 // as `other` instead of being skipped: a sequence dropped on the floor is a cursor that never advances past it.
 
+/** The route a run is started at, relative to the client prefix. */
+export const discoveryRunsRoute = '/discovery/runs';
+
 /** The route one run is read at, relative to the client prefix. */
 export function discoveryRunRoute(runId: string): string {
-    return `/discovery/runs/${encodeURIComponent(runId)}`;
+    return `${discoveryRunsRoute}/${encodeURIComponent(runId)}`;
 }
 
 /**
@@ -299,6 +302,109 @@ const longestEndpointName = 128;
 
 // A stop answers `204` with no body at all, so anything arriving on it is already more than the contract carries.
 const longestStopAnswer = 4 * 1024;
+
+// A start answers one identifier, so the same bound holds: anything larger is not the answer this route publishes.
+const longestStartAnswer = 4 * 1024;
+
+/**
+ * The question one run is asked, and the mail it may be answered from.
+ *
+ * Every field the deployment requires is stated rather than optional, because a question asked against *whatever the
+ * service defaults to* is a run reading mail the person never chose. What a caller narrows with is the empty list and
+ * `null`, which is how the service spells *every account* and *no conversation* — so a scope reaching nothing is
+ * expressible and a scope the caller forgot to state is not.
+ *
+ * It names no user. Whose mail is read comes off the credential, exactly as it does on every other route here.
+ */
+export interface DiscoveryRunAsk {
+    /** What the person wants to know. */
+    readonly question: string;
+
+    /** The accounts to read, by identifier or display name, and empty for every account this user holds. */
+    readonly accounts: readonly string[];
+
+    /** The folders to read, by alias or as `role:Inbox`, and empty for every folder. */
+    readonly folders: readonly string[];
+
+    /** The conversation the question is about, or `null` where it is about none. */
+    readonly thread: string | null;
+
+    /** The individual messages the question is about, and empty where it is about none. */
+    readonly emails: readonly string[];
+}
+
+/**
+ * Asks one question of this user's mail, and answers with the run that will answer it.
+ *
+ * @param session The address to reach and the finished header value to present.
+ * @param transport How the request goes out.
+ * @param asked The question and the mail it may be answered from.
+ * @returns The run to follow, or why it was not started. The deployment accepts a question as soon as it knows the
+ * question and its scope are answerable, so what comes back is an identifier rather than an answer: everything the run
+ * publishes is read at {@link readDiscoveryRunTail}.
+ * @remarks
+ * Every status but `202` is read by {@link failureReasonForStatus}, so a refusal of the question itself — which the
+ * service answers `400` — reaches a screen as `unavailable`, beside a deployment that could not be reached at all. That
+ * is the same reading every other route here takes of a `400`, and it is deliberate rather than a gap: what the service
+ * says a caller has to change is stated in a body this client does not surface, a question being the most revealing
+ * value this surface carries, so there is nothing a distinct reason could tell somebody that *asking again* does not.
+ * `unreadable` is the accepted run this client could not name — a `202` whose body carries no identifier a later read
+ * could use — and it is reached from nowhere else.
+ */
+export function startDiscoveryRun(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    asked: DiscoveryRunAsk,
+): Promise<ClientResult<string>> {
+    return spanned(`POST ${discoveryRunsRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'POST',
+            path: routeFor(session, discoveryRunsRoute),
+            headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question: asked.question,
+                accounts: asked.accounts,
+                folders: asked.folders,
+                thread: asked.thread,
+                emails: asked.emails,
+            }),
+            longestAnswer: longestStartAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 202) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const runId = parseStartedRun(response.body);
+
+        return runId === null ? failed('unreadable', response.status) : read(runId);
+    });
+}
+
+/** The run the deployment accepted, or nothing where what came back is not an identifier a later read could name. */
+function parseStartedRun(body: string): string | null {
+    let parsed: unknown;
+
+    try {
+        parsed = JSON.parse(body);
+    } catch {
+        return null;
+    }
+
+    const record = asRecord(parsed);
+    const runId = record?.['runId'];
+
+    return typeof runId === 'string' && runId.length > 0 && runId.length <= longestRunIdentifier ? runId : null;
+}
+
+// An identifier the deployment wrote, which is a UUID. Bounded rather than matched, because what this client does with
+// it is put it back in a path — and a shape the route does not match is the deployment's answer to that, not a value to
+// be refused on a guess about what a later version of it may look like.
+const longestRunIdentifier = 128;
 
 /**
  * Reads what one run has published after a cursor, and whether it is still working.

@@ -68,7 +68,7 @@ cannot divert an ordinary `aspire run` onto it.
 
 **The client endpoint's per-user budget is raised for this run, and the limiter stays on.** The default allows one user
 a burst of 120 requests restored at 120 a minute, queueing none beyond it — a bound written for a person reading their
-mail. What drives this endpoint is a browser suite signing in once per case and drawing four spaces as fast as it can,
+mail. What drives this endpoint is a browser suite signing in once per case and drawing five spaces as fast as it can,
 so the suite spends that budget inside its first minute and every request after it is refused; the client reports a
 refusal as *the deployment did not answer*, which reads as a broken screen and is not one. The run therefore states a
 budget no suite can exhaust rather than switching the limiter off, so a request still takes the path it takes in a
@@ -85,10 +85,11 @@ of a filled mailbox takes as long as it takes.
 ## What the specs assert
 
 `frontend/tests/end-to-end/` holds them and `frontend/playwright.end-to-end.config.ts` runs them. They cover the path a
-person takes through each of the client's four built spaces: signing in, the mail list, opening a message, the
+person takes through each of the client's five built spaces: signing in, the mail list, opening a message, the
 conversation it belongs to, a search over the mailbox, and signing out; the calendar in each of its four views and an
 event written, amended and deleted; the task list under its three headings, the day beside it, and a task written,
-marked done and deleted; the address book, somebody opened out of it, and a contact written and deleted. Everything is
+marked done and deleted; the address book, somebody opened out of it, and a contact written and deleted; and Discover as
+far as this run can reach it, which the paragraph below says is the screen rather than an answer. Everything is
 asserted by role and by the words a person reads, as the client's unit and browser suites are. Its fourth suite is the
 exception that proves nothing about this one: the desktop suite reaches its WebView over the WebDriver protocol, which
 has no locator for a role and a name at all.
@@ -103,11 +104,11 @@ pins, so *Today*, *This week* and *Later* are each reachable whichever weekday a
 also writes one record of its own through its screen and removes it again, which is where the client's own write path
 is held to account and what keeps the files runnable in any order.
 
-**Discover is held to being a placeholder.** The client opens there, `routing/spaces.ts` leaves it out of
-`implementedSpaces`, and nothing in the client reads the discovery routes — so there is no answer to ask this
-deployment for, and configuring a chat provider would not produce one. What the spec holds is that the space is
-reachable, that it says it is not built rather than drawing an empty frame, and that the question field the frame
-composes for every space stands on it.
+**Discover is held to the screen somebody lands on, and not to an answer.** The client opens there and the space is
+built, so pressing one of the questions it offers starts a real run — but composing an answer needs a chat provider and
+this run configures none, so a spec that waited for a block would be waiting on a model nothing here provides. What the
+spec holds is that landing reaches the screen rather than the note every unbuilt space carries, that the questions it
+offers are there to press, and that the question field the frame composes for every space stands on it.
 
 **They route nothing.** The bundle the deployment serves reaches the surface that deployment serves, over one origin,
 and every answer comes from mail that arrived at a mail server and was synchronized out of it. A `page.route` here would
