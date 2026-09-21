@@ -240,7 +240,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<bool> TryStartAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -255,7 +255,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<long?> AppendAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         AgentConversationEntry entry,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -287,7 +287,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<long?> TryResolveProposalAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         long proposedAt,
         AgentProposalState state,
         DateTimeOffset now,
@@ -333,7 +333,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<AgentConversationReading?> ReadAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         long afterSequence,
         int limit,
         CancellationToken cancellationToken)
@@ -386,7 +386,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentConversationSummary>> ListAsync(
-        MailUserId user,
+        UserId user,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -416,7 +416,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<bool> TrySetTitleAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         PresentationText title,
         CancellationToken cancellationToken)
     {
@@ -443,7 +443,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <inheritdoc />
     public async Task<bool> TryDeleteAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(DeleteConversationStatement);

@@ -44,7 +44,7 @@ public interface IAgentConversationStore
     /// <returns><see langword="true" /> when the conversation was started; <see langword="false" /> when one already exists under that identifier.</returns>
     Task<bool> TryStartAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
@@ -79,7 +79,7 @@ public interface IAgentConversationStore
     /// </remarks>
     Task<long?> AppendAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         AgentConversationEntry entry,
         DateTimeOffset now,
         CancellationToken cancellationToken);
@@ -107,7 +107,7 @@ public interface IAgentConversationStore
     /// </remarks>
     Task<long?> TryResolveProposalAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         long proposedAt,
         AgentProposalState state,
         DateTimeOffset now,
@@ -130,7 +130,7 @@ public interface IAgentConversationStore
     /// </remarks>
     Task<AgentConversationReading?> ReadAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         long afterSequence,
         int limit,
         CancellationToken cancellationToken);
@@ -142,7 +142,7 @@ public interface IAgentConversationStore
     /// <returns>The lines of the history, and empty where this person has held none.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is outside the bound.</exception>
     Task<IReadOnlyList<AgentConversationSummary>> ListAsync(
-        MailUserId user,
+        UserId user,
         int limit,
         CancellationToken cancellationToken);
 
@@ -161,7 +161,7 @@ public interface IAgentConversationStore
     /// </remarks>
     Task<bool> TrySetTitleAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         PresentationText title,
         CancellationToken cancellationToken);
 
@@ -176,6 +176,6 @@ public interface IAgentConversationStore
     /// </remarks>
     Task<bool> TryDeleteAsync(
         AgentConversationId id,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken);
 }

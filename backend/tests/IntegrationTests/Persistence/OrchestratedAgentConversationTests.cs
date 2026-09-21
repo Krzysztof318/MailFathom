@@ -69,20 +69,20 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(composing, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await composing.AppendAsync(conversation, MailUserId.Create(user), Question(), Instant, cancellationToken);
-            await composing.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
-            await composing.AppendAsync(conversation, MailUserId.Create(user), Composed(answer), Instant, cancellationToken);
+            await composing.AppendAsync(conversation, UserId.Create(user), Question(), Instant, cancellationToken);
+            await composing.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await composing.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
             await composing.AppendAsync(
                 conversation,
-                MailUserId.Create(user),
+                UserId.Create(user),
                 new AgentAnswerEnded(answer, AgentAnswerOutcome.Completed),
                 Instant,
                 cancellationToken);
 
-            await composing.TrySetTitleAsync(conversation, MailUserId.Create(user), PresentationText.Create("The price thread"), cancellationToken);
+            await composing.TrySetTitleAsync(conversation, UserId.Create(user), PresentationText.Create("The price thread"), cancellationToken);
 
             // Act
-            var read = await reading.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
+            var read = await reading.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
 
             // Assert
             Assert.NotNull(read);
@@ -131,14 +131,14 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), Question(), Instant, cancellationToken);
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
-            await store.AppendAsync(conversation, MailUserId.Create(user), Composed(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), Question(), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
 
             // Act
-            var tail = await store.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 2, limit: 50, cancellationToken);
-            var unreached = await store.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 99, limit: 50, cancellationToken);
-            var somebodyElses = await store.ReadAsync(conversation, MailUserId.Create(Guid.NewGuid()), afterSequence: 0, limit: 50, cancellationToken);
+            var tail = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 2, limit: 50, cancellationToken);
+            var unreached = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 99, limit: 50, cancellationToken);
+            var somebodyElses = await store.ReadAsync(conversation, UserId.Create(Guid.NewGuid()), afterSequence: 0, limit: 50, cancellationToken);
 
             // Assert
             Assert.Equal([3L], tail?.Entries.Select(written => written.Sequence));
@@ -169,16 +169,16 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
 
             foreach (var _ in Enumerable.Range(0, 4))
             {
-                await store.AppendAsync(conversation, MailUserId.Create(user), Composed(answer), Instant, cancellationToken);
+                await store.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
             }
 
             // Act
-            var page = await store.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 0, limit: 2, cancellationToken);
-            var rest = await store.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 2, limit: 10, cancellationToken);
+            var page = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 2, cancellationToken);
+            var rest = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 2, limit: 10, cancellationToken);
 
             // Assert
             Assert.Equal([1L, 2L], page?.Entries.Select(written => written.Sequence));
@@ -216,25 +216,25 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(composing, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await composing.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
-            await composing.AppendAsync(conversation, MailUserId.Create(user), Composed(answer), Instant, cancellationToken);
+            await composing.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await composing.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
 
             // Act
             var stopped = await stopping.AppendAsync(
                 conversation,
-                MailUserId.Create(user),
+                UserId.Create(user),
                 new AgentAnswerEnded(answer, AgentAnswerOutcome.Stopped),
                 Instant,
                 cancellationToken);
-            var refused = await composing.AppendAsync(conversation, MailUserId.Create(user), Composed(answer), Instant, cancellationToken);
-            var note = await stopping.AppendAsync(conversation, MailUserId.Create(user), Note(), Instant, cancellationToken);
+            var refused = await composing.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
+            var note = await stopping.AppendAsync(conversation, UserId.Create(user), Note(), Instant, cancellationToken);
 
             // Assert
             Assert.Equal(3L, stopped);
             Assert.Null(refused);
             Assert.Equal(4L, note);
 
-            var read = await composing.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
+            var read = await composing.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
             Assert.False(read?.Composing);
             Assert.Equal(
                 [AgentAnswerStarted.Kind, AgentBlockComposed.Kind, AgentAnswerEnded.Kind, AgentMessageWritten.Kind],
@@ -263,16 +263,16 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
 
             // Act
             var second = await store.AppendAsync(
                 conversation,
-                MailUserId.Create(user),
+                UserId.Create(user),
                 new AgentAnswerStarted(AgentMessageId.New()),
                 Instant,
                 cancellationToken);
-            var steering = await store.AppendAsync(conversation, MailUserId.Create(user), Question(), Instant, cancellationToken);
+            var steering = await store.AppendAsync(conversation, UserId.Create(user), Question(), Instant, cancellationToken);
 
             // Assert
             Assert.Null(second);
@@ -307,7 +307,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
 
             // Act
             var attempts = await ConcurrentIdempotency.RunAsync(
@@ -315,7 +315,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
                 ContendingCallers,
                 (ordinal, token) => store.AppendAsync(
                     conversation,
-                    MailUserId.Create(user),
+                    UserId.Create(user),
                     ordinal % 2 == 0 ? Composed(answer) : Question(),
                     Instant,
                     token),
@@ -354,8 +354,8 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
-            var proposedAt = await store.AppendAsync(conversation, MailUserId.Create(user), Proposed(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            var proposedAt = await store.AppendAsync(conversation, UserId.Create(user), Proposed(answer), Instant, cancellationToken);
 
             // Act
             var attempts = await ConcurrentIdempotency.RunAsync(
@@ -363,7 +363,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
                 ContendingCallers,
                 (_, token) => store.TryResolveProposalAsync(
                     conversation,
-                    MailUserId.Create(user),
+                    UserId.Create(user),
                     proposedAt!.Value,
                     AgentProposalState.Accepted,
                     Instant,
@@ -396,10 +396,10 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var conversation = await StartedAsync(store, user, cancellationToken);
             var answer = AgentMessageId.New();
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
-            var declinedAt = await store.AppendAsync(conversation, MailUserId.Create(user), Proposed(answer), Instant, cancellationToken);
-            var acceptedAt = await store.AppendAsync(conversation, MailUserId.Create(user), Proposed(answer), Instant, cancellationToken);
-            var leftPendingAt = await store.AppendAsync(conversation, MailUserId.Create(user), Proposed(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            var declinedAt = await store.AppendAsync(conversation, UserId.Create(user), Proposed(answer), Instant, cancellationToken);
+            var acceptedAt = await store.AppendAsync(conversation, UserId.Create(user), Proposed(answer), Instant, cancellationToken);
+            var leftPendingAt = await store.AppendAsync(conversation, UserId.Create(user), Proposed(answer), Instant, cancellationToken);
 
             // Act
             var declined = await Resolve(store, conversation, user, declinedAt, AgentProposalState.Declined, cancellationToken);
@@ -411,7 +411,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             // somewhere it cannot move from, the assertion would hold with the ownership check gone.
             var somebodyElses = await store.TryResolveProposalAsync(
                 conversation,
-                MailUserId.Create(Guid.NewGuid()),
+                UserId.Create(Guid.NewGuid()),
                 leftPendingAt!.Value,
                 AgentProposalState.Declined,
                 Instant,
@@ -467,16 +467,16 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var newer = await StartedAsync(store, user, cancellationToken);
             var theirs = await StartedAsync(store, somebodyElse, cancellationToken);
 
-            await store.AppendAsync(older, MailUserId.Create(user), Question(), Instant, cancellationToken);
-            await store.AppendAsync(newer, MailUserId.Create(user), Question(), Instant.AddMinutes(1), cancellationToken);
-            await store.AppendAsync(theirs, MailUserId.Create(somebodyElse), Question(), Instant.AddMinutes(2), cancellationToken);
+            await store.AppendAsync(older, UserId.Create(user), Question(), Instant, cancellationToken);
+            await store.AppendAsync(newer, UserId.Create(user), Question(), Instant.AddMinutes(1), cancellationToken);
+            await store.AppendAsync(theirs, UserId.Create(somebodyElse), Question(), Instant.AddMinutes(2), cancellationToken);
 
             // Act
-            var history = await store.ListAsync(MailUserId.Create(user), limit: 10, cancellationToken);
-            var wroteIntoSomebodyElses = await store.AppendAsync(theirs, MailUserId.Create(user), Question(), Instant, cancellationToken);
-            var namedSomebodyElses = await store.TrySetTitleAsync(theirs, MailUserId.Create(user), PresentationText.Create("Not theirs to name"), cancellationToken);
-            var removedSomebodyElses = await store.TryDeleteAsync(theirs, MailUserId.Create(user), cancellationToken);
-            var removed = await store.TryDeleteAsync(newer, MailUserId.Create(user), cancellationToken);
+            var history = await store.ListAsync(UserId.Create(user), limit: 10, cancellationToken);
+            var wroteIntoSomebodyElses = await store.AppendAsync(theirs, UserId.Create(user), Question(), Instant, cancellationToken);
+            var namedSomebodyElses = await store.TrySetTitleAsync(theirs, UserId.Create(user), PresentationText.Create("Not theirs to name"), cancellationToken);
+            var removedSomebodyElses = await store.TryDeleteAsync(theirs, UserId.Create(user), cancellationToken);
+            var removed = await store.TryDeleteAsync(newer, UserId.Create(user), cancellationToken);
 
             // Assert
             Assert.Equal([newer, older], history.Select(line => line.Id));
@@ -485,8 +485,8 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.False(removedSomebodyElses);
             Assert.True(removed);
             Assert.Equal(0, await CountEntriesOfAsync(host, newer, cancellationToken));
-            Assert.Null(await store.ReadAsync(newer, MailUserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
-            Assert.NotNull(await store.ReadAsync(theirs, MailUserId.Create(somebodyElse), afterSequence: 0, limit: 10, cancellationToken));
+            Assert.Null(await store.ReadAsync(newer, UserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
+            Assert.NotNull(await store.ReadAsync(theirs, UserId.Create(somebodyElse), afterSequence: 0, limit: 10, cancellationToken));
         }
         finally
         {
@@ -511,16 +511,16 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var store = await StoreOfAsync(host, cancellationToken);
             var conversation = await StartedAsync(store, user, cancellationToken);
 
-            await store.AppendAsync(conversation, MailUserId.Create(user), Question(), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), Question(), Instant, cancellationToken);
 
             // Act
-            var startedTwice = await store.TryStartAsync(conversation, MailUserId.Create(user), Instant, cancellationToken);
+            var startedTwice = await store.TryStartAsync(conversation, UserId.Create(user), Instant, cancellationToken);
 
             await OrchestratedForeignUser.EraseAsync(host, user);
 
             // Assert
             Assert.False(startedTwice);
-            Assert.Null(await store.ReadAsync(conversation, MailUserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
+            Assert.Null(await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
             Assert.Equal(0, await CountEntriesOfAsync(host, conversation, cancellationToken));
         }
         finally
@@ -539,7 +539,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         AgentProposalState state,
         CancellationToken cancellationToken) => store.TryResolveProposalAsync(
             conversation,
-            MailUserId.Create(user),
+            UserId.Create(user),
             proposedAt!.Value,
             state,
             Instant,
@@ -552,7 +552,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
     {
         var id = AgentConversationId.New();
 
-        Assert.True(await store.TryStartAsync(id, MailUserId.Create(user), Instant, cancellationToken));
+        Assert.True(await store.TryStartAsync(id, UserId.Create(user), Instant, cancellationToken));
 
         return id;
     }
