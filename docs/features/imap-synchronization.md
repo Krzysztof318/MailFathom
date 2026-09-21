@@ -621,12 +621,22 @@ transaction that authored it, beside its audit entry where the account keeps one
 [client endpoint](../operations/client-endpoint.md#the-folder-management-routes) holds what each act does there. The exception
 is a delete of a message already in the local trash: it erases the message and every row derived from it, so it is
 recorded like any delete and held for its withdrawal window, and once that window passes the account's run erases the
-message instead of opening a write session. The run does not tell such a delete from any other delete record: every
-outstanding delete record on a held account is run as an erasure once its window has passed, including one opened
-before the account became held, whatever local disposition it was authored with. A record of any other change opened
-before then is left where it is rather than issued, because the server it named is no longer the mailbox's truth: the
-run reads only a held account's delete records, so however many such records wait, none of them stands ahead of an
-erasure, and each stays counted as pending.
+message instead of opening a write session. Such a record says so on the row it was opened as, and the run erases that
+row and no other: a delete opened before the account became held, or opened while it was being restored, is a change a
+server is still owed rather than an erasure, and running it as one would destroy the local copy its own disposition
+asked to keep. Those records are left where they are rather than issued, because the server they name is not the
+mailbox's truth while the account is held, and each stays counted as pending. A record of any other change is left the
+same way: the run reads only the records a held account opened as erasures, so however many records of other kinds
+wait — a move from before the hold, a delete the restore opened for the source — none of them stands ahead of an
+erasure.
+
+**An account being restored to its source both commits and records.** MailFathom is still the truth while the mailbox
+is appended back, so every act is made to the stored message exactly as it is on a held account; where the message
+still stands on the source — never drained, or already appended back — the same transaction opens the ordinary record
+the run carries to the server, so an act taken during the restore reaches the source instead of being undone by it. A
+message the drain has already taken off the source carries no record, the restore writing its local state onto the
+occurrence when it appends the message. The erasure above is the one act that is local in every phase: a run on a
+restoring account erases the record opened as one and carries the rest.
 
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary

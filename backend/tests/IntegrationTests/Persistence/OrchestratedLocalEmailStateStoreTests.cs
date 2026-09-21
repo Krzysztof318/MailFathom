@@ -114,6 +114,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
         var anotherAccount = MailAccountId.Create("local-email-state-elsewhere");
         var refusedState = new LocalEmailState(
             binding,
+            HoldsSourceOccurrence: true,
             Folder: null,
             IsSeen: true,
             IsFlagged: true,
@@ -159,6 +160,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             cancellationToken);
         var written = new LocalEmailState(
             binding,
+            HoldsSourceOccurrence: true,
             Folder: null,
             IsSeen: true,
             IsFlagged: true,

@@ -141,52 +141,52 @@ public sealed class MailFlagChangeRecorder
                         heldUntil: null,
                         attemptCancellationToken);
 
-                    switch (submitted.Outcome)
+                    if (submitted.Outcome is not (MailboxChangeSubmissionOutcome.Recorded or MailboxChangeSubmissionOutcome.Applied))
                     {
-                        case MailboxChangeSubmissionOutcome.Recorded when submitted.Record is { } record:
-                            if (!StatesTheSameChangeAs(record.Request, request))
-                            {
-                                throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
-                            }
+                        throw new AuthoredMailChangeTargetNotFoundException();
+                    }
 
-                            opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
-                            break;
-                        case MailboxChangeSubmissionOutcome.Applied when submitted.Change is { } change:
-                            applied.Add(change);
-                            break;
-                        default:
-                            throw new AuthoredMailChangeTargetNotFoundException();
+                    // The two are not alternatives: a restoring account commits the change to stored state and opens the
+                    // record its source is still owed, so a call there reports both halves of what it did.
+                    if (submitted.Change is { } appliedChange)
+                    {
+                        applied.Add(appliedChange);
+                    }
+
+                    if (submitted.Record is { } record)
+                    {
+                        if (!StatesTheSameChangeAs(record.Request, request))
+                        {
+                            throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
+                        }
+
+                        opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
                     }
                 }
             },
             cancellationToken);
 
-        if (applied.Count > 0)
+        foreach (var committed in applied)
         {
-            foreach (var committed in applied)
-            {
-                this.submission.Announce(committed);
-            }
-
-            return new AuthoredMailFlagChangeResult(
-                change.StoredEmailId,
-                target.Occurrence.AccountId,
-                target.Folder.Alias,
-                [],
-                IsApplied: true);
+            this.submission.Announce(committed);
         }
 
-        // Raised once the records are durable, and never before: the run this brings forward reads the records rather
-        // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited
-        // out the interval anyway. It is a hint and nothing is done about it failing — the account's own schedule is
-        // what makes the change correct, and this only decides whether it is prompt.
-        this.runSignal.BringForward(target.Occurrence.AccountId);
+        if (opened.Count > 0)
+        {
+            // Raised once the records are durable, and never before: the run this brings forward reads the records rather
+            // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited
+            // out the interval anyway. It is a hint and nothing is done about it failing — the account's own schedule is
+            // what makes the change correct, and this only decides whether it is prompt. A restoring account's records are
+            // brought forward the same way, the change having already taken effect locally.
+            this.runSignal.BringForward(target.Occurrence.AccountId);
+        }
 
         return new AuthoredMailFlagChangeResult(
             change.StoredEmailId,
             target.Occurrence.AccountId,
             target.Folder.Alias,
-            opened);
+            opened,
+            IsApplied: applied.Count > 0);
     }
 
     /// <summary>Reports whether the record this call was answered with asks for what this call asked for.</summary>

@@ -25,12 +25,19 @@ namespace MailFathom.Application.Mail.Mutations;
 /// requires that the executor be chosen once, in the mutation layer, from the account's phase.
 /// </para>
 /// <para>
-/// On an account that is not held, the change is written down as the durable record the account's convergence pass
-/// carries, exactly as before. On a held account there is no server to carry it to, so it is committed to stored state
-/// together with its audit entry, in the caller's transaction, and no record is written — a transaction either happened
-/// or it did not, and there is no sequence for a crash to interrupt. The one exception is erasure: a delete of a message
-/// already in the trash opens the ordinary record, held for the caller's window, so the existing withdrawal and release
-/// routes keep acting on it and the cascade runs only once the window has passed.
+/// On an account whose source is the truth, the change is written down as the durable record the account's convergence
+/// pass carries, exactly as before. On a held account there is no server to carry it to, so it is committed to stored
+/// state together with its audit entry, in the caller's transaction, and no record is written — a transaction either
+/// happened or it did not, and there is no sequence for a crash to interrupt. The one exception is erasure: a delete of
+/// a message already in the trash opens a record marked as the local erasure it is, held for the caller's window, so the
+/// existing withdrawal and release routes keep acting on it and the cascade runs only once the window has passed.
+/// </para>
+/// <para>
+/// A restoring account commits locally for the same reason a held one does — MailFathom is still the truth until the
+/// mailbox has been appended back — and owes its source one thing more. Where the message holds an occurrence, never
+/// drained or already appended, the same transaction opens the ordinary record the converger carries under ADR 0007, so
+/// an act taken during the restore reaches the source instead of being undone by it; where the message holds none, the
+/// local commit is the whole of the act and the restore carries it when it appends the message.
 /// </para>
 /// <para>
 /// A copy is the one local change that takes two phases, because it creates a second stored message with a payload of
@@ -227,7 +234,7 @@ public sealed class MailboxChangeSubmission
         var account = request.Account;
         var holding = await this.localFolders.ReadAsync(session, account, cancellationToken);
 
-        if (holding is not { Phase: MailAccountCustodyPhase.Held })
+        if (holding is not { Phase: MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring })
         {
             if (refusesMoveIntoCurrentFolder
                 && request.Mutation == MailboxMutation.Relocate
@@ -236,7 +243,7 @@ public sealed class MailboxChangeSubmission
                 return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
             }
 
-            var record = await this.records.OpenAsync(session, request, heldUntil, cancellationToken);
+            var record = await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: false, cancellationToken);
 
             return SubmittedMailboxChange.Recorded(record);
         }
@@ -381,7 +388,7 @@ public sealed class MailboxChangeSubmission
                 : mutation == MailboxMutation.SetFlagged ? state with { IsFlagged = request.DesiredFlaggedState!.Value }
                 : state with { Keywords = KeywordsAfter(request, state.Keywords) };
 
-            return await this.CommitAsync(session, request, state, flagged, cancellationToken);
+            return await this.CommitAsync(session, request, state, flagged, heldUntil, holding.Phase, cancellationToken);
         }
 
         // Every other change moves the message, so the hierarchy is saved with it: a save is what makes the commit
@@ -404,14 +411,21 @@ public sealed class MailboxChangeSubmission
                     return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
                 }
 
-                var record = await this.records.OpenAsync(session, request, heldUntil, cancellationToken);
+                var record = await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: true, cancellationToken);
 
                 return SubmittedMailboxChange.Recorded(record);
             }
 
             var trash = tree.Folders.First(folder => folder.Role == MailFolderSpecialUse.Trash);
 
-            return await this.CommitAsync(session, request, state, state with { Folder = trash.Id }, cancellationToken);
+            return await this.CommitAsync(
+                session,
+                request,
+                state,
+                state with { Folder = trash.Id },
+                heldUntil,
+                holding.Phase,
+                cancellationToken);
         }
 
         if (destination is null || CorrespondingFolder(tree, destination) is not { } target)
@@ -434,7 +448,14 @@ public sealed class MailboxChangeSubmission
                 : await this.CommitCopyAsync(session, request, state, target.Id, preparedCopy, cancellationToken);
         }
 
-        return await this.CommitAsync(session, request, state, state with { Folder = target.Id }, cancellationToken);
+        return await this.CommitAsync(
+            session,
+            request,
+            state,
+            state with { Folder = target.Id },
+            heldUntil,
+            holding.Phase,
+            cancellationToken);
     }
 
     /// <summary>Writes the second stored message a copy produces, from the payload placed before this transaction.</summary>
@@ -480,22 +501,37 @@ public sealed class MailboxChangeSubmission
             new AppliedMailboxChange(request.Account, state.SourceFolder.Alias, copied.Value, Flags: null));
     }
 
+    /// <summary>Writes the change onto the stored message, and beside it the record a restoring account owes its source.</summary>
+    /// <remarks>
+    /// The record is opened in the same transaction as the commit, so a message acted on during the restore cannot end
+    /// up committed locally with nothing to carry the act to the source — which is what would leave it arriving back in
+    /// <see cref="MailAccountCustodyPhase.Mirrored" /> in the state the source last had. It is opened against the
+    /// occurrence the requester resolved, because a restore appends only a message that holds none and therefore never
+    /// moves the occurrence this request names.
+    /// </remarks>
     private async Task<SubmittedMailboxChange> CommitAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
         LocalEmailState before,
         LocalEmailState after,
+        DateTimeOffset? heldUntil,
+        MailAccountCustodyPhase phase,
         CancellationToken cancellationToken)
     {
         await this.AuditAsync(session, request, before, cancellationToken);
         await this.states.WriteAsync(session, request.Account, request.StoredEmailId, after, cancellationToken);
+
+        var carried = phase == MailAccountCustodyPhase.Restoring && before.HoldsSourceOccurrence
+            ? await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: false, cancellationToken)
+            : null;
 
         var flags = request.Mutation == MailboxMutation.SetSeen || request.Mutation == MailboxMutation.SetFlagged
             ? new SignalledEmailFlags(request.StoredEmailId, request.DesiredSeenState, request.DesiredFlaggedState)
             : (SignalledEmailFlags?)null;
 
         return SubmittedMailboxChange.Applied(
-            new AppliedMailboxChange(request.Account, before.SourceFolder.Alias, request.StoredEmailId, flags));
+            new AppliedMailboxChange(request.Account, before.SourceFolder.Alias, request.StoredEmailId, flags),
+            carried);
     }
 
     /// <summary>Appends the audit entry one local act owes, where the account keeps a trail.</summary>
@@ -536,7 +572,7 @@ public enum MailboxChangeSubmissionOutcome
     /// <summary>A durable record was written, which a convergence pass carries.</summary>
     Recorded = 0,
 
-    /// <summary>The change was committed to stored state with its audit entry, and nothing is left to carry.</summary>
+    /// <summary>The change was committed to stored state with its audit entry, and carries a record only where a restoring account owes its source one.</summary>
     Applied = 1,
 
     /// <summary>The held account no longer stores the message, so there was nothing to change.</summary>
@@ -558,8 +594,13 @@ public enum MailboxChangeSubmissionOutcome
 
 /// <summary>The answer one submitted change produced.</summary>
 /// <param name="Outcome">What became of the change.</param>
-/// <param name="Record">The record written, for <see cref="MailboxChangeSubmissionOutcome.Recorded" /> alone.</param>
+/// <param name="Record">The record written, which a change committed locally also carries where the account owes its source one.</param>
 /// <param name="Change">What to announce once the transaction commits, for <see cref="MailboxChangeSubmissionOutcome.Applied" /> alone.</param>
+/// <remarks>
+/// The outcome names what the requester tells its caller and the record names what convergence will carry, and the two
+/// stopped being the same question once an account could be restoring: a change committed to stored state there is
+/// applied exactly as a held account's is, and still leaves a record behind for the source.
+/// </remarks>
 public sealed record SubmittedMailboxChange(
     MailboxChangeSubmissionOutcome Outcome,
     MailboxMutationRecord? Record,
@@ -573,9 +614,10 @@ public sealed record SubmittedMailboxChange(
 
     /// <summary>Describes a change committed to stored state.</summary>
     /// <param name="change">What to announce.</param>
+    /// <param name="record">The record the account's source is still owed, or <see langword="null" /> where there is nothing to carry.</param>
     /// <returns>The answer.</returns>
-    public static SubmittedMailboxChange Applied(AppliedMailboxChange change) =>
-        new(MailboxChangeSubmissionOutcome.Applied, Record: null, change ?? throw new ArgumentNullException(nameof(change)));
+    public static SubmittedMailboxChange Applied(AppliedMailboxChange change, MailboxMutationRecord? record = null) =>
+        new(MailboxChangeSubmissionOutcome.Applied, record, change ?? throw new ArgumentNullException(nameof(change)));
 
     /// <summary>Describes a change nothing was written for.</summary>
     /// <param name="outcome">Why.</param>

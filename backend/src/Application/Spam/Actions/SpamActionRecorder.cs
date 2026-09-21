@@ -330,14 +330,20 @@ public sealed class SpamActionRecorder
                         filedRecordId = RecordIdOf(filed, applied);
                     }
 
+                    // An account that committed locally answers as applied whatever else it wrote, because that is what
+                    // happened to the mail; a restoring one carries its records inside that answer rather than instead
+                    // of it.
+                    if (applied.Count > 0)
+                    {
+                        return SpamActionResult.Applied(markedReadRecordId, filedRecordId);
+                    }
+
                     if (markedReadRecordId is not null || filedRecordId is not null)
                     {
                         return SpamActionResult.Requested(markedReadRecordId, filedRecordId);
                     }
 
-                    return applied.Count > 0
-                        ? SpamActionResult.Applied()
-                        : SpamActionResult.NotActedOn(SpamActionOutcome.NothingToChange);
+                    return SpamActionResult.NotActedOn(SpamActionOutcome.NothingToChange);
                 },
                 cancellationToken);
         }

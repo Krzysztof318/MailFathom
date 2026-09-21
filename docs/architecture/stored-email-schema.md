@@ -1061,6 +1061,14 @@ settles that delete, since the server goes on holding the message. `ix_mailbox_m
 `(MailFolderId, UidValidity, RecordedAt)`, filtered to completed `FlagDeleted` deletes that are neither settled nor seen
 removed, so it holds only what the next run of each folder is about to settle.
 
+`IsLocalErasure` says what the row was opened as rather than what it asks for, and it is true on exactly one kind of
+row: the delete of a message already in the local trash on an account holding its own mailbox, which erases MailFathom's
+copy once the person's withdrawal window has passed and reaches no server at all. It is written down rather than worked
+out from the account's phase, because the phase moves while a row waits — an account being restored to its source opens
+ordinary delete rows beside its local commits, and once it is held again both kinds are deletes against a trashed
+message. A convergence pass erases the marked rows and leaves the rest, so a delete whose `LocalDisposition` asked for
+the copy to be kept is carried or deferred rather than destroying it.
+
 `DesiredSeenState`, `DesiredFlaggedState`, and `Keywords` are the other parameters, and each belongs to the mutations
 that take it: the two booleans carry the direction a flag change asked for, and `Keywords` is a `text[]` carrying the
 keywords an addition, a removal, or a replacement named. A row carries exactly the parameter its mutation takes and

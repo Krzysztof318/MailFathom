@@ -26,7 +26,7 @@ public enum MailDeletionOutcome
     /// <remarks>A deleted message is one MailFathom will not see again, so what becomes of the local copy is the account's own answer; an account a reload has stopped declaring has none, and none invented here would be it.</remarks>
     AccountNoLongerConfigured = 2,
 
-    /// <summary>The account is held, and the message was moved into its local trash without any record to carry.</summary>
+    /// <summary>The account holds its mailbox, and the message was moved into its local trash; a restoring one also opened the delete its source is owed.</summary>
     /// <remarks>A delete of a message already in a held account's trash is an erasure instead, which is <see cref="Recorded" />: its record is what holds the cascade for the grace window.</remarks>
     Applied = 3,
 }
@@ -56,8 +56,12 @@ public sealed record AuthoredMailDeletionResult(
         new(MailDeletionOutcome.Recorded, recordId, lifecycle);
 
     /// <summary>Reports a delete committed to a held account's stored state as a move into its trash.</summary>
-    /// <returns>The result, which carries no record because none was written.</returns>
-    public static AuthoredMailDeletionResult Applied() => new(MailDeletionOutcome.Applied, RecordId: null, Lifecycle: null);
+    /// <param name="recordId">The delete a restoring account's source is still owed, or <see langword="null" /> where none was written.</param>
+    /// <param name="lifecycle">Where that record stands, supplied exactly where one was written.</param>
+    /// <returns>The result.</returns>
+    public static AuthoredMailDeletionResult Applied(
+        MailboxMutationRecordId? recordId = null,
+        MailboxMutationLifecycle? lifecycle = null) => new(MailDeletionOutcome.Applied, recordId, lifecycle);
 
     /// <summary>Reports a delete that produced no record, and why.</summary>
     /// <param name="outcome">The reason nothing was written down.</param>

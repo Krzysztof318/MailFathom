@@ -43,6 +43,7 @@ internal sealed class MailboxMutationRecordStore(
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
+        bool erasesLocalCopy,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -97,6 +98,7 @@ internal sealed class MailboxMutationRecordStore(
             // nothing about a change already begun.
             AuditTrailEnabled = auditSettingsReader.GetAuditSettings(request.Occurrence.AccountId).IsEnabled,
             Stage = MailboxMutationStage.Recorded,
+            IsLocalErasure = erasesLocalCopy,
             RequiresSourceRemoval = false,
             AttemptCount = 0,
             HeldUntil = heldUntil,
@@ -346,19 +348,18 @@ internal sealed class MailboxMutationRecordStore(
         MailAccountId account,
         int limit,
         CancellationToken cancellationToken) =>
-        this.ReadOutstandingOfAsync(account, mutationName: null, limit, cancellationToken);
+        this.ReadOutstandingOfAsync(account, localErasuresOnly: false, limit, cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingLocalErasuresAsync(
         MailAccountId account,
-        MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken) =>
-        this.ReadOutstandingOfAsync(account, mutation.Name, limit, cancellationToken);
+        this.ReadOutstandingOfAsync(account, localErasuresOnly: true, limit, cancellationToken);
 
     private async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingOfAsync(
         MailAccountId account,
-        string? mutationName,
+        bool localErasuresOnly,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -378,7 +379,7 @@ internal sealed class MailboxMutationRecordStore(
             .Where(mutation => mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled &&
-                (mutationName == null || mutation.Mutation == mutationName) &&
+                (!localErasuresOnly || mutation.IsLocalErasure) &&
 
                 // A record still inside its withdrawal window is not work this pass can do, so it is left out of the
                 // page rather than read and skipped — a page spent on records nothing may touch is a page the account's

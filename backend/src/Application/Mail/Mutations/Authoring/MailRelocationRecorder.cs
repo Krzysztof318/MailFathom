@@ -188,6 +188,15 @@ public sealed class MailRelocationRecorder
             case MailboxChangeSubmissionOutcome.Applied when submitted.Change is { } change:
                 this.submission.Announce(change);
 
+                // A restoring account's move is applied and recorded at once, so the record its source is still owed is
+                // brought forward exactly as a mirrored account's is and reported beside the move that already happened.
+                if (submitted.Record is { } carried)
+                {
+                    this.runSignal.BringForward(target.Occurrence.AccountId);
+
+                    return AuthoredMailRelocationResult.Applied(folder.Alias, carried.Id, carried.Lifecycle);
+                }
+
                 return AuthoredMailRelocationResult.Applied(folder.Alias);
             case MailboxChangeSubmissionOutcome.AlreadyInDestination:
                 return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.AlreadyInDestination);

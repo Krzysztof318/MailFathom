@@ -30,6 +30,7 @@ public interface IMailboxMutationRecordStore
     /// <param name="session">The session the write joins.</param>
     /// <param name="request">The change that was asked for.</param>
     /// <param name="heldUntil">The instant before which no convergence pass may take the record in hand, or <see langword="null" /> where it may be taken at once.</param>
+    /// <param name="erasesLocalCopy">Whether the record is a held account's erasure of its own copy rather than a change a mail server is to be told about.</param>
     /// <param name="cancellationToken">Cancels the write or the read that follows a losing insert.</param>
     /// <returns>The record for this request, whether this call created it or another one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
@@ -42,11 +43,17 @@ public interface IMailboxMutationRecordStore
     /// is honoured by <see cref="ReadOutstandingAsync(MailAccountId, int, CancellationToken)" /> and lifted by <see cref="ReleaseAsync" />, and a record that
     /// already exists under this identity keeps the hold it was opened with rather than taking this call's.
     /// </para>
+    /// <para>
+    /// What the record is for is written down with it for the same reason, and read back as
+    /// <see cref="MailboxMutationRecord.IsLocalErasure" />: a record outlives the phase it was opened under, and the two
+    /// kinds a held account can meet are told apart by what each was opened as rather than by what the account is now.
+    /// </para>
     /// </remarks>
     Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
+        bool erasesLocalCopy,
         CancellationToken cancellationToken);
 
     /// <summary>Reports whether one local email has ever had a mutation of a given kind asked for by a given kind of requester.</summary>
@@ -239,21 +246,21 @@ public interface IMailboxMutationRecordStore
         int limit,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the mutations of one account that have not completed and ask for one change, with the folder binding each was recorded against.</summary>
+    /// <summary>Reads the mutations of one account that have not completed and were opened to erase MailFathom's own copy, with the folder binding each was recorded against.</summary>
     /// <param name="account">The account whose mutations are read.</param>
-    /// <param name="mutation">The change every returned record asks for.</param>
     /// <param name="limit">The greatest number of records to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The outstanding records asking for <paramref name="mutation" />, oldest first, at most <paramref name="limit" /> of them.</returns>
+    /// <returns>The outstanding records marked <see cref="MailboxMutationRecord.IsLocalErasure" />, oldest first, at most <paramref name="limit" /> of them.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     /// <remarks>
     /// The same answer as the unfiltered read, narrowed for a pass that can do only one kind of work: a held account
-    /// erases its deletes and issues nothing else, so a record of another change is left out of its page for the reason
-    /// a record inside its hold is — a page spent on records the pass cannot act on is a page its real backlog does not get.
+    /// runs its erasures and issues nothing else, so every other record is left out of its page for the reason a record
+    /// inside its hold is — a page spent on records the pass cannot act on is a page its real backlog does not get. The
+    /// narrowing is the mark rather than the kind of change, because a delete a restore opened for the source is a
+    /// delete too, and one outstanding on an account that is held again would otherwise fill the page forever.
     /// </remarks>
-    Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+    Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingLocalErasuresAsync(
         MailAccountId account,
-        MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken);
 

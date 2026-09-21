@@ -54,6 +54,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
+        bool erasesLocalCopy,
         CancellationToken cancellationToken)
     {
         var identity = IdentityOf(request);
@@ -69,6 +70,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             Request = request,
             Stage = MailboxMutationStage.Recorded,
             IsAudited = this.AuditsMutations,
+            IsLocalErasure = erasesLocalCopy,
             RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 0,
@@ -283,9 +285,8 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingLocalErasuresAsync(
         MailAccountId account,
-        MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -294,7 +295,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
             .. this.OutstandingOf(account)
-                .Where(record => record.Request.Mutation == mutation)
+                .Where(record => record.IsLocalErasure)
                 .OrderBy(record => record.RecordedAt)
                 .Take(limit)
                 .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),

@@ -48,6 +48,30 @@ public sealed class SpamActionResultTests
     }
 
     [Fact]
+    public void Applied_ARestoringAccountsRecords_ReportsThemBesideTheChangeThatAlreadyHappened()
+    {
+        // Act
+        var result = SpamActionResult.Applied(markedReadRecordId: null, Record);
+
+        // Assert
+        Assert.Equal(SpamActionOutcome.Applied, result.Outcome);
+        Assert.Equal(Record, result.FiledRecordId);
+        Assert.Null(result.MarkedReadRecordId);
+    }
+
+    [Fact]
+    public void Applied_AHeldAccountsChange_CarriesNoRecordBecauseNoneWasWritten()
+    {
+        // Act
+        var result = SpamActionResult.Applied();
+
+        // Assert
+        Assert.Equal(SpamActionOutcome.Applied, result.Outcome);
+        Assert.Null(result.MarkedReadRecordId);
+        Assert.Null(result.FiledRecordId);
+    }
+
+    [Fact]
     public void Requested_NeitherChange_IsRefusedBecauseThatIsNothingToChange()
     {
         // Act

@@ -347,6 +347,16 @@ under `FlagDeleted` that such a replica takes in hand is expunged rather than fl
 marked flagged is served by the older one's queries. Nothing is lost that the delete did not ask to remove from the
 server. An account that relies on `FlagDeleted` finishes the rollout before its user deletes anything.
 
+**`AddMailboxMutationLocalErasureFlag` asks a held account's rollout to be short.** It adds `IsLocalErasure` to
+`mailbox_mutations`, not null with a `false` default, so it is a catalog change on a table of any size and every row
+already written arrives as the ordinary change it was. What the column records is which delete records exist to erase
+MailFathom's own copy rather than to reach a server, and a build older than the release carrying it decides that from
+the account's phase instead: on a held account it erases every outstanding delete. So a delete opened while an account
+was being restored to its source — a change the source is still owed, whose own disposition asked for the local copy to
+be kept — is erased rather than left alone if an older replica takes it in hand while the account is held again. Only an
+account that is held or being restored is exposed to it, and only for as long as two builds are running. Finish the
+rollout before restoring a mailbox, or leave the account held until it has finished.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The

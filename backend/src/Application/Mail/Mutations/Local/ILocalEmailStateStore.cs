@@ -57,12 +57,20 @@ public interface ILocalEmailStateStore
 
 /// <summary>Where a stored message is kept and what it carries, as a local change reads and writes it.</summary>
 /// <param name="SourceFolder">The binding the message's occurrence names, which is what a listing and a signal name it by.</param>
+/// <param name="HoldsSourceOccurrence">Whether a source still holds the message at the place the occurrence names.</param>
 /// <param name="Folder">The local folder the message is in, or <see langword="null" /> where none has been assigned yet.</param>
 /// <param name="IsSeen">Whether the message is read.</param>
 /// <param name="IsFlagged">Whether the message is starred.</param>
 /// <param name="Keywords">The keywords the message carries.</param>
+/// <remarks>
+/// The occurrence is reported as a fact rather than as an identity, because the identity a change is recorded against
+/// is the one the requester resolved and wrote into its request. What the transaction has to answer is narrower: a
+/// message the drain has taken off the source has nothing for a mutation record to be issued against, and one that
+/// still stands there — never drained, or appended back by a restore — has.
+/// </remarks>
 public sealed record LocalEmailState(
     MailFolderResolution SourceFolder,
+    bool HoldsSourceOccurrence,
     LocalMailFolderId? Folder,
     bool IsSeen,
     bool IsFlagged,

@@ -170,7 +170,19 @@ public sealed class MailDeletionRecorder
         {
             this.submission.Announce(change);
 
-            return AuthoredMailDeletionResult.Applied();
+            // A restoring account moved the message into its local trash and opened the delete its source is still owed,
+            // which waits out the person's window exactly as a mirrored account's does before anything is raised for it.
+            if (submitted.Record is not { } carried)
+            {
+                return AuthoredMailDeletionResult.Applied();
+            }
+
+            if (heldUntil is null)
+            {
+                this.runSignal.BringForward(target.Occurrence.AccountId);
+            }
+
+            return AuthoredMailDeletionResult.Applied(carried.Id, carried.Lifecycle);
         }
 
         if (submitted.Record is not { } record)

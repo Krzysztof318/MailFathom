@@ -35,7 +35,7 @@ public enum MailRelocationOutcome
     /// <remarks>A message moved out of the mirror is one MailFathom will not see again, so what becomes of the local copy is the account's own answer; an account a reload has stopped declaring has none, and none invented here would be it.</remarks>
     AccountNoLongerConfigured = 4,
 
-    /// <summary>The account is held, and the move was committed to stored state without any record to carry.</summary>
+    /// <summary>The account holds its mailbox, and the move was committed to stored state; a restoring one also opened the record its source is owed.</summary>
     Applied = 5,
 }
 
@@ -69,9 +69,14 @@ public sealed record AuthoredMailRelocationResult(
 
     /// <summary>Reports a move committed to a held account's stored state.</summary>
     /// <param name="destination">The folder the move named.</param>
-    /// <returns>The result, which carries no record because none was written.</returns>
-    public static AuthoredMailRelocationResult Applied(MailFolderAlias destination) =>
-        new(MailRelocationOutcome.Applied, destination, RecordId: null, Lifecycle: null);
+    /// <param name="recordId">The record a restoring account's source is still owed, or <see langword="null" /> where none was written.</param>
+    /// <param name="lifecycle">Where that record stands, supplied exactly where one was written.</param>
+    /// <returns>The result.</returns>
+    public static AuthoredMailRelocationResult Applied(
+        MailFolderAlias destination,
+        MailboxMutationRecordId? recordId = null,
+        MailboxMutationLifecycle? lifecycle = null) =>
+        new(MailRelocationOutcome.Applied, destination, recordId, lifecycle);
 
     /// <summary>Reports a move that produced no record, and why.</summary>
     /// <param name="outcome">The reason nothing was written down.</param>

@@ -370,7 +370,7 @@ public sealed class SetMailFlagsToolTests
                     Arg.Any<StoredEmailId>(),
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalEmailState?>(
-                    new LocalEmailState(folder, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([]))));
+                    new LocalEmailState(folder, HoldsSourceOccurrence: true, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([]))));
             auditSettings.GetAuditSettings(Arg.Any<MailAccountId>()).Returns(MailboxMutationAuditSettings.Disabled);
         }
         targets = Substitute.For<IAuthoredMailboxTargetReader>();
@@ -426,6 +426,7 @@ public sealed class SetMailFlagsToolTests
             IPersistenceSession session,
             MailboxMutationRequest request,
             DateTimeOffset? heldUntil,
+            bool erasesLocalCopy,
             CancellationToken cancellationToken)
         {
             this.openedRequests.Add(request);
@@ -508,9 +509,8 @@ public sealed class SetMailFlagsToolTests
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+        public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingLocalErasuresAsync(
             MailAccountId account,
-            MailboxMutation mutation,
             int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();

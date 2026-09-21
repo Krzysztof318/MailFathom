@@ -41,6 +41,10 @@ internal sealed class LocalEmailStateStore(TimeProvider timeProvider) : ILocalEm
 
         return new LocalEmailState(
             MailFolderEntityResolver.ToResolution(row.MailFolder),
+
+            // Both columns are cleared together when the drain observes its expunge, so either one answers; reading the
+            // UID alone would say nothing about which UIDVALIDITY it belonged to.
+            row is { UidValidity: not null, Uid: not null },
             row.LocalMailFolderId is { } folder ? LocalMailFolderId.Create(folder) : null,
             row.IsRemotelySeen,
             row.IsRemotelyFlagged,

@@ -286,7 +286,7 @@ public sealed class ClientMailMutationsEndpointTests
 
         Assert.Equal(ClientMailChangeOutcomes.Applied, change.Outcome);
         Assert.Empty(change.Changes);
-        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
+        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A move a held account applied is published as <c>applied</c>, naming where it went and no record to follow.</summary>
@@ -434,7 +434,7 @@ public sealed class ClientMailMutationsEndpointTests
 
         Assert.Equal(ClientMailChangeOutcomes.Applied, deleted.Outcome);
         Assert.Null(deleted.Change);
-        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
+        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -460,6 +460,7 @@ public sealed class ClientMailMutationsEndpointTests
             Arg.Any<IPersistenceSession>(),
             Arg.Any<MailboxMutationRequest>(),
             RecordedAt + TimeSpan.FromSeconds(8) + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
+            Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -491,6 +492,7 @@ public sealed class ClientMailMutationsEndpointTests
             RecordedAt
                 + TimeSpan.FromSeconds(ClientPreferences.Unset.NotificationSeconds)
                 + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
+            Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -528,7 +530,7 @@ public sealed class ClientMailMutationsEndpointTests
 
         Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, deleted.Outcome);
         await this.records.DidNotReceiveWithAnyArgs()
-            .OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
+            .OpenAsync(default!, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A withdrawal naming nothing is a request with nothing to take back.</summary>
@@ -642,6 +644,7 @@ public sealed class ClientMailMutationsEndpointTests
             Arg.Any<IPersistenceSession>(),
             Arg.Any<MailboxMutationRequest>(),
             Arg.Any<DateTimeOffset?>(),
+            Arg.Any<bool>(),
             Arg.Any<CancellationToken>())
         .Returns(call => Task.FromResult(new MailboxMutationRecord
         {
@@ -721,6 +724,7 @@ public sealed class ClientMailMutationsEndpointTests
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalEmailState?>(new LocalEmailState(
                     TargetInInbox().Folder,
+                    HoldsSourceOccurrence: true,
                     Folder: null,
                     IsSeen: false,
                     IsFlagged: false,

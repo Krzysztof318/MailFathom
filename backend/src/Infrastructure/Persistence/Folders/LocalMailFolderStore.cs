@@ -226,7 +226,10 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
         MailAccountCustodyPhase phase,
         CancellationToken cancellationToken)
     {
-        if (phase != MailAccountCustodyPhase.Held)
+        // A restoring account still keeps its mail in its own folders — the mailbox is being appended back, not handed
+        // over — so its acts are committed against the same hierarchy a held account's are. Reading none for it would
+        // leave a local change minting a second trash beside the one the mail is already in.
+        if (phase is not (MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring))
         {
             return new LocalMailFolderHolding(phase, [], []);
         }

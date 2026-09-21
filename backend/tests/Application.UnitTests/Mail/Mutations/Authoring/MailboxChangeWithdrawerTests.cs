@@ -288,6 +288,7 @@ public sealed class MailboxChangeWithdrawerTests
             CommittingSession(),
             request,
             heldUntil,
+            erasesLocalCopy: false,
             TestContext.Current.CancellationToken);
 
     private static IPersistenceSession CommittingSession()

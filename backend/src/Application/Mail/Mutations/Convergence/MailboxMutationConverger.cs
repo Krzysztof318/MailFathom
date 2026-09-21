@@ -8,7 +8,6 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
-using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 
 namespace MailFathom.Application.Mail.Mutations.Convergence;
@@ -61,7 +60,7 @@ public sealed class MailboxMutationConverger
     /// <param name="options">Bounds one pass and carries the unknown-outcome grace period.</param>
     /// <param name="timeProvider">Measures how long an unresolved outcome has been unresolved.</param>
     /// <param name="localFolders">Answers whether the account is held, where no change is carried to a server.</param>
-    /// <param name="submission">Runs a held account's erasure once its window has passed.</param>
+    /// <param name="submission">Runs a record opened as a local erasure once its window has passed.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured pass bound is below one or the grace period is negative.</exception>
     public MailboxMutationConverger(
@@ -115,18 +114,19 @@ public sealed class MailboxMutationConverger
     {
         var isHeld = await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
 
-        // A held account issues no IMAP command, so a record of any other change opened before the hold is work no pass on
-        // it can do. Reading only its deletes keeps those records out of the page instead of letting them fill it ahead of
-        // the erasures behind them; they stay pending in the lifecycle counts, which is what they are.
+        // A held account issues no IMAP command, so a record of any other change opened before the hold, or opened by a
+        // restore the hold interrupted, is work no pass on it can do. Reading only the records opened as local erasures
+        // keeps those out of the page instead of letting them fill it ahead of the erasures behind them; they stay
+        // pending in the lifecycle counts, which is what they are.
         var outstanding = isHeld
-            ? await this.store.ReadOutstandingAsync(account, MailboxMutation.Delete, this.options.MaxMutationsPerPass, cancellationToken)
+            ? await this.store.ReadOutstandingLocalErasuresAsync(account, this.options.MaxMutationsPerPass, cancellationToken)
             : await this.store.ReadOutstandingAsync(account, this.options.MaxMutationsPerPass, cancellationToken);
 
         if (outstanding.Count == 0 && !isHeld)
         {
             // An empty unfiltered page is nothing to count: the lifecycle read answers over the same rows, so an account with
             // no unfinished mutation — which is nearly every account on nearly every run — spares that query. A held
-            // account's page holds only its deletes, so an empty one can still leave inherited records to report.
+            // account's page holds only its erasures, so an empty one can still leave inherited records to report.
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 
@@ -144,10 +144,20 @@ public sealed class MailboxMutationConverger
                 continue;
             }
 
+            // What the record was opened as decides this, never what the account is now. A restoring account opens
+            // ordinary records beside its local commits, and a hold taken again while one is outstanding would
+            // otherwise erase a local copy whose own disposition asked for it to be kept.
+            if (candidate.Record.IsLocalErasure)
+            {
+                await this.EraseLocalCopyAsync(candidate, tally, cancellationToken);
+
+                continue;
+            }
+
+            // The held page is already narrowed to erasures, so nothing ought to reach here. It refuses anyway, because
+            // the cost of the two being out of step is an IMAP command issued to a source that is no longer the truth.
             if (isHeld)
             {
-                await this.EraseHeldAsync(candidate, tally, cancellationToken);
-
                 continue;
             }
 
@@ -164,17 +174,17 @@ public sealed class MailboxMutationConverger
             outstandingCounts);
     }
 
-    /// <summary>Runs one delete record of a held account whose window has passed as an erasure.</summary>
+    /// <summary>Runs one record opened as a local erasure, whose window has passed, as the erasure it was opened as.</summary>
     /// <remarks>
-    /// A held account writes no record for anything but an erasure, so this issues no IMAP command at all. It does not
-    /// tell an erasure apart from a delete recorded before the account became held: every delete record is erased, whatever
-    /// disposition it carries, and #2007 owns telling the two apart. A record of another kind left from before the account
-    /// became held never reaches here, because the pass reads only a held account's deletes; it stays where it is rather
-    /// than being carried to a source that is no longer the truth. The isolation is the one a remote change gets, for the
-    /// same reason.
+    /// Such a record is a person's second delete of a message already in the local trash, so this issues no IMAP command
+    /// at all and the phase decides nothing: an erasure asked for while the account was held is the same act once the
+    /// mailbox is being restored, and running it there is what keeps a message the person erased from being appended
+    /// back to the source. Every other record is left where it is — carried on a restoring account, deferred on a held
+    /// one — because a delete whose disposition asked for the local copy to be kept is not an erasure whatever phase it
+    /// is met in. The isolation is the one a remote change gets, for the same reason.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass isolates one erasure's failure so the account's remaining records are still taken in hand; the record stays outstanding and the next pass tries it again.")]
-    private async Task EraseHeldAsync(
+    private async Task EraseLocalCopyAsync(
         OutstandingMailboxMutation candidate,
         ConvergenceTally tally,
         CancellationToken cancellationToken)

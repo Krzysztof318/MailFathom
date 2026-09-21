@@ -79,6 +79,23 @@ public sealed record MailboxMutationRecord
     /// </remarks>
     public required bool IsAudited { get; init; }
 
+    /// <summary>Gets whether this record was opened to erase MailFathom's own copy rather than to reach a mail server.</summary>
+    /// <remarks>
+    /// <para>
+    /// An account holding its mailbox commits every act to stored state, and opens a record for one act only: a delete
+    /// of a message already in its local trash, which is the erasure a person asked for twice. The record exists to hold
+    /// the cascade for the window the person may withdraw it in, and nothing about it is ever issued to a server.
+    /// </para>
+    /// <para>
+    /// It is written down rather than inferred from the account's phase, because the phase moves while the record waits.
+    /// An account restoring its mailbox opens ordinary records beside its local commits, and both kinds are deletes
+    /// against a trashed message once the account is held again — so a converger asking what the account is now cannot
+    /// tell the erasure a person asked for from the delete the source has still to be told about, and erasing the second
+    /// would destroy the local copy its own disposition asked to keep.
+    /// </para>
+    /// </remarks>
+    public bool IsLocalErasure { get; init; }
+
     /// <summary>Gets how many times this mutation has been attempted, counted before each attempt rather than after it.</summary>
     /// <remarks>
     /// Counting first is what makes the bound survive a crash loop: an attempt that kills the process still counted, so a
