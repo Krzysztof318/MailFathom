@@ -100,6 +100,38 @@ describe('AnswerBlockCard', () => {
         expect(retry).toHaveBeenCalledTimes(1);
     });
 
+    // The button goes with the state it stood on, so a reader who pressed it would otherwise be left focused on
+    // nothing at all — which is where the keyboard and the screen reader quietly stop working.
+    it('puts the keyboard on the card when the way out it offered goes away', () => {
+        const { rerender } = renderCard('offline', vi.fn());
+
+        screen.getByRole('button', { name: 'Try again' }).focus();
+
+        rerender(
+            <LocalizationProvider>
+                <AnswerBlockCard label={label} meta="2 rows" state="loading">
+                    <p>{body}</p>
+                </AnswerBlockCard>
+            </LocalizationProvider>,
+        );
+
+        expect(document.activeElement).toBe(screen.getByRole('article', { name: label }));
+    });
+
+    it('leaves the keyboard alone where it never offered one', () => {
+        const { rerender } = renderCard('offline');
+
+        rerender(
+            <LocalizationProvider>
+                <AnswerBlockCard label={label} meta="2 rows" state="loading">
+                    <p>{body}</p>
+                </AnswerBlockCard>
+            </LocalizationProvider>,
+        );
+
+        expect(document.activeElement).toBe(document.body);
+    });
+
     it('offers none where the surface has none to offer', () => {
         renderCard('error');
 

@@ -101,18 +101,28 @@ describe('AnswerCanvas', () => {
         expect(screen.queryByRole('article', { name: 'More of this answer' })).toBeNull();
     });
 
-    it('says the deployment is out of reach rather than waiting on it in silence', () => {
+    it('keeps what had arrived when a read fails, rather than waiting on it in silence', () => {
         renderCanvas([arrival(1, 'answer')], { running: true, failure: 'unavailable' });
 
         expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
+        expect(screen.getByText('answer')).toBeDefined();
     });
 
-    it('says which way the read failed rather than reporting all four as no connection', () => {
-        renderCanvas([], { running: true, failure: 'unauthenticated' });
+    // Each of the four says its own thing, and the pairing is asserted rather than the count: a transposition
+    // between two of them reads as a sentence somebody acts on wrongly, and a suite counting four sentences would
+    // pass through it.
+    it.each([
+        ['unauthenticated', 'The session ended while this answer was being read. Sign in again to see the rest.'],
+        ['unauthorized', 'This account is not allowed to read this answer.'],
+        ['unavailable', 'No connection to the server — this block cannot be loaded.'],
+        [
+            'unreadable',
+            'The rest of this answer arrived in a form this client could not read, which is a defect worth reporting.',
+        ],
+    ] as const)('says what happened when a read failed as %s', (failure, said) => {
+        renderCanvas([], { running: true, failure });
 
-        expect(
-            screen.getByText('The session ended while this answer was being read. Sign in again to see the rest.'),
-        ).toBeDefined();
+        expect(screen.getByText(said)).toBeDefined();
     });
 
     it('offers reading the run again when it could not be reached', () => {

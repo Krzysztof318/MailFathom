@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import { SkeletonLines } from '../controls/Skeleton';
+import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { AnswerBlockState } from './answerBlocks';
 
@@ -26,11 +27,25 @@ const waitingLines = [
     { fills: 55, height: 'h-3.25' },
 ];
 
-const stateIcons: Readonly<Record<'empty' | 'error' | 'offline', IconName>> = {
+// The three states that draw a sentence and an icon where a body would be. Named once because three things read
+// it: which icon, which sentence, and whether a way out is on the screen to be left focused on.
+type NothingDrawn = 'empty' | 'error' | 'offline';
+
+const stateIcons: Readonly<Record<NothingDrawn, IconName>> = {
     empty: 'inbox',
     error: 'error',
     offline: 'cloud_off',
 };
+
+const stateNotes: Readonly<Record<NothingDrawn, MessageKey>> = {
+    empty: 'answerBlock.empty',
+    error: 'answerBlock.error',
+    offline: 'answerBlock.offline',
+};
+
+function nothingDrawn(state: AnswerBlockState): state is NothingDrawn {
+    return state === 'empty' || state === 'error' || state === 'offline';
+}
 
 /**
  * One block of an answer, in whichever of its six states it is.
@@ -61,8 +76,24 @@ export function AnswerBlockCard({
     const { translate } = useLocalization();
     const named = useId();
 
+    const region = useRef<HTMLElement>(null);
+    const offeredAWayOut = useRef(false);
+    const offersAWayOut = onRetry !== undefined && nothingDrawn(state);
+
+    // The control that brought the block back has gone with the state it stood on, so the keyboard goes to the card
+    // rather than being left on nothing. It is the move `containment/Containment.tsx` makes when a region recovers,
+    // and for its reason: a block that has just been asked for again is often still reading, so what is inside it a
+    // moment later may be nothing at all.
+    useEffect(() => {
+        if (offeredAWayOut.current && !offersAWayOut) {
+            region.current?.focus();
+        }
+
+        offeredAWayOut.current = offersAWayOut;
+    }, [offersAWayOut]);
+
     return (
-        <BlockCard label={label} labelId={named} meta={meta}>
+        <BlockCard label={label} labelId={named} meta={meta} ref={region}>
             {state === 'loading' ? (
                 <>
                     <p className="sr-only" role="status">
@@ -82,7 +113,7 @@ export function AnswerBlockCard({
                 </p>
             ) : null}
 
-            {state === 'empty' || state === 'error' || state === 'offline' ? (
+            {nothingDrawn(state) ? (
                 <div className="flex flex-col items-center gap-1.75 px-2.5 py-5.5 text-center">
                     <Icon
                         className={`size-6.5 ${state === 'error' ? 'text-warning' : 'text-faint'}`}
@@ -90,14 +121,7 @@ export function AnswerBlockCard({
                     />
 
                     <p className="max-w-95 text-sm text-text-soft text-pretty">
-                        {note ??
-                            translate(
-                                state === 'empty'
-                                    ? 'answerBlock.empty'
-                                    : state === 'error'
-                                      ? 'answerBlock.error'
-                                      : 'answerBlock.offline',
-                            )}
+                        {note ?? translate(stateNotes[state])}
                     </p>
 
                     {onRetry === undefined ? null : (
@@ -152,17 +176,20 @@ function BlockCard({
     label,
     labelId,
     meta,
+    ref,
     children,
 }: {
     readonly label: string;
     readonly labelId: string;
     readonly meta?: string | undefined;
+    readonly ref?: RefObject<HTMLElement | null>;
     readonly children: ReactNode;
 }) {
     return (
         <article
             aria-labelledby={labelId}
             className="flex flex-col gap-3 rounded-xl border border-line bg-panel px-4.5 py-4"
+            ref={ref}
             tabIndex={0}
         >
             <div className="flex flex-wrap items-center gap-2.5">
