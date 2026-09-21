@@ -88,7 +88,7 @@ internal sealed class UserRecordDeployment
 
         this.Erasure = Substitute.For<IUserErasure>();
         this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new Application.Access.UserErasureOutcome(false, null));
+            .Returns(new UserErasureOutcome(false, null));
 
         // A roster naming somebody no test acts on, so every user a test writes for reads as one nothing declares —
         // which is the ordinary case — until the test says otherwise.

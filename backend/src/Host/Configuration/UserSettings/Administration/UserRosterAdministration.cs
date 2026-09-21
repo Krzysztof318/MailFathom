@@ -280,7 +280,7 @@ internal sealed partial class UserRosterAdministration(
     /// caller asked about rather than the roster the erasure left.
     /// </para>
     /// </remarks>
-    internal async Task<UserErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
+    internal async Task<UserRosterErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
     {
         if (!user.IsSpecified)
         {
@@ -328,7 +328,7 @@ internal sealed partial class UserRosterAdministration(
         {
             this.LogUserErasureRefused();
 
-            return UserErasureOutcome.Refused(stillRunning);
+            return UserRosterErasureOutcome.Refused(stillRunning);
         }
 
         // The transaction refused on what only it could see: an account that became solely this user's after the set
@@ -338,7 +338,7 @@ internal sealed partial class UserRosterAdministration(
         {
             this.LogUserErasureRefused();
 
-            return UserErasureOutcome.Refused(
+            return UserRosterErasureOutcome.Refused(
                 $"Mail account {accountStillBusy:D} was still being worked on when the erasure reached it, so nothing was erased. Ask again once that has ended.");
         }
 
@@ -347,7 +347,7 @@ internal sealed partial class UserRosterAdministration(
             await announcements.AnnounceAsync();
         }
 
-        return new UserErasureOutcome(erased, served);
+        return new UserRosterErasureOutcome(erased, served);
     }
 
     /// <summary>Says why a label cannot be a user's, or nothing when it can.</summary>

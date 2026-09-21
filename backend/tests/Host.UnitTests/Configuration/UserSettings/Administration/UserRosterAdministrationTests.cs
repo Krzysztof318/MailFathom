@@ -411,7 +411,7 @@ public sealed class UserRosterAdministrationTests
         harness.Erasing(SyntheticUser.Deployment);
         await harness.ServedUsers.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
 
-        Task<Host.Configuration.UserSettings.Administration.UserErasureOutcome> erasing;
+        Task<UserRosterErasureOutcome> erasing;
         try
         {
             // Act
@@ -467,7 +467,7 @@ public sealed class UserRosterAdministrationTests
                     candidate => candidate.User == SyntheticUser.Deployment);
                 statedAsQuiesced = call.Arg<IReadOnlyList<Guid>>()!;
 
-                return new Application.Access.UserErasureOutcome(true, null);
+                return new UserErasureOutcome(true, null);
             });
 
         // Act
@@ -527,7 +527,7 @@ public sealed class UserRosterAdministrationTests
         var appearedUnheld = Guid.Parse("7d3a9c15-4e28-4b61-9f07-2c8b6d0e5a34");
         harness.Erasure
             .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new Application.Access.UserErasureOutcome(false, appearedUnheld));
+            .Returns(new UserErasureOutcome(false, appearedUnheld));
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
@@ -792,7 +792,7 @@ public sealed class UserRosterAdministrationTests
 
             this.Erasure = Substitute.For<IUserErasure>();
             this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new Application.Access.UserErasureOutcome(false, null));
+                .Returns(new UserErasureOutcome(false, null));
 
             this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
             this.Documents
@@ -864,6 +864,6 @@ public sealed class UserRosterAdministrationTests
 
         internal void Erasing(UserId user) =>
             this.Erasure.EraseAsync(user, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new Application.Access.UserErasureOutcome(true, null));
+                .Returns(new UserErasureOutcome(true, null));
     }
 }

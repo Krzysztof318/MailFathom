@@ -16,11 +16,16 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// refusal means nothing at all was erased, which is the whole point of reporting it — an erasure that went ahead over
 /// a run still writing would answer that the deployment holds nothing while it was still being written to.
 /// </para>
+/// <para>
+/// It is named for the roster rather than for the erasure alone because <see cref="Application.Access.UserErasureOutcome" />
+/// is the other half of the same act and the two would otherwise read as one word meaning two things: that one is what
+/// the store removed, and this is what the roster administration answered — including the refusal the store never sees.
+/// </para>
 /// </remarks>
 /// <param name="UserErased">Whether a user record was there to remove, so a repeat is reported as the no-op it is.</param>
 /// <param name="WasServed">Whether the runtime roster held the user that was erased.</param>
 /// <param name="RefusalMessage">The sentence naming the work that is still running, or <see langword="null" /> where nothing refused the erasure.</param>
-internal readonly record struct UserErasureOutcome(bool UserErased, bool WasServed, string? RefusalMessage = null)
+internal readonly record struct UserRosterErasureOutcome(bool UserErased, bool WasServed, string? RefusalMessage = null)
 {
     /// <summary>Gets whether the deployment could stop the user's own work for long enough to erase them.</summary>
     public bool IsQuiesced => this.RefusalMessage is null;
@@ -29,10 +34,10 @@ internal readonly record struct UserErasureOutcome(bool UserErased, bool WasServ
     /// <param name="refusalMessage">The sentence naming what is still running.</param>
     /// <returns>The refused outcome.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="refusalMessage" /> is <see langword="null" />, empty, or white space.</exception>
-    public static UserErasureOutcome Refused(string refusalMessage)
+    public static UserRosterErasureOutcome Refused(string refusalMessage)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refusalMessage);
 
-        return new UserErasureOutcome(UserErased: false, WasServed: false, refusalMessage);
+        return new UserRosterErasureOutcome(UserErased: false, WasServed: false, refusalMessage);
     }
 }
