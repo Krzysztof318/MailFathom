@@ -4,10 +4,14 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    parseAttachmentEntries,
     parseBlockEvidence,
     parseDeclaredSource,
     parseEvidenceEntries,
+    parseFactTableColumns,
+    parseFactTableRows,
     parseSynthesizedAnswer,
+    parseTimelineEntries,
 } from './presentationBlocks';
 
 const current = { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' };
@@ -223,5 +227,163 @@ describe('parseEvidenceEntries', () => {
 
     it('refuses an entry quoting nothing, the fragment being what makes it checkable', () => {
         expect(parseEvidenceEntries([{ ...entry, fragment: '' }])).toBeNull();
+    });
+});
+
+describe('parseTimelineEntries', () => {
+    const event = {
+        occurredAt: '2021-04-12T00:00:00+00:00',
+        summary: 'Monthly remuneration set at EUR 1,200',
+        subject: 'Master agreement',
+        sources: ['c-1'],
+    };
+
+    it('reads each event with what happened, what it happened to, and when', () => {
+        expect(parseTimelineEntries([event])).toEqual([
+            {
+                occurredAt: '2021-04-12T00:00:00+00:00',
+                summary: 'Monthly remuneration set at EUR 1,200',
+                subject: 'Master agreement',
+                sources: ['c-1'],
+            },
+        ]);
+    });
+
+    it('keeps the order the run composed rather than sorting by date', () => {
+        const later = { ...event, occurredAt: '2025-11-18T00:00:00+00:00', subject: 'SLA addendum' };
+
+        expect(parseTimelineEntries([later, event])?.map((entry) => entry.subject)).toEqual([
+            'SLA addendum',
+            'Master agreement',
+        ]);
+    });
+
+    it('reads an event nothing backs, which is how it stands beside events that are backed', () => {
+        expect(parseTimelineEntries([{ ...event, sources: [] }])?.[0]?.sources).toEqual([]);
+    });
+
+    it('reads a chronology holding nothing as one holding nothing rather than as a defect', () => {
+        expect(parseTimelineEntries([])).toEqual([]);
+    });
+
+    it('refuses an event naming one source twice, which is two numbers for one source', () => {
+        expect(parseTimelineEntries([{ ...event, sources: ['c-1', 'c-1'] }])).toBeNull();
+    });
+
+    it('refuses an event with no date, a chronology being what the dates make it', () => {
+        expect(parseTimelineEntries([{ ...event, occurredAt: '' }])).toBeNull();
+    });
+
+    it('refuses more events than one timeline may hold', () => {
+        expect(parseTimelineEntries(Array.from({ length: 51 }, () => event))).toBeNull();
+    });
+});
+
+describe('parseFactTableColumns', () => {
+    it('reads the columns compared across, in the order they are drawn', () => {
+        expect(parseFactTableColumns(['version', 'amount'])).toEqual(['version', 'amount']);
+    });
+
+    it('refuses a column the catalogue does not hold, which nothing could draw a heading for', () => {
+        expect(parseFactTableColumns(['version', 'likelihood'])).toBeNull();
+    });
+
+    it('refuses one column compared across twice, which is two headings a reader cannot tell apart', () => {
+        expect(parseFactTableColumns(['version', 'version'])).toBeNull();
+    });
+
+    it('refuses more columns than one table may compare across', () => {
+        expect(parseFactTableColumns(Array.from({ length: 9 }, () => 'amount'))).toBeNull();
+    });
+});
+
+describe('parseFactTableRows', () => {
+    const row = {
+        cells: [
+            { value: 'Agreement 2021', sources: ['c-1'] },
+            { value: 'EUR 1,200', sources: ['c-1'] },
+        ],
+    };
+
+    it('reads each cell with the value as the correspondence wrote it and what it rests on', () => {
+        expect(parseFactTableRows([row], 2)).toEqual([
+            {
+                cells: [
+                    { value: 'Agreement 2021', sources: ['c-1'] },
+                    { value: 'EUR 1,200', sources: ['c-1'] },
+                ],
+            },
+        ]);
+    });
+
+    it('reads a cell the correspondence says nothing about as holding no value at all', () => {
+        const silent = { cells: [row.cells[0], { value: null, sources: [] }] };
+
+        expect(parseFactTableRows([silent], 2)?.[0]?.cells[1]).toEqual({ value: null, sources: [] });
+    });
+
+    it('refuses a cell with no value that names a source, which would be citing an absence', () => {
+        const cited = { cells: [row.cells[0], { value: null, sources: ['c-1'] }] };
+
+        expect(parseFactTableRows([cited], 2)).toBeNull();
+    });
+
+    it('refuses a row whose cell count disagrees with the header, which is a comparison nobody can trust', () => {
+        expect(parseFactTableRows([row], 3)).toBeNull();
+    });
+
+    it('refuses more rows than one table may hold', () => {
+        expect(
+            parseFactTableRows(
+                Array.from({ length: 51 }, () => row),
+                2,
+            ),
+        ).toBeNull();
+    });
+});
+
+describe('parseAttachmentEntries', () => {
+    const file = {
+        source: 'c-1',
+        name: 'Master agreement.pdf',
+        mediaType: 'application/pdf',
+        sizeOctets: 312_000,
+        availability: 'Stored',
+    };
+
+    it('reads each file with what it is, how large it is, and whether it can be opened', () => {
+        expect(parseAttachmentEntries([file])).toEqual([
+            {
+                source: 'c-1',
+                name: 'Master agreement.pdf',
+                mediaType: 'application/pdf',
+                sizeOctets: 312_000,
+                availability: 'Stored',
+            },
+        ]);
+    });
+
+    it('reads a file the message declared no type for rather than refusing it', () => {
+        expect(parseAttachmentEntries([{ ...file, mediaType: null }])?.[0]?.mediaType).toBeNull();
+    });
+
+    it('reads the size of a file whose content was never stored, the size being the message’s own account', () => {
+        expect(parseAttachmentEntries([{ ...file, availability: 'NotStored' }])?.[0]?.sizeOctets).toBe(312_000);
+    });
+
+    it('refuses an availability this contract does not carry rather than reading it as openable', () => {
+        expect(parseAttachmentEntries([{ ...file, availability: 'Quarantined' }])).toBeNull();
+    });
+
+    it('refuses a size that is not a count of octets', () => {
+        expect(parseAttachmentEntries([{ ...file, sizeOctets: -1 }])).toBeNull();
+    });
+
+    it('refuses a file with no name, the name being what somebody chooses it by', () => {
+        expect(parseAttachmentEntries([{ ...file, name: '' }])).toBeNull();
+    });
+
+    it('refuses more files than one gallery may hold', () => {
+        expect(parseAttachmentEntries(Array.from({ length: 51 }, () => file))).toBeNull();
     });
 });

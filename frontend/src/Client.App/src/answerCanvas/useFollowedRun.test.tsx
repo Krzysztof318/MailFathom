@@ -84,7 +84,7 @@ function following(transport: MailFathomTransport, changes: SignalledChanges, fo
 describe('useFollowedRun', () => {
     it('reads the run on mount, so a run already composed draws with no hub at all', async () => {
         const { transport } = answering([
-            tailOf([startedEvent, { event: 'block', sequence: 2, block: { type: 'factTable' } }]),
+            tailOf([startedEvent, { event: 'block', sequence: 2, block: { type: 'people' } }]),
         ]);
 
         const { result } = following(transport, hearing().changes);
@@ -93,14 +93,14 @@ describe('useFollowedRun', () => {
             expect(result.current.running).toBe(false);
         });
 
-        expect(result.current.blocks.map((arrived) => arrived.block.named)).toEqual(['factTable']);
+        expect(result.current.blocks.map((arrived) => arrived.block.named)).toEqual(['people']);
         expect(result.current.planSchemaVersion).toBe(2);
     });
 
     it('reads again from its cursor when the deployment says the run advanced', async () => {
         const { transport, requests } = answering([
-            tailOf([{ event: 'block', sequence: 2, block: { type: 'factTable' } }], true),
-            tailOf([{ event: 'block', sequence: 3, block: { type: 'timeline' } }]),
+            tailOf([{ event: 'block', sequence: 2, block: { type: 'people' } }], true),
+            tailOf([{ event: 'block', sequence: 3, block: { type: 'threadState' } }]),
         ]);
 
         const heard = hearing();
@@ -115,7 +115,7 @@ describe('useFollowedRun', () => {
         });
 
         await waitFor(() => {
-            expect(result.current.blocks.map((arrived) => arrived.block.named)).toEqual(['factTable', 'timeline']);
+            expect(result.current.blocks.map((arrived) => arrived.block.named)).toEqual(['people', 'threadState']);
         });
 
         expect(requests[1]?.path).toContain('?since=2');
@@ -123,7 +123,7 @@ describe('useFollowedRun', () => {
 
     it('leaves a run alone when another run advanced', async () => {
         const { transport, requests } = answering([
-            tailOf([{ event: 'block', sequence: 2, block: { type: 'factTable' } }], true),
+            tailOf([{ event: 'block', sequence: 2, block: { type: 'people' } }], true),
         ]);
 
         const heard = hearing();

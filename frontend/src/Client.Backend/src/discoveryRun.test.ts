@@ -246,7 +246,7 @@ describe('readDiscoveryRunTail', () => {
     it('reads a block the catalogue carries under the type it names', async () => {
         const answered = await readDiscoveryRunTail(
             session,
-            answering({ status: 200, body: bodyOf([{ event: 'block', sequence: 4, block: { type: 'factTable' } }]) }),
+            answering({ status: 200, body: bodyOf([{ event: 'block', sequence: 4, block: { type: 'people' } }]) }),
             runId,
             0,
         );
@@ -255,7 +255,7 @@ describe('readDiscoveryRunTail', () => {
             outcome: 'read',
             value: {
                 running: false,
-                events: [{ kind: 'block', sequence: 4, block: { type: 'factTable', named: 'factTable' } }],
+                events: [{ kind: 'block', sequence: 4, block: { type: 'people', named: 'people' } }],
             },
         });
     });
@@ -417,6 +417,171 @@ describe('readDiscoveryRunTail', () => {
                 fragment: 'Monthly remuneration is EUR 1,200 net',
                 relevance: 0.94,
                 freshness: { staleness: 'Stale', observedAt: '2026-09-01T08:00:00+00:00' },
+            },
+        ]);
+    });
+
+    it('reads each event a timeline presents, in the order the run composed them', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 7,
+                        block: {
+                            type: 'timeline',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            entries: [
+                                {
+                                    occurredAt: '2021-04-12T00:00:00+00:00',
+                                    summary: 'Monthly remuneration set at EUR 1,200',
+                                    subject: 'Master agreement',
+                                    sources: ['c-1'],
+                                },
+                            ],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+
+        expect(event?.kind === 'block' && event.block.type === 'timeline' ? event.block.entries : null).toEqual([
+            {
+                occurredAt: '2021-04-12T00:00:00+00:00',
+                summary: 'Monthly remuneration set at EUR 1,200',
+                subject: 'Master agreement',
+                sources: ['c-1'],
+            },
+        ]);
+    });
+
+    it('reads the columns a fact table compares across beside the rows that fill them', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 8,
+                        block: {
+                            type: 'factTable',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            columns: ['version', 'amount'],
+                            rows: [
+                                {
+                                    cells: [
+                                        { value: 'Agreement 2021', sources: ['c-1'] },
+                                        { value: 'EUR 1,200', sources: ['c-1'] },
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+        const table = event?.kind === 'block' && event.block.type === 'factTable' ? event.block : null;
+
+        expect(table?.columns).toEqual(['version', 'amount']);
+        expect(table?.rows[0]?.cells[1]).toEqual({ value: 'EUR 1,200', sources: ['c-1'] });
+    });
+
+    it('refuses a fact table whose row disagrees with its header, which is a comparison nobody can trust', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 9,
+                        block: {
+                            type: 'factTable',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            columns: ['version', 'amount'],
+                            rows: [{ cells: [{ value: 'Agreement 2021', sources: ['c-1'] }] }],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
+    it('reads each file a gallery presents with its size and whether it can be opened', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 10,
+                        block: {
+                            type: 'attachmentGallery',
+                            version: 1,
+                            evidence: {
+                                support: 'Supported',
+                                citations: ['c-1'],
+                                freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+                            },
+                            entries: [
+                                {
+                                    source: 'c-1',
+                                    name: 'Master agreement.pdf',
+                                    mediaType: 'application/pdf',
+                                    sizeOctets: 312000,
+                                    availability: 'NotStored',
+                                },
+                            ],
+                        },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+
+        expect(
+            event?.kind === 'block' && event.block.type === 'attachmentGallery' ? event.block.entries : null,
+        ).toEqual([
+            {
+                source: 'c-1',
+                name: 'Master agreement.pdf',
+                mediaType: 'application/pdf',
+                sizeOctets: 312000,
+                availability: 'NotStored',
             },
         ]);
     });

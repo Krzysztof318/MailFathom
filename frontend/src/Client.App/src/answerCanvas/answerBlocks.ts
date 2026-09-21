@@ -4,8 +4,11 @@
 
 import type { ComponentType } from 'react';
 import type { AnswerBlock, AnswerBlockType } from '@mailfathom/client-backend';
+import { AttachmentGallery } from './blocks/AttachmentGallery';
 import { EvidenceList } from './blocks/EvidenceList';
+import { FactTable } from './blocks/FactTable';
 import { SynthesizedAnswer } from './blocks/SynthesizedAnswer';
+import { Timeline } from './blocks/Timeline';
 
 // What a block is drawn as, and which component draws which type. It sits apart from the canvas and from the card
 // because both read it and neither owns it: adding a renderer is registering one here rather than editing the host,
@@ -35,4 +38,7 @@ export type AnswerBlockRenderers = Partial<Readonly<Record<AnswerBlockType, Answ
 export const answerBlockRenderers: AnswerBlockRenderers = {
     answer: SynthesizedAnswer,
     evidenceList: EvidenceList,
+    timeline: Timeline,
+    factTable: FactTable,
+    attachmentGallery: AttachmentGallery,
 };

@@ -56,6 +56,34 @@ export type CitedSourceKind = 'email' | 'fragment' | 'attachment';
 
 const sourceKinds: readonly CitedSourceKind[] = ['email', 'fragment', 'attachment'];
 
+/** Whether an attachment a run found can actually be opened, which is a state a reader acts on rather than a failure. */
+export type AttachmentAvailability = 'Stored' | 'NotStored' | 'Removed';
+
+const availabilities: readonly AttachmentAvailability[] = ['Stored', 'NotStored', 'Removed'];
+
+/**
+ * The closed catalogue of columns a fact table compares values across.
+ *
+ * A column carries no heading, because a heading is words in somebody's language and this client is localized — so the
+ * wire carries the identity and the screen draws the heading for it, which is only possible because the set is closed.
+ * A table naming anything else is refused rather than drawn under a heading nobody can read.
+ */
+export type FactTableColumn =
+    'subject' | 'party' | 'document' | 'reference' | 'amount' | 'quantity' | 'term' | 'version' | 'status' | 'date';
+
+const columns: readonly FactTableColumn[] = [
+    'subject',
+    'party',
+    'document',
+    'reference',
+    'amount',
+    'quantity',
+    'term',
+    'version',
+    'status',
+    'date',
+];
+
 /** How current the local copy behind a block or an entry was, and when that was established. */
 export interface SourceFreshness {
     readonly staleness: SourceStaleness;
@@ -122,13 +150,68 @@ export interface EvidenceEntry {
     readonly freshness: SourceFreshness;
 }
 
+/** One dated event on a timeline: what happened, what it happened to, and when the correspondence dates it. */
+export interface TimelineEntry {
+    /** When the event happened, as the correspondence dates it. */
+    readonly occurredAt: string;
+
+    /** What happened. */
+    readonly summary: string;
+
+    /** What it happened to — the matter, the document, or the thread it belongs to. */
+    readonly subject: string;
+
+    /** The sources this entry rests on, which may be none where nothing backs it. */
+    readonly sources: readonly string[];
+}
+
+/**
+ * One cell of a fact table: the value as the correspondence wrote it, and what that value was read from.
+ *
+ * A cell the correspondence says nothing about carries no value at all, which is a different thing from a cell whose
+ * value is blank — and it rests on nothing, because there is nothing for a source to back.
+ */
+export interface FactTableCell {
+    /** The value as the correspondence wrote it, or `null` where the correspondence says nothing. */
+    readonly value: string | null;
+
+    /** The sources this cell rests on, which is what makes one cell's evidence checkable rather than the table's. */
+    readonly sources: readonly string[];
+}
+
+/** One row of a fact table, holding exactly one cell per column of the table it belongs to, in the columns' order. */
+export interface FactTableRow {
+    readonly cells: readonly FactTableCell[];
+}
+
+/** One file found in mail, as the message that carried it describes it. */
+export interface AttachmentEntry {
+    /** The source resolving to the attachment, which is how the file is reached and which message it came on. */
+    readonly source: string;
+
+    /** The file's name, normalized. */
+    readonly name: string;
+
+    /** The media type the message declared, and `null` where it declared none. It chooses a word, never a way to open. */
+    readonly mediaType: string | null;
+
+    /** How large the message says the file is, which an entry whose content was never stored still carries. */
+    readonly sizeOctets: number;
+
+    readonly availability: AttachmentAvailability;
+}
+
 // The service's own bounds, restated because this side of the boundary refuses what it will not draw rather than
 // trusting the side that composed it. Each is the constant the contract names: a block rests on at most twenty-four
-// sources, presents at most six sides of a disagreement, lists at most fifty messages, and every free text it carries
-// is one presentation text.
+// sources, presents at most six sides of a disagreement, lists at most fifty messages, events, or files, compares
+// across at most eight columns, and every free text it carries is one presentation text.
 const mostCitations = 24;
 const mostConflictingClaims = 6;
 const mostEvidenceEntries = 50;
+const mostTimelineEntries = 50;
+const mostFactTableColumns = 8;
+const mostFactTableRows = 50;
+const mostAttachmentEntries = 50;
 const longestText = 4000;
 const longestCitationId = 32;
 
@@ -208,21 +291,170 @@ export function parseSynthesizedAnswer(value: unknown): SynthesizedAnswer | null
  * over a list which arrived empty would be reporting a defect where the honest reading is that there was nothing in it.
  */
 export function parseEvidenceEntries(value: unknown): readonly EvidenceEntry[] | null {
-    if (!Array.isArray(value) || value.length > mostEvidenceEntries) {
+    return parsedItems(value, mostEvidenceEntries, parseEvidenceEntry);
+}
+
+/**
+ * The events a timeline holds, or `null` where what arrived is not a course of events this client can draw.
+ *
+ * The order is the producer's and is never sorted here: a run that ordered by when something was agreed rather than by
+ * when it was mentioned has said something a date column cannot, and a client that re-sorted would throw it away.
+ *
+ * A timeline holding nothing is read rather than refused, for the reason a list of messages holding nothing is: a
+ * block that found no event in the period asked about is an answer, and drawing an error over it would report a defect.
+ */
+export function parseTimelineEntries(value: unknown): readonly TimelineEntry[] | null {
+    return parsedItems(value, mostTimelineEntries, parseTimelineEntry);
+}
+
+/** The columns a table compares across, or `null` where one of them is not a column this client can draw a heading for. */
+export function parseFactTableColumns(value: unknown): readonly FactTableColumn[] | null {
+    const compared = parsedItems(value, mostFactTableColumns, (written) => oneOf(written, columns));
+
+    if (compared === null) {
         return null;
     }
 
-    const entries: EvidenceEntry[] = [];
+    // A table comparing across one column twice is two headings a reader cannot tell apart, which the plan refuses and
+    // this refuses again rather than drawing.
+    return new Set(compared).size === compared.length ? compared : null;
+}
+
+/**
+ * The rows a table holds, or `null` where what arrived is not a set of rows this client can draw.
+ *
+ * @param value The rows as they arrived.
+ * @param compared How many columns the table compares across, which every row holds exactly one cell per.
+ * @remarks
+ * A row whose cell count disagrees with the header is the one structural mistake this block can make, and it is a
+ * comparison nobody can trust rather than a rendering to patch up with blanks.
+ */
+export function parseFactTableRows(value: unknown, compared: number): readonly FactTableRow[] | null {
+    return parsedItems(value, mostFactTableRows, (written) => parseFactTableRow(written, compared));
+}
+
+/** The files a gallery holds, or `null` where what arrived is not a set of files this client can draw. */
+export function parseAttachmentEntries(value: unknown): readonly AttachmentEntry[] | null {
+    return parsedItems(value, mostAttachmentEntries, parseAttachmentEntry);
+}
+
+function parseTimelineEntry(value: unknown): TimelineEntry | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const occurredAt = parseInstant(record['occurredAt']);
+    const summary = parseText(record['summary']);
+    const subject = parseText(record['subject']);
+    const sources = parseSources(record['sources']);
+
+    return occurredAt === null || summary === null || subject === null || sources === null
+        ? null
+        : { occurredAt, summary, subject, sources };
+}
+
+function parseFactTableRow(value: unknown, compared: number): FactTableRow | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const cells = parsedItems(record['cells'], mostFactTableColumns, parseFactTableCell);
+
+    if (cells === null) {
+        return null;
+    }
+
+    return cells.length === compared ? { cells } : null;
+}
+
+function parseFactTableCell(value: unknown): FactTableCell | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    // A cell the correspondence says nothing about writes no member at all on the journal and `null` on the route that
+    // serves it, and the two are the same fact.
+    const stated = record['value'];
+    const cell = stated === undefined || stated === null ? null : parseText(stated);
+    const sources = parseSources(record['sources']);
+
+    if (sources === null || (stated !== undefined && stated !== null && cell === null)) {
+        return null;
+    }
+
+    // A cell with no value rests on nothing, because there is nothing for a source to back — a cell that named one
+    // would be citing an absence.
+    return cell === null && sources.length > 0 ? null : { value: cell, sources };
+}
+
+function parseAttachmentEntry(value: unknown): AttachmentEntry | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const source = parseCitationId(record['source']);
+    const name = parseText(record['name']);
+    const availability = oneOf(record['availability'], availabilities);
+    const sizeOctets = record['sizeOctets'];
+
+    const declared = record['mediaType'];
+    const mediaType = declared === undefined || declared === null ? null : parseText(declared);
+
+    if (source === null || name === null || availability === null) {
+        return null;
+    }
+
+    if (declared !== undefined && declared !== null && mediaType === null) {
+        return null;
+    }
+
+    return typeof sizeOctets === 'number' && Number.isSafeInteger(sizeOctets) && sizeOctets >= 0
+        ? { source, name, mediaType, sizeOctets, availability }
+        : null;
+}
+
+/**
+ * The citations one item within a block rests on, or `null` where they are not citations this client can number.
+ *
+ * An item may rest on nothing, which is how a row nothing backs is presented beside rows that are backed. What is
+ * refused is a name given twice, because a screen numbers a source by its place among the ones the block names and a
+ * repeat is two numbers for one source.
+ */
+function parseSources(value: unknown): readonly string[] | null {
+    const sources = parseCitationIds(value, mostCitations);
+
+    if (sources === null) {
+        return null;
+    }
+
+    return new Set(sources).size === sources.length ? sources : null;
+}
+
+/** Every item of a bounded list read the same way, or `null` where the list or one of its items is not readable. */
+function parsedItems<TItem>(
+    value: unknown,
+    most: number,
+    parse: (written: unknown) => TItem | null,
+): readonly TItem[] | null {
+    if (!Array.isArray(value) || value.length > most) {
+        return null;
+    }
+
+    const items: TItem[] = [];
     for (const written of value) {
-        const entry = parseEvidenceEntry(written);
-        if (entry === null) {
+        const item = parse(written);
+        if (item === null) {
             return null;
         }
 
-        entries.push(entry);
+        items.push(item);
     }
 
-    return entries;
+    return items;
 }
 
 function parseEvidenceEntry(value: unknown): EvidenceEntry | null {
@@ -334,9 +566,14 @@ function parseFreshness(value: unknown): SourceFreshness | null {
         return { staleness, observedAt: null };
     }
 
-    return typeof observedAt === 'string' && observedAt.length > 0 && observedAt.length <= longestText
-        ? { staleness, observedAt }
-        : null;
+    const at = parseInstant(observedAt);
+
+    return at === null ? null : { staleness, observedAt: at };
+}
+
+/** An instant as the service wrote it, left as it arrived: what it says is read where it is worded, never here. */
+function parseInstant(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestText ? value : null;
 }
 
 function parseCitationIds(value: unknown, most: number): readonly string[] | null {

@@ -118,8 +118,8 @@ describe('SynthesizedAnswer', () => {
     });
 
     it('names a block registered under the wrong type rather than drawing somebody else’s data as an answer', () => {
-        renderAnswer({ type: 'timeline', named: 'timeline' });
+        renderAnswer({ type: 'threadState', named: 'threadState' });
 
-        expect(screen.getByText('type: timeline')).toBeDefined();
+        expect(screen.getByText('type: threadState')).toBeDefined();
     });
 });
