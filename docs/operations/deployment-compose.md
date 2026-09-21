@@ -33,8 +33,10 @@ scripts/quick-start-compose.sh
 
 **It ends with an address for a chat client and an address for a browser.** The client travels inside the image, so
 the script writes the two settings that serve it and pulls nothing extra; `--no-client` prepares the MCP endpoint alone.
-It provisions no credential to sign in with, because the client reads its own sample data and calls no route yet, and
-its closing report says so.
+What it does not write is the credential the page asks for: a password is a record beside a user in the running
+deployment rather than a file, so the closing report names the command that mints one —
+`mfctl credential create --method password --username <name>`, over the administrative endpoint this run already
+serves — exactly as it names the command for the MCP key.
 
 **The mailbox it asked about is not written into the configuration**, because no configuration source declares one:
 the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is a mail account created for a user the

@@ -3979,8 +3979,16 @@ upgrades, and MailFathom answers HTTP/1.1 on the hop it was always answering.
 
 **Every published image carries the page**, built into it from the client workspace under `frontend/` and copied
 beneath the image's web root. Serving it pulls nothing, starts no second process, and costs an image that never serves
-it about 230 kB. What it is today is an early client: it draws its own sample data rather than this deployment's mail,
-so a person can open it and nothing signs in to it yet.
+it about 230 kB.
+
+**Serving the bundle is half of what an operator does, and provisioning a credential is the other half.** The page
+opens on its sign-in screen, presents what a person gives it to [the exchange](#the-session-token-routes), and reads
+this deployment's mail with the session it gets back — so a deployment that serves the page and provisioned nobody
+publishes a sign-in screen with nothing to present at it. A deployment offering the password form mints one with
+`mfctl credential create --method password --username <name>`, over
+[the administrative endpoint](admin-endpoint.md#user-credentials); one that believes an authorization server's tokens
+maps each person's subject onto their record over the same endpoint instead.
+[What a sign-in screen is offered](#what-a-sign-in-screen-is-offered) is which of the two a person meets.
 
 One setting serves a bundle from this endpoint's own listeners, where a host was given one:
 

@@ -7471,8 +7471,9 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
 # image, so serving it is the page setting in .env and the surface it is served on in the configuration file — the two
 # together, because the page is served on that surface's listeners and enabling one without the other is refused at
 # startup naming both. The surface takes `password` rather than nothing, because it reads mail. No credential is
-# generated for it: the client draws its own sample data and calls no route yet, so a password would be a record
-# nothing can present, and generating one would send somebody to a sign-in the page does not have.
+# generated for it, and that is the shape of a password rather than an omission: it is a record beside a user in the
+# running deployment, so what the run owes somebody is the command that mints one, which is asserted here beside the
+# absence of a file.
 quick_start_prepares_the_client_it_can_serve() {
   local checkout_root compose_directory
   local without_client_root
@@ -7488,13 +7489,18 @@ quick_start_prepares_the_client_it_can_serve() {
   assert_contains 'MAILFATHOM_CLIENT=true' "$compose_directory/.env"
 
   if compgen -G "$compose_directory/secrets/client-*-password" > /dev/null; then
-    printf 'A credential was generated for a page that has no sign-in to present it at.\n' >&2
+    printf 'A credential was written to a file, which is not where a password credential lives.\n' >&2
     return 1
   fi
 
   # The address is what somebody is looking for at the end of a run, beside the MCP endpoint the run is also for.
   assert_contains 'The MailFathom client answers at' "$output_file"
   assert_contains '/mcp' "$output_file"
+
+  # And the command that mints what the page asks for, since the run writes no credential and a sign-in screen with
+  # nothing to present at it is what this assertion exists to keep the report from producing.
+  assert_contains 'mfctl credential create --method password --username' "$output_file"
+  assert_excludes 'sample data' "$output_file"
 
   # And declining it leaves the deployment the run would otherwise have produced: neither the page nor the surface,
   # because publishing a mail-reading endpoint for nobody is what --no-client is for.
