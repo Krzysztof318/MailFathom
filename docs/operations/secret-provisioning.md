@@ -89,7 +89,26 @@ A name is required because the alternatives are worse. An array position renumbe
 
 It may carry up to 64 letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit. The set is narrow on purpose: the name is written into logs, metric labels, and audit records without escaping, so a name that could carry a newline or a quotation mark would let a configuration file decide how a log line parses.
 
-Names must be unique within one bound configuration root — within `MailSynchronization`, within `Persistence`, within `McpEndpoint`. Uniqueness stops at the section boundary so that adding a section to a working deployment cannot collide with a name it cannot see. A duplicate, a missing name, and an unacceptable one all fail startup naming the exact setting.
+A name means one credential within one bound configuration root — within `MailSynchronization`, within `Persistence`, within `McpEndpoint`. Uniqueness stops at the section boundary so that adding a section to a working deployment cannot collide with a name it cannot see. A missing name and an unacceptable one both fail startup naming the exact setting.
+
+**One credential used by two settings in one section is declared under one name, in both places.** The two declarations must be identical — the same `SecretReference`, the same `Lifetime`, and the same nested `Password` — and a section carrying them starts:
+
+```json
+{
+  "Chat": {
+    "Models": [
+      { "ApiKey": { "Name": "openrouter-api-key", "SecretReference": "file:/etc/mailfathom/secrets/openrouter-api-key" } },
+      { "ApiKey": { "Name": "openrouter-api-key", "SecretReference": "file:/etc/mailfathom/secrets/openrouter-api-key" } }
+    ]
+  }
+}
+```
+
+Two declarations sharing a name and disagreeing about any of the three fail startup, naming the setting and which of the three disagrees. That is what the rule protects: a name that meant two credentials would leave a rotation instruction, an expiry warning, and an audit record pointing at neither. Requiring a second name for the same file would move that ambiguity into the log rather than remove it, which is why identical declarations are accepted instead.
+
+Two spellings of one expiry instant are one lifetime — `2027-01-31T00:00:00Z` and `2027-01-31T01:00:00+01:00` are the same moment — so neither declaration has to be re-dated to match the other. A bundle password is a secret in its own right and is held to this same rule, so two declarations that name one password agree here and are judged against each other under that password's own path, which is where a refusal names them.
+
+Everything a name identifies is reported once per name rather than once per declaration, an expiry warning included.
 
 ### Lifetimes
 
@@ -342,7 +361,7 @@ A mailbox's own credential is proven at the same moment and reported the same wa
 rather than under a configuration path — `document:MailAccounts:0:Secrets:Password`, with the user named beside it —
 because there is no key an operator could go and edit.
 
-**What a declaration *says* is judged at startup in every section; whether its reference is *resolved* there is not.** `Chat` and `Embeddings` are the two whose material is retrieved when the capability is first used rather than while the host starts, and that is deliberate: an AI endpoint is an optional capability, so a key that has stopped resolving is reported by the first question instead of taking a deployment that searches perfectly well offline. The name, the lifetime, and the block shape need nothing retrieved, so a duplicate, a missing name, an unacceptable one, and a malformed lifetime fail startup in those two sections exactly as in every other. `Chat` reloads, and a reloaded declaration has its references proven before it is adopted; `Embeddings` does not reload, so a restart is what re-reads it.
+**What a declaration *says* is judged at startup in every section; whether its reference is *resolved* there is not.** `Chat` and `Embeddings` are the two whose material is retrieved when the capability is first used rather than while the host starts, and that is deliberate: an AI endpoint is an optional capability, so a key that has stopped resolving is reported by the first question instead of taking a deployment that searches perfectly well offline. The name, the lifetime, and the block shape need nothing retrieved, so a name repeated by a declaration that disagrees with it, a missing name, an unacceptable one, and a malformed lifetime fail startup in those two sections exactly as in every other — and so, in those two sections exactly as in every other, one provider key declared identically by two models is accepted. `Chat` reloads, and a reloaded declaration has its references proven before it is adopted; `Embeddings` does not reload, so a restart is what re-reads it.
 
 A target that never answers is one line of that report rather than the end of it, which is what the deadline above buys: the reference after an unreachable mount is still resolved and still reported.
 

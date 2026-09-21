@@ -23,6 +23,8 @@ public sealed class ComposedSettingsProviderSecretTests
 {
     private const string RepeatedSecretName = "provider-key";
 
+    private const string SharedKeyReference = "plaintext:the-answering-key";
+
     /// <summary>The reload path and the start now read one rule, so the message an operator meets is the same sentence.</summary>
     [Fact]
     public async Task FindProviderRefusals_ADuplicatedChatSecretName_IsRefusedWithTheMessageAReloadGives()
@@ -63,6 +65,24 @@ public sealed class ComposedSettingsProviderSecretTests
             error => error.StartsWith("Embeddings:Endpoints:1:ApiKey:Name — ", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Two models against one gateway share one key, and a name identifies that credential. Refusing the pair would
+    /// make an operator name one file twice, which is the ambiguity the rule exists to prevent rather than a case of it.
+    /// </summary>
+    [Fact]
+    public void FindProviderRefusals_TwoChatModelsDeclaringOneKeyIdentically_AreNotRefused()
+    {
+        // Arrange
+        var configuration = Configuration(
+            ChatDeclaring(RepeatedSecretName, RepeatedSecretName, secondKeyReference: SharedKeyReference));
+
+        // Act
+        var refusals = ComposedSettings.FindProviderRefusals(configuration);
+
+        // Assert
+        Assert.Empty(refusals);
+    }
+
     /// <summary>Uniqueness stops at the section boundary, so one name in each section is two secrets rather than a collision.</summary>
     [Fact]
     public void FindProviderRefusals_ProviderSectionsNamingOneSecretEach_AreNotRefused()
@@ -91,19 +111,23 @@ public sealed class ComposedSettingsProviderSecretTests
         Assert.Empty(refusals);
     }
 
-    private static Dictionary<string, string?> ChatDeclaring(string firstKeyName, string secondKeyName) =>
+    /// <summary>Two declared models, whose keys differ in everything unless the caller asks for one key declared twice.</summary>
+    private static Dictionary<string, string?> ChatDeclaring(
+        string firstKeyName,
+        string secondKeyName,
+        string secondKeyReference = "plaintext:the-cheap-key") =>
         new(StringComparer.Ordinal)
         {
             ["Chat:Models:0:Alias"] = "answering",
             ["Chat:Models:0:Model"] = "a-chat-model",
             ["Chat:Models:0:Address"] = "https://provider.invalid/v1/",
             ["Chat:Models:0:ApiKey:Name"] = firstKeyName,
-            ["Chat:Models:0:ApiKey:SecretReference"] = "plaintext:the-answering-key",
+            ["Chat:Models:0:ApiKey:SecretReference"] = SharedKeyReference,
             ["Chat:Models:1:Alias"] = "cheap",
             ["Chat:Models:1:Model"] = "a-small-fast-model",
             ["Chat:Models:1:Address"] = "https://provider.invalid/v1/",
             ["Chat:Models:1:ApiKey:Name"] = secondKeyName,
-            ["Chat:Models:1:ApiKey:SecretReference"] = "plaintext:the-cheap-key",
+            ["Chat:Models:1:ApiKey:SecretReference"] = secondKeyReference,
             ["Chat:MainModel:Alias"] = "answering",
         };
 
