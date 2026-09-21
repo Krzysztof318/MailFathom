@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { expect, test, type Page } from '@playwright/test';
+import { signIn } from './deployment';
 
 // The path a person takes, against a MailFathom that was stood up the way an operator stands one up: signing in, the
 // list of what it synchronized, one message, the conversation it belongs to, a search over the mailbox, and signing
@@ -19,40 +20,8 @@ import { expect, test, type Page } from '@playwright/test';
 // mean anything: a folder with mail in it, a message that opens, a conversation, and a search that finds the message
 // it was asked about.
 
-// The credential `scripts/run-end-to-end-client.sh` provisioned through the administrative API, refused rather than
-// defaulted for the reason the configuration refuses a missing origin: an empty password reaches the screen as a
-// sign-in that failed, which reads as a defect in the client rather than as a suite nobody handed a deployment to.
-function required(variable: string): string {
-    const value = process.env[variable];
-
-    if (value === undefined || value.trim() === '') {
-        throw new Error(
-            `${variable} is not set. This suite is run by scripts/run-end-to-end-client.sh, which provisions the credential and hands it over.`,
-        );
-    }
-
-    return value;
-}
-
-const credential = {
-    userName: required('MAILFATHOM_CLIENT_USERNAME'),
-    password: required('MAILFATHOM_CLIENT_PASSWORD'),
-};
-
-/** Signs in with the credential the run provisioned, and waits for the client to have drawn its spaces. */
-async function signIn(page: Page): Promise<void> {
-    await page.goto('/app/');
-
-    // The page is served by the deployment it calls, so it asks for no address — the same claim the pull-request suite
-    // makes about the web head, made here against a service rather than against a preview server.
-    await expect(page.getByRole('textbox', { name: 'Server' })).toHaveCount(0);
-
-    await page.getByRole('textbox', { name: 'Login' }).fill(credential.userName);
-    await page.getByLabel('Password', { exact: true }).fill(credential.password);
-    await page.getByRole('button', { name: 'Connect' }).click();
-
-    await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
-}
+// The credential this suite signs in with, and the sign-in itself, are `deployment.ts` beside this file: four specs
+// need them now rather than one.
 
 /** Reaches the mail space and waits for the folder to have drawn at least one message. */
 async function openTheMailbox(page: Page): Promise<void> {

@@ -32,6 +32,12 @@ function required(variable: string): string {
 export default defineConfig({
     testDir: './tests/end-to-end',
 
+    // The sample calendar, task list and address book, written into the deployment before the first browser opens.
+    // Only Mail arrives by itself — the run replays a corpus into a mailbox and MailFathom synchronizes it — so the
+    // other three spaces would be empty screens without this. `tests/end-to-end/seed.ts` holds both the data and the
+    // argument for writing it here rather than through the screens.
+    globalSetup: './tests/end-to-end/seed.ts',
+
     // Kept, unlike the pull-request suite's, and the reason is the mail rather than the storage: every message this run
     // reads is a fabricated corpus delivered into a container that is destroyed with the run, so a trace carries no
     // personal data and a screenshot shows nobody's mailbox. `frontend/tests/AGENTS.md` holds the other half of that
@@ -54,6 +60,20 @@ export default defineConfig({
 
     use: {
         baseURL: required('MAILFATHOM_CLIENT_ORIGIN'),
+
+        // Pinned, because three of the four spaces this suite drives place a day rather than an instant: a task
+        // stands under *Today* or *This week*, an event falls in the week the calendar opened on, and both are read
+        // against the zone the runtime reports — the deployment holds none for this run's user. So a machine west of
+        // Greenwich would draw the seed a day off its own offsets, which is a suite that passes or fails by where the
+        // runner is. `tests/end-to-end/seed.ts` states its days in UTC against this.
+        timezoneId: 'UTC',
+
+        // Pinned for the same reason, and for one this suite's specs make sharper than the mail one did: every
+        // assertion here is a word a person reads, and which words those are is decided by what the browser says it
+        // prefers. A runner configured for another language would open the client in it and fail every spec on a
+        // translation rather than on a defect.
+        locale: 'en-US',
+
         trace: 'on',
         screenshot: 'on',
         video: 'off',
