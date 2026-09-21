@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { mostCitedPassages, readCitedPassages } from './citedPassages';
+import { mostCitedPassages, readCitations, readCitedPassages } from './citedPassages';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -258,5 +258,183 @@ describe('readCitedPassages', () => {
         );
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+});
+
+describe('readCitations', () => {
+    const emailTarget = { kind: 'email', email: storedEmailId } as const;
+    const passageTarget = { kind: 'fragment', email: storedEmailId, fragment: 'p-3' } as const;
+    const fileTarget = { kind: 'attachment', email: storedEmailId, attachmentPosition: 0 } as const;
+
+    const message = {
+        storedEmailId,
+        account: 'work',
+        folder: 'Inbox',
+        subject: 'Proposed terms 2027',
+        sentAt: '2026-08-26T09:00:00+00:00',
+        receivedAt: '2026-08-26T09:00:04+00:00',
+    };
+
+    const passage = { fragmentId: 'p-3', ordinal: 2, text: 'We propose an 8% rate increase from 1 January 2027.' };
+
+    const file = {
+        position: 0,
+        fileName: 'Master agreement.pdf',
+        wasFileNameNormalized: false,
+        mediaType: 'application/pdf',
+        sizeOctets: 91_233,
+    };
+
+    it('asks the citation route for the targets the plan declared, unchanged and in order', async () => {
+        const { transport, requests } = recording(
+            resolving([
+                { outcome: 'Resolved', message },
+                { outcome: 'Resolved', message, fragment: passage },
+            ]),
+        );
+
+        await readCitations(session, transport, [emailTarget, passageTarget]);
+
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/citations/resolution');
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({ citations: [emailTarget, passageTarget] });
+    });
+
+    it('reads the passage a fact rests on beside the message it stands in', async () => {
+        const answer = await readCitations(
+            session,
+            answering(resolving([{ outcome: 'Resolved', message, fragment: passage }])),
+            [passageTarget],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: passageTarget, outcome: 'Resolved', message, fragment: passage, file: null }],
+        });
+    });
+
+    it('reads the file a fact rests on beside the message that carries it', async () => {
+        const answer = await readCitations(
+            session,
+            answering(resolving([{ outcome: 'Resolved', message, attachment: file }])),
+            [fileTarget],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: fileTarget, outcome: 'Resolved', message, fragment: null, file }],
+        });
+    });
+
+    it('reads a citation followed to the message as such, which points at no place inside it', async () => {
+        const answer = await readCitations(session, answering(resolving([{ outcome: 'Resolved', message }])), [
+            emailTarget,
+        ]);
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: emailTarget, outcome: 'Resolved', message, fragment: null, file: null }],
+        });
+    });
+
+    it('keeps the message of a citation whose passage has been re-cut since the run composed it', async () => {
+        const answer = await readCitations(session, answering(resolving([{ outcome: 'Unresolvable', message }])), [
+            passageTarget,
+        ]);
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: passageTarget, outcome: 'Unresolvable', message, fragment: null, file: null }],
+        });
+    });
+
+    it('reads a stored copy that could not be read at all as carrying no message', async () => {
+        const answer = await readCitations(session, answering(resolving([{ outcome: 'Unresolvable' }])), [
+            passageTarget,
+        ]);
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: passageTarget, outcome: 'Unresolvable', message: null, fragment: null, file: null }],
+        });
+    });
+
+    it('reads a source this sign-in may not read as carrying nothing but the target that named it', async () => {
+        const answer = await readCitations(session, answering(resolving([{ outcome: 'PrivateSource' }])), [
+            passageTarget,
+        ]);
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ target: passageTarget, outcome: 'PrivateSource', message: null, fragment: null, file: null }],
+        });
+    });
+
+    it.each([
+        ['a private source carrying the message anyway', passageTarget, { outcome: 'PrivateSource', message }],
+        ['a resolved citation standing in no message', passageTarget, { outcome: 'Resolved', fragment: passage }],
+        [
+            'a resolution naming a message other than the one asked about',
+            passageTarget,
+            { outcome: 'Resolved', message: { ...message, storedEmailId: 'another-message' }, fragment: passage },
+        ],
+        [
+            'a passage other than the one that position asked about',
+            passageTarget,
+            { outcome: 'Resolved', message, fragment: { ...passage, fragmentId: 'p-9' } },
+        ],
+        [
+            'a file at a position other than the one asked about',
+            fileTarget,
+            { outcome: 'Resolved', message, attachment: { ...file, position: 4 } },
+        ],
+        [
+            'a passage answered for a citation that named a file',
+            fileTarget,
+            { outcome: 'Resolved', message, fragment: passage },
+        ],
+        [
+            'a file answered for a citation that named a passage',
+            passageTarget,
+            { outcome: 'Resolved', message, attachment: file },
+        ],
+        [
+            'a place inside a message whose cited place is reported gone',
+            passageTarget,
+            { outcome: 'Unresolvable', message, fragment: passage },
+        ],
+        [
+            'a citation that resolved to the message as such and to a place as well',
+            emailTarget,
+            { outcome: 'Resolved', message, fragment: passage },
+        ],
+    ])('refuses %s rather than drawing it against the wrong fact', async (_unused, target, resolution) => {
+        const answer = await readCitations(session, answering(resolving([resolution])), [target]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('sends nothing where more citations are named than the route follows at once', async () => {
+        const { transport, requests } = recording(resolving([]));
+        const targets = Array.from({ length: mostCitedPassages + 1 }, () => passageTarget);
+
+        const answer = await readCitations(session, transport, targets);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: null } });
+        expect(requests).toHaveLength(0);
+    });
+
+    it('reports a deployment that did not answer as unreachable', async () => {
+        const answer = await readCitations(session, () => Promise.reject(new Error('the name does not resolve')), [
+            passageTarget,
+        ]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
+
+    it('reads what a refused status stands for', async () => {
+        const answer = await readCitations(session, answering({ status: 403, body: '' }), [passageTarget]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
     });
 });

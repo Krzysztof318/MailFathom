@@ -85,9 +85,13 @@ export {
 export {
     citedPassagesRoute,
     mostCitedPassages,
+    readCitations,
     readCitedPassages,
+    type CitedFragment,
+    type CitedMessage,
     type CitedPassage,
     type CitedPassageOutcome,
+    type ResolvedCitation,
 } from './citedPassages';
 export {
     answerBlockTypes,
@@ -110,6 +114,7 @@ export type {
     AttachmentEntry,
     BlockEvidence,
     BlockSupport,
+    CitationTarget,
     CitedSourceKind,
     ConflictingClaim,
     DeclaredSource,

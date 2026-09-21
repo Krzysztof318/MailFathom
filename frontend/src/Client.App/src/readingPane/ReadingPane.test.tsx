@@ -884,6 +884,122 @@ describe('ReadingPane following a cited file', () => {
     });
 });
 
+// Following an evidence citation to the message a fact rests on, which is the other half of the act above: the panel
+// beside the answer records which message was cited, and this pane is the only place that learns whether that message
+// stands in a conversation — so the landing is the message inside its thread rather than a message on its own.
+const followTheCitedMessage = 'Follow the cited message, as the evidence panel would write it.';
+
+describe('ReadingPane following a cited message', () => {
+    function citing(cited: string, described = description({ threadId: 'thread-1' })): () => void {
+        function Citing() {
+            const { workspace, revise } = useWorkspace();
+
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            revise({ citedMessage: cited });
+                        }}
+                    >
+                        {followTheCitedMessage}
+                    </button>
+                    <output>
+                        {JSON.stringify({
+                            cited: workspace.citedMessage,
+                            conversation: workspace.conversation,
+                        })}
+                    </output>
+                </>
+            );
+        }
+
+        render(
+            <LocalizationProvider>
+                <ToastsProvider>
+                    <WorkspaceProvider>
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <AttachmentExchangeContext value={deliversNothing}>
+                                <OpenAttachmentContext value={() => undefined}>
+                                    <Citing />
+                                    <ReadingPane
+                                        session={session}
+                                        transport={deploymentDescribing(described)}
+                                        storedEmailId={messageId}
+                                        online
+                                        onShowFullHtml={() => undefined}
+                                    />
+                                </OpenAttachmentContext>
+                            </AttachmentExchangeContext>
+                        </LinkOpenerContext>
+                    </WorkspaceProvider>
+                </ToastsProvider>
+            </LocalizationProvider>,
+        );
+
+        return () => {
+            fireEvent.click(screen.getByRole('button', { name: followTheCitedMessage }));
+        };
+    }
+
+    function following(): { readonly cited: string | null; readonly conversation: Workspace['conversation'] } {
+        const probe = screen.getAllByRole('status').find((element) => element.textContent.startsWith('{"cited"'));
+
+        return JSON.parse(probe?.textContent ?? 'null') as {
+            readonly cited: string | null;
+            readonly conversation: Workspace['conversation'];
+        };
+    }
+
+    it('lands on the cited message inside the conversation it stands in', async () => {
+        const cite = citing(messageId);
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(following().conversation).toStrictEqual({
+                threadId: 'thread-1',
+                openAt: messageId,
+                fromResult: true,
+            });
+        });
+    });
+
+    it('spends the citation as it lands, so reopening the message opens no conversation nobody asked for', async () => {
+        const cite = citing(messageId);
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(following().cited).toBeNull();
+        });
+    });
+
+    it('opens no conversation for a cited message that stands in none', async () => {
+        const cite = citing(messageId, description({ threadId: null }));
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(following().cited).toBeNull();
+        });
+
+        expect(following().conversation).toBeNull();
+    });
+
+    it('lets go of a citation naming a message other than the one being read', async () => {
+        const cite = citing('another-message');
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(following().cited).toBeNull();
+        });
+
+        expect(following().conversation).toBeNull();
+    });
+});
+
 describe('ReadingPane selection', () => {
     // The message being read is `workspace.selection` in the application — `App.tsx` hands the pane that very value —
     // and the passage in scope is read against it, so the harness sets it rather than leaving the pane drawing a

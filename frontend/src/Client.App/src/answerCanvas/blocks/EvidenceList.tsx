@@ -117,8 +117,9 @@ function EvidenceItem({ entry, now }: { readonly entry: EvidenceEntry; readonly 
     const rows = 'flex w-full flex-col gap-1.25 py-2.5 text-start';
 
     // A source that can be followed is a control and a source that cannot is not one: drawing the private entry as a
-    // button would offer somebody a way into mail this client was never given.
-    if (declared === undefined || follow === null) {
+    // button would offer somebody a way into mail this client was never given, and so would drawing one whose target
+    // names a kind written after this build was.
+    if ((declared?.target ?? null) === null || follow === null) {
         return <div className={rows}>{said}</div>;
     }
 
@@ -155,7 +156,7 @@ function MatchedFragment({ declared, fragment }: { readonly declared: DeclaredSo
 /** What a source is, drawn as the design project's two kinds plus the one note a described picture owes a reader. */
 function SourceBadge({ source }: { readonly source: DeclaredSource }) {
     const { translate } = useLocalization();
-    const kind = source.kind === null ? null : sourceKinds[source.kind];
+    const kind = source.target === null ? null : sourceKinds[source.target.kind];
     const medium = sourceMediums[source.medium];
 
     return (

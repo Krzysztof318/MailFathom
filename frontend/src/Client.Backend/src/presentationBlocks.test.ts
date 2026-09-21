@@ -150,14 +150,42 @@ describe('parseBlockEvidence', () => {
 });
 
 describe('parseDeclaredSource', () => {
-    it('reads the name a block refers to a source by and what it is called', () => {
+    it('reads the name a block refers to a source by, what it is called, and where it is followed to', () => {
         expect(parseDeclaredSource(source())).toEqual({
             id: 'c-1',
-            kind: 'email',
+            target: { kind: 'email', email: '0198f4a1-0000-7000-8000-000000000001' },
             label: 'Master agreement.pdf',
             medium: 'Written',
             unreadable: null,
         });
+    });
+
+    it('reads the passage a source names beside the message it was cut from', () => {
+        const target = {
+            kind: 'fragment',
+            email: '0198f4a1-0000-7000-8000-000000000001',
+            fragment: '0198f4a1-0000-7000-8000-00000000000f',
+        };
+
+        expect(parseDeclaredSource(source({ target }))?.target).toEqual(target);
+    });
+
+    it('reads the position of the file a source names', () => {
+        const target = { kind: 'attachment', email: '0198f4a1-0000-7000-8000-000000000001', attachmentPosition: 0 };
+
+        expect(parseDeclaredSource(source({ target }))?.target).toEqual(target);
+    });
+
+    it.each([
+        ['a passage citation naming no passage', { kind: 'fragment', email: 'an-email' }],
+        ['a file citation naming no position', { kind: 'attachment', email: 'an-email' }],
+        [
+            'a file citation naming a position no message holds',
+            { kind: 'attachment', email: 'an-email', attachmentPosition: -1 },
+        ],
+        ['a citation naming no message', { kind: 'email' }],
+    ])('leaves %s unfollowable rather than drawing a target half of it', (_unused, target) => {
+        expect(parseDeclaredSource(source({ target }))?.target).toBeNull();
     });
 
     it('reads why a source yielded nothing', () => {
@@ -168,8 +196,8 @@ describe('parseDeclaredSource', () => {
         expect(parseDeclaredSource(source({ unreadable: 'Locked' }))).toBeNull();
     });
 
-    it('leaves a target kind this contract does not carry unnamed rather than refusing the source', () => {
-        expect(parseDeclaredSource(source({ target: { kind: 'calendar' } }))?.kind).toBeNull();
+    it('leaves a target kind this contract does not carry unfollowable rather than refusing the source', () => {
+        expect(parseDeclaredSource(source({ target: { kind: 'calendar' } }))?.target).toBeNull();
     });
 
     it('refuses a source naming no target at all, which is a citation nothing can be followed to', () => {

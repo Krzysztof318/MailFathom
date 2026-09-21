@@ -11,7 +11,7 @@ import { Citation } from './Citation';
 
 const agreement: DeclaredSource = {
     id: 'c-1',
-    kind: 'email',
+    target: { kind: 'email', email: '0198f4a1-0000-7000-8000-000000000001' },
     label: 'Master agreement.pdf',
     medium: 'Written',
     unreadable: null,
@@ -19,9 +19,10 @@ const agreement: DeclaredSource = {
 
 function renderCitation({
     declared = true,
+    source = agreement,
     follow = null,
-}: { declared?: boolean; follow?: ((of: string) => void) | null } = {}) {
-    const sources = new Map(declared ? [[agreement.id, agreement]] : []);
+}: { declared?: boolean; source?: DeclaredSource; follow?: ((of: string) => void) | null } = {}) {
+    const sources = new Map(declared ? [[source.id, source]] : []);
 
     return render(
         <LocalizationProvider>
@@ -55,6 +56,24 @@ describe('Citation', () => {
 
         expect(chip.getAttribute('aria-disabled')).toBe('true');
         expect(chip.getAttribute('aria-label')).toContain('not built yet');
+    });
+
+    it('names a source pointing where this client cannot open and follows it nowhere', () => {
+        const follow = vi.fn();
+        renderCitation({ source: { ...agreement, target: null }, follow });
+
+        const chip = screen.getByRole('button');
+
+        // The source is named, because this client was given it; what it says instead is which half is missing,
+        // rather than the capability report a control nobody has built yet would carry.
+        expect(chip.getAttribute('aria-label')).toBe(
+            'Citation 1: Master agreement.pdf — this client cannot open where it points',
+        );
+        expect(chip.getAttribute('aria-disabled')).toBe('true');
+
+        fireEvent.click(chip);
+
+        expect(follow).not.toHaveBeenCalled();
     });
 
     it('says a source this client was never given rather than drawing the fact uncited', () => {

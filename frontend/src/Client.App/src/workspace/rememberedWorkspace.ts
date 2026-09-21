@@ -72,7 +72,7 @@ export function rememberedWorkspace(): Workspace {
 /**
  * Keeps what this tab is looking at, so a reload returns to it.
  *
- * Everything but three values, each left out for a reason of its own. The selected fragment is a passage of somebody's
+ * Everything but four values, each left out for a reason of its own. The selected fragment is a passage of somebody's
  * mail rather than a name the service assigned, so keeping it would put mail content in a browser store for nothing —
  * the reading pane drops the fragment as the message it belongs to opens, and a reload is that message opening again.
  * The full-HTML surface is left out because it is a consent rather than a place: it was given for one message after
@@ -81,7 +81,9 @@ export function rememberedWorkspace(): Workspace {
  * is left out because it is the sender's own name for something a reader asked to see once, and returning to it would
  * fetch the file again on a reload nobody meant as a request for it — so a reload returns to the message, which is
  * where the file was opened from and is one press away. A file a search result cited goes with it, being the same act
- * half finished.
+ * half finished. The message an answer's citation named is left out on that same reading: it is an act begun by
+ * pressing a citation and finished by the pane that reads the message, so a reload carrying one would open a
+ * conversation nobody asked for out of a result the reload has already dropped.
  *
  * A question asked about a passage is kept and the passage is not, for the same reason the selected fragment is left
  * out: the question is a sentence somebody typed, and the words they highlighted are a piece of somebody's mail. What
@@ -97,6 +99,7 @@ export function rememberWorkspace(workspace: Workspace): void {
                 fullHtml: null,
                 attachment: null,
                 citedAttachment: null,
+                citedMessage: null,
                 askedBefore: workspace.askedBefore.map(withoutFragmentText),
             }),
         );
@@ -165,6 +168,7 @@ function workspaceIn(value: unknown): Workspace | null {
         fullHtml: null,
         attachment: null,
         citedAttachment: null,
+        citedMessage: null,
         fragment: null,
         selected,
         question,

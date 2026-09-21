@@ -84,6 +84,27 @@ const columns: readonly FactTableColumn[] = [
     'date',
 ];
 
+/**
+ * Where one declared source is followed to, spelled as the plan publishes it.
+ *
+ * The three carry different members and each kind requires its own, which is what makes this a union rather than one
+ * record with three optional halves: a passage citation with no passage and an attachment citation with no position
+ * are both a target nothing can be followed to, and neither is representable here.
+ *
+ * It is carried back to the deployment unchanged when the citation is followed, so this is the plan's spelling rather
+ * than a second one of this client's — a translation between two spellings of one identity is a place for them to
+ * disagree.
+ */
+export type CitationTarget =
+    /** The message as such, which is what a fact about the correspondence itself rests on. */
+    | { readonly kind: 'email'; readonly email: string }
+
+    /** One persisted passage of a message, which is what a fact taken from part of a long one rests on. */
+    | { readonly kind: 'fragment'; readonly email: string; readonly fragment: string }
+
+    /** One file a message carries, named by the position the download route is addressed with. */
+    | { readonly kind: 'attachment'; readonly email: string; readonly attachmentPosition: number };
+
 /** How current the local copy behind a block or an entry was, and when that was established. */
 export interface SourceFreshness {
     readonly staleness: SourceStaleness;
@@ -118,8 +139,8 @@ export interface DeclaredSource {
     /** The name the blocks refer to this source by. */
     readonly id: string;
 
-    /** What it points at, or `null` where the run named a kind this contract does not carry. */
-    readonly kind: CitedSourceKind | null;
+    /** Where it is followed to, or `null` where the run named a kind this contract does not carry. */
+    readonly target: CitationTarget | null;
 
     /** What the source is called, which is what a screen puts on the citation rather than the identifier. */
     readonly label: string;
@@ -214,6 +235,7 @@ const mostFactTableRows = 50;
 const mostAttachmentEntries = 50;
 const longestText = 4000;
 const longestCitationId = 32;
+const longestIdentity = 256;
 
 /** What the correspondence does for one block, or `null` where what arrived is not evidence this client can read. */
 export function parseBlockEvidence(value: unknown): BlockEvidence | null {
@@ -264,11 +286,41 @@ export function parseDeclaredSource(value: unknown): DeclaredSource | null {
         return null;
     }
 
-    // The kind is read and the identity it names is not, because nothing draws a source by its identity yet: following
-    // a citation is the evidence inspector's, and the members it takes are read in the change that follows one.
-    const kind = typeof target['kind'] === 'string' ? oneOf(target['kind'], sourceKinds) : null;
+    // A target this client cannot read is `null` rather than a refusal of the source around it: a run naming a kind
+    // written after this build was is a source that can still be named, numbered, and drawn — what it cannot be is
+    // followed, which is a control the inspector does not offer rather than a plan to refuse.
+    return { id, target: parseCitationTarget(target), label, medium, unreadable };
+}
 
-    return { id, kind, label, medium, unreadable };
+/** Where a declared source is followed to, or `null` where the target is not one of the three this client follows. */
+function parseCitationTarget(target: Readonly<Record<string, unknown>>): CitationTarget | null {
+    const kind = oneOf(target['kind'], sourceKinds);
+    const email = parseIdentity(target['email']);
+
+    if (kind === null || email === null) {
+        return null;
+    }
+
+    switch (kind) {
+        case 'email':
+            return { kind, email };
+
+        case 'fragment': {
+            const fragment = parseIdentity(target['fragment']);
+
+            return fragment === null ? null : { kind, email, fragment };
+        }
+
+        case 'attachment': {
+            const attachmentPosition = target['attachmentPosition'];
+
+            return typeof attachmentPosition === 'number' &&
+                Number.isSafeInteger(attachmentPosition) &&
+                attachmentPosition >= 0
+                ? { kind, email, attachmentPosition }
+                : null;
+        }
+    }
 }
 
 /** One synthesized answer, or `null` where what arrived is not one this client can draw. */
@@ -596,6 +648,13 @@ function parseCitationIds(value: unknown, most: number): readonly string[] | nul
 
 function parseCitationId(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 && value.length <= longestCitationId ? value : null;
+}
+
+// The identities a target names are this deployment's own, written as the bare UUID every other client route names a
+// message by. The bound is the one `citedPassages.ts` posts them back under, so a target this parser admits is one that
+// can actually be followed rather than one the request would refuse.
+function parseIdentity(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestIdentity ? value : null;
 }
 
 function parseText(value: unknown): string | null {
