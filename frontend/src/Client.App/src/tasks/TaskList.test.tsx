@@ -20,7 +20,16 @@ afterEach(() => {
 const readingAt = Date.parse('2026-09-21T09:00:00+02:00');
 
 function taskDue(id: string, title: string, dueOn: string | null): PersonalTask {
-    return { id, title, dueOn, origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title,
+        dueOn,
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 function drawList({
@@ -63,6 +72,7 @@ function drawList({
                 onToggleCompleted={vi.fn()}
                 onAccept={vi.fn()}
                 onOpenSource={vi.fn()}
+                onReminders={vi.fn()}
                 onSchedule={vi.fn()}
                 onAskErasure={vi.fn()}
                 onReadMore={onReadMore}

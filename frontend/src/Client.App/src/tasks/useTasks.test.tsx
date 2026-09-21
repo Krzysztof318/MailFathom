@@ -15,7 +15,16 @@ const asksForMore = 'Read more';
 const asksAgain = 'Read again';
 
 function task(id: string, title: string, dueOn: string | null): unknown {
-    return { id, title, dueOn, origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title,
+        dueOn,
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 function pageOf(tasks: readonly unknown[], nextCursor: string | null): string {

@@ -3,6 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 export {
+    dueDayOffsetMinutes,
+    isReminderInstantList,
+    isReminderSet,
     isStatableReminderLead,
     isStatableReminderSet,
     longestReminderLead,
@@ -479,6 +482,7 @@ export {
     readOwnTasks,
     readProposedTasks,
     recordTask,
+    reviseTask,
     setTaskCompletion,
     taskAcceptanceRoute,
     taskCompletionRoute,

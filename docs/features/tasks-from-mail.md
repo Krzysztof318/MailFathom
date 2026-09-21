@@ -120,7 +120,7 @@ same way. What the two routes make of each of these is
 
 - **Accepting anything automatically.** No pass, no schedule, and no arrangement moves a task onto the committed half
   of a list. A person does that, or it does not happen.
-- **Reminding, notifying, or chasing.** A due day is a column; nothing watches it.
+- **Chasing a task nobody asked to be reminded about.** A due day on its own is a column, and no pass reads it. What is watched is a [reminder](reminders.md) somebody put on that due day, which is the same mechanism a calendar event announces itself through.
 - **Writing an arrangement onto a calendar.** A placement is a suggestion about a day, not an event — putting one on a
   calendar is [a calendar act](calendar-events.md) somebody takes.
 - **Any external task protocol.** The list is native to this deployment in the strong sense: nothing synchronizes, and

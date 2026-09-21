@@ -11,11 +11,9 @@ import { useLocalization } from '../localization/useLocalization';
 // stands, how it is walked, and how it is left are `contextMenu/ContextMenu.tsx`'s.
 //
 // **An item the client cannot yet perform is left out rather than drawn inert**, which is the rule
-// `messageRows/MessageRowMenu.tsx` states. Two of the design's six are absent for that reason and each names where it
-// arrives: *reminders*, because a task carries none on this surface and
-// [#1572](https://github.com/Krzysztof318/MailFathom/issues/1572) is the issue that attaches them — the panel is
-// already built and waiting; and *schedule in the calendar* on a deployment that arranges no day, because the act
-// behind it is the arrangement rather than a time this client would pick.
+// `messageRows/MessageRowMenu.tsx` states. Two of the design's six are absent on a row that cannot perform them:
+// *reminders* on a task nobody dated, a lead having no day to be measured back from; and *schedule in the calendar*
+// on the same row, for the reason the row's own control is absent there.
 //
 // **One item the design does not draw here is drawn: taking on what mail proposed.** The design answers a proposal in
 // the conversation it came out of, and this screen lists proposals too — so a reader looking at one here would
@@ -31,6 +29,7 @@ export function TaskRowMenu({
     onSelect,
     onToggleCompleted,
     onAccept,
+    onReminders,
     onSchedule,
     onOpenSource,
     onAskErasure,
@@ -46,6 +45,9 @@ export function TaskRowMenu({
 
     /** Takes a task mail proposed on, or `undefined` for one the person already owes. */
     readonly onAccept: (() => void) | undefined;
+
+    /** Opens what announces this task, or `undefined` for one nobody dated, which can announce nothing. */
+    readonly onReminders: (() => void) | undefined;
 
     readonly onSchedule: () => void;
 
@@ -70,6 +72,10 @@ export function TaskRowMenu({
 
     if (onAccept !== undefined) {
         items.push({ icon: 'check', label: translate('tasks.accept'), choose: onAccept });
+    }
+
+    if (onReminders !== undefined) {
+        items.push({ icon: 'notifications_active', label: translate('reminders.title'), choose: onReminders });
     }
 
     if (task.dueOn !== null) {

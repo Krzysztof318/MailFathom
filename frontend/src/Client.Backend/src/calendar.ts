@@ -4,7 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
-import { isStatableReminderSet, mostRemindersOnOneRecord } from './reminders';
+import { isReminderInstantList, isReminderSet } from './reminders';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
@@ -583,26 +583,11 @@ export function parseCalendarEvent(value: unknown): CalendarEvent | null {
     // An announcement the contract says cannot exist — more than an event may carry, a lead further ahead than one may
     // state, or the same lead twice — is a body this client refuses rather than a set it draws: the panel enforces the
     // same three rules before it writes, so an answer breaking them describes an event nothing here could have made.
-    if (typeof isAllDay !== 'boolean' || !isReminderSet(reminders) || !isInstantList(remindsAt)) {
+    if (typeof isAllDay !== 'boolean' || !isReminderSet(reminders) || !isReminderInstantList(remindsAt)) {
         return null;
     }
 
     return { id, title, start, end, isAllDay, reminders, remindsAt, origin, sourceMessage, recordedAt, amendedAt };
-}
-
-function isReminderSet(value: unknown): value is readonly number[] {
-    return (
-        Array.isArray(value) &&
-        value.length <= mostRemindersOnOneRecord &&
-        value.every((lead) => typeof lead === 'number') &&
-        isStatableReminderSet(value)
-    );
-}
-
-function isInstantList(value: unknown): value is readonly string[] {
-    return (
-        Array.isArray(value) && value.length <= mostRemindersOnOneRecord && value.every((at) => typeof at === 'string')
-    );
 }
 
 /** Whether the value is one of the two origins this surface publishes. */

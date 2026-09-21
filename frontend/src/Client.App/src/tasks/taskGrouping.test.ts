@@ -12,7 +12,16 @@ import { groupOf, groupedTasks, inDueOrder } from './taskGrouping';
 const warsaw = 'Europe/Warsaw';
 
 function task(id: string, dueOn: string | null): PersonalTask {
-    return { id, title: id, dueOn, origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title: id,
+        dueOn,
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 // Monday 21 September 2026, late morning in Warsaw.

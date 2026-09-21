@@ -6,10 +6,12 @@ import { useEffect, useRef, useState } from 'react';
 import {
     acceptTask,
     arrangesDays,
+    dueDayOffsetMinutes,
     recordCalendarEvent,
     eraseTask,
     layOutToday,
     recordTask,
+    reviseTask,
     setTaskCompletion,
     type CalendarEventWrite,
     type ClientFailureReason,
@@ -25,6 +27,7 @@ import { Control } from '../controls/Control';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
+import { ReminderPanel } from '../reminders/ReminderPanel';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { DayCapacity } from './DayCapacity';
 import { NewTask, type TaskDraft } from './NewTask';
@@ -170,8 +173,11 @@ export function TasksSpace({
     const [applying, setApplying] = useState(false);
     const [layout, setLayout] = useState<DayLayout | null>(null);
 
+    const [announcing, setAnnouncing] = useState<PersonalTask | null>(null);
+
     const asked = useRef<HTMLDialogElement | null>(null);
     const asking = useRef<HTMLDialogElement | null>(null);
+    const panel = useRef<HTMLDialogElement | null>(null);
 
     const reading = useTasks(session, transport);
     const day = useTodayCalendar(session, transport, now);
@@ -409,14 +415,40 @@ export function TasksSpace({
         });
     }
 
+    // What announces one task, written as the panel answers it: there is no *Save* behind it, exactly as there is none
+    // behind the calendar's, so what the reader saw on leaving it is what the deployment then holds. The route takes
+    // the whole record, so the line, the day and the citation are restated unchanged beside the leads — and the offset
+    // travels with them because this deployment keeps no timezone for anybody.
+    function stateReminders(task: PersonalTask, reminders: readonly number[]): void {
+        setAnnouncing({ ...task, reminders });
+
+        if (session === null) {
+            return;
+        }
+
+        void reviseTask(session, transport, task.id, {
+            title: task.title,
+            dueOn: task.dueOn,
+            reminders,
+            dueDayOffsetMinutes: dueDayOffsetMinutes(task.dueOn),
+            sourceMessageId: task.sourceMessageId,
+        }).then((answer) => {
+            after([wrote(answer)], 'tasks.remindersWritten');
+        });
+    }
+
     function record(draft: TaskDraft): void {
         if (session === null) {
             return;
         }
 
+        // A task is written announcing nothing, which is what the design's own *New task* offers: the panel is reached
+        // from the row once the task exists, and a day is what a lead is measured back from.
         void recordTask(session, transport, {
             title: draft.title,
             dueOn: draft.dueOn === '' ? null : draft.dueOn,
+            reminders: [],
+            dueDayOffsetMinutes: null,
             sourceMessageId: null,
         }).then((answer) => {
             after([wrote(answer)], 'tasks.written');
@@ -496,6 +528,11 @@ export function TasksSpace({
                     onToggleCompleted={toggleCompleted}
                     onAccept={accept}
                     onOpenSource={onOpenMessage}
+                    onReminders={(task) => {
+                        setSaid(null);
+                        setAnnouncing(task);
+                        panel.current?.showModal();
+                    }}
                     onSchedule={schedule}
                     onAskErasure={askErasure}
                     onReadMore={reading.readMore}
@@ -541,6 +578,22 @@ export function TasksSpace({
             ) : null}
 
             <NewTask asked={asking} onSave={record} />
+
+            {/* One panel for the whole screen rather than one per row, which is what lets the element itself hold
+                whether it is open: the task it is about is what the row that opened it put here. It is mounted from
+                the start rather than with that task, because the act that names the task is also the act that opens
+                the panel — a panel mounted by the same commit would not exist yet to be opened. */}
+            <ReminderPanel
+                panel={panel}
+                subject={announcing?.title ?? ''}
+                anchor="taskDueDate"
+                reminders={announcing?.reminders ?? []}
+                onRemindersChanged={(reminders) => {
+                    if (announcing !== null) {
+                        stateReminders(announcing, reminders);
+                    }
+                }}
+            />
 
             <Confirmation
                 asked={asked}

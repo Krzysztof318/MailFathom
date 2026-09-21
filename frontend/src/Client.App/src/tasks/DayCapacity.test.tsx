@@ -16,7 +16,16 @@ afterEach(() => {
 });
 
 function taskCalled(id: string, title: string): PersonalTask {
-    return { id, title, dueOn: '2026-09-21', origin: 'Asserted', completed: false, sourceMessageId: null };
+    return {
+        id,
+        title,
+        dueOn: '2026-09-21',
+        reminders: [],
+        remindsAt: [],
+        origin: 'Asserted',
+        completed: false,
+        sourceMessageId: null,
+    };
 }
 
 const arranged: DayLayout = {

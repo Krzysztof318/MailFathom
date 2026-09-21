@@ -57,6 +57,7 @@ export function TaskList({
     onToggleCompleted,
     onAccept,
     onOpenSource,
+    onReminders,
     onSchedule,
     onAskErasure,
     onReadMore,
@@ -92,6 +93,9 @@ export function TaskList({
 
     /** Opens the message a task cites, which is the Mail space's to draw and therefore the frame's to perform. */
     readonly onOpenSource: (messageId: string) => void;
+
+    /** Opens what announces one task, which the screen holds the panel for. */
+    readonly onReminders: (task: PersonalTask) => void;
 
     readonly onSchedule: (tasks: readonly PersonalTask[]) => void;
 
@@ -143,6 +147,12 @@ export function TaskList({
                     ? undefined
                     : () => {
                           onOpenSource(source);
+                      },
+            onReminders:
+                task.dueOn === null
+                    ? undefined
+                    : () => {
+                          onReminders(task);
                       },
             onSchedule: () => {
                 onSchedule([task]);
