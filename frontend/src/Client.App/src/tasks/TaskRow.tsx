@@ -171,7 +171,7 @@ export function TaskRow({
                 <input
                     type="checkbox"
                     checked={task.completed}
-                    aria-label={translate(task.completed ? 'tasks.uncompleteRow' : 'tasks.completeRow', {
+                    aria-label={translate(task.completed ? 'tasks.markNotDoneRow' : 'tasks.markDoneRow', {
                         title: task.title,
                     })}
                     className="mt-0.5 size-5 shrink-0 accent-accent"
