@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { discoveryRunRoute, readDiscoveryRunTail } from './discoveryRun';
+import { discoveryRunRoute, readDiscoveryRunTail, stopDiscoveryRun } from './discoveryRun';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -17,6 +17,21 @@ const runId = '6f1b0a8c-2d3e-4f50-9a1b-7c8d9e0f1a2b';
 function bodyOf(events: readonly unknown[], running = false): string {
     return JSON.stringify({ running, events });
 }
+
+// The three payloads the service writes, in its own spelling: camel-cased property names, and a closed value spelled
+// as the member itself because this surface configures no naming policy for one.
+const startedEvent = {
+    event: 'started',
+    sequence: 1,
+    planSchemaVersion: 3,
+    bounds: { maximumRetrievedCharacters: 20000, maximumProviderCalls: 8, maximumTokens: 80000 },
+    endpointAlias: 'house',
+    publishedModel: 'gpt-4o',
+};
+
+const spentEvent = { spend: { providerCalls: 3, tokens: 1200, retrievedCharacters: 900, messagesRetrieved: 4 } };
+
+const progressed = { lookupsRun: 2, lookupsRefused: 1, lookupsPlanned: 5, passagesFound: 41 };
 
 type Answer = Omit<ClientResponse, 'headers'>;
 
@@ -75,18 +90,157 @@ describe('readDiscoveryRunTail', () => {
         expect(answered).toEqual({ outcome: 'read', value: { running: true, events: [] } });
     });
 
-    it('reads the revision the plan was written against off the run that started', async () => {
+    it('reads the plan revision, the ceilings, and what answers the run off the run that started', async () => {
         const answered = await readDiscoveryRunTail(
             session,
-            answering({ status: 200, body: bodyOf([{ event: 'started', sequence: 1, planSchemaVersion: 3 }]) }),
+            answering({ status: 200, body: bodyOf([startedEvent]) }),
             runId,
             0,
         );
 
         expect(answered).toEqual({
             outcome: 'read',
-            value: { running: false, events: [{ kind: 'started', sequence: 1, planSchemaVersion: 3 }] },
+            value: {
+                running: false,
+                events: [
+                    {
+                        kind: 'started',
+                        sequence: 1,
+                        planSchemaVersion: 3,
+                        ceilings: { retrievedCharacters: 20000, providerCalls: 8, tokens: 80000 },
+                        endpointAlias: 'house',
+                        publishedModel: 'gpt-4o',
+                    },
+                ],
+            },
         });
+    });
+
+    it('reads a deployment that declared no model for publication as naming the alias alone', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({ status: 200, body: bodyOf([{ ...startedEvent, publishedModel: '' }]) }),
+            runId,
+            0,
+        );
+
+        expect(answered.outcome === 'read' && answered.value.events[0]).toMatchObject({ publishedModel: '' });
+    });
+
+    it('reads how far retrieval got and what the run had spent reaching there', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'retrieval',
+                        sequence: 2,
+                        progress: { lookupsRun: 2, lookupsRefused: 1, lookupsPlanned: 5, passagesFound: 41 },
+                        spend: spentEvent.spend,
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({
+            outcome: 'read',
+            value: {
+                running: false,
+                events: [
+                    {
+                        kind: 'retrieval',
+                        sequence: 2,
+                        progress: { lookupsRun: 2, lookupsRefused: 1, lookupsPlanned: 5, passagesFound: 41 },
+                        spend: spentEvent.spend,
+                    },
+                ],
+            },
+        });
+    });
+
+    it('reads what a finished run finally consumed', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({ status: 200, body: bodyOf([{ event: 'completed', sequence: 9, ...spentEvent }]) }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({
+            outcome: 'read',
+            value: { running: false, events: [{ kind: 'completed', sequence: 9, spend: spentEvent.spend }] },
+        });
+    });
+
+    it.each([
+        ['Cancelled', 'cancelled'],
+        ['PeriodSpent', 'periodSpent'],
+        ['RunSpent', 'runSpent'],
+        ['TimedOut', 'timedOut'],
+        ['Stopped', 'stopped'],
+        ['Unavailable', 'unavailable'],
+        ['TemporarilyUnavailable', 'temporarilyUnavailable'],
+        ['RetrievalRefused', 'retrievalRefused'],
+        ['Failed', 'failed'],
+    ])('reads the ending the service spells %s', async (spelled, ending) => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([{ event: 'failed', sequence: 3, failure: spelled, ...spentEvent }]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered).toEqual({
+            outcome: 'read',
+            value: {
+                running: false,
+                events: [{ kind: 'failed', sequence: 3, ending, spend: spentEvent.spend, retryAt: null }],
+            },
+        });
+    });
+
+    it('carries when a refused period turns over', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'failed',
+                        sequence: 3,
+                        failure: 'PeriodSpent',
+                        retryAt: '2026-09-21T13:00:00+00:00',
+                        ...spentEvent,
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered.outcome === 'read' && answered.value.events[0]).toMatchObject({
+            retryAt: '2026-09-21T13:00:00+00:00',
+        });
+    });
+
+    it('reads an ending this build has no name for as one the run does not publish', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([{ event: 'failed', sequence: 3, failure: 'ProviderRefused', ...spentEvent }]),
+            }),
+            runId,
+            0,
+        );
+
+        expect(answered.outcome === 'read' && answered.value.events[0]).toMatchObject({ ending: 'failed' });
     });
 
     it('reads a block the catalogue carries under the type it names', async () => {
@@ -123,22 +277,19 @@ describe('readDiscoveryRunTail', () => {
         });
     });
 
-    it.each(['completed', 'failed', 'retrieval', 'citation'])(
-        'carries the %s event as one no answer is drawn out of',
-        async (event) => {
-            const answered = await readDiscoveryRunTail(
-                session,
-                answering({ status: 200, body: bodyOf([{ event, sequence: 9 }]) }),
-                runId,
-                0,
-            );
+    it('carries a citation as an event no answer is drawn out of', async () => {
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({ status: 200, body: bodyOf([{ event: 'citation', sequence: 9, citation: {} }]) }),
+            runId,
+            0,
+        );
 
-            expect(answered).toEqual({
-                outcome: 'read',
-                value: { running: false, events: [{ kind: 'other', sequence: 9 }] },
-            });
-        },
-    );
+        expect(answered).toEqual({
+            outcome: 'read',
+            value: { running: false, events: [{ kind: 'other', sequence: 9 }] },
+        });
+    });
 
     it('carries an event kind this contract does not name so the cursor moves past it', async () => {
         const answered = await readDiscoveryRunTail(
@@ -186,7 +337,23 @@ describe('readDiscoveryRunTail', () => {
         ['an event whose sequence is not whole', bodyOf([{ event: 'other', sequence: 1.5 }])],
         ['an event whose sequence is below the first', bodyOf([{ event: 'other', sequence: 0 }])],
         ['an event this contract cannot name', bodyOf([{ event: 7, sequence: 1 }])],
-        ['a start that names no revision', bodyOf([{ event: 'started', sequence: 1 }])],
+        ['a start that names no revision', bodyOf([{ ...startedEvent, planSchemaVersion: undefined }])],
+        ['a start that names no ceilings', bodyOf([{ ...startedEvent, bounds: undefined }])],
+        ['a start whose ceilings are incomplete', bodyOf([{ ...startedEvent, bounds: { maximumTokens: 10 } }])],
+        ['a start naming no endpoint at all', bodyOf([{ ...startedEvent, endpointAlias: undefined }])],
+        [
+            'a start whose endpoint name is longer than a screen could carry',
+            bodyOf([{ ...startedEvent, endpointAlias: 'a'.repeat(129) }]),
+        ],
+        ['a retrieval report with no counts', bodyOf([{ event: 'retrieval', sequence: 2, spend: spentEvent.spend }])],
+        ['a retrieval report with no spend', bodyOf([{ event: 'retrieval', sequence: 2, progress: progressed }])],
+        ['a completion with no spend', bodyOf([{ event: 'completed', sequence: 9 }])],
+        ['an ending that names no failure', bodyOf([{ event: 'failed', sequence: 3, ...spentEvent }])],
+        ['an ending with no spend', bodyOf([{ event: 'failed', sequence: 3, failure: 'Cancelled' }])],
+        [
+            'a spend count that is not whole',
+            bodyOf([{ event: 'completed', sequence: 9, spend: { ...spentEvent.spend, tokens: 1.5 } }]),
+        ],
         ['a block that is not an object', bodyOf([{ event: 'block', sequence: 1, block: 'answer' }])],
         ['a block naming no type', bodyOf([{ event: 'block', sequence: 1, block: {} }])],
         ['a block whose type is empty', bodyOf([{ event: 'block', sequence: 1, block: { type: '' } }])],
@@ -215,5 +382,40 @@ describe('readDiscoveryRunTail', () => {
         const answered = await readDiscoveryRunTail(session, answering({ status: 200, body }), runId, 0);
 
         expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+});
+
+describe('stopDiscoveryRun', () => {
+    it('asks the deployment to stop the run itself rather than stopping the reading', async () => {
+        const { transport, requests } = recording({ status: 204, body: '' });
+
+        const answered = await stopDiscoveryRun(session, transport, runId);
+
+        expect(requests[0]?.method).toBe('DELETE');
+        expect(requests[0]?.path).toBe(`https://mail.example.invalid/api/client/discovery/runs/${runId}`);
+        expect(answered.outcome).toBe('read');
+    });
+
+    it('reads a run this user does not hold as gone rather than as something to retry', async () => {
+        const answered = await stopDiscoveryRun(session, answering({ status: 404, body: '' }), runId);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'missing', status: 404 } });
+    });
+
+    it.each([
+        [401, 'unauthenticated'],
+        [403, 'unauthorized'],
+        [200, 'unavailable'],
+        [500, 'unavailable'],
+    ])('reports %i as %s', async (status, reason) => {
+        const answered = await stopDiscoveryRun(session, answering({ status, body: '' }), runId);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason, status } });
+    });
+
+    it('reports a deployment it could not reach', async () => {
+        const answered = await stopDiscoveryRun(session, () => Promise.reject(new Error('down')), runId);
+
+        expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
 });
