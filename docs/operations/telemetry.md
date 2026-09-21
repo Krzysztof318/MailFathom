@@ -1537,8 +1537,8 @@ is `off`, whatever the deployment asked for.
 **`render_failed` carries two attributes beside `mailfathom.client.event`, and both are bounded.**
 `mailfathom.client.region` names
 which part of the client the failure was contained in — `reading_pane` for the surface that draws a document assembled
-out of mail somebody else sent, and `application` for the last resort around everything, including a failure raised
-before there was anything to draw into. `mailfathom.client.error` names the class of what was thrown, refused back to
+out of mail somebody else sent, `answer_block` for one block of an answer a model composed, and `application` for the
+last resort around everything, including a failure raised before there was anything to draw into. `mailfathom.client.error` names the class of what was thrown, refused back to
 `unknown` where that is not an ordinary class name. What is deliberately absent is everything unbounded: the
 exception's message, its stack, the component stack, and the address the client was on. An exception message can be
 assembled out of the mail that could not be drawn, which is why the class alone is reported and the message is not read

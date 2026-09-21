@@ -54,7 +54,7 @@ export type { ClientEvent };
  * placed. `application` is the last resort around everything, and every other member is a region the screen around it
  * is still worth using without.
  */
-export type ClientRegion = 'application' | 'reading_pane';
+export type ClientRegion = 'application' | 'answer_block' | 'reading_pane';
 
 /** What a move is reported as where the address named something this client does not publish as a space. */
 export const unnamedSpace = 'other';

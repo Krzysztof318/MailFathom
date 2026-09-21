@@ -26,6 +26,26 @@ export const pl: Catalogue = {
     'shell.tabModeTooNarrow': 'dostępne na szerszym ekranie',
     'control.notBuiltYet': '{control} — jeszcze niezbudowane',
     'ai.badge': 'AI',
+    'answerCanvas.blocks': 'Bloki odpowiedzi',
+    'answerCanvas.stillComing': 'Dalsza część odpowiedzi',
+    'answerCanvas.nothing': 'To uruchomienie nie dało nic do pokazania.',
+    'answerCanvas.planAhead':
+        'Ten wynik korzysta z nowszej wersji schematu planu (v{plan}) niż obsługuje ta aplikacja (v{client}). Nowe rodzaje bloków mogły zostać pominięte.',
+    'answerBlock.loading': '{block} — wciąż powstaje.',
+    'answerBlock.partial': 'Część danych źródłowych jest jeszcze odczytywana.',
+    'answerBlock.empty': 'Nie było czym wypełnić tego bloku.',
+    'answerBlock.error': 'Nie udało się zbudować tego bloku.',
+    'answerBlock.offline': 'Brak połączenia z serwerem — tego bloku nie można wczytać.',
+    'answerBlock.unauthenticated':
+        'Sesja zakończyła się w trakcie odczytu tej odpowiedzi. Zaloguj się ponownie, aby zobaczyć resztę.',
+    'answerBlock.unauthorized': 'To konto nie ma uprawnień do odczytania tej odpowiedzi.',
+    'answerBlock.unreadable':
+        'Dalsza część tej odpowiedzi przyszła w postaci, której ten klient nie potrafi odczytać — to usterka warta zgłoszenia.',
+    'answerBlock.unrecognised': 'Nieznany blok',
+    'answerBlock.unrecognisedType': 'typ: {named}',
+    'answerBlock.unrecognisedBody':
+        'Ten klient nie rozpoznaje rodzaju bloku „{named}”. Blok został pominięty — reszta wyniku wyświetliła się normalnie.',
+    'answerBlock.unrecognisedRemedy': 'Aktualizacja aplikacji może odblokować ten rodzaj bloku.',
     'confirm.undoableFor.one': 'Możesz to cofnąć jeszcze przez {count} sekundę.',
     'confirm.undoableFor.few': 'Możesz to cofnąć jeszcze przez {count} sekundy.',
     'confirm.undoableFor.many': 'Możesz to cofnąć jeszcze przez {count} sekund.',
