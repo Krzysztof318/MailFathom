@@ -106,16 +106,22 @@ export {
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
 export type {
     AnswerConfidence,
+    AttachmentAvailability,
+    AttachmentEntry,
     BlockEvidence,
     BlockSupport,
     CitedSourceKind,
     ConflictingClaim,
     DeclaredSource,
     EvidenceEntry,
+    FactTableCell,
+    FactTableColumn,
+    FactTableRow,
     SourceFreshness,
     SourceMedium,
     SourceStaleness,
     SynthesizedAnswer,
+    TimelineEntry,
     UnreadableSource,
 } from './presentationBlocks';
 export {

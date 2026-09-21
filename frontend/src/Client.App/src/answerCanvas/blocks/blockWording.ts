@@ -4,8 +4,10 @@
 
 import type {
     AnswerConfidence,
+    AttachmentAvailability,
     BlockSupport,
     CitedSourceKind,
+    FactTableColumn,
     SourceMedium,
     SourceStaleness,
 } from '@mailfathom/client-backend';
@@ -134,4 +136,82 @@ export const evidenceCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> =
     few: 'answer.evidenceCount.few',
     many: 'answer.evidenceCount.many',
     other: 'answer.evidenceCount.other',
+};
+
+/** The same forms for the events a chronology holds. */
+export const timelineCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'answer.timelineCount.other',
+    one: 'answer.timelineCount.one',
+    two: 'answer.timelineCount.other',
+    few: 'answer.timelineCount.few',
+    many: 'answer.timelineCount.many',
+    other: 'answer.timelineCount.other',
+};
+
+/** The same forms for the rows a comparison holds. */
+export const factTableRowCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'answer.factTableCount.other',
+    one: 'answer.factTableCount.one',
+    two: 'answer.factTableCount.other',
+    few: 'answer.factTableCount.few',
+    many: 'answer.factTableCount.many',
+    other: 'answer.factTableCount.other',
+};
+
+/** The same forms for the files a gallery holds. */
+export const attachmentCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'answer.galleryCount.other',
+    one: 'answer.galleryCount.one',
+    two: 'answer.galleryCount.other',
+    few: 'answer.galleryCount.few',
+    many: 'answer.galleryCount.many',
+    other: 'answer.galleryCount.other',
+};
+
+/**
+ * What each column of a fact table is headed, and which edge its values are aligned to.
+ *
+ * The heading is here rather than on the wire because it is words in somebody's language, and the run states an
+ * identity out of a closed catalogue precisely so that this client can draw the heading in the reader's own — which is
+ * the whole reason a producer cannot invent a column.
+ *
+ * `numeric` is the column's kind read for the one thing a client may do with it. A cell is always the text the
+ * correspondence wrote, so what the kind settles is presentation: a counted quantity and a money amount are aligned to
+ * the end of the column and held in step, and everything else reads as the language reads. It never settles a parse —
+ * "roughly €40k" is a value this contract carries, and a client that reformatted it would assert a precision nobody
+ * wrote. A date is text for the same reason, so it is aligned as words are.
+ */
+export const factTableColumns: Readonly<
+    Record<FactTableColumn, { readonly heading: MessageKey; readonly numeric: boolean }>
+> = {
+    subject: { heading: 'answer.columnSubject', numeric: false },
+    party: { heading: 'answer.columnParty', numeric: false },
+    document: { heading: 'answer.columnDocument', numeric: false },
+    reference: { heading: 'answer.columnReference', numeric: false },
+    amount: { heading: 'answer.columnAmount', numeric: true },
+    quantity: { heading: 'answer.columnQuantity', numeric: true },
+    term: { heading: 'answer.columnTerm', numeric: false },
+    version: { heading: 'answer.columnVersion', numeric: false },
+    status: { heading: 'answer.columnStatus', numeric: false },
+    date: { heading: 'answer.columnDate', numeric: false },
+};
+
+/**
+ * What each of the three availabilities is called and drawn as.
+ *
+ * A file held locally is the settled case and is drawn as one. The other two are not failures and are not drawn as
+ * errors either: a message whose content was never stored is ordinary, and content retention removed is a fact about
+ * the deployment rather than about this run. Both are warned rather than healthy because both mean *this is not a file
+ * you can have from here*, which is what somebody choosing between three files needs to see at a glance.
+ */
+export const attachmentAvailabilities: Readonly<
+    Record<AttachmentAvailability, { readonly label: MessageKey; readonly icon: IconName; readonly tint: string }>
+> = {
+    Stored: {
+        label: 'answer.attachmentStored',
+        icon: 'check_circle',
+        tint: 'bg-healthy-soft text-healthy-text',
+    },
+    NotStored: { label: 'answer.attachmentNotStored', icon: 'cloud_off', tint: warned },
+    Removed: { label: 'answer.attachmentRemoved', icon: 'history', tint: warned },
 };

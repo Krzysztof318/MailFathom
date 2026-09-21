@@ -16,7 +16,7 @@ import type { ArrivedAnswerBlock } from './followedRun';
 let failingBlock: string | null = null;
 
 function arrival(sequence: number, named: string, known = true): ArrivedAnswerBlock {
-    const block: AnswerBlock = { type: known ? 'timeline' : null, named };
+    const block: AnswerBlock = { type: known ? 'threadState' : null, named };
 
     return { sequence, block };
 }
@@ -31,7 +31,7 @@ function Drawn({ block }: { readonly block: AnswerBlock }) {
     return <p>{block.named}</p>;
 }
 
-const renderers: AnswerBlockRenderers = { timeline: Drawn };
+const renderers: AnswerBlockRenderers = { threadState: Drawn };
 
 function renderCanvas(blocks: readonly ArrivedAnswerBlock[], canvas: Partial<Parameters<typeof AnswerCanvas>[0]> = {}) {
     return render(
@@ -62,57 +62,57 @@ describe('AnswerCanvas', () => {
     });
 
     it('draws each block through the renderer registered for its type', () => {
-        renderCanvas([arrival(1, 'timeline')]);
+        renderCanvas([arrival(1, 'threadState')]);
 
-        expect(screen.getByText('timeline')).toBeDefined();
+        expect(screen.getByText('threadState')).toBeDefined();
     });
 
     it('announces the blocks in the order the run composed them', () => {
-        renderCanvas([arrival(1, 'timeline'), arrival(4, 'timeline')]);
+        renderCanvas([arrival(1, 'threadState'), arrival(4, 'threadState')]);
 
         expect(screen.getAllByRole('listitem')).toHaveLength(2);
     });
 
     it('names a block type this build has no renderer for, and draws the rest of the answer', () => {
-        renderCanvas([arrival(1, 'RiskScore', false), arrival(2, 'timeline')]);
+        renderCanvas([arrival(1, 'RiskScore', false), arrival(2, 'threadState')]);
 
         expect(screen.getByText('type: RiskScore')).toBeDefined();
-        expect(screen.getByText('timeline')).toBeDefined();
+        expect(screen.getByText('threadState')).toBeDefined();
     });
 
     it('leaves the rest of the answer standing when one block fails to draw', () => {
         failingBlock = 'broken';
 
-        renderCanvas([{ sequence: 1, block: { type: 'timeline', named: 'broken' } }, arrival(2, 'timeline')]);
+        renderCanvas([{ sequence: 1, block: { type: 'threadState', named: 'broken' } }, arrival(2, 'threadState')]);
 
-        expect(screen.getByText('timeline')).toBeDefined();
+        expect(screen.getByText('threadState')).toBeDefined();
     });
 
     it('says in place that the block which failed did', () => {
         failingBlock = 'broken';
 
-        renderCanvas([{ sequence: 1, block: { type: 'timeline', named: 'broken' } }]);
+        renderCanvas([{ sequence: 1, block: { type: 'threadState', named: 'broken' } }]);
 
         expect(screen.getByRole('alert')).toBeDefined();
     });
 
     it('holds a place for what is still coming while the run works', () => {
-        renderCanvas([arrival(1, 'timeline')], { running: true });
+        renderCanvas([arrival(1, 'threadState')], { running: true });
 
         expect(screen.getByRole('article', { name: 'More of this answer' })).toBeDefined();
     });
 
     it('holds none once the run has stopped', () => {
-        renderCanvas([arrival(1, 'timeline')]);
+        renderCanvas([arrival(1, 'threadState')]);
 
         expect(screen.queryByRole('article', { name: 'More of this answer' })).toBeNull();
     });
 
     it('keeps what had arrived when a read fails, rather than waiting on it in silence', () => {
-        renderCanvas([arrival(1, 'timeline')], { running: true, failure: 'unavailable' });
+        renderCanvas([arrival(1, 'threadState')], { running: true, failure: 'unavailable' });
 
         expect(screen.getByText('No connection to the server — this block cannot be loaded.')).toBeDefined();
-        expect(screen.getByText('timeline')).toBeDefined();
+        expect(screen.getByText('threadState')).toBeDefined();
     });
 
     // Each of the four says its own thing, and the pairing is asserted rather than the count: a transposition
@@ -152,18 +152,18 @@ describe('AnswerCanvas', () => {
     });
 
     it('says a plan written against a newer revision was drawn as far as it went', () => {
-        renderCanvas([arrival(1, 'timeline')], { planSchemaVersion: 3 });
+        renderCanvas([arrival(1, 'threadState')], { planSchemaVersion: 3 });
 
         expect(
             screen.getByText(
                 'This result uses a newer plan schema version (v3) than this app supports (v2). Some new block types may have been skipped.',
             ),
         ).toBeDefined();
-        expect(screen.getByText('timeline')).toBeDefined();
+        expect(screen.getByText('threadState')).toBeDefined();
     });
 
     it.each([2, 1, null])('says nothing about a plan at revision %s', (planSchemaVersion) => {
-        renderCanvas([arrival(1, 'timeline')], { planSchemaVersion });
+        renderCanvas([arrival(1, 'threadState')], { planSchemaVersion });
 
         expect(screen.queryByText(/newer plan schema version/u)).toBeNull();
     });

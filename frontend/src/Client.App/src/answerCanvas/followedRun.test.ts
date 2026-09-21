@@ -35,8 +35,8 @@ describe('answerAfter', () => {
         const answer = answerAfter(
             nothingRead,
             answering([
-                { kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } },
-                { kind: 'block', sequence: 3, block: { type: 'timeline', named: 'timeline' } },
+                { kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } },
+                { kind: 'block', sequence: 3, block: { type: 'people', named: 'people' } },
             ]),
         );
 
@@ -46,7 +46,7 @@ describe('answerAfter', () => {
     it('adds what a later read brought to what an earlier one did', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }], true),
         );
 
         const second = answerAfter(
@@ -54,7 +54,7 @@ describe('answerAfter', () => {
             answering([{ kind: 'block', sequence: 3, block: { type: 'people', named: 'people' } }]),
         );
 
-        expect(second.blocks.map((arrived) => arrived.block.named)).toEqual(['factTable', 'people']);
+        expect(second.blocks.map((arrived) => arrived.block.named)).toEqual(['threadState', 'people']);
     });
 
     it('keeps every source the run declared, so a block drawn later can still name what it rests on', () => {
@@ -69,7 +69,7 @@ describe('answerAfter', () => {
         const first = answerAfter(nothingRead, answering([{ kind: 'citation', sequence: 1, source: declared }], true));
         const second = answerAfter(
             first,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }]),
+            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }]),
         );
 
         expect(second.sources.get('c-1')).toEqual(declared);
@@ -132,7 +132,7 @@ describe('answerAfter', () => {
     it('keeps the blocks that had arrived when the run ended badly, and says which ending it was', () => {
         const working = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 2, block: { type: 'factTable', named: 'factTable' } }], true),
+            answering([{ kind: 'block', sequence: 2, block: { type: 'threadState', named: 'threadState' } }], true),
         );
 
         const ended = answerAfter(
@@ -166,7 +166,7 @@ describe('answerAfter', () => {
     it('says the deployment is out of reach and keeps what had arrived', () => {
         const first = answerAfter(
             nothingRead,
-            answering([{ kind: 'block', sequence: 1, block: { type: 'factTable', named: 'factTable' } }], true),
+            answering([{ kind: 'block', sequence: 1, block: { type: 'threadState', named: 'threadState' } }], true),
         );
 
         const second = answerAfter(first, { outcome: 'failed', failure: { reason: 'unavailable', status: null } });

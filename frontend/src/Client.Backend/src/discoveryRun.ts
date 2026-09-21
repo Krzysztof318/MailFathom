@@ -5,14 +5,22 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import {
+    parseAttachmentEntries,
     parseBlockEvidence,
     parseDeclaredSource,
     parseEvidenceEntries,
+    parseFactTableColumns,
+    parseFactTableRows,
     parseSynthesizedAnswer,
+    parseTimelineEntries,
+    type AttachmentEntry,
     type BlockEvidence,
     type DeclaredSource,
     type EvidenceEntry,
+    type FactTableColumn,
+    type FactTableRow,
     type SynthesizedAnswer,
+    type TimelineEntry,
 } from './presentationBlocks';
 import type { RunTail } from './runFollowing';
 import { headersFor, routeFor, type ClientSession } from './session';
@@ -105,8 +113,30 @@ export type AnswerBlock =
           readonly entries: readonly EvidenceEntry[];
       })
     | (NamedBlock & {
+          readonly type: 'timeline';
+          readonly evidence: BlockEvidence;
+          readonly entries: readonly TimelineEntry[];
+      })
+    | (NamedBlock & {
+          readonly type: 'factTable';
+          readonly evidence: BlockEvidence;
+
+          /** The columns compared across, in the order they are drawn, which every row holds one cell per. */
+          readonly columns: readonly FactTableColumn[];
+
+          readonly rows: readonly FactTableRow[];
+      })
+    | (NamedBlock & {
+          readonly type: 'attachmentGallery';
+          readonly evidence: BlockEvidence;
+          readonly entries: readonly AttachmentEntry[];
+      })
+    | (NamedBlock & {
           /** The type the catalogue carries, or `null` where the run named one this contract does not. */
-          readonly type: Exclude<AnswerBlockType, 'answer' | 'evidenceList'> | null;
+          readonly type: Exclude<
+              AnswerBlockType,
+              'answer' | 'evidenceList' | 'timeline' | 'factTable' | 'attachmentGallery'
+          > | null;
       });
 
 /**
@@ -529,6 +559,33 @@ function parseBlock(value: unknown): AnswerBlock | null {
         case 'evidenceList': {
             const evidence = parseBlockEvidence(record['evidence']);
             const entries = parseEvidenceEntries(record['entries']);
+
+            return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'timeline': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const entries = parseTimelineEntries(record['entries']);
+
+            return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
+        }
+
+        case 'factTable': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const columns = parseFactTableColumns(record['columns']);
+
+            if (evidence === null || columns === null) {
+                return null;
+            }
+
+            const rows = parseFactTableRows(record['rows'], columns.length);
+
+            return rows === null ? null : { type: named, named, evidence, columns, rows };
+        }
+
+        case 'attachmentGallery': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const entries = parseAttachmentEntries(record['entries']);
 
             return evidence === null || entries === null ? null : { type: named, named, evidence, entries };
         }
