@@ -44,6 +44,9 @@
   @keyframes mfspin { to { transform: rotate(360deg) } }
   @keyframes mftbar { from { transform: scaleX(1) } to { transform: scaleX(0) } }
   @keyframes mfshim { from { background-position: 130% 0 } to { background-position: -130% 0 } }
+  @keyframes mfmsgin { from { opacity: 0; transform: translateY(6px) } }
+  @keyframes mfblkin { from { opacity: 0; transform: translateY(7px) } }
+  @keyframes mfdot { 0%, 78%, 100% { opacity: 0.25; transform: translateY(0) } 38% { opacity: 1; transform: translateY(-3px) } }
   @keyframes mfrowin { from { opacity: 0; max-height: 0; transform: translateY(-7px) } to { opacity: 1; max-height: 260px; transform: none } }
   @keyframes mfrowout { from { opacity: 1; max-height: 260px; transform: none } to { opacity: 0; max-height: 0; transform: translateX(-22px) } }
   @keyframes mfrowdel { 0% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 0 var(--err-soft) } 28% { box-shadow: inset 3px 0 0 var(--err), inset 0 0 0 40px var(--err-soft) } 100% { box-shadow: inset 3px 0 0 var(--err), inset 0 0 0 40px var(--err-soft) } }
@@ -1522,15 +1525,15 @@
             <div onClick="{{ h.activate }}" onContextMenu="{{ h.press.ctx }}" onTouchStart="{{ h.press.down }}" onTouchEnd="{{ h.press.up }}" onTouchMove="{{ h.press.up }}" style="{{ h.style }}" style-hover="cursor:pointer;background:var(--hover)">
               <div style="display:flex;align-items:center;gap:6px">
                 <div style="display:flex;align-items:baseline;gap:8px;flex:1;min-width:0">
-                  <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.title }}</span>
-                  <span style="font-size:10px;color:var(--faint);white-space:nowrap">{{ h.when }}</span>
+                  <span style="font-size:13.5px;font-weight:600;line-height:1.35;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.title }}</span>
+                  <span style="font-size:10.5px;color:var(--muted);white-space:nowrap">{{ h.when }}</span>
                 </div>
                 <sc-if value="{{ h.hasActions }}" hint-placeholder-val="{{ false }}">
                   <span onClick="{{ h.toggleArchive }}" title="{{ h.archiveTitle }}" style="flex:0 0 auto;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--faint)" style-hover="color:var(--text);cursor:pointer">{{ h.archiveIcon }}</span>
                   <span onClick="{{ h.askDelete }}" title="Delete" style="flex:0 0 auto;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--faint)" style-hover="color:var(--warn);cursor:pointer">delete</span>
                 </sc-if>
               </div>
-              <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.preview }}</div>
+              <div style="font-size:12px;line-height:1.4;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.preview }}</div>
             </div>
           </sc-for>
           <sc-if value="{{ hasArchived }}" hint-placeholder-val="{{ false }}">
@@ -1543,13 +1546,13 @@
                 <div onClick="{{ h.activate }}" onContextMenu="{{ h.press.ctx }}" onTouchStart="{{ h.press.down }}" onTouchEnd="{{ h.press.up }}" onTouchMove="{{ h.press.up }}" style="{{ h.style }}" style-hover="cursor:pointer;background:var(--hover)">
                   <div style="display:flex;align-items:center;gap:6px">
                     <div style="display:flex;align-items:baseline;gap:8px;flex:1;min-width:0">
-                      <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.title }}</span>
-                      <span style="font-size:10px;color:var(--faint);white-space:nowrap">{{ h.when }}</span>
+                      <span style="font-size:13.5px;font-weight:600;line-height:1.35;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.title }}</span>
+                      <span style="font-size:10.5px;color:var(--muted);white-space:nowrap">{{ h.when }}</span>
                     </div>
                     <span onClick="{{ h.toggleArchive }}" title="{{ h.archiveTitle }}" style="flex:0 0 auto;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--faint)" style-hover="color:var(--text);cursor:pointer">{{ h.archiveIcon }}</span>
                     <span onClick="{{ h.askDelete }}" title="Delete" style="flex:0 0 auto;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--faint)" style-hover="color:var(--warn);cursor:pointer">delete</span>
                   </div>
-                  <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.preview }}</div>
+                  <div style="font-size:12px;line-height:1.4;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.preview }}</div>
                 </div>
               </sc-for>
             </sc-if>
@@ -1562,21 +1565,27 @@
         </sc-if>
       </sc-if>
       <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0">
-      <div style="{{ agentScrollStyle }}">
+      <div ref="{{ agentScrollRef }}" onScroll="{{ onAgentScroll }}" onWheel="{{ onAgentWheel }}" onTouchMove="{{ onAgentWheel }}" style="{{ agentScrollStyle }}">
         <sc-for list="{{ agentMsgs }}" as="m" hint-placeholder-count="2">
           <div style="{{ m.rowStyle }}">
-            <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+            <div style="{{ m.colStyle }}">
             <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
               <div style="{{ m.bubbleStyle }}">{{ m.text }}</div>
             </sc-if>
             <sc-if value="{{ m.isBot }}" hint-placeholder-val="{{ true }}">
               <div style="{{ m.bubbleStyle }}">
-                <div style="display:flex;align-items:center;gap:9px">
-                  <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.06em;color:var(--onaccent);background:var(--accent);border-radius:4px;padding:3px 7px">AI</span>
-                  <span style="font-size:11px;color:var(--muted)">{{ m.scope }}</span>
+                <div style="display:flex;align-items:center;gap:7px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.07em;color:var(--muted)">
+                  <span style="color:var(--accent-d)">AI</span>
+                  <span>·</span>
+                  <span style="letter-spacing:0.02em">{{ m.scope }}</span>
                 </div>
                 <sc-if value="{{ m.hasText }}" hint-placeholder-val="{{ true }}">
                   <div style="font-size:15px;line-height:1.6;color:var(--text2);text-wrap:pretty">{{ m.text }}</div>
+                </sc-if>
+                <sc-if value="{{ m.hasParas }}" hint-placeholder-val="{{ false }}">
+                  <sc-for list="{{ m.paras }}" as="p" hint-placeholder-count="0">
+                    <div style="{{ p.style }}">{{ p.t }}</div>
+                  </sc-for>
                 </sc-if>
                 <sc-if value="{{ m.working }}" hint-placeholder-val="{{ false }}">
                   <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--accent-d)">autorenew</span>The agent is going through your mail…</div>
@@ -1742,7 +1751,22 @@
           </div>
         </sc-for>
         <sc-if value="{{ agentThinking }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);padding-left:2px">The agent is going through your mail…</div>
+          <div style="align-self:flex-start;max-width:100%;display:flex;align-items:center;gap:9px;padding:2px;animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both">
+            <span style="display:inline-block;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;color:var(--accent-d);animation:mfspin 1.15s linear infinite">progress_activity</span>
+            <span role="status" aria-live="polite" style="font-size:13.5px;color:var(--muted);min-width:0">{{ agentStatus }}</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ agentNextShown }}" hint-placeholder-val="{{ false }}">
+          <div style="align-self:flex-start;max-width:100%;display:flex;flex-direction:column;gap:8px;padding-top:2px;animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both">
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.07em;color:var(--muted)">PROPOSED NEXT</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ agentNext }}" as="n" hint-placeholder-count="0">
+                <div role="button" tabIndex="0" aria-label="{{ n.aria }}" onClick="{{ n.run }}" onKeyDown="{{ n.key }}" style="{{ n.style }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                  <span style="{{ n.iconStyle }}">arrow_forward</span>{{ n.label }}
+                </div>
+              </sc-for>
+            </div>
+          </div>
         </sc-if>
       </div>
       <div style="{{ agentInputWrapStyle }}">
@@ -1756,13 +1780,16 @@
         <sc-if value="{{ agentShowChips }}" hint-placeholder-val="{{ true }}">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <sc-for list="{{ agentChips }}" as="ch" hint-placeholder-count="3">
-              <div onClick="{{ ch.run }}" style="font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:16px;padding:7px 13px;white-space:nowrap" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)">{{ ch.label }}</div>
+              <div role="button" tabIndex="0" aria-label="{{ ch.aria }}" onClick="{{ ch.run }}" onKeyDown="{{ ch.key }}" style="{{ ch.style }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                <sc-if value="{{ ch.hasIcon }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.iconStyle }}">{{ ch.icon }}</span></sc-if>{{ ch.label }}
+              </div>
             </sc-for>
           </div>
         </sc-if>
         <div style="{{ agentBoxStyle }}">
           <input ref="{{ agentInputRef }}" value="{{ agentInput }}" onChange="{{ onAgentInput }}" onKeyDown="{{ onAgentKey }}" placeholder="Tell me what to do — write, schedule, check" style="flex:1;min-width:0;border:none;outline:none;font-family:inherit;font-size:15px;color:var(--text);background:transparent" />
           <div onClick="{{ agentSend }}" style="font-size:13px;color:var(--onaccent);background:var(--accent);border-radius:7px;padding:8px 16px;white-space:nowrap" style-hover="cursor:pointer;opacity:0.88">Send ⏎</div>
+          <div role="button" tabIndex="{{ agentCancelTab }}" aria-disabled="{{ agentCancelDisabled }}" aria-label="{{ agentCancelAria }}" onClick="{{ agentCancel }}" onKeyDown="{{ agentCancelKey }}" style="{{ agentCancelStyle }}" style-hover="{{ agentCancelHover }}" style-focus="outline:2px solid var(--accent);outline-offset:2px">Cancel</div>
         </div>
         <div style="font-size:11px;color:var(--faint)">The agent proposes actions — nothing is sent without your approval.</div>
       </div>
@@ -4483,6 +4510,89 @@ const BK_DRAFT_CONTOSO = {
   nav: [{ label: "Open the thread", icon: "forum", kind: "thread", tid: "contoso" }],
 };
 
+/* REAL EXAMPLE — a scripted conversation played back in real time. Content never arrives token
+   by token: a widget appears only once it is whole. Between arrivals the status line says what
+   the agent is doing right now, and it changes as the work moves on.
+   Step kinds — u: user turn · s: status · b: new agent bubble · t: text appended · k: block appended. */
+const DEMO_CONV_ID = "c-real";
+const DEMO_SCRIPT = [
+  { d: 300, u: "Anna Kowalska is pressing on the addendum. Go through the thread and get me a reply." },
+  { d: 450, s: "Reading your request" },
+  { d: 950, s: "Searching 3 accounts for the thread" },
+  { d: 1150, b: { scope: "3 accounts · mail, calendar, cases", text: "Found it — “Contract addendum — signatures”. 6 messages since 18 August, 3 attachments." } },
+  { d: 600, s: "Reading 6 messages" },
+  {
+    d: 1700, b: { scope: "thread · 6 messages", text: "Here is where the thread actually stands." },
+    k: {
+      type: "threadstate", meta: "this thread",
+      cols: [
+        { label: "AGREED", items: [{ t: "2 h response time for critical incidents" }, { t: "Fee rises 8% from January" }] },
+        { label: "OPEN QUESTIONS", items: [{ t: "Cap on CPI indexation" }, { t: "Penalty for a missed response" }] },
+        { label: "COMMITMENTS", items: [{ t: "You: counter-proposal by 28 August" }] },
+      ],
+    },
+  },
+  { d: 500, s: "Opening 3 attachments" },
+  { d: 1400, s: "Checking them against case CN-114" },
+  {
+    d: 1500,
+    k: {
+      type: "evidence", meta: "3 sources",
+      items: [
+        { n: "1", source: "Contract addendum — signatures", badge: "mail", snippet: "“…indexation by the CPI published for the previous year…”", relevance: "94%", freshness: "yesterday · Anna Kowalska" },
+        { n: "2", source: "CPI addendum 2023.pdf", badge: "attachment", snippet: "“Indexation shall not exceed 5% per year.”", relevance: "91%", freshness: "18 August · attachment" },
+        { n: "3", source: "Case CN-114 — framework contract", badge: "case", snippet: "“Response time 4 h, penalty 0.2% of the monthly fee.”", relevance: "86%", freshness: "March · case file" },
+      ],
+    },
+  },
+  { d: 600, s: "Weighing the 2023 cap against the new wording" },
+  { d: 1500, b: { scope: "reading · 3 sources", text: "" } },
+  { d: 700, p: "Short version: the cap you already agreed has quietly disappeared. The 2023 addendum says indexation shall not exceed 5% per year. The new draft only points at the CPI published for the previous year, with no ceiling on it at all." },
+  { d: 1500, p: "That matters more than the 8% headline does. At the 4.1% forecast the first year costs you roughly the same either way — but with no cap, a repeat of 2022 would push the fee up by a fifth in one step, and nothing in the framework contract stops it." },
+  { d: 800, s: "Checking the penalty in case CN-114" },
+  { d: 1700, p: "The response time is the smaller trade. You give up 4 hours for 2 on critical incidents, while the penalty stays at 0.2% of the monthly fee — the same figure as in the framework contract, so no new exposure there." },
+  { d: 700, s: "Putting my reading together" },
+  { d: 1600, p: "My reading: take the 8%, insist the 5% cap comes back in writing, leave the penalty alone. That keeps the whole thing closable by the 28 August date you already promised Anna." },
+  { d: 1900, u: "Accept the 8%, but keep the 5% cap. Draft it." },
+  { d: 450, s: "Writing the draft" },
+  { d: 1500, s: "Matching the tone to your earlier replies" },
+  {
+    d: 1900, b: { scope: "draft · from 6 messages and 3 attachments", text: "Draft is ready. Nothing goes out until you approve it." },
+    k: Object.assign({}, BK_DRAFT_CONTOSO, { phase: "pending", cta: "Send it" }),
+  },
+  { d: 700, s: "Looking for what follows from this" },
+  {
+    d: 1400,
+    k: {
+      type: "task", meta: "tasks", phase: "pending",
+      title: "Close the CPI cap decision with Anna Kowalska",
+      due: "28 August", from: "Contract addendum — signatures", reminder: "2 days before",
+      done: "Added to your task list",
+      cta: "Add it",
+    },
+  },
+  { d: 550, s: "Checking your calendar for a slot" },
+  {
+    d: 1400,
+    k: {
+      type: "event", meta: "calendar · work", phase: "pending",
+      title: "Call with Anna Kowalska — CPI cap",
+      when: "27 August 13:00–13:30", duration: "30 min", attendees: "You, Anna Kowalska", from: "Contract addendum — signatures",
+      done: "Added to the calendar",
+      cta: "Propose it",
+      nav: [{ label: "Open the calendar", icon: "calendar_month", kind: "gocal" }],
+    },
+  },
+  { d: 1000, b: { scope: "waiting for you", text: "" } },
+  { d: 600, p: "Nothing has left your outbox. Three things sit above waiting on you: the reply, the task for the 28th, and the half-hour with Anna. Approve the draft and I will send it, then the other two follow on their own." },
+  { d: 1800, p: "If you would rather not concede the 8% at all, say so and I will rewrite the draft around holding January's fee flat. Be aware that the 28 August date then becomes unlikely — Anna's last two messages both pushed for a decision this week." },
+  /* Work is done — three things the agent can do next, never more. */
+  { d: 500, n: ["Rewrite the draft firmer", "What if Anna refuses the cap?", "Open the 2023 addendum"] },
+];
+
+/* Fallback next steps for any reply that does not name its own. */
+const NEXT_DEFAULT = ["Turn this into a task", "Draft a reply", "Show me the sources"];
+
 const SEED_CONVS = () => [
   {
     id: "c-plan", title: "Plan my day", when: "09:41",
@@ -4936,6 +5046,7 @@ class Component extends DCLogic {
   state = { workMode: "classic", tabs: [{ key: "thread:contoso", kind: "thread", id: "contoso" }], activeTab: "thread:contoso", screen: "discover", phase: "idle", query: "", planKey: null, ready: {}, ev: null, threadId: "contoso", fromCite: null, cameFrom: false, mailAnswer: false, mailPane: "list", themeOverride: null, stateOpen: false, vw: typeof window !== "undefined" ? window.innerWidth : 1440, listW: 340, remMap: { t1: [15], t3: [1440, 60] }, remUnit: "min", convs: SEED_CONVS(), bkPhase: {}, bkState: {}, bkResult: {}, bkEdit: {} };
   timers = [];
   rootRef = React.createRef();
+  agentScrollRef = React.createRef();
 
   /* List scroll memory — for the session only, held in memory (gone when the app closes).
      Every list has its own key; the ref and handler are memoised so React does not detach them
@@ -6206,20 +6317,160 @@ class Component extends DCLogic {
     });
   };
 
+  /* Real-time playback of the scripted example. One timer at a time so the run can be skipped
+     or interrupted at any point; every arrival scrolls the thread and animates in. */
+  demoAt = 0;
+
+  demoSpeed = () => Math.max(0.3, Math.min(2, (this.props.streamDelay ?? 550) / 550));
+
+  playDemo = () => {
+    clearTimeout(this.demoT);
+    this.demoAt = 0;
+    this.setState(s2 => ({
+      convs: (s2.convs || []).filter(c => c.id !== DEMO_CONV_ID)
+        .concat([{ id: DEMO_CONV_ID, title: "Real example — contract addendum", when: "now", msgs: [] }]),
+      screen: "agent", convId: DEMO_CONV_ID, agentInput: "", agentThinking: false, agentStatus: "", demoRun: true,
+    }));
+    this.startAgentPin();
+    this.demoNext();
+  };
+
+  demoNext = () => {
+    const step = DEMO_SCRIPT[this.demoAt];
+    if (!step) { this.stopAgentPin(); this.setState({ agentThinking: false, agentStatus: "", demoRun: false }); return; }
+    this.demoT = setTimeout(() => {
+      this.demoAt += 1;
+      this.demoApply(step, false);
+      this.demoNext();
+    }, Math.round((step.d || 600) * this.demoSpeed()));
+    this.timers.push(this.demoT);
+  };
+
+  demoApply = (step, instant) => {
+    this.setState(s2 => {
+      const convs = (s2.convs || []).slice();
+      const i = convs.findIndex(c => c.id === DEMO_CONV_ID);
+      if (i < 0) return null;
+      const conv = Object.assign({}, convs[i]);
+      const msgs = conv.msgs.slice();
+      const onLast = (fn) => {
+        if (!msgs.length) return;
+        const m = Object.assign({}, msgs[msgs.length - 1]);
+        fn(m);
+        msgs[msgs.length - 1] = m;
+      };
+      if (step.u) msgs.push({ role: "user", text: step.u, ts: Date.now(), anim: !instant });
+      if (step.b) msgs.push(Object.assign({ role: "bot", ts: Date.now(), anim: !instant, bullets: [], blocks: [] }, step.b));
+      if (step.t) onLast(m => { m.text = m.text ? m.text + " " + step.t : step.t; });
+      /* A longer answer lands one whole paragraph at a time — never letter by letter. */
+      if (step.p) onLast(m => { m.paras = (m.paras || []).concat([{ t: step.p, anim: !instant }]); });
+      if (step.n) onLast(m => { m.next = step.n.slice(0, 3); });
+      if (step.k) onLast(m => { m.blocks = (m.blocks || []).concat([Object.assign({ anim: !instant }, step.k)]); });
+      conv.msgs = msgs;
+      convs[i] = conv;
+      const out = { convs };
+      /* The indicator stays up for the whole run — content landing is not the end of the work,
+         so it only goes away when there is nothing left to load. */
+      if (step.s) { out.agentStatus = step.s; out.agentThinking = true; }
+      else { out.agentThinking = !!s2.demoRun; }
+      return out;
+    });
+    if (!instant) this.scrollAgentDown();
+  };
+
+  /* Cancel stops the playback or a pending reply where it stands — nothing is rolled back,
+     what already arrived stays, and the thread says the run was stopped. */
+  agentCancel = () => {
+    if (!this.state.agentThinking && !this.state.demoRun) return;
+    this.stopAgentPin();
+    clearTimeout(this.demoT);
+    clearTimeout(this._askT);
+    this.demoAt = DEMO_SCRIPT.length;
+    this.setState(s2 => Object.assign(
+      { agentThinking: false, agentStatus: "", demoRun: false },
+      this.pushMsg(s2, [{ role: "bot", anim: true, scope: "stopped by you", text: "Stopped. What arrived so far stays — tell me where to pick it up.", bullets: [], blocks: [] }])
+    ));
+    this.scrollAgentDown();
+  };
+
+  demoStop = () => {
+    this.stopAgentPin();
+    clearTimeout(this.demoT);
+    if (this.state.demoRun) this.setState({ demoRun: false, agentThinking: false, agentStatus: "" });
+  };
+
+  /* Proposed next actions — only when the agent has stopped working, only from the last reply,
+     never more than three. */
+  nextActs = (msgs, st) => {
+    const lm = msgs && msgs.length ? msgs[msgs.length - 1] : null;
+    if (st.agentThinking || st.demoRun || !lm || lm.role !== "bot") return [];
+    return (lm.next || []).slice(0, 3).map(label => ({
+      label,
+      aria: "Ask the agent to: " + label,
+      iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--accent-d)",
+      style: "display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:8px;padding:7px 12px 7px 10px;text-align:left",
+      run: () => this.agentAsk(label),
+      key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.agentAsk(label); } },
+    }));
+  };
+
+  /* Keeping the tail in view. Two rAFs so the freshly inserted block has been laid out before we
+     measure; smooth only for short hops, an instant jump when a big widget would otherwise leave
+     the status line below the fold; and we stay out of the way once the user scrolls up. */
+  scrollAgentDown = () => {
+    cancelAnimationFrame(this._agRaf);
+    this._agRaf = requestAnimationFrame(() => requestAnimationFrame(this.pinAgentBottom));
+  };
+
+  pinAgentBottom = () => {
+    const el = this.agentScrollRef.current;
+    if (!el || this._agAway) return;
+    const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+    if (gap <= 2) return;
+    if (gap > el.clientHeight * 0.85 || !el.scrollTo) el.scrollTop = el.scrollHeight;
+    else el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+
+  startAgentPin = () => {
+    this._agAway = false;
+    clearInterval(this._agPin);
+    this._agPin = setInterval(this.pinAgentBottom, 140);
+  };
+
+  stopAgentPin = () => {
+    clearInterval(this._agPin);
+    this.scrollAgentDown();
+  };
+
+  onAgentWheel = () => {
+    const el = this.agentScrollRef.current;
+    if (!el) return;
+    this._agAway = el.scrollHeight - el.clientHeight - el.scrollTop > 40;
+  };
+
+  onAgentScroll = (e) => {
+    const el = e.target;
+    if (el.scrollHeight - el.clientHeight - el.scrollTop < 40) this._agAway = false;
+  };
+
   agentAsk = (text) => {
     const q = (text || "").trim();
     if (!q) return;
+    this.demoStop();
     this.setState(s2 => Object.assign(
       { screen: "agent", agentInput: "", agentThinking: true },
-      this.pushMsg(s2, [{ role: "user", text: q }])
+      this.pushMsg(s2, [{ role: "user", anim: true, text: q }])
     ));
-    this.timers.push(setTimeout(() => {
+    this.startAgentPin();
+    this._askT = setTimeout(() => {
       const hit = AGENT_REPLIES.find(r => r.match.test(q)) || AGENT_FALLBACK;
       this.setState(s2 => Object.assign(
         { agentThinking: false },
-        this.pushMsg(s2, [{ role: "bot", scope: hit.scope, text: hit.text, bullets: hit.bullets || [], blocks: hit.blocks || [] }])
+        this.pushMsg(s2, [{ role: "bot", anim: true, scope: hit.scope, text: hit.text, bullets: hit.bullets || [], blocks: hit.blocks || [], next: hit.next || NEXT_DEFAULT }])
       ));
-    }, Math.max(500, (this.props.streamDelay ?? 550) * 1.1)));
+      this.stopAgentPin();
+    }, Math.max(500, (this.props.streamDelay ?? 550) * 1.1));
+    this.timers.push(this._askT);
   };
 
   /* One block, drawn exactly as the Discover catalogue draws it — plus, for the three actionable
@@ -6307,9 +6558,12 @@ class Component extends DCLogic {
       label: LABEL[b.type] || "BLOCK",
       meta: b.meta || "",
       cardStyle: "display:flex;flex-direction:column;gap:" + rowGap + "px;border-radius:11px;padding:" + (isMobile ? "12px 13px" : "13px 15px") + ";" +
+        /* The thread itself is flat, so the blocks carry the separation: they sit on panel with a
+           visible edge instead of melting into the page. */
         (declined ? "border:1px dashed var(--border2);background:transparent;"
-          : phase === "pending" ? "border:1px solid var(--accent-line);background:var(--accent-soft);"
-          : "border:1px solid var(--line);background:var(--sub);"),
+          : phase === "pending" ? "border:1px solid var(--accent-line);background:var(--accent-soft);box-shadow:0 1px 2px var(--sh-1);"
+          : "border:1px solid var(--border2);background:var(--panel);box-shadow:0 1px 2px var(--sh-1);")
+        + (b.anim ? "animation:mfblkin 0.52s cubic-bezier(0.22,0.61,0.36,1) both;" : ""),
       headStyle: "display:flex;align-items:center;gap:9px;flex-wrap:wrap",
       labelStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.09em;color:var(--muted)",
       metaStyle: "font-size:11px;color:var(--faint)",
@@ -6320,7 +6574,7 @@ class Component extends DCLogic {
       chipStyle: "margin-left:auto;display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
         (phase === "pending" ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
           : failed ? "color:var(--text);background:var(--hl);border:1px solid var(--hl-line);"
-          : "color:var(--muted);background:var(--panel);border:1px solid var(--line);"),
+          : "color:var(--muted);background:var(--sub);border:1px solid var(--border2);"),
 
       isDeclined: declined,
       showBody: !declined,
@@ -6421,7 +6675,7 @@ class Component extends DCLogic {
       notEditing: !editing,
       editText: editing ? editRaw : "",
       onEdit: (e) => this.editBk(key, true, e.target.value),
-      textareaStyle: "width:100%;box-sizing:border-box;min-height:" + (isMobile ? 150 : 130) + "px;resize:vertical;font-family:inherit;font-size:13.5px;line-height:1.6;color:var(--text);background:var(--panel);border:1px solid var(--accent-line);border-radius:9px;padding:10px 12px",
+      textareaStyle: "width:100%;box-sizing:border-box;min-height:" + (isMobile ? 150 : 130) + "px;resize:vertical;font-family:inherit;font-size:13.5px;line-height:1.6;color:var(--text);background:var(--sub);border:1px solid var(--accent-line);border-radius:9px;padding:10px 12px",
       paras: (b.paras || []).map(p => ({ t: p, style: "font-size:13.5px;line-height:1.6;color:var(--text2);text-wrap:pretty" })),
 
       hasControls: controls.length > 0,
@@ -6984,8 +7238,10 @@ class Component extends DCLogic {
           }));
         },
         askDelete: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ deleteConvAsk: c.id }); },
-        style: "display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:9px 11px;" +
-          (c.id === (activeConv || {}).id ? "background:var(--accent-soft);" : "background:var(--panel);border:1px solid var(--line);") +
+        /* A readable list, not a stack of cards: hairline separation, the open one marked by an
+           accent edge and a tint. */
+        style: "display:flex;flex-direction:column;gap:2px;padding:9px 11px 10px 9px;border-radius:8px;border-left:3px solid " +
+          (c.id === (activeConv || {}).id ? "var(--accent);background:var(--accent-soft);" : "transparent;") +
           (isSel("convs", c.id) ? "background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);" : ""),
       };
     };
@@ -7377,6 +7633,27 @@ class Component extends DCLogic {
         ? "display:flex;flex-direction:column;gap:9px;background:var(--panel);border-top:1px solid var(--line);padding:12px 14px"
         : "display:flex;flex-direction:column;gap:10px;background:var(--panel);border-top:1px solid var(--line);padding:14px 26px 16px 26px",
       agentThinking: !!st.agentThinking,
+      agentScrollRef: this.agentScrollRef,
+      onAgentScroll: this.onAgentScroll,
+      onAgentWheel: this.onAgentWheel,
+      agentNext: this.nextActs(convMsgs, st),
+      agentNextShown: this.nextActs(convMsgs, st).length > 0,
+      /* What the agent is doing right now — it changes as the work moves on, it is not one fixed line. */
+      agentStatus: st.agentStatus || "Going through your mail",
+      /* Cancel sits next to Send at all times, greyed out until there is work to stop. */
+      agentCancelActive: !!(st.agentThinking || st.demoRun),
+      agentCancelDisabled: !(st.agentThinking || st.demoRun),
+      agentCancelTab: (st.agentThinking || st.demoRun) ? 0 : -1,
+      agentCancelAria: (st.agentThinking || st.demoRun) ? "Stop what the agent is doing" : "Cancel — nothing is running",
+      agentCancelStyle: "font-size:13px;border-radius:7px;padding:8px 14px;white-space:nowrap;border:1px solid " +
+        ((st.agentThinking || st.demoRun)
+          ? "var(--err);color:var(--onaccent);background:var(--err);font-weight:600;"
+          : "var(--line);color:var(--faint);background:transparent;"),
+      agentCancelHover: (st.agentThinking || st.demoRun)
+        ? "cursor:pointer;opacity:0.88"
+        : "cursor:default",
+      agentCancel: this.agentCancel,
+      agentCancelKey: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.agentCancel(); } },
       convTitle: activeConv && activeConv.title ? activeConv.title : "Agent",
       convBarShown: tabsMode && convList.length > 1,
       convTabs: convList.map(c => ({
@@ -7403,8 +7680,8 @@ class Component extends DCLogic {
       resetHistoryResize: () => this.setState({ historyPanelW: 250 }),
       historyCloseShown: isMobile,
       historyPanelStyle: isMobile
-        ? "position:absolute;inset:0;z-index:45;display:flex;flex-direction:column;gap:8px;overflow:auto;background:var(--rail);padding:14px 14px 18px"
-        : "width:" + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;flex:0 0 " + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;display:flex;flex-direction:column;gap:6px;overflow:auto;background:var(--rail);border-right:1px solid var(--line);padding:14px 12px",
+        ? "position:absolute;inset:0;z-index:45;display:flex;flex-direction:column;gap:1px;overflow:auto;background:var(--rail);padding:14px 12px 18px"
+        : "width:" + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;flex:0 0 " + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;display:flex;flex-direction:column;gap:1px;overflow:auto;background:var(--rail);border-right:1px solid var(--line);padding:14px 10px",
       convHistory: (activeConvList.length ? activeConvList : [{ id: null, title: "New conversation", when: "now", msgs: [] }]).filter(matchesHistQuery).slice().reverse().map(c => convRow(c, false)),
       hasArchived: archivedConvList.length > 0,
       archivedCount: archivedConvList.length,
@@ -7432,10 +7709,23 @@ class Component extends DCLogic {
         { label: "Status of open cases", id: "c-cases" },
       ].map(c => ({
         label: c.label,
-        run: () => ((st.convs || []).some(x => x.id === c.id)
+        aria: "Open the conversation: " + c.label,
+        hasIcon: false, icon: "", iconStyle: "",
+        style: "display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:16px;padding:7px 13px;white-space:nowrap",
+        run: () => { this.demoStop(); return (st.convs || []).some(x => x.id === c.id)
           ? this.setState({ screen: "agent", convId: c.id, agentInput: "" })
-          : this.agentAsk(c.label)),
-      })),
+          : this.agentAsk(c.label); },
+        key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.demoStop(); if ((st.convs || []).some(x => x.id === c.id)) this.setState({ screen: "agent", convId: c.id, agentInput: "" }); else this.agentAsk(c.label); } },
+      })).concat([{
+        /* The one chip that plays instead of opening — content arrives live, block by block. */
+        label: "Real example",
+        aria: "Play the real example conversation in real time",
+        hasIcon: true, icon: "play_arrow",
+        iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1",
+        style: "display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent-d);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:16px;padding:7px 13px 7px 11px;white-space:nowrap",
+        run: this.playDemo,
+        key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.playDemo(); } },
+      }]),
       agentInput: st.agentInput || "",
       onAgentInput: (e) => this.setState({ agentInput: e.target.value }),
       onAgentKey: (e) => { if (e.key === "Enter") this.agentAsk(st.agentInput); },
@@ -7456,14 +7746,23 @@ class Component extends DCLogic {
         hasText: !!m.text,
         scope: m.scope || "",
         working: !!m.working,
+        hasParas: (m.paras || []).length > 0,
+        paras: (m.paras || []).map(p => ({
+          t: p.t,
+          style: "font-size:15px;line-height:1.62;color:var(--text2);text-wrap:pretty" + (p.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
+        })),
         bullets: (m.bullets || []).map(t2 => ({ t: t2 })),
         hasBlocks: (m.blocks || []).length > 0,
         blocks: (m.blocks || []).map((b, bi) => this.bkView(b, (activeConv ? activeConv.id : "new") + "#" + mi + "#" + bi, isMobile)),
         blocksStyle: "display:flex;flex-direction:column;gap:" + (isMobile ? 10 : 11) + "px",
-        rowStyle: "display:flex;justify-content:flex-start",
-        bubbleStyle: m.role === "user"
-          ? "max-width:" + (isMobile ? "88%" : "620px") + ";font-size:15px;line-height:1.55;color:var(--onaccent);background:var(--accent);border-radius:14px 14px 3px 14px;padding:12px 16px;text-wrap:pretty"
-          : "max-width:" + (isMobile ? "94%" : "720px") + ";display:flex;flex-direction:column;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px 14px 14px 3px;padding:14px 17px;box-shadow:0 1px 2px var(--sh-1)",
+        rowStyle: "display:flex;justify-content:" + (m.role === "user" ? "flex-end" : "flex-start"),
+        colStyle: "display:flex;flex-direction:column;gap:4px;min-width:0;align-items:" + (m.role === "user" ? "flex-end" : "flex-start") + (m.role === "user" ? "" : ";flex:1"),
+        /* Quiet by default: the user turn is a lightly tinted block, the agent turn is plain text
+           on the page. The only cards in the thread are the result blocks themselves. */
+        bubbleStyle: (m.role === "user"
+          ? "max-width:" + (isMobile ? "92%" : "775px") + ";font-size:15px;line-height:1.55;color:var(--text);background:var(--accent-soft);border-radius:10px;padding:11px 14px;text-wrap:pretty"
+          : "width:100%;max-width:" + (isMobile ? "100%" : "900px") + ";display:flex;flex-direction:column;gap:11px")
+          + (m.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
       })),
       isPeople: st.screen === "people" && !emptyApp,
       goCal: () => this.goScreen("cal"),
