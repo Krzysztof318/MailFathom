@@ -17,10 +17,11 @@ import { evidenceCounts, freshnessWords, sourceKinds, sourceMediums, supportVerd
 // what the source is, the part of it that matched, and how current the local copy was.
 //
 // **The fragment is quoted rather than described**, which is what makes an entry checkable: it is the one text in the
-// contract a reader can hold against the source and expect to find word for word. It is drawn in a `q` element so the
-// quotation marks are the document language's own rather than a pair spelled into a catalogue entry. A source this deployment described
-// rather than read says so beside it, under ADR 0030, because a machine's account of a picture presented as a
-// quotation is a guess promoted to evidence.
+// contract a reader can hold against the source and expect to find word for word. A written one is drawn in a `q`
+// element so the quotation marks are the document language's own rather than a pair spelled into a catalogue entry. A
+// source this deployment described rather than read is drawn in a plain paragraph and says so beside itself, under ADR
+// 0030, because a machine's account of a picture presented as a quotation is a guess promoted to evidence — and the
+// badge says that to somebody looking while the element says it to everything else.
 //
 // **A source the run never declared to this client is drawn as a private source**: the entry keeps its relevance and
 // its freshness, and what it rests on is stated as unavailable rather than left blank. An entry silently shorn of its
@@ -101,7 +102,7 @@ function EvidenceItem({ entry, now }: { readonly entry: EvidenceEntry; readonly 
             {declared === undefined ? (
                 <p className="text-sm text-faint italic text-pretty">{translate('answer.sourcePrivateBody')}</p>
             ) : (
-                <q className="block text-sm text-text-soft text-pretty">{entry.fragment}</q>
+                <MatchedFragment declared={declared} fragment={entry.fragment} />
             )}
 
             <p className="flex flex-wrap gap-2.5 text-xs text-faint">
@@ -130,6 +131,22 @@ function EvidenceItem({ entry, now }: { readonly entry: EvidenceEntry; readonly 
         >
             {said}
         </button>
+    );
+}
+
+/**
+ * The part of the source that matched, quoted where it is a quotation and stated plainly where it is not.
+ *
+ * A written source is quoted in a `q` element, which is what makes the quotation marks the document language's own
+ * rather than a pair spelled into a catalogue entry. A depicted one is this deployment's description of a picture, and
+ * ADR 0030 refuses presenting that as a quotation — a badge beside it says so to somebody looking, and the element
+ * itself is what says so to everything else.
+ */
+function MatchedFragment({ declared, fragment }: { readonly declared: DeclaredSource; readonly fragment: string }) {
+    return declared.medium === 'Depicted' ? (
+        <p className="text-sm text-text-soft text-pretty">{fragment}</p>
+    ) : (
+        <q className="block text-sm text-text-soft text-pretty">{fragment}</q>
     );
 }
 

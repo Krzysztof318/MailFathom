@@ -65,6 +65,22 @@ describe('parseBlockEvidence', () => {
         ).toBeNull();
     });
 
+    it('refuses a side naming a source the block does not rest on, which nothing could number', () => {
+        expect(
+            parseBlockEvidence(
+                evidence({
+                    support: 'Conflicting',
+                    citations: ['c-1'],
+                    conflictingClaims: [{ statement: 'Somebody else said this', sources: ['c-9'] }],
+                }),
+            ),
+        ).toBeNull();
+    });
+
+    it('refuses a block naming one source twice, which is two numbers for one source', () => {
+        expect(parseBlockEvidence(evidence({ citations: ['c-1', 'c-1'] }))).toBeNull();
+    });
+
     it('refuses a verdict this contract does not carry rather than reading it as a settled one', () => {
         expect(parseBlockEvidence(evidence({ support: 'ProbablyFine' }))).toBeNull();
     });

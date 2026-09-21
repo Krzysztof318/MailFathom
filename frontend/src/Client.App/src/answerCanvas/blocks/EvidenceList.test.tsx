@@ -109,6 +109,13 @@ describe('EvidenceList', () => {
         renderList(listing([quoted]), { sources: [{ ...agreement, medium: 'Depicted' }] });
 
         expect(screen.getByText('description of an image')).toBeDefined();
+        expect(screen.getByText(quoted.fragment).tagName).toBe('P');
+    });
+
+    it('quotes a written source, so what is drawn as a quotation is one', () => {
+        renderList(listing([quoted]));
+
+        expect(screen.getByText(quoted.fragment).tagName).toBe('Q');
     });
 
     it('draws an entry this client was given no source for as a private source rather than as an omission', () => {

@@ -143,11 +143,13 @@ export function parseBlockEvidence(value: unknown): BlockEvidence | null {
     const citations = parseCitationIds(record['citations'], mostCitations);
     const freshness = parseFreshness(record['freshness']);
 
-    if (support === null || citations === null || freshness === null) {
+    // A block that named one source twice is refused rather than drawn: a screen numbers the sources it rests on by
+    // their place in this list, so a repeated name is two different numbers for one source.
+    if (support === null || citations === null || freshness === null || new Set(citations).size !== citations.length) {
         return null;
     }
 
-    const conflictingClaims = parseConflictingClaims(record['conflictingClaims']);
+    const conflictingClaims = parseConflictingClaims(record['conflictingClaims'], citations);
 
     return conflictingClaims === null ? null : { support, citations, freshness, conflictingClaims };
 }
@@ -241,7 +243,14 @@ function parseEvidenceEntry(value: unknown): EvidenceEntry | null {
         : null;
 }
 
-function parseConflictingClaims(value: unknown): readonly ConflictingClaim[] | null {
+/**
+ * The sides of a disagreement, or `null` where what arrived is not a set of sides this client can draw.
+ *
+ * A side names sources the block itself rests on, which the plan enforces and this checks again: a side naming
+ * anything else is a source with no place in the block's own list, and a screen that numbers a citation by that place
+ * would draw it as the source before the first one rather than refusing it.
+ */
+function parseConflictingClaims(value: unknown, citations: readonly string[]): readonly ConflictingClaim[] | null {
     // The member is absent on a block that carries none, which every block but a conflicting one is.
     if (value === undefined || value === null) {
         return [];
@@ -251,6 +260,7 @@ function parseConflictingClaims(value: unknown): readonly ConflictingClaim[] | n
         return null;
     }
 
+    const restedOn = new Set(citations);
     const claims: ConflictingClaim[] = [];
     for (const written of value) {
         const record = asRecord(written);
@@ -258,6 +268,10 @@ function parseConflictingClaims(value: unknown): readonly ConflictingClaim[] | n
         const sources = record === null ? null : parseCitationIds(record['sources'], mostCitations);
 
         if (statement === null || sources === null || sources.length === 0) {
+            return null;
+        }
+
+        if (sources.some((source) => !restedOn.has(source))) {
             return null;
         }
 
