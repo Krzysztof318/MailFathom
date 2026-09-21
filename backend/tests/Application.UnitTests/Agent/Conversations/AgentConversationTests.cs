@@ -260,7 +260,7 @@ public sealed class AgentConversationTests
         Assert.Equal(StartedAt, conversation.StartedAt);
     }
 
-    /// <summary>A part taken from the middle of a conversation is not one this can read, and it says so.</summary>
+    /// <summary>An entry naming a turn nothing before it opened is refused rather than placed in a turn of its own.</summary>
     [Fact]
     public void Compose_ABlockWhoseTurnTheEntriesNeverOpened_IsRefused()
     {

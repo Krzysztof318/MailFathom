@@ -36,6 +36,33 @@ public sealed class AgentConversationEntryTests
         Assert.Throws<ArgumentException>(() => new AgentActionProposed(message, AgentConversationExample.Reading()));
     }
 
+    /// <summary>A turn says something, and the struct default is what saying nothing looks like at compile time.</summary>
+    /// <remarks>
+    /// Refused where it is written rather than where it is stored: unchecked, the unspecified default travels as far as
+    /// the serializer, which raises a <c>JsonException</c> out of the store — a failure naming neither the entry nor the
+    /// member, a long way from whoever composed it.
+    /// </remarks>
+    [Fact]
+    public void Constructor_AMessageSayingNothing_IsRefused()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => new AgentMessageWritten(message, AgentMessageAuthor.Person, default, AgentMessageScope.Mailbox()));
+    }
+
+    [Fact]
+    public void Constructor_ARunReportingNothing_IsRefused()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new AgentStatusReported(message, default));
+    }
+
     /// <summary>Pending is the state of an offer nothing has been recorded against, so recording it records nothing.</summary>
     [Fact]
     public void Constructor_AnOfferMovedToPending_IsRefused()

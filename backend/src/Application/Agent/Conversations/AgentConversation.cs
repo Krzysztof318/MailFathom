@@ -67,8 +67,15 @@ public sealed record AgentConversation
     /// <para>
     /// It takes the conversation from its beginning, which a bounded read of one also gives: a turn is opened before
     /// anything is written into it and an offer is made before it is answered, so any leading part of the order is a
-    /// conversation this can read. A part taken from the middle is not, and it says so rather than reading back a
-    /// conversation with the turns it could not place quietly missing.
+    /// conversation this can read.
+    /// </para>
+    /// <para>
+    /// What it refuses is an entry naming a turn or an offer that nothing earlier in the same entries opened — which
+    /// is what a part taken from the middle of a conversation usually looks like, and is the whole of the guarantee.
+    /// A part that happens to begin exactly where a turn does carries no such entry, so it composes as a conversation
+    /// of its own with everything before it absent, and nothing here can tell that from a conversation that short.
+    /// Reading from the beginning is therefore the caller's to arrange rather than this method's to verify; what a
+    /// client watching an answer being composed reads is the entries themselves, which is the next paragraph.
     /// </para>
     /// <para>
     /// It is the reading the composition uses, where what a turn said matters more than the order the parts of it

@@ -30,6 +30,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// why this entry carries text and no blocks.
 /// </para>
 /// </remarks>
+/// <exception cref="ArgumentException">Thrown when <paramref name="Text" /> is the unspecified struct default.</exception>
 public sealed record AgentMessageWritten(
     AgentMessageId MessageId,
     AgentMessageAuthor Author,
@@ -39,6 +40,9 @@ public sealed record AgentMessageWritten(
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "message";
+
+    /// <summary>Gets what was written, which is always something.</summary>
+    public PresentationText Text { get; } = Requirement.Spoken(Text, nameof(Text));
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -81,10 +85,14 @@ public sealed record AgentAnswerStarted(AgentMessageId MessageId) : AgentConvers
 /// attachments on the contract thread* names a thread — so it is sensitive exactly as the rest of the record is.
 /// </para>
 /// </remarks>
+/// <exception cref="ArgumentException">Thrown when <paramref name="Status" /> is the unspecified struct default.</exception>
 public sealed record AgentStatusReported(AgentMessageId MessageId, PresentationText Status) : AgentConversationEntry
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "status";
+
+    /// <summary>Gets the line the run is reporting, which is always something.</summary>
+    public PresentationText Status { get; } = Requirement.Spoken(Status, nameof(Status));
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -275,6 +283,13 @@ file static class Requirement
 
         return block;
     }
+
+    internal static PresentationText Spoken(PresentationText text, string parameter) =>
+        text.IsSpecified
+            ? text
+            : throw new ArgumentException(
+                "A turn says something, so the unspecified struct default is not a thing anybody wrote.",
+                parameter);
 
     internal static AgentAnswerOutcome Declared(AgentAnswerOutcome outcome, string parameter) =>
         Enum.IsDefined(outcome)
