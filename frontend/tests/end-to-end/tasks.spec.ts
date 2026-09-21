@@ -70,10 +70,13 @@ test('writes a task down, marks it done, and deletes it', async ({ page }) => {
     // Done work leaves the list rather than sitting in it struck through, which is what the switch below is for.
     await expect(rowFor(page, written)).toHaveCount(0);
 
-    const showDone = page.getByRole('switch', { name: 'Show done' });
+    // A button that reports whether it is held down rather than a switch: `controls/Control.tsx` draws it as
+    // `aria-pressed`, which the platform computes as a pressed button and not as a checked switch.
+    const showDone = page.getByRole('button', { name: 'Show done' });
 
     await showDone.click();
 
+    await expect(showDone).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('checkbox', { name: `Mark ${written} as not done` })).toBeChecked();
 
     // Picked out with a modifier held, which is the one gesture that opens the acts over a row: a task has nowhere to

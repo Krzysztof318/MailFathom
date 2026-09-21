@@ -304,6 +304,14 @@ cp --recursive frontend/src/Client.App/dist/. "$host_directory/wwwroot"
 #
 # One variable in the block is not configuration at all: the mailbox password, put where the reference the mail account
 # record carries can resolve it. The declaration of its name says why it cannot be written into that record instead.
+#
+# The client endpoint's per-user budget is raised, and that is a statement about this run rather than about the product.
+# The default allows one user a burst of 120 requests restored at 120 a minute and queues none beyond it, which is a
+# bound on a person reading their mail. What drives this endpoint is a browser suite signing in once per case and
+# drawing four spaces as fast as it can, so the whole suite spends that budget within its first minute and everything
+# after it is refused — which reaches the screen as *the deployment did not answer*, reads as a broken client, and is
+# neither. The limiter stays switched on rather than being turned off, so the path a request takes here is still the
+# path it takes in a deployment; what changes is a budget no suite can exhaust.
 env --chdir="$host_directory" \
   ConnectionStrings__mailfathom="Host=$loopback;Port=$postgres_port;Database=$database_name;Username=$postgres_user_name;Password=$postgres_password" \
   DataEncryption__ActiveKeyId="$data_encryption_key_id" \
@@ -317,6 +325,9 @@ env --chdir="$host_directory" \
   ClientEndpoint__Authentication__0__Method='password' \
   ClientEndpoint__Application__Enabled='true' \
   ClientEndpoint__Application__AllowClearText='true' \
+  ClientEndpoint__RateLimiting__TokenCapacity='20000' \
+  ClientEndpoint__RateLimiting__TokensPerReplenishmentPeriod='20000' \
+  ClientEndpoint__RateLimiting__ReplenishmentPeriod='00:00:10' \
   AdminEndpoint__Enabled='true' \
   AdminEndpoint__BindAddress="$loopback" \
   AdminEndpoint__Port="$admin_endpoint_port" \

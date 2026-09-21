@@ -66,6 +66,14 @@ gives about the same thing: what the run exercises has to be the PostgreSQL and 
 repository exercises, at the same pins. `EndToEndClient=true` is an argument rather than a variable, so an ambient value
 cannot divert an ordinary `aspire run` onto it.
 
+**The client endpoint's per-user budget is raised for this run, and the limiter stays on.** The default allows one user
+a burst of 120 requests restored at 120 a minute, queueing none beyond it — a bound written for a person reading their
+mail. What drives this endpoint is a browser suite signing in once per case and drawing four spaces as fast as it can,
+so the suite spends that budget inside its first minute and every request after it is refused; the client reports a
+refusal as *the deployment did not answer*, which reads as a broken screen and is not one. The run therefore states a
+budget no suite can exhaust rather than switching the limiter off, so a request still takes the path it takes in a
+deployment.
+
 **Every wait is on a condition rather than on a duration.** The database is waited for with `pg_isready` over TCP —
 over the socket it would report ready against the temporary server the image runs while it initializes its data
 directory, and that server is stopped, and its socket removed, under the command that follows — the mail
