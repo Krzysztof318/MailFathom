@@ -90,6 +90,37 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
+        MailUserId owner,
+        IReadOnlyCollection<ImportedCalendarEventUid> candidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        RequireNamed(owner);
+
+        if (candidates.Count == 0)
+        {
+            return new HashSet<ImportedCalendarEventUid>();
+        }
+
+        var ownerValue = owner.Value;
+        var stated = candidates.Select(uid => uid.Value).ToArray();
+
+        // Only the column the answer is made of, so a file naming five hundred identifiers reads five hundred strings
+        // rather than five hundred events and their reminders. The partial unique index on the pair is what serves it.
+        var alreadyHeld = await context.CalendarEvents
+            .AsNoTracking()
+            .Where(calendarEvent =>
+                calendarEvent.UserId == ownerValue
+                && calendarEvent.ImportedUid != null
+                && stated.Contains(calendarEvent.ImportedUid))
+            .Select(calendarEvent => calendarEvent.ImportedUid!)
+            .ToArrayAsync(cancellationToken);
+
+        return alreadyHeld.Select(ImportedCalendarEventUid.Create).ToHashSet();
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(
         IPersistenceSession session,
         MailUserId owner,

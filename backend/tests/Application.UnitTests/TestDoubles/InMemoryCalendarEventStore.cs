@@ -62,6 +62,24 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
+        MailUserId owner,
+        IReadOnlyCollection<ImportedCalendarEventUid> candidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        IReadOnlySet<ImportedCalendarEventUid> alreadyHeld = this.held
+            .Where(entry => entry.Key.Owner == owner.Value)
+            .Select(entry => entry.Value.ImportedUid)
+            .OfType<ImportedCalendarEventUid>()
+            .Where(candidates.Contains)
+            .ToHashSet();
+
+        return Task.FromResult(alreadyHeld);
+    }
+
+    /// <inheritdoc />
     public Task AddAsync(
         IPersistenceSession session,
         MailUserId owner,

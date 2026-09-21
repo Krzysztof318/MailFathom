@@ -56,6 +56,25 @@ public interface ICalendarEventStore
         CalendarEventQuery query,
         CancellationToken cancellationToken);
 
+    /// <summary>Reports which of the stated imported identifiers somebody's calendar already holds.</summary>
+    /// <param name="owner">The person whose calendar is read.</param>
+    /// <param name="candidates">The identifiers an offered file names, which bounds the read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The subset of <paramref name="candidates" /> that calendar already holds, which is empty where it holds none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidates" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// Asked about the identifiers of one file rather than about the calendar, so the read is bounded by what somebody
+    /// chose to import instead of growing with the events they have imported before. It is what turns a second import
+    /// of one file into a count of entries skipped rather than a doubled calendar, and it is not what makes that
+    /// safe — the unique index on <see cref="ICalendarEventStore" />'s own insert is, because two imports running at
+    /// once both read nothing here.
+    /// </remarks>
+    Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
+        MailUserId owner,
+        IReadOnlyCollection<ImportedCalendarEventUid> candidates,
+        CancellationToken cancellationToken);
+
     /// <summary>Stages an event the calendar does not yet hold.</summary>
     /// <param name="session">The session the write joins.</param>
     /// <param name="owner">The person whose calendar the event is written into.</param>

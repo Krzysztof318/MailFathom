@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientTimeZoneEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientTimeZoneEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarImportEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -142,6 +142,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `PUT /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
 | `POST /api/client/calendar/{eventId}/acceptance` | `mailfathom.mail.read` |
 | `DELETE /api/client/calendar/{eventId}` | `mailfathom.mail.read` |
+| `POST /api/client/calendar/import/summary` | `mailfathom.mail.read` |
+| `POST /api/client/calendar/import` | `mailfathom.mail.read` |
 | `GET /api/client/calendar/drafts` | `mailfathom.mail.ask` |
 | `POST /api/client/calendar/drafts` | `mailfathom.mail.ask` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
@@ -3158,11 +3160,91 @@ committed: nothing here reaches a mail server, nothing moves in a mailbox, and t
 carries rather than mail these routes read. `mailfathom.mail.delete` is the power to remove somebody's mail and is not
 what the deletion asks for — what leaves is a date about a message that stays.
 
-**What these routes do not serve.** There is no recurrence, no external calendar synchronization, and no `.ics`
-import here; [calendar events](../features/calendar-events.md) states which of those are refused as ideas and which
-are simply not part of the record today. A reminder that has come due is not read here either: it arrives as a
-notification on [the notification routes](#the-notification-routes), which is how a client learns about one whether
-or not it was open when the reminder fell.
+**What these routes do not serve.** There is no recurrence and no external calendar synchronization;
+[calendar events](../features/calendar-events.md) states which of those are refused as ideas and which are simply not
+part of the record today. A file somebody hands over is a different thing and has
+[two routes of its own](#the-calendar-import-routes) below. A reminder that has come due is not read here either: it
+arrives as a notification on [the notification routes](#the-notification-routes), which is how a client learns about
+one whether or not it was open when the reminder fell.
+
+### The calendar import routes
+
+A conference programme, a schedule exported from another calendar, a single invitation saved to disk — each arrives as
+an `.ics` file, and these are the two routes it reaches a calendar over. Reading one is not synchronization: nothing is
+subscribed to, nothing is polled, nothing is written back, and nothing the file names causes an outbound request of any
+kind.
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/client/calendar/import/summary` | Reports what the file would create and skip, writing nothing |
+| `POST /api/client/calendar/import` | Puts the events the file names on the calendar |
+
+**The summary is the acceptance rather than a courtesy.** Nothing creates a calendared event without somebody typing
+or accepting it, and a file prepared by somebody else is exactly the case where having chosen it says little about
+what it holds. So a client shows what the first route reports and calls the second only once the person has confirmed
+it. The two read the same file the same way and answer with the same shape:
+
+```http
+POST /api/client/calendar/import/summary?timeZone=Europe/Warsaw
+Content-Type: text/calendar
+
+BEGIN:VCALENDAR
+...
+END:VCALENDAR
+```
+
+```json
+{
+  "events": 68,
+  "earliest": "2026-10-05T07:00:00+00:00",
+  "latest": "2026-10-09T15:30:00+00:00",
+  "skipped": [
+    { "reason": "Recurring", "count": 8 },
+    { "reason": "AlreadyOnTheCalendar", "count": 4 }
+  ]
+}
+```
+
+**The confirmation carries the file again rather than a token.** Nothing is staged between the two calls, so there is
+no half-import to expire, to clean up, or to leave an entry of somebody's day sitting in this deployment while they
+decide. The body is the file itself, sent as `text/calendar` or as `application/octet-stream` for a browser that
+reported no type at all; neither is trusted, and what the octets are is decided by parsing them.
+
+**`timeZone` decides only what the file left undecided.** An entry stating a UTC instant or naming its own `TZID`
+resolves to the instant the file names, whatever this parameter says. What it is for are the two shapes that name no
+zone: a floating time, which RFC 5545 defines as the local time of whoever reads it, and an all-day entry, whose day
+opens at a different instant in every zone. Name the IANA identifier the person is in — a client sends its own. Naming
+nothing reads both in the coordinated zone, and naming one this deployment does not know is refused with `400` rather
+than quietly read in another.
+
+**An entry this deployment has no event for is skipped and counted rather than failing the file.** The reasons are
+`Recurring` for an entry carrying `RRULE`, `RDATE`, or `RECURRENCE-ID` — a MailFathom event is a single occasion and
+nothing here expands a series — `NoStart`, `UnreadableTitle`, `UnreadableIdentifier` for an entry naming no `UID` or
+one this deployment will not hold, `UnknownTimeZone`, `EndNotAfterStart`, `AlreadyOnTheCalendar`, and
+`RepeatedInTheFile`. Each arrives as a count, never as the entries themselves: which eight entries recur is a list of
+somebody's appointments, and that eight of them do is what a person deciding needs.
+
+**Importing the same file twice creates nothing the second time.** Every entry carries a `UID`, an imported event
+keeps it, and an entry whose identifier this calendar already holds is counted under `AlreadyOnTheCalendar` instead of
+being written again. It is the calendar's own identifier rather than a global one, so a file somebody else imported
+says nothing about this person's.
+
+**What is written is asserted, and the import is one transaction.** Choosing a file and confirming what it holds is a
+person putting those events on their calendar, so nothing an import produces is a proposal; the events carry no
+reminders and cite no message. Either every event the answer names is on the calendar or none is, so a file that fails
+part way through leaves nothing to find and undo. The answer carries counts rather than events — the calendar is read
+back afterwards through [its own window](#the-calendar-routes), which is the one place events are drawn from.
+
+**The file is bounded twice, and both refusals say so.** Octets over 1 MB are answered `413` naming the bound, and a
+file naming more than 500 entries is answered `400` and refused whole rather than partly written — a person confirming
+a summary is deciding about everything the file holds, and a truncated import would be one they were never shown. A
+request carrying no body at all, and one whose octets are not iCalendar this deployment can finish reading, are both
+`400` naming what to do instead. No refusal echoes anything the file carries.
+
+**What these routes do not do.** They do not export — the other direction is not opened here. They do not read an
+`.ics` that arrived as a message attachment, and they answer no invitation: `METHOD:REQUEST` and `METHOD:REPLY` are
+ignored, nothing replies to an organizer, and no `ATTENDEE`, `ORGANIZER`, `ATTACH`, `URL`, `DESCRIPTION`, or
+`LOCATION` an entry carries is read at all.
 
 ### The Discover routes
 
