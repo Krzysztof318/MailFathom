@@ -179,6 +179,7 @@ public sealed class PersonalTaskReminderTests
     /// </summary>
     [Theory]
     [InlineData(15, 0)]
+    [InlineData(-13, 0)]
     [InlineData(-15, 0)]
     [InlineData(2, 30)]
     public void Compose_AnOffsetNoDueDayCanRunIn_IsRefused(int hours, int seconds)
@@ -233,6 +234,7 @@ public sealed class PersonalTaskReminderTests
     /// <summary>The offset a stored row states is untrusted for the same reason its leads are, and refused the same way.</summary>
     [Theory]
     [InlineData(15, 0)]
+    [InlineData(-13, 0)]
     [InlineData(-15, 0)]
     [InlineData(2, 30)]
     public void Restore_AnOffsetNoDueDayCanRunIn_IsRefused(int hours, int seconds)

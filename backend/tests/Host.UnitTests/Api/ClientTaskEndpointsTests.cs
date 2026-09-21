@@ -726,6 +726,7 @@ public sealed class ClientTaskEndpointsTests
     [InlineData(new[] { 60, 60 }, 120)]
     [InlineData(new[] { 60 }, null)]
     [InlineData(new[] { 60 }, 15 * 60)]
+    [InlineData(new[] { 60 }, -13 * 60)]
     public async Task RecordAsync_ASetOfLeadsNoTaskMayCarry_RefusesWithoutEchoingIt(
         int[] reminders,
         int? dueDayOffsetMinutes)

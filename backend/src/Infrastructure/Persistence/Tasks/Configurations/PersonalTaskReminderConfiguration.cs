@@ -31,7 +31,8 @@ internal sealed class PersonalTaskReminderConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<PersonalTaskReminderEntity> entity)
     {
         entity.ToTable("task_reminders");
-        entity.HasKey(reminder => new { reminder.PersonalTaskId, reminder.MinutesBefore });
+        entity.HasKey(reminder => new { reminder.PersonalTaskId, reminder.MinutesBefore })
+            .HasName(PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName);
 
         entity.Property(reminder => reminder.MinutesBefore).IsRequired();
         entity.Property(reminder => reminder.DueAt).IsRequired();

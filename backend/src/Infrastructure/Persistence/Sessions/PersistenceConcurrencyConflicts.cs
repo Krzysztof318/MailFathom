@@ -237,6 +237,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName
-                or PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName,
+                or PersistenceConstraintNames.MailboxFlaggedDeleteOccurrenceUniqueIndexName
+                or PersistenceConstraintNames.CalendarEventReminderPrimaryKeyConstraintName
+                or PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName,
         };
 }

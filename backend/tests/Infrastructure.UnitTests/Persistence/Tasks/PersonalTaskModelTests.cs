@@ -159,6 +159,24 @@ public sealed class PersonalTaskModelTests
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
     }
 
+    /// <summary>
+    /// Why the key is named rather than left to the convention: two clients saving one task both read that a lead has
+    /// no row and both insert one, and the loser is recognized by the constraint its insert violated. A name only EF
+    /// Core knew about would leave that race ending as a provider failure instead of the retry from a fresh read.
+    /// </summary>
+    [Fact]
+    public void PersonalTaskReminderModel_ItsKey_IsNamedSoALosingWriterIsRecognized()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var key = ReminderEntityType(context).FindPrimaryKey()!;
+
+        // Assert
+        Assert.Equal(PersistenceConstraintNames.PersonalTaskReminderPrimaryKeyConstraintName, key.GetName());
+    }
+
     private static IEntityType ReminderEntityType(MailFathomDbContext context) =>
         context.Model.FindEntityType(typeof(PersonalTaskReminderEntity))
             ?? throw new InvalidOperationException("The model holds no task reminder row.");

@@ -372,6 +372,15 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string CalendarEventReminderDueIndexName = "ix_calendar_event_reminders_due_at";
 
+    /// <summary>The key one reminder on a calendar event is written under, kept at EF Core's conventional name.</summary>
+    /// <remarks>
+    /// Stated for the reason the draft copy's key is: a losing writer is recognized by the constraint its insert
+    /// violated, and a name only the convention knew about would leave a resolvable race ending as a provider failure.
+    /// Two revisions of one event arriving at once both read that a lead has no row and both insert one, which is
+    /// exactly the race the retry converges on.
+    /// </remarks>
+    internal const string CalendarEventReminderPrimaryKeyConstraintName = "PK_calendar_event_reminders";
+
     /// <summary>The index the run that announces reminders reads over every task list at once.</summary>
     /// <remarks>
     /// The calendar's index with the same reasoning: the pass asks which reminders across the deployment have come
@@ -380,6 +389,14 @@ internal static class PersistenceConstraintNames
     /// because a completion is a column on a row this index does not cover.
     /// </remarks>
     internal const string PersonalTaskReminderDueIndexName = "ix_task_reminders_due_at";
+
+    /// <summary>The key one reminder on a task's due date is written under, kept at EF Core's conventional name.</summary>
+    /// <remarks>
+    /// The calendar reminder's key with the same reasoning and the same race, which reaches a task through a second
+    /// path the calendar has no equivalent of: moving a due date rewrites every instant on the task, so two clients
+    /// saving one task are two writers reaching the same lead rather than one writer repeating itself.
+    /// </remarks>
+    internal const string PersonalTaskReminderPrimaryKeyConstraintName = "PK_task_reminders";
 
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>

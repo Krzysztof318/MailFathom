@@ -558,11 +558,12 @@ internal static class ClientTaskEndpoints
 
     /// <summary>Reports whether a stated offset is one a UTC offset can be.</summary>
     /// <remarks>
-    /// Fourteen hours either way is the range <see cref="DateTimeOffset" /> itself admits, and a whole number of
-    /// minutes is what every real zone states. Bounded here because the value reaches a constructor that throws
-    /// rather than reports, and this is the trust boundary.
+    /// Twelve hours behind and fourteen ahead is what the world's zones run, which is narrower than the band
+    /// <see cref="DateTimeOffset" /> admits either way and is the bound the domain holds the same value to. A whole
+    /// number of minutes is what every real zone states. Bounded here because the value reaches a constructor that
+    /// throws rather than reports, and this is the trust boundary.
     /// </remarks>
-    private static bool IsStatableOffset(int offsetMinutes) => offsetMinutes is >= -14 * 60 and <= 14 * 60;
+    private static bool IsStatableOffset(int offsetMinutes) => offsetMinutes is >= -12 * 60 and <= 14 * 60;
 
     /// <summary>States that the request carried no task to write.</summary>
     private static ProblemHttpResult NoRecord() => Refuse("The request carries no task.");

@@ -41,8 +41,16 @@ public sealed record PersonalTask
     /// </remarks>
     public const int DueDayReminderHour = 9;
 
-    /// <summary>How far from UTC a due day may run, which is the range an offset can be at all.</summary>
-    private static readonly TimeSpan MaximumDueDayOffset = TimeSpan.FromHours(14);
+    /// <summary>The furthest behind UTC a due day may run, which no zone is further behind than.</summary>
+    private static readonly TimeSpan EarliestDueDayOffset = TimeSpan.FromHours(-12);
+
+    /// <summary>The furthest ahead of UTC a due day may run, which no zone is further ahead of.</summary>
+    /// <remarks>
+    /// The two are not a symmetric band, because the offsets the world actually runs are not one: a zone reaches
+    /// fourteen hours ahead and only twelve behind. Stating them as one magnitude would admit thirteen and fourteen
+    /// hours behind UTC, which no zone runs and no client resolving a reader's own record could have produced.
+    /// </remarks>
+    private static readonly TimeSpan LatestDueDayOffset = TimeSpan.FromHours(14);
 
     private PersonalTask(
         PersonalTaskId id,
@@ -280,12 +288,13 @@ public sealed record PersonalTask
         }
 
         if (announcement.DueDayOffset.Ticks % TimeSpan.TicksPerMinute != 0
-            || announcement.DueDayOffset.Duration() > MaximumDueDayOffset)
+            || announcement.DueDayOffset < EarliestDueDayOffset
+            || announcement.DueDayOffset > LatestDueDayOffset)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(announcement),
                 announcement.DueDayOffset,
-                "A due day runs in a whole number of minutes from UTC, at most fourteen hours either way.");
+                "A due day runs in a whole number of minutes from UTC, between twelve hours behind and fourteen ahead.");
         }
 
         return (announcement.DueDayOffset, ordered);
