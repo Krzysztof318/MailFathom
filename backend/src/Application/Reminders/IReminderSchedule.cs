@@ -28,13 +28,6 @@ namespace MailFathom.Application.Reminders;
 /// </remarks>
 public interface IReminderSchedule
 {
-    /// <summary>Gets which kind of thing this schedule's reminders are about.</summary>
-    /// <remarks>
-    /// A constant per implementation rather than a value read per row, because a schedule reads one table and every
-    /// reminder in it is about the same kind of record.
-    /// </remarks>
-    ReminderSubject Subject { get; }
-
     /// <summary>Reads the reminders that have come due and have not been announced at the instant they now fall at.</summary>
     /// <param name="asOf">The instant a reminder must have fallen at or before to be due.</param>
     /// <param name="notDueBefore">The instant a reminder must have fallen at or after to still be worth announcing.</param>

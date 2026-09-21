@@ -32,9 +32,6 @@ namespace MailFathom.Infrastructure.Persistence.Calendar;
 internal sealed class CalendarReminderSchedule(MailFathomDbContext context) : IReminderSchedule
 {
     /// <inheritdoc />
-    public ReminderSubject Subject => ReminderSubject.CalendarEvent;
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<DueReminder>> ReadDueAsync(
         DateTimeOffset asOf,
         DateTimeOffset notDueBefore,

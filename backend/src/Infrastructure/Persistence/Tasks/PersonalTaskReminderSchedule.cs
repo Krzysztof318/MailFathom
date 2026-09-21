@@ -38,9 +38,6 @@ namespace MailFathom.Infrastructure.Persistence.Tasks;
 internal sealed class PersonalTaskReminderSchedule(MailFathomDbContext context) : IReminderSchedule
 {
     /// <inheritdoc />
-    public ReminderSubject Subject => ReminderSubject.PersonalTask;
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<DueReminder>> ReadDueAsync(
         DateTimeOffset asOf,
         DateTimeOffset notDueBefore,

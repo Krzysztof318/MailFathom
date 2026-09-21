@@ -12,7 +12,7 @@ namespace MailFathom.Domain.Notifications;
 /// <remarks>
 /// <para>
 /// The five shapes are closed and each is reached through its own factory, so a target can never half exist — a
-/// message target with no message, or a screen target that also names one. Which of the four a producer chose is what
+/// message target with no message, or a screen target that also names one. Which of the five a producer chose is what
 /// a reader switches on, and <see cref="NotificationTargetKind" /> is that answer without unwrapping anything.
 /// </para>
 /// <para>

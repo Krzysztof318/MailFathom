@@ -35,8 +35,8 @@ public sealed class ReminderSweepTests
 
     private static readonly Guid CounterProposal = new("0197a3c0-0000-7000-8000-000000000002");
 
-    private readonly StubReminderSchedule schedule = new(ReminderSubject.CalendarEvent);
-    private readonly StubReminderSchedule tasks = new(ReminderSubject.PersonalTask);
+    private readonly StubReminderSchedule schedule = new();
+    private readonly StubReminderSchedule tasks = new();
     private readonly InMemoryNotificationStore notifications = new();
 
     [Fact]
@@ -388,11 +388,9 @@ public sealed class ReminderSweepTests
     /// a double that claimed unconditionally would pass a sweep that announced a moved event twice. What it does not
     /// model is the race two replicas settle on the database, which the integration suite proves.
     /// </remarks>
-    private sealed class StubReminderSchedule(ReminderSubject subject) : IReminderSchedule
+    private sealed class StubReminderSchedule : IReminderSchedule
     {
         private readonly List<StandingReminder> standing = [];
-
-        public ReminderSubject Subject => subject;
 
         public void Holding(DueReminder due) => this.standing.Add(new StandingReminder(due));
 
