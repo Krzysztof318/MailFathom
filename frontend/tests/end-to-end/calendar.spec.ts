@@ -116,8 +116,14 @@ test('writes an event down, amends it, and takes it off the calendar', async ({ 
     await expect(entryFor(page, amended)).toBeVisible();
     await expect(entryFor(page, written)).toHaveCount(0);
 
-    await entryFor(page, amended).click();
-    await page.getByRole('dialog', { name: amended }).getByRole('button', { name: 'Delete the event' }).click();
+    // Saving an amendment leaves the surface open and renames it to what was saved, so the deletion is reached in the
+    // dialog already in front of the reader. Clicking the entry again would be a click at a modal dialog's backdrop,
+    // which is what it was: the platform holds the pointer inside an open `showModal` surface.
+    const renamed = page.getByRole('dialog', { name: amended });
+
+    await expect(renamed).toBeVisible();
+
+    await renamed.getByRole('button', { name: 'Delete the event' }).click();
     await page.getByRole('button', { name: 'Delete from the calendar' }).click();
 
     await expect(entryFor(page, amended)).toHaveCount(0);
