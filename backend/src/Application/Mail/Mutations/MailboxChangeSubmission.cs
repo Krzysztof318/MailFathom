@@ -439,9 +439,17 @@ public sealed class MailboxChangeSubmission
 
     /// <summary>Writes the second stored message a copy produces, from the payload placed before this transaction.</summary>
     /// <remarks>
+    /// <para>
     /// The audit entry names the copied message and the folder it was copied into, exactly as a move's does, because the
     /// act the trail records is the one somebody asked for rather than the row it produced. What is announced is the
     /// copy: a client told about the copied message would re-read a message that has not changed.
+    /// </para>
+    /// <para>
+    /// It is appended after the copy is written rather than before it, which is where a move's differs. A local act's
+    /// entry is always a performed change, and this is the one local act that can decline to write anything while its
+    /// caller commits the transaction anyway — a rule records the refusal and carries on — so auditing first would
+    /// leave the trail permanently stating a copy that produced no row.
+    /// </para>
     /// </remarks>
     private async Task<SubmittedMailboxChange> CommitCopyAsync(
         IPersistenceSession session,
@@ -451,8 +459,6 @@ public sealed class MailboxChangeSubmission
         PreparedLocalCopy preparedCopy,
         CancellationToken cancellationToken)
     {
-        await this.AuditAsync(session, request, state, cancellationToken);
-
         var copied = await this.copier.CommitAsync(
             session,
             preparedCopy,
@@ -463,10 +469,15 @@ public sealed class MailboxChangeSubmission
 
         // Nothing written means the copied message's own binding went while this ran, which is the message going rather
         // than the destination: answering for the destination would send a rule's author to correct a name that is right.
-        return copied is null
-            ? SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.MessageMissing)
-            : SubmittedMailboxChange.Applied(
-                new AppliedMailboxChange(request.Account, state.SourceFolder.Alias, copied.Value, Flags: null));
+        if (copied is null)
+        {
+            return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.MessageMissing);
+        }
+
+        await this.AuditAsync(session, request, state, cancellationToken);
+
+        return SubmittedMailboxChange.Applied(
+            new AppliedMailboxChange(request.Account, state.SourceFolder.Alias, copied.Value, Flags: null));
     }
 
     private async Task<SubmittedMailboxChange> CommitAsync(

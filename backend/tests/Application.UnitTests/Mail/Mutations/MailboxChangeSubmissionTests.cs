@@ -434,6 +434,25 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Equal(2, prepared.Of(Email).Count);
     }
 
+    /// <summary>A copy that wrote no row leaves no trail entry, because a local act's entry is always a performed change.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyWhoseBindingIsGone_AppendsNoAuditEntry()
+    {
+        // Arrange
+        this.Store();
+        var junk = JunkDestination();
+        var prepared = await this.PrepareCopyAsync();
+        this.CopyWritesNothing();
+
+        // Act
+        var submitted = await this.Held(Auditing(), copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.MessageMissing, submitted.Outcome);
+        await this.auditEntries.DidNotReceiveWithAnyArgs().AppendAsync(default!, default!, Token);
+    }
+
     /// <summary>A message the held account no longer stores has nothing to change.</summary>
     [Fact]
     public async Task SubmitAsync_AMessageAHeldAccountNoLongerStores_ReportsItMissing()
@@ -451,13 +470,9 @@ public sealed class MailboxChangeSubmissionTests
     {
         // Arrange
         this.Store();
-        var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
-        auditSettings
-            .GetAuditSettings(Account)
-            .Returns(new MailboxMutationAuditSettings(IsEnabled: true, TimeSpan.FromDays(30)));
 
         // Act
-        await this.Held(auditSettings).SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+        await this.Held(Auditing()).SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
 
         // Assert
         await this.auditEntries.Received(1).AppendAsync(
@@ -637,6 +652,31 @@ public sealed class MailboxChangeSubmissionTests
         auditSettings,
         signals,
         new FakeTimeProvider(Now));
+
+    /// <summary>Answers that the account keeps a trail, which is what makes an appended entry assertable.</summary>
+    private static IMailboxMutationAuditSettingsReader Auditing()
+    {
+        var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
+
+        auditSettings
+            .GetAuditSettings(Account)
+            .Returns(new MailboxMutationAuditSettings(IsEnabled: true, TimeSpan.FromDays(30)));
+
+        return auditSettings;
+    }
+
+    /// <summary>Leaves the copy's row unwritten, which is what a binding erased after the payload was placed produces.</summary>
+    private void CopyWritesNothing() =>
+        this.copies
+            .StoreLocalCopyAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<long>(),
+                Arg.Any<CopiedMailFlags>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailId?>(null));
 
     /// <summary>Builds a copier that finds the copied message's payload and writes the copy as <see cref="Copy" />.</summary>
     private LocalMailCopier Copying() => LocalMailCopiers.Over(
