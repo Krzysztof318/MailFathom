@@ -39,12 +39,19 @@ reminder an hour before one would arrive in the night before anybody is awake to
 is that hour, it is MailFathom's own rule rather than a client's, and it is stated once so that two clients cannot
 come to disagree about when the same reminder falls.
 
-**Which offset that hour runs in is the client's to state, because this deployment keeps no timezone for a person.**
-It is the same answer [arranging a day](tasks-from-mail.md) gives: a calendar event carries its own offset with the
-instant it begins, and a task carries a day and nothing else, so a client writing a reminder onto one sends the
+**Which offset that hour runs in is the client's to state**, because a calendar event carries its own offset with the
+instant it begins while a task carries a day and nothing else — so a client writing a reminder onto one sends the
 whole-minute UTC offset that day runs in beside the leads. A request stating no lead states no offset either, and a
-task nobody has dated carries neither — a lead has nothing to be measured back from, so stating one against an undated
+task nobody has dated carries neither: a lead has nothing to be measured back from, so stating one against an undated
 task is refused rather than stored.
+
+**The zone that offset is read in is the reader's own record**, which is what
+[the user record](../operations/client-endpoint.md#the-time-zone-a-persons-days-are-read-in) states and what every date a client draws is
+placed in. It is the client that resolves it, because the offset a zone runs at depends on the day, and it is read at
+the anchor rather than at the moment of writing — a due day three weeks out may fall on the other side of a
+daylight-saving change from today, and today's offset would put every reminder on that task an hour out. A record
+stating no zone leaves the machine's own in force, which is the answer a deployment that has never been told anything
+about a reader gives.
 
 ## What silences one
 

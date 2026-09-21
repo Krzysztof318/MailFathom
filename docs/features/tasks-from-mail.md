@@ -49,7 +49,7 @@ list or somebody else's calendar.
 |---|---|
 | Tasks | The person's own, on the half of the list they committed to, not yet completed, due on or before that day, soonest due first, at most 20 |
 | Commitments | The events on their own calendar during the window — not the dates their mail proposed — at most 50 |
-| The day | The two instants the client stated, at most 48 hours apart, because this deployment keeps no timezone for a person |
+| The day | The two instants the client stated, at most 48 hours apart, because nothing here reads a recorded zone to decide which hours a day covers |
 
 **What comes back is an offer.** Each placement names a task by identity, when it is suggested to begin, and how long
 it is suggested to take; beside them stands the list of tasks that do not realistically fit the day, so somebody is

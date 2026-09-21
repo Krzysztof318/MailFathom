@@ -2976,8 +2976,10 @@ dropped the rest.
 **A task is announced from nine in the morning on the day it is due**, which is
 [the reminders](../features/reminders.md) page's rule rather than these routes'. `reminders` states the leads in whole
 minutes before that hour, and `dueDayOffsetMinutes` states the whole-minute UTC offset that day runs in — a client
-sends it because this deployment keeps no timezone for a person, exactly as it states its own window when it asks for
-[a day to be arranged](#the-day-layout-routes). The answer carries `reminders` longest lead first and `remindsAt`
+sends it rather than the zone itself, because the offset a zone runs at depends on the day and a due day three weeks
+out may fall on the other side of a daylight-saving change. Which zone the client resolves it in is
+[the reader's own record](#the-time-zone-a-persons-days-are-read-in), and the machine's own where that record states
+none. The answer carries `reminders` longest lead first and `remindsAt`
 beside it, the instants each one falls at, so the hour is derived in one place rather than in every client. The offset
 itself is not answered with: a client states its own on every write and never reads one back.
 
@@ -3024,8 +3026,9 @@ nothing unless they act on it, through the routes above that own each of those a
 | `POST /api/client/tasks/today/layout` | Suggests an arrangement of one day, and changes nothing |
 
 **Which hours are somebody's day is their client's to state.** The body carries `from` and `until` as ISO 8601
-instants, exactly as [the calendar window](#the-calendar-routes) does and for the same reason: this deployment keeps no
-timezone for a person, so the offsets their own client drew are what say which day is meant. A window that closes
+instants, exactly as [the calendar window](#the-calendar-routes) does and for the same reason: nothing here reads the
+reader's recorded zone to decide which hours a day covers, so the offsets their own client drew are what say which day
+is meant. A window that closes
 before it opens, or runs longer than 48 hours, is answered `400` naming the rule; a body stating neither instant is
 answered the same way.
 
