@@ -1266,7 +1266,7 @@ a statement that something changed, never the thing itself.
 |---|---|
 | `RunId`, `Sequence`, together the primary key | Which run this belongs to and the place it holds in it, counted from one. The sequence is derived inside the insert, from the greatest one the run already holds, so the composite key is what makes a gap and a repeat both impossible rather than a number any replica hands out |
 | `Kind` | The event contract's own published name for this kind of event, at most 64 characters. It is the readable half of the row: an ad-hoc query reports what a run did without deserializing anything |
-| `Payload` | The event itself as `jsonb`, written by the run's own serialization contract. JSON rather than a column per kind because a rolling upgrade runs two builds against one database, so an older build reads a newer build's row rather than failing on a column it does not know about |
+| `Payload` | The event itself as `json`, written by the run's own serialization contract. JSON rather than a column per kind because a rolling upgrade runs two builds against one database, so an older build reads a newer build's row rather than failing on a column it does not know about. `json` rather than `jsonb` because only the first of the two stores the document it was given: `jsonb` reorders the keys of everything it holds, and an event is a polymorphic document whose type discriminator is read nowhere but first |
 | `WrittenAt` | When the event was written |
 
 **This is mail content, and it is classified as mail content.** A composed block and a declared citation are drawn from

@@ -121,7 +121,7 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
         written AS (
             INSERT INTO "{DiscoveryRunEventEntity.TableName}"
                 ("{DiscoveryRunEventEntity.RunIdColumnName}", "{DiscoveryRunEventEntity.SequenceColumnName}", "{DiscoveryRunEventEntity.KindColumnName}", "{DiscoveryRunEventEntity.PayloadColumnName}", "{DiscoveryRunEventEntity.WrittenAtColumnName}")
-            SELECT a.run, a.reached + 1, @kind, CAST(@payload AS jsonb), @now
+            SELECT a.run, a.reached + 1, @kind, CAST(@payload AS json), @now
             FROM admitted a
             WHERE @endsTheRun OR a.reached < @mostEvents - 1
             RETURNING "{DiscoveryRunEventEntity.RunIdColumnName}" AS run, "{DiscoveryRunEventEntity.SequenceColumnName}" AS sequence
