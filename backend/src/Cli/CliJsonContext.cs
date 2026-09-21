@@ -86,6 +86,8 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(MailAccountCustodySwitchRequest))]
 [JsonSerializable(typeof(MailAccountCustodyState))]
 [JsonSerializable(typeof(MailAccountCustodySwitchOutcome))]
+[JsonSerializable(typeof(MailAccountRestoreSettlementRequest))]
+[JsonSerializable(typeof(MailAccountRestoreSettlementOutcome))]
 [JsonSerializable(typeof(ContactRecordRequest))]
 [JsonSerializable(typeof(ContactLookup))]
 [JsonSerializable(typeof(ContactPage))]

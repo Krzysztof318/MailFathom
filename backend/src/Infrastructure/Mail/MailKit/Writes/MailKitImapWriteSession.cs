@@ -58,6 +58,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private const string FileOperationName = "file-outgoing-copy";
     private const string WithdrawOperationName = "withdraw-outgoing-copy";
     private const string DrainOperationName = "drain-held-mailbox";
+    private const string RestoreOperationName = "restore-held-mailbox";
     private const string PermanentKeywordsCapabilityName = "persistent keywords (RFC 9051 PERMANENTFLAGS)";
 
     private readonly MailboxWriteConnectionLease lease;
@@ -399,6 +400,54 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     }
 
     /// <inheritdoc />
+    public async Task<RemoteEmailPlacement> AppendRestoredAsync(
+        ReadOnlyMemory<byte> rawMime,
+        RestoredEmailState state,
+        DateTimeOffset internalDate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException(
+                "A held message is appended back with the bytes it was stored as.",
+                nameof(rawMime));
+        }
+
+        using var scope = this.telemetry.BeginFiling(
+            RestoreOperationName,
+            this.SessionAccountId,
+            this.folder.Alias,
+            cancellationToken);
+
+        var placement = await this.lease.Connection.ExecuteMutationAsync(
+            async (_, openFolder, attemptToken) =>
+            {
+                // Parsed rather than recomposed, exactly as the outgoing filing is: what goes back onto the source is
+                // the message the source delivered, header for header.
+                using var storedMime = RawMimeStream.Open(rawMime);
+                using var message = await MimeMessage.LoadAsync(storedMime, attemptToken);
+
+                scope.CommandIssued("APPEND");
+                var appendedUid = await openFolder.AppendAsync(
+                    new AppendRequest(
+                        message,
+                        MessageFlagsOf(state),
+                        state.Keywords.Values,
+                        internalDate),
+                    attemptToken);
+
+                return PlacementOfAppend(openFolder, appendedUid);
+            },
+            cancellationToken);
+
+        scope.Completed();
+
+        return placement;
+    }
+
+    /// <inheritdoc />
     public async Task WithdrawAppendedAsync(
         ImapUidValidity uidValidity,
         ImapUid uid,
@@ -531,6 +580,30 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private MailAccountId SessionAccountId => this.lease.AccountId;
 
     /// <summary>Turns the two flags a filed copy may carry into the flag set the protocol takes.</summary>
+    /// <summary>Reads the system flags a restored copy carries, which are the two a held message can have moved.</summary>
+    /// <remarks>
+    /// <c>\Draft</c> is deliberately absent, being an assertion about a message being composed rather than one about
+    /// mail somebody received, and <c>\Answered</c> and <c>\Deleted</c> are flags MailFathom never writes. The
+    /// keywords travel beside these on the same <c>APPEND</c>, so one command puts the message back exactly as
+    /// MailFathom held it.
+    /// </remarks>
+    private static MessageFlags MessageFlagsOf(RestoredEmailState state)
+    {
+        var messageFlags = MessageFlags.None;
+
+        if (state.IsSeen)
+        {
+            messageFlags |= MessageFlags.Seen;
+        }
+
+        if (state.IsFlagged)
+        {
+            messageFlags |= MessageFlags.Flagged;
+        }
+
+        return messageFlags;
+    }
+
     private static MessageFlags MessageFlagsOf(AppendedMailFlags flags)
     {
         var messageFlags = MessageFlags.None;

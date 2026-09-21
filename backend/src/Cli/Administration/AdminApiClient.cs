@@ -1160,6 +1160,35 @@ internal sealed class AdminApiClient
                 CliJsonContext.Default.MailAccountCustodySwitchRequest));
     }
 
+    /// <summary>Records what an operator found in the folder one unanswered restore append was issued against.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account, as the deployment's configuration names it.</param>
+    /// <param name="record">The record being settled, as the custody reading names it.</param>
+    /// <param name="sourceHoldsTheCopy">Whether the folder holds the copy the append may have put there.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the verdict did, including whether the record was still standing.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="account" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountRestoreSettlementOutcome> SettleMailAccountRestoreAppendAsync(
+        string token,
+        string account,
+        Guid record,
+        bool sourceHoldsTheCopy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailAccountRestoreSettlementPath,
+            token,
+            CliJsonContext.Default.MailAccountRestoreSettlementOutcome,
+            cancellationToken,
+            JsonContent.Create(
+                new MailAccountRestoreSettlementRequest(account, record, sourceHoldsTheCopy),
+                CliJsonContext.Default.MailAccountRestoreSettlementRequest));
+    }
+
     /// <summary>Reads one bounded page of the books one user reads.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="user">The user whose books are read: their own, and the collected book of each account assigned to them.</param>

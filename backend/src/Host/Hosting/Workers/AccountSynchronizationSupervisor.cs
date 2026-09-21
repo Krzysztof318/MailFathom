@@ -26,6 +26,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -331,6 +332,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 Func<CancellationToken, Task>[] stagesAfterTheFolders =
                 [
                     token => this.DrainHeldSourceAsync(runSettings, token),
+                    token => this.RestoreHeldMailboxAsync(runSettings, token),
                     this.DeliverOutstandingMailAsync,
                     token => this.EraseExpiredDerivedRecordsAsync(runSettings, token),
                     token => this.ClassifyRequestedMailAsync(runSettings, token),
@@ -486,6 +488,46 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogSourceDrainFailed(exception, this.account.Value);
+        }
+    }
+
+    /// <summary>Takes one bounded pass at putting a restoring account's mailbox back onto its source.</summary>
+    /// <remarks>
+    /// <para>
+    /// Immediately after the drain and for the same reasons: it takes the account's one write connection, which the
+    /// folder connections must have given back, and it acts on mail the folders have just finished storing. The two
+    /// never work at once — one is what a held account does and the other what a restoring one does — so the pass of
+    /// whichever phase the account is not in is a single read that returns nothing.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run and never puts the account into backoff, exactly as the drain's does not. Putting
+    /// a mailbox back has no deadline either: what could not go back this time goes back next time, and reading
+    /// somebody's mail less often would be the wrong answer to a mail server being away.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A restore pass that ended unexpectedly leaves the mailbox where it was; every message keeps its state, the next run asks again, and the account is not backed off for a pass with no deadline.")]
+    private async Task RestoreHeldMailboxAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var pass = scope.ServiceProvider.GetRequiredService<MailboxRestorePass>();
+            var report = await pass.RestoreAsync(this.account, cancellationToken);
+
+            scope.ServiceProvider.GetRequiredService<IMailboxRestoreTelemetry>().Report(this.account, report);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogMailboxRestoreFailed(exception, this.account.Value);
         }
     }
 
@@ -1715,6 +1757,12 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Draining the source of account {AccountId} ended unexpectedly; every message it did not take off the source keeps its occurrence and the next run asks again, and the account is not backed off for it.")]
     private partial void LogSourceDrainFailed(Exception exception, string accountId);
+
+    /// <summary>Reports a restore pass that ended unexpectedly, which leaves the mailbox exactly where it was.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Restoring the mailbox of account {AccountId} onto its source ended unexpectedly; every message it did not put back keeps its stored state and the next run asks again, and the account is not backed off for it.")]
+    private partial void LogMailboxRestoreFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Information,

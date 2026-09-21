@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Accounts;
 
 namespace MailFathom.Cli.Commands.Accounts;
 
@@ -82,6 +83,50 @@ internal static class ShowMailAccountCustodyCommand
                 $"Awaiting source removal: {standing.AwaitingSourceRemoval}"));
         }
 
+        if (state.Restore is { } restore)
+        {
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Awaiting append:         {restore.AwaitingAppend}"));
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Awaiting state write:    {restore.AwaitingStateWrite}"));
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Unanswered appends:      {restore.UnansweredAppends}"));
+
+            WriteUnansweredAppends(context, restore.Unanswered ?? []);
+        }
+
         return CliExitCode.Success;
+    }
+
+    /// <summary>Names each append an operator has still to settle, and what settling one takes.</summary>
+    /// <remarks>
+    /// Listed rather than counted, unlike everything else here, because each one is an act somebody has to perform and
+    /// a count alone names nothing to act on. What is printed is a record identity, a folder alias, and an instant —
+    /// MailFathom's own words for things, and nothing derived from the message.
+    /// </remarks>
+    private static void WriteUnansweredAppends(
+        CliContext context,
+        IReadOnlyList<MailAccountUnansweredAppend> unanswered)
+    {
+        if (unanswered.Count == 0)
+        {
+            return;
+        }
+
+        context.Console.WriteLine(string.Empty);
+        context.Console.WriteLine(
+            "These appends were issued and never answered. The account stays in Restoring until each is settled;");
+        context.Console.WriteLine(
+            "open the folder, look for the message, and run 'account custody settle --record <id> --found|--missing'.");
+
+        foreach (var append in unanswered)
+        {
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"  {append.Record}  {ConsoleSafeText.Sanitize(append.Folder ?? "unknown")}  issued {append.IssuedAt:u}"));
+        }
     }
 }

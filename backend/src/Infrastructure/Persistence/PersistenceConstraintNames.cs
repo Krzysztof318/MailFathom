@@ -298,6 +298,12 @@ internal static class PersistenceConstraintNames
     /// <summary>The order a held account's outstanding source removals are taken in.</summary>
     internal const string MailboxSourceRemovalQueueIndexName = "ix_mailbox_source_removals_queue";
 
+    /// <summary>The one append record a message may carry, which is what keeps a restore from putting a second copy on the source.</summary>
+    internal const string MailboxRestoreAppendEmailUniqueIndexName = "ix_mailbox_restore_appends_email";
+
+    /// <summary>The order a restoring account's unanswered appends are read in.</summary>
+    internal const string MailboxRestoreAppendUnansweredIndexName = "ix_mailbox_restore_appends_unanswered";
+
     /// <summary>The constraint that keeps one audit entry per mutation ending, whatever a repeated append attempts.</summary>
     internal const string MailboxMutationAuditEntryMutationUniqueIndexName =
         "ix_mailbox_mutation_audit_entries_mutation";

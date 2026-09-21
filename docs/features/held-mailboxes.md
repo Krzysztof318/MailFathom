@@ -1,6 +1,6 @@
 # Holding a mailbox and emptying its source
 
-<!-- describes: backend/src/Domain/Accounts/MailAccountCustody.cs, backend/src/Domain/Accounts/MailAccountCustodyState.cs, backend/src/Domain/Accounts/MailAccountCustodySwitchRefusal.cs, backend/src/Application/Accounts/Custody/**, backend/src/Application/Synchronization/Drain/**, backend/src/Host/Api/MailAccountCustodyEndpoints.cs, backend/src/Cli/Commands/Accounts/MailAccountCustodies.cs, backend/src/Cli/Commands/Accounts/ShowMailAccountCustodyCommand.cs, backend/src/Cli/Commands/Accounts/SwitchMailAccountCustodyCommand.cs -->
+<!-- describes: backend/src/Domain/Accounts/MailAccountCustody.cs, backend/src/Domain/Accounts/MailAccountCustodyState.cs, backend/src/Domain/Accounts/MailAccountCustodySwitchRefusal.cs, backend/src/Application/Accounts/Custody/**, backend/src/Application/Synchronization/Drain/**, backend/src/Application/Synchronization/Restore/**, backend/src/Host/Api/MailAccountCustodyEndpoints.cs, backend/src/Cli/Commands/Accounts/MailAccountCustodies.cs, backend/src/Cli/Commands/Accounts/ShowMailAccountCustodyCommand.cs, backend/src/Cli/Commands/Accounts/SwitchMailAccountCustodyCommand.cs, backend/src/Cli/Commands/Accounts/SettleMailAccountRestoreAppendCommand.cs -->
 
 Every mail account this deployment reads has a **custody**, and it says which copy of the mailbox is the truth.
 `MirrorSource` is what every account has until somebody changes it: the source IMAP server holds the mailbox, MailFathom
@@ -24,11 +24,11 @@ Read this part before switching anything. A drained message is gone from the sou
 - **There is a way out, and it is not the source server.** [The mailbox export](../operations/mailbox-export.md) writes
   a Maildir tree in a zip archive, which mail servers read directly and people open with no tooling. It is what a user
   leaving with their mail uses and what an operator putting a mailbox back onto an IMAP server uses.
-- **Switching back is a new copy rather than an undo, and the copy is not written yet.** Asking for `MirrorSource` again
-  checks every folder mapping, stops the drain, and moves the account to `Restoring`. Appending the mailbox back to the
-  source is the half of that phase this release does not implement, so an account switched off stays in `Restoring` and
-  MailFathom goes on being the truth about it. Either way the messages the drain removed are not recovered from the
-  source, and what takes a mailbox off this deployment today is the export above.
+- **Switching back is a new copy rather than an undo.** Asking for `MirrorSource` again checks every folder mapping,
+  stops the drain, and moves the account to `Restoring`, and the account's own runs then append the mailbox back onto
+  the source. What arrives there is a copy MailFathom composed from what it stored: a new message with a new UID, in
+  the folder the mapping names, carrying the flags, the keywords, and the arrival MailFathom held. The messages the
+  drain removed are not recovered from the source — they are put back onto it from here.
 
 ## Switching one account
 
@@ -53,6 +53,23 @@ Awaiting drain:          4812
 Held back, above limit:  3
 Held back, no headroom:  0
 Awaiting source removal: 0
+```
+
+While the account is switching off, the same command reports how far the mailbox has got back onto its source, and
+names every append an operator has still to settle:
+
+```console
+$ mfctl account custody show --account personal
+Account:   personal
+Requested: MirrorSource
+Phase:     Restoring
+Awaiting drain:          0
+Held back, above limit:  0
+Held back, no headroom:  0
+Awaiting source removal: 0
+Awaiting append:         318
+Awaiting state write:    12
+Unanswered appends:      1
 ```
 
 `Requested` is what was asked for and `Phase` is how far the work has got. They differ while a switch is under way,
@@ -165,6 +182,72 @@ carry no subject, address, folder path, or UID:
 A drain that fails never puts the account into backoff and never fails its run. What it could not take off the source
 this time it takes next time, and answering an unreachable source by reading the account's mail less often would be the
 wrong trade for everybody using it.
+
+## What the restore does, and the one thing it asks a person for
+
+Switching an account back to `MirrorSource` moves it to `Restoring`, and the restore runs at the end of each of that
+account's synchronization runs, under the same lease and over the same write connection as the drain. The account stays
+`Restoring` — MailFathom stays the truth about the mailbox, and every act on it goes on taking effect locally — until
+nothing is left to put back.
+
+A held mailbox is in two states at once, and each owes the source something different.
+
+- **A message the drain took off has no occurrence**, so it is appended back into the folder its mapping names, with
+  its flags, its keywords, and the arrival the row recorded. The folder is the one the account's configuration maps
+  *now*, which may be a mapping rewritten since the drain took the message off.
+- **A message the drain never reached still has its occurrence**, so what it owes the source is the state somebody gave
+  it while the account was held: the move, the read, the star, and the labels. Those are written down as ordinary
+  remote mutations and carried by the converger, exactly as an act on a mirrored account is.
+
+**A folder is created on the source only where a mapping's `CreateIfMissing` says so.** The restore appends into the
+folder the run's own folder resolution bound, and creates none of its own, so a local folder whose mapping names a
+source path that does not exist is created by that mapping or by nobody.
+
+**Two things pause the whole restore rather than one folder of it.** An account whose configuration has come to
+synchronize a folder playing a virtual role appends nothing, for the reason such an account is refused the switch on. A
+local folder that holds mail and corresponds to no mapping pauses it too: there is no folder on the source its mail
+could go back into, and deriving a source path from a local name is the one thing ADR 0034 never permits. Write the
+mapping, and the next run carries on.
+
+### An unanswered append is the one thing MailFathom will not decide
+
+`APPEND` is the only command of this mode that may never be issued twice: a second one is a second message in somebody's
+folder rather than a repeat of the first. So a record is written and committed **before** the command goes out and
+deleted once the server has named where the copy went, and a record found standing is an append whose outcome is
+unknown — the folder may hold the copy and may not, and nothing the folder shows afterwards tells a copy MailFathom
+appended apart from one somebody else put there.
+
+MailFathom therefore refuses to guess. It reissues nothing for that message, reports the record, and keeps the account
+in `Restoring` until a person looks in the folder and says which of the two happened:
+
+```console
+$ mfctl account custody settle --account personal --record 0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04 --missing
+Recorded that the source of personal does not hold that copy. The message is appended again on the account's next run.
+```
+
+`--found` keeps the record for good, so the message is never appended a second time; `--missing` deletes it, and the
+next run appends the message as it would any other. Both are published under `mailfathom.admin.custody.write`, because
+one of them puts a message back onto somebody's mail server and the other leaves a message MailFathom holds with no
+occurrence it will ever write.
+
+A source that accepted the append and named nowhere it put the copy — a server advertising no RFC 4315 `UIDPLUS` — is
+the same unknown outcome and is settled the same way. Such a source is refused the switch *on*, so this is reached only
+by a server that lost the capability between the two halves.
+
+### What it costs, and how to watch it
+
+One run puts at most [`MailSynchronization:MaxRestoredEmailsPerRun`](../operations/configuration-mail.md) messages back,
+over both halves of the pass together. The state writes are spent first, because they cost no mail-server round trip at
+all, and the appends get whatever is left — which is what keeps a mailbox of years from starving the half that finishes
+quickest. A restore that fails never puts the account into backoff and never fails its run, on the same terms the drain
+has.
+
+| Instrument | What it counts |
+| --- | --- |
+| `mailfathom.mailbox.restore.appended` | Messages put back onto the source, whose new occurrence MailFathom wrote down |
+| `mailfathom.mailbox.restore.state_written` | Messages whose held state was written down as the mutations the converger carries |
+| `mailfathom.mailbox.restore.unanswered_appends` | Appends this run left with an unknown outcome, each holding the account in `Restoring` until an operator settles it |
+| `mailfathom.mailbox.restore.failures` | What refused an append, broken down by the reason, each attempted again by the next run unless a record stands for it |
 
 ## What changes about the rest of the product
 

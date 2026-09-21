@@ -197,6 +197,7 @@ internal static class CliRootCommand
         {
             ShowMailAccountCustodyCommand.Create(context),
             SwitchMailAccountCustodyCommand.Create(context),
+            SettleMailAccountRestoreAppendCommand.Create(context),
         };
 
         // The mailboxes this deployment reads. A group beside "user" rather than beneath it, because an account is a

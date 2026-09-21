@@ -1,0 +1,765 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Security.Cryptography;
+using System.Text;
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
+using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Transport;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Xunit;
+
+namespace MailFathom.Application.UnitTests.Synchronization.Restore;
+
+public sealed class MailboxRestorePassTests
+{
+    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+
+    private static readonly MailFolderResolution Inbox = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("inbox"),
+        RemoteFolderPath.Create("INBOX"));
+
+    private static readonly MailFolderResolution Archive = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("archive"),
+        RemoteFolderPath.Create("Archive"));
+
+    private static readonly MailFolderAlias Unbound = MailFolderAlias.Create("unbound");
+
+    private static readonly DateTimeOffset RunInstant = new(2026, 9, 15, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset ArrivedAt = new(2026, 8, 1, 9, 30, 0, TimeSpan.Zero);
+
+    private static readonly MailTransportSecurityPolicy TransportPolicy = MailTransportSecurityPolicy.Create(
+        MailConnectionSecurity.TlsOnConnect,
+        MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false),
+        MailServerCertificateTrust.SystemTrustStore,
+        trustedCertificateAuthorityReference: null);
+
+    [Fact]
+    public async Task RestoreAsync_AccountMirrorsItsSource_PutsNothingBack()
+    {
+        // Arrange
+        var context = new RestoreContext(MailAccountCustodyState.Mirrored)
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Empty(context.Store.IssuedAppends);
+        await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderResolution>(),
+            Arg.Any<MailTransportSecurityPolicy>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RestoreAsync_AccountIsStillBeingHeld_PutsNothingBack()
+    {
+        // Arrange
+        var context = new RestoreContext(Held)
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Empty(context.Store.IssuedAppends);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_MessageTheDrainTookOff_AppendsItWithItsFlagsKeywordsAndArrival()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias, seen: true, flagged: true, keywords: ["$Forwarded"]));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.AppendedCount);
+        Assert.Equal(0, report.UnansweredAppendCount);
+        Assert.Equal([Inbox], context.OpenedFolders);
+
+        var state = Assert.Single(context.AppendedStates);
+        Assert.True(state.IsSeen);
+        Assert.True(state.IsFlagged);
+        Assert.Equal(["$FORWARDED"], state.Keywords.Values);
+        Assert.Equal([ArrivedAt], context.AppendedInternalDates);
+    }
+
+    /// <summary>The occurrence the source named is what makes the append known to have happened.</summary>
+    [Fact]
+    public async Task RestoreAsync_SourceNamedWhereItPutTheCopy_WritesThatOccurrenceAndSettlesTheRecord()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var occurrence = Assert.Single(context.Store.ConfirmedOccurrences);
+        Assert.Equal(Inbox.Id, occurrence.FolderResolutionId);
+        Assert.Equal(ImapUidValidity.Create(7), occurrence.UidValidity);
+        Assert.Equal(ImapUid.Create(41), occurrence.Uid);
+        Assert.Empty(await context.Pass.ReadUnansweredAppendsAsync(Account, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// An <c>APPEND</c> is not idempotent, so the record goes in before the command does: the folder may hold the copy
+    /// and nothing it shows afterwards tells one MailFathom appended apart from one somebody else put there.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_SourceNeverAnsweredTheAppend_LeavesTheRecordStandingAsAnUnknownOutcome()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias))
+            .WithUnreachableSource();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(1, report.UnansweredAppendCount);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.SourceUnavailable]);
+        Assert.Single(context.Store.IssuedAppends);
+        Assert.Single(await context.Pass.ReadUnansweredAppendsAsync(Account, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A server that accepted the append and named nowhere left the same unknown outcome behind.</summary>
+    [Fact]
+    public async Task RestoreAsync_SourceNamedNowhereItPutTheCopy_LeavesTheRecordStandingRatherThanGuessing()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias))
+            .WithSourceThatNamesNoPlacement();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(1, report.UnansweredAppendCount);
+        Assert.Empty(report.Failures);
+        Assert.Empty(context.Store.ConfirmedOccurrences);
+        Assert.Single(await context.Pass.ReadUnansweredAppendsAsync(Account, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The folder is part of the occurrence, so a message somebody moved while the account was held takes the identity
+    /// of the folder it is in now rather than the one its row bound before the drain took it off.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_MessageWasMovedWhileTheAccountWasHeld_WritesTheOccurrenceOfTheFolderItWentBackInto()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring).AwaitingAppendOf(Drained(Archive.Alias));
+
+        // Act
+        await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([Archive], context.OpenedFolders);
+        Assert.Equal(Archive.Id, Assert.Single(context.Store.ConfirmedOccurrences).FolderResolutionId);
+    }
+
+    /// <summary>
+    /// Synchronization meeting the appended copy as an arrival stores it beside the message it is a copy of, so the
+    /// occurrence is taken and the message may now be on the source twice — which is an operator's to establish.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_SomethingElseAlreadyHoldsTheOccurrence_LeavesTheRecordStandingRatherThanAppendingAgain()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias))
+            .WithTheOccurrenceAlreadyHeld();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(1, report.UnansweredAppendCount);
+        Assert.False(report.EndedTheRestore);
+        Assert.Single(await context.Pass.ReadUnansweredAppendsAsync(Account, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A second <c>APPEND</c> is a second message in somebody's folder rather than a repeat of the first.</summary>
+    [Fact]
+    public async Task RestoreAsync_AnAppendForThatMessageIsAlreadyStanding_IssuesNoSecondOne()
+    {
+        // Arrange
+        var drained = Drained(Inbox.Alias);
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(drained)
+            .WithAppendStandingFor(drained);
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Empty(context.Store.IssuedAppends);
+        await context.WriteSession.DidNotReceive().AppendRestoredAsync(
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<RestoredEmailState>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RestoreAsync_AnAppendIsStandingUnanswered_KeepsTheAccountRestoring()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias))
+            .WithUnreachableSource();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(report.EndedTheRestore);
+        Assert.Equal(MailAccountCustodyPhase.Restoring, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_TheLastMessageWentBack_TakesTheAccountToMirroring()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(report.EndedTheRestore);
+        Assert.Equal(MailAccountCustodyPhase.Mirrored, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>A mailbox the source still has to be emptied of is a mailbox MailFathom is still the truth about.</summary>
+    [Fact]
+    public async Task RestoreAsync_TheDrainStillOwesASourceRemoval_KeepsTheAccountRestoring()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring).AwaitingSourceRemoval();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(report.EndedTheRestore);
+        Assert.Equal(MailAccountCustodyPhase.Restoring, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>An operator who asked to hold the mailbox again is not somebody this pass hands the source back to.</summary>
+    [Fact]
+    public async Task RestoreAsync_TheAccountIsAskedToBeHeldAgain_LeavesThePhaseAlone()
+    {
+        // Arrange
+        var context = new RestoreContext(
+            new MailAccountCustodyState(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Restoring));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(report.EndedTheRestore);
+        Assert.Equal(MailAccountCustodyPhase.Restoring, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>
+    /// The drain never reached these, so the source still holds them where it always did — and what it owes them is the
+    /// read, the star, and the labels somebody gave the message while the account was held.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_MessageTheDrainNeverReached_WritesItsSeenFlaggedAndKeywordStateAsMutationRecords()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Inbox.Alias, seen: true, keywords: ["$Label1"]));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.StateWrittenCount);
+        Assert.Equal(
+            [MailboxMutation.SetSeen, MailboxMutation.SetFlagged, MailboxMutation.SetKeywords],
+            context.Mutations.OpenedRequests.Select(request => request.Mutation));
+        Assert.Single(context.Store.StateWritten);
+    }
+
+    /// <summary>A move somebody made while the account was held reaches the source as an ordinary relocation.</summary>
+    [Fact]
+    public async Task RestoreAsync_MessageWasMovedWhileTheAccountWasHeld_WritesARelocationAheadOfItsState()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Archive.Alias));
+
+        // Act
+        await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var relocation = context.Mutations.OpenedRequests[0];
+        Assert.Equal(MailboxMutation.Relocate, relocation.Mutation);
+        Assert.Equal(Archive.RemotePath, relocation.DestinationPath);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_FolderTheMessageBelongsInIsBoundToNothing_WritesNoRecordsAndCountsWhy()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Unbound));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.StateWrittenCount);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.FolderUnresolved]);
+        Assert.Equal(0, context.Mutations.OpenedRecordCount);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_FolderTheMessageGoesBackIntoIsBoundToNothing_AppendsNothingAndCountsWhy()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring).AwaitingAppendOf(Drained(Unbound));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.FolderUnresolved]);
+        Assert.Empty(context.Store.IssuedAppends);
+    }
+
+    /// <summary>Nothing went out, so nothing is unknown: the message keeps no record and the next pass takes it again.</summary>
+    [Fact]
+    public async Task RestoreAsync_ContentStoreServesNoPayload_WritesNoRecordAndLeavesNothingUnanswered()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias))
+            .WithNoStoredPayload();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(0, report.UnansweredAppendCount);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.ContentUnreadable]);
+        Assert.Empty(context.Store.IssuedAppends);
+    }
+
+    [Theory]
+    [InlineData(nameof(MailboxCredentialRefusedException), MailboxRestoreFailure.SourceRefusedTheCredential)]
+    [InlineData(nameof(MailboxDestinationFolderMissingException), MailboxRestoreFailure.FolderMissing)]
+    public async Task RestoreAsync_SourceRefusedTheWholeFolder_CountsEveryMessageOfItUnderThatFailure(
+        string failure,
+        MailboxRestoreFailure expected)
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias), Drained(Inbox.Alias))
+            .WithSessionThatCannotBeOpened(failure);
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Equal(2, report.Failures[expected]);
+    }
+
+    /// <summary>One folder's failure is that folder's, because the other folder's messages were never issued against it.</summary>
+    [Fact]
+    public async Task RestoreAsync_MessagesOfTwoFolders_OpensOneSessionPerFolder()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias), Drained(Archive.Alias), Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(3, report.AppendedCount);
+        Assert.Equal([Inbox, Archive], context.OpenedFolders);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_MoreMailThanOneRunPutsBack_StopsAtTheConfiguredBound()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring, maxPerRun: 2)
+            .AwaitingAppendOf(Drained(Inbox.Alias), Drained(Inbox.Alias), Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, report.AppendedCount);
+        Assert.False(report.EndedTheRestore);
+    }
+
+    /// <summary>The state half costs no round trip at all, so it is what the bound is spent on first.</summary>
+    [Fact]
+    public async Task RestoreAsync_TheBoundIsSpentOnTheStateHalf_LeavesTheAppendsToTheNextPass()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring, maxPerRun: 1)
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Inbox.Alias))
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.StateWrittenCount);
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Empty(context.Store.IssuedAppends);
+    }
+
+    /// <summary>
+    /// A folder playing a virtual role shows the same message as the folder that really holds it, so appending into one
+    /// would put a second copy into the other. ADR 0034 refuses the account rather than the folder.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_AccountSynchronizesAFolderPlayingAVirtualRole_PausesTheWholeRestore()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .SynchronizingAVirtualFolder()
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailboxRestorePause.SynchronizedVirtualFolder, report.Pause);
+        Assert.Empty(context.Store.IssuedAppends);
+        Assert.Equal(MailAccountCustodyPhase.Restoring, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>There is no folder on the source its mail could go back into, and no source path may be derived from a local name.</summary>
+    [Fact]
+    public async Task RestoreAsync_LocalFolderHoldsMailAndMapsOntoNoSourceFolder_PausesTheWholeRestore()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .WithLocalFolderHoldingMailAndNoMapping()
+            .AwaitingAppendOf(Drained(Inbox.Alias));
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailboxRestorePause.LocalFolderWithoutMapping, report.Pause);
+        Assert.Empty(context.Store.IssuedAppends);
+    }
+
+    [Fact]
+    public async Task ReadStandingAsync_MailIsAwaitingBothHalves_ReportsEachOfThemSeparately()
+    {
+        // Arrange
+        var drained = Drained(Inbox.Alias);
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(drained, Drained(Inbox.Alias))
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Inbox.Alias))
+            .WithAppendStandingFor(drained);
+
+        // Act
+        var standing = await context.Pass.ReadStandingAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, standing.AwaitingAppend);
+        Assert.Equal(1, standing.AwaitingStateWrite);
+        Assert.Equal(1, standing.UnansweredAppends);
+        Assert.True(standing.IsOutstanding);
+    }
+
+    private static MailAccountCustodyState Held { get; } =
+        new(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Held);
+
+    private static MailAccountCustodyState Restoring { get; } =
+        new(MailAccountCustody.MirrorSource, MailAccountCustodyPhase.Restoring);
+
+    private static MailboxRestoreCandidate Drained(
+        MailFolderAlias folder,
+        bool seen = false,
+        bool flagged = false,
+        IEnumerable<string>? keywords = null) => new(
+        StoredEmailId.Create(Guid.CreateVersion7()),
+        folder,
+        new RestoredEmailState(seen, flagged, RemoteEmailKeywords.Create(keywords)),
+        ArrivedAt);
+
+    private static MailboxRestoredStateCandidate StillOnTheSource(
+        MailFolderResolution folder,
+        MailFolderAlias destination,
+        bool seen = false,
+        bool flagged = false,
+        IEnumerable<string>? keywords = null) => new(
+        StoredEmailId.Create(Guid.CreateVersion7()),
+        EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(1), ImapUid.Create(11)),
+        folder,
+        destination,
+        new RestoredEmailState(seen, flagged, RemoteEmailKeywords.Create(keywords)));
+
+    private sealed class RestoreContext
+    {
+        private static readonly byte[] Payload = Encoding.ASCII.GetBytes("Subject: stored\r\n\r\nbody\r\n");
+
+        private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
+        private readonly IMailFolderResolutionStore resolutions = Substitute.For<IMailFolderResolutionStore>();
+        private readonly InMemoryMailboxDrainStore drain = new();
+
+        private uint nextUid = 41;
+
+        internal RestoreContext(MailAccountCustodyState custody, int maxPerRun = 100)
+        {
+            this.Custody = InMemoryMailAccountCustodyStore.With(Account, custody);
+
+            var persistenceSession = Substitute.For<IPersistenceSession>();
+            persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+            var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+            sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+
+            this.mappings.FoldersOf(Account).Returns([
+                MailFolderMapping.ToRemotePath(Inbox.Alias, Inbox.RemotePath),
+                MailFolderMapping.ToRemotePath(Archive.Alias, Archive.RemotePath),
+            ]);
+            this.resolutions.GetCurrentResolutionAsync(Account, Inbox.Alias, Arg.Any<CancellationToken>())
+                .Returns(Inbox);
+            this.resolutions.GetCurrentResolutionAsync(Account, Archive.Alias, Arg.Any<CancellationToken>())
+                .Returns(Archive);
+            this.resolutions.GetCurrentResolutionAsync(Account, Unbound, Arg.Any<CancellationToken>())
+                .Returns((MailFolderResolution?)null);
+
+            this.Content = Substitute.For<IEmailContentStore>();
+            this.Content.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+                .Returns(new StoredEmailContent(Payload, Payload.Length, SHA256.HashData(Payload)));
+
+            this.WriteSession = Substitute.For<IMailboxWriteSession>();
+            this.WriteSession.AppendRestoredAsync(
+                    Arg.Any<ReadOnlyMemory<byte>>(),
+                    Arg.Any<RestoredEmailState>(),
+                    Arg.Any<DateTimeOffset>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    this.AppendedStates.Add(call.ArgAt<RestoredEmailState>(1));
+                    this.AppendedInternalDates.Add(call.ArgAt<DateTimeOffset>(2));
+
+                    return RemoteEmailPlacement.Reported(
+                        ImapUidValidity.Create(7),
+                        ImapUid.Create(this.nextUid++));
+                });
+
+            this.WriteSessionFactory = Substitute.For<IMailboxWriteSessionFactory>();
+            this.WriteSessionFactory.OpenForWritingAsync(
+                    Arg.Any<MailAccountId>(),
+                    Arg.Any<MailFolderResolution>(),
+                    Arg.Any<MailTransportSecurityPolicy>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    this.OpenedFolders.Add(call.ArgAt<MailFolderResolution>(1));
+
+                    return this.WriteSession;
+                });
+
+            var transportSecurity = Substitute.For<IMailTransportSecurityPolicyReader>();
+            transportSecurity.GetPolicy(Account).Returns(TransportPolicy);
+
+            var clock = new FakeTimeProvider(RunInstant);
+
+            this.Pass = new MailboxRestorePass(
+                this.Custody,
+                this.Store,
+                this.drain,
+                this.Mutations,
+                this.Content,
+                this.WriteSessionFactory,
+                this.resolutions,
+                transportSecurity,
+                this.mappings,
+                new OptimisticConcurrencyRetryPolicy(
+                    sessionFactory,
+                    new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
+                    clock),
+                new MailboxSynchronizationOptions { MaxRestoredEmailsPerRun = maxPerRun },
+                clock);
+        }
+
+        internal InMemoryMailAccountCustodyStore Custody { get; }
+
+        internal InMemoryMailboxRestoreStore Store { get; } = new();
+
+        internal InMemoryMailboxMutationRecordStore Mutations { get; } = new();
+
+        internal IEmailContentStore Content { get; }
+
+        internal IMailboxWriteSession WriteSession { get; }
+
+        internal IMailboxWriteSessionFactory WriteSessionFactory { get; }
+
+        internal MailboxRestorePass Pass { get; }
+
+        internal List<MailFolderResolution> OpenedFolders { get; } = [];
+
+        internal List<RestoredEmailState> AppendedStates { get; } = [];
+
+        internal List<DateTimeOffset> AppendedInternalDates { get; } = [];
+
+        internal RestoreContext AwaitingAppendOf(params MailboxRestoreCandidate[] candidates)
+        {
+            this.Store.AwaitingAppendOf(candidates);
+
+            return this;
+        }
+
+        internal RestoreContext AwaitingStateWriteOf(params MailboxRestoredStateCandidate[] candidates)
+        {
+            this.Store.AwaitingStateWriteOf(candidates);
+
+            return this;
+        }
+
+        internal RestoreContext WithAppendStandingFor(MailboxRestoreCandidate candidate)
+        {
+            this.Store.WithAppendStandingFor(new MailboxRestoreAppend(
+                MailboxRestoreAppendId.New(),
+                candidate.Email,
+                candidate.SourceFolderAlias,
+                RunInstant));
+
+            return this;
+        }
+
+        internal RestoreContext AwaitingSourceRemoval()
+        {
+            this.drain.AwaitingRemovalOf(new MailboxSourceRemoval(
+                MailboxSourceRemovalId.New(),
+                EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(31)),
+                Inbox));
+
+            return this;
+        }
+
+        internal RestoreContext WithTheOccurrenceAlreadyHeld()
+        {
+            this.Store.OccurrenceIsAlreadyHeld = true;
+
+            return this;
+        }
+
+        internal RestoreContext WithNoStoredPayload()
+        {
+            this.Content.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+                .Returns((StoredEmailContent?)null);
+
+            return this;
+        }
+
+        internal RestoreContext WithUnreachableSource()
+        {
+            this.WriteSession.AppendRestoredAsync(
+                    Arg.Any<ReadOnlyMemory<byte>>(),
+                    Arg.Any<RestoredEmailState>(),
+                    Arg.Any<DateTimeOffset>(),
+                    Arg.Any<CancellationToken>())
+                .ThrowsAsync(new MailboxUnavailableException(
+                    Account,
+                    Inbox.Alias,
+                    new TimeoutException("The source did not answer.")));
+
+            return this;
+        }
+
+        internal RestoreContext WithSourceThatNamesNoPlacement()
+        {
+            this.WriteSession.AppendRestoredAsync(
+                    Arg.Any<ReadOnlyMemory<byte>>(),
+                    Arg.Any<RestoredEmailState>(),
+                    Arg.Any<DateTimeOffset>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(RemoteEmailPlacement.NotReported());
+
+            return this;
+        }
+
+        internal RestoreContext WithSessionThatCannotBeOpened(string failure)
+        {
+            Exception thrown = failure == nameof(MailboxCredentialRefusedException)
+                ? new MailboxCredentialRefusedException(
+                    Account,
+                    new InvalidOperationException("The server refused the credential."))
+                : new MailboxDestinationFolderMissingException(
+                    Account,
+                    Inbox.Alias,
+                    MailboxMutation.Relocate,
+                    new InvalidOperationException("The folder is gone."));
+
+            this.WriteSessionFactory.OpenForWritingAsync(
+                    Arg.Any<MailAccountId>(),
+                    Arg.Any<MailFolderResolution>(),
+                    Arg.Any<MailTransportSecurityPolicy>(),
+                    Arg.Any<CancellationToken>())
+                .ThrowsAsync(thrown);
+
+            return this;
+        }
+
+        internal RestoreContext SynchronizingAVirtualFolder()
+        {
+            this.mappings.FoldersOf(Account).Returns([
+                MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("all"), MailFolderSpecialUse.All),
+            ]);
+
+            return this;
+        }
+
+        internal RestoreContext WithLocalFolderHoldingMailAndNoMapping()
+        {
+            this.Store.UnmappedFoldersHoldingMail = 1;
+
+            return this;
+        }
+    }
+}

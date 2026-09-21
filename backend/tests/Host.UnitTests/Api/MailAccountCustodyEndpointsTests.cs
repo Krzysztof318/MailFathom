@@ -13,6 +13,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
@@ -69,6 +70,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             custody,
             drain,
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -91,6 +93,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored)),
             DrainOver(),
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -112,6 +115,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             SwitchOver(CustodyStoreHoldingNothing()),
             DrainOver(),
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -289,6 +293,31 @@ public sealed class MailAccountCustodyEndpointsTests
             Substitute.For<IMailboxMutationRecordStore>(),
             Substitute.For<IEmailContentStore>(),
             Substitute.For<IEmailContentRepairRequestStore>(),
+            Substitute.For<IMailboxWriteSessionFactory>(),
+            Substitute.For<IMailFolderResolutionStore>(),
+            Substitute.For<IMailTransportSecurityPolicyReader>(),
+            Substitute.For<IMailFolderMappingReader>(),
+            CommitPolicy(),
+            new MailboxSynchronizationOptions(),
+            new FakeTimeProvider(Moment));
+    }
+
+    private static MailboxRestorePass RestoreOver(
+        MailboxRestoreStanding? standing = null,
+        params MailboxRestoreAppend[] unanswered)
+    {
+        var store = Substitute.For<IMailboxRestoreStore>();
+        store.ReadStandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(standing ?? MailboxRestoreStanding.Nothing));
+        store.ReadUnansweredAppendsAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxRestoreAppend>>(unanswered));
+
+        return new MailboxRestorePass(
+            Substitute.For<IMailAccountCustodyStore>(),
+            store,
+            Substitute.For<IMailboxDrainStore>(),
+            Substitute.For<IMailboxMutationRecordStore>(),
+            Substitute.For<IEmailContentStore>(),
             Substitute.For<IMailboxWriteSessionFactory>(),
             Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailTransportSecurityPolicyReader>(),

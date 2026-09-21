@@ -376,6 +376,29 @@ was erased. What it is for is a UID to name in a `UID EXPUNGE`, and the record i
 records the expunge as done. A record whose folder reports another `UIDVALIDITY` is abandoned without a command
 reaching the source, on the same reasoning the drain's own batches are.
 
+## What an append the source never answered leaves behind
+
+Switching a held account back to mirroring appends its mailbox onto the source again, and `APPEND` is the one command
+of that mode that may never be issued twice: a second one is a second message in somebody's folder rather than a repeat
+of the first. So a row is written here and committed **before** the command goes out, and deleted in the same
+transaction that writes the occurrence the source named. A row that exists at all is therefore an append whose outcome
+is unknown, and nothing appends that message again while it stands.
+
+| Column of `mailbox_restore_appends` | What it records |
+|---|---|
+| `Id` | The record's identity, a version 7 UUID MailFathom mints, and what an operator settles the record by |
+| `MailboxAccountId` | The account the append belongs to, as text, so the reading is per account exactly as every other pass is |
+| `StoredEmailId` | The message the append carried, a foreign key onto `stored_emails` that cascades. `ix_mailbox_restore_appends_email` is unique over it, so one message has one such record however many passes reach it at once — which is the constraint the whole safety rests on rather than a reading somebody remembered to take |
+| `FolderAlias` | MailFathom's own name for the folder the copy was appended into, which is what an operator is told to look in |
+| `IssuedAt` | When the command went out. `ix_mailbox_restore_appends_unanswered` is `(MailboxAccountId, IssuedAt)` filtered on `SettledAt IS NULL`, which is the reading an operator's view answers from, oldest first |
+| `SettledAt` | When an operator found the copy in the folder, and null while the outcome is unknown. A verdict of *found* stamps the row and keeps it for good, because the message has no occurrence to write and this row is the only thing stopping a second copy; a verdict of *not there* deletes it, and the next pass appends the message as it would any other |
+
+The row carries nothing from the message: a stored identity, a folder alias, and two instants. Beside it
+`mailbox_accounts.RestoreStatePosition` is the account-level cursor the other half of the restore walks — the messages
+the drain never reached, whose held state has still to be written onto the occurrence they keep. It is one nullable
+`uuid` on the account rather than a stamp per message, because a per-message column would need a filtered index on the
+largest table in the schema and every mirrored deployment would carry it for nothing.
+
 ## Where a delete left a message flagged
 
 `mailbox_flagged_deletes` holds one row per occurrence a `FlagDeleted` delete left on its server, written in the

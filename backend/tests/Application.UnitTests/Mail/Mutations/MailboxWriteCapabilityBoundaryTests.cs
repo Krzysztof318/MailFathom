@@ -7,6 +7,7 @@ using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations;
@@ -83,6 +84,7 @@ public sealed class MailboxWriteCapabilityBoundaryTests
                 nameof(MailboxCopyAppender),
                 nameof(MailboxDrainPass),
                 nameof(MailboxMutationPerformer),
+                nameof(MailboxRestorePass),
                 nameof(OutgoingMailFiler),
             ],
             holders);

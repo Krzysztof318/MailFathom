@@ -19,6 +19,8 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
 {
     private const string Endpoint = CliCommandHarness.Endpoint;
 
+    private const string RecordIdentity = "0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04";
+
     private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The drain is only ever visible as counts, so what the command prints is the whole of what an operator learns.</summary>
@@ -37,6 +39,115 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Phase:     Held", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("4812", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting source removal: 7", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An unanswered append is the one thing MailFathom refuses to decide, so the record has to be nameable: a count
+    /// alone says work is outstanding and nothing an operator could act on.
+    /// </summary>
+    [Fact]
+    public async Task Show_ARestoringAccount_ReportsWhatIsLeftToPutBackAndNamesEveryAppendToSettle()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering(
+            state: FakeMailAccountCustodyDeployment.Restoring());
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "custody", "show", "--account", "work", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Phase:     Restoring", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting append:         318", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Unanswered appends:      1", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("archive", StringComparison.Ordinal));
+    }
+
+    /// <summary>A mirrored account has nothing to put back, so nothing about a restore is printed at it.</summary>
+    [Fact]
+    public async Task Show_AnAccountWithNothingToPutBack_PrintsNothingAboutARestore()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+
+        // Act
+        await this.RunAsync(deployment, "account", "custody", "show", "--account", "work", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains("Awaiting append:", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains("Unanswered appends:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The two verdicts do opposite things to somebody's mailbox — one leaves a copy where it is and the other puts a
+    /// second message into the folder if the first was wrong — so a command that guessed either would be the guess the
+    /// record exists to refuse.
+    /// </summary>
+    [Theory]
+    [InlineData("--found", "--missing")]
+    [InlineData(null, null)]
+    public async Task Settle_TheOperatorNamedBothVerdictsOrNeither_AsksTheDeploymentForNothing(
+        string? first,
+        string? second)
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+        string[] verdict = first is null ? [] : [first, second!];
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            ["account", "custody", "settle", "--account", "work", "--record", RecordIdentity, .. verdict, "--endpoint", Endpoint]);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(
+            0,
+            deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountRestoreSettlementPath));
+    }
+
+    [Theory]
+    [InlineData("--found", "holds that copy")]
+    [InlineData("--missing", "does not hold that copy")]
+    public async Task Settle_TheOperatorSaidWhatTheFolderHolds_RecordsThatVerdictAndSaysWhatFollowsFromIt(
+        string verdict,
+        string expected)
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "settle", "--account", "work", "--record", RecordIdentity, verdict, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(
+            1,
+            deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountRestoreSettlementPath));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains(expected, StringComparison.Ordinal));
+    }
+
+    /// <summary>A record nothing is standing for is a verdict on nothing, and reporting it as recorded would be a lie.</summary>
+    [Fact]
+    public async Task Settle_NoAppendIsStandingUnderThatRecord_SaysSoRatherThanReportingAVerdict()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering(
+            settlement: FakeMailAccountCustodyDeployment.Settled(wasSettled: false));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "settle", "--account", "work", "--record", RecordIdentity, "--found", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("No append of that account is standing", StringComparison.Ordinal));
     }
 
     /// <summary>Reading which copy of a mailbox is the truth may never reach the route that empties a mail server.</summary>

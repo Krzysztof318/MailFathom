@@ -114,6 +114,7 @@ using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.Tasks;
 using MailFathom.CodeCoverage;
@@ -1478,6 +1479,12 @@ public static class ServiceCollectionExtensions
         // A singleton for the reason the convergence instruments are: the counters accumulate across every account and
         // every run, and a second instance would publish a second set of them.
         services.AddSingleton<IMailboxDrainTelemetry, MailboxDrainTelemetry>();
+        services.AddScoped<IMailboxRestoreStore, MailboxRestoreStore>();
+        services.AddScoped<MailboxRestorePass>();
+        services.AddScoped<MailboxRestoreSettlement>();
+        // A singleton beside the drain's, and for the same reason: one set of counters per replica rather than one per
+        // scope, over every account the deployment is putting back.
+        services.AddSingleton<IMailboxRestoreTelemetry, MailboxRestoreTelemetry>();
         services.AddScoped<MailboxDestinationResolver>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             MailKitImapClientFactory.CreateWithoutProtocolLogging,
