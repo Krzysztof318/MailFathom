@@ -199,7 +199,6 @@ export const en = {
     'draft.saved': 'Saved to your drafts — nothing was sent',
     'draft.queued': 'Waiting in the outbox — nothing has been sent yet',
     'draft.to': 'To:',
-    'draft.recipient': '{name} ({address})',
     'draft.subject': 'Subject:',
     'draft.bodyLabel': 'Draft text',
     'draft.edit': 'Edit the text',

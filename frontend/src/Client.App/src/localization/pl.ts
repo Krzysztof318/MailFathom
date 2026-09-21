@@ -205,7 +205,6 @@ export const pl: Catalogue = {
     'draft.saved': 'Zapisany w Twoich szkicach — nic nie zostało wysłane',
     'draft.queued': 'Czeka w skrzynce nadawczej — nic nie zostało jeszcze wysłane',
     'draft.to': 'Do:',
-    'draft.recipient': '{name} ({address})',
     'draft.subject': 'Temat:',
     'draft.bodyLabel': 'Treść szkicu',
     'draft.edit': 'Edytuj treść',

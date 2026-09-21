@@ -31,7 +31,7 @@ const backed: BlockEvidence = {
 };
 
 const composed: ComposedDraft = {
-    recipients: [{ displayName: 'Anna Kowalska', address: 'anna@contoso.example' }],
+    recipients: ['anna@contoso.example'],
     subject: 'Re: proposed terms for 2027',
     body: 'We accept shortening the response time to 2 hours on business days.',
     disposition: 'Composed',
@@ -64,42 +64,20 @@ describe('Draft', () => {
     it('shows who it is addressed to, what it is about, and what it says', () => {
         renderDraft(drafted());
 
-        expect(screen.getByText('Anna Kowalska (anna@contoso.example)')).toBeDefined();
+        expect(screen.getByText('anna@contoso.example')).toBeDefined();
         expect(screen.getByText('Re: proposed terms for 2027')).toBeDefined();
         expect(screen.getByText('We accept shortening the response time to 2 hours on business days.')).toBeDefined();
     });
 
-    it('shows the address beside the name, which is what somebody about to send is checking', () => {
+    it('joins several recipients as the reader’s own language joins a list', () => {
         renderDraft({
             type: 'draft',
             named: 'draft',
             evidence: backed,
-            draft: {
-                ...composed,
-                recipients: [
-                    { displayName: 'Anna Kowalska', address: 'anna@contoso.example' },
-                    { displayName: 'Anna Kowalska', address: 'a.kowalska@fabrikam.example' },
-                ],
-            },
+            draft: { ...composed, recipients: ['anna@contoso.example', 'a.kowalska@fabrikam.example'] },
         });
 
-        expect(
-            screen.getByText('Anna Kowalska (anna@contoso.example) and Anna Kowalska (a.kowalska@fabrikam.example)'),
-        ).toBeDefined();
-    });
-
-    it('names a recipient the correspondence gave no name beside by their address alone', () => {
-        renderDraft({
-            type: 'draft',
-            named: 'draft',
-            evidence: backed,
-            draft: {
-                ...composed,
-                recipients: [{ displayName: null, address: 'anna@contoso.example' }],
-            },
-        });
-
-        expect(screen.getByText('anna@contoso.example')).toBeDefined();
+        expect(screen.getByText('anna@contoso.example and a.kowalska@fabrikam.example')).toBeDefined();
     });
 
     it.each([
@@ -179,6 +157,24 @@ describe('Draft', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
 
         expect(screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeDefined();
+    });
+
+    it('keeps saying so once the editor closes, the paragraph then drawing what the reader wrote', () => {
+        renderDraft(drafted('Saved'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Draft text' }), {
+            target: { value: 'We accept, with a 5% cap.' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Stop editing' }));
+
+        expect(screen.getByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeDefined();
+    });
+
+    it('says nothing about an edit nobody made, the card standing as the deployment holds it', () => {
+        renderDraft(drafted());
+
+        expect(screen.queryByText('Changes stay on this screen — nothing here saves or sends the draft.')).toBeNull();
     });
 
     it('names a block it is not the renderer for rather than drawing somebody else’s data as a draft', () => {

@@ -130,7 +130,6 @@ export type {
     ConversationStanding,
     DeclaredSource,
     DraftDisposition,
-    DraftRecipient,
     EvidenceEntry,
     FactTableCell,
     FactTableColumn,

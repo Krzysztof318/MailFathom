@@ -85,7 +85,7 @@ const registered: readonly { readonly block: AnswerBlock; readonly draws: string
             named: 'draft',
             evidence: backed,
             draft: {
-                recipients: [{ displayName: null, address: 'anna@contoso.example' }],
+                recipients: ['anna@contoso.example'],
                 subject: 'Re: proposed terms for 2027',
                 body: 'We accept shortening the response time.',
                 disposition: 'Composed',

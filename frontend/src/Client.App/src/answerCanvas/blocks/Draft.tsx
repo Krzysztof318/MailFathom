@@ -3,9 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useId, useState } from 'react';
-import type { AnswerBlock, DraftRecipient } from '@mailfathom/client-backend';
+import type { AnswerBlock } from '@mailfathom/client-backend';
 import { Icon } from '../../controls/Icon';
-import { useLocalization, type Translate } from '../../localization/useLocalization';
+import { useLocalization } from '../../localization/useLocalization';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { Citation } from './Citation';
 import { draftDispositions, supportVerdicts } from './blockWording';
@@ -28,20 +28,13 @@ import { draftDispositions, supportVerdicts } from './blockWording';
 /**
  * Who a draft is addressed to, as one list in the reader's own language.
  *
- * The address is drawn beside the name wherever the correspondence wrote one, because somebody about to put their name
- * to a message is checking who it goes to rather than who the correspondence calls them — and a name alone is exactly
- * what hides a reply addressed to the wrong one of two people called the same thing. Where it wrote none, the address
- * stands alone, which is this screen's answer to a missing name rather than the contract's. `Intl` joins them, so which separator a language
- * uses and what it puts before the last one are the locale's answers rather than a comma written here.
+ * Addresses rather than names, because an address is the whole of what the contract publishes here — and it is also what
+ * somebody about to put their name to a message is checking, a name alone being exactly what hides a reply addressed to
+ * the wrong one of two people called the same thing. `Intl` joins them, so which separator a language uses and what it
+ * puts before the last one are the locale's answers rather than a comma written here.
  */
-function addressedTo(recipients: readonly DraftRecipient[], locale: string, translate: Translate): string {
-    const named = recipients.map((recipient) =>
-        recipient.displayName === null
-            ? recipient.address
-            : translate('draft.recipient', { name: recipient.displayName, address: recipient.address }),
-    );
-
-    return new Intl.ListFormat(locale).format(named);
+function addressedTo(recipients: readonly string[], locale: string): string {
+    return new Intl.ListFormat(locale).format(recipients);
 }
 
 export function Draft({ block }: { readonly block: AnswerBlock }) {
@@ -82,7 +75,7 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                 <p className="flex flex-wrap gap-2 text-sm">
                     <span className="text-muted">{translate('draft.to')}</span>
 
-                    <span>{addressedTo(draft.recipients, locale, translate)}</span>
+                    <span>{addressedTo(draft.recipients, locale)}</span>
                 </p>
 
                 <p className="flex flex-wrap gap-2 text-sm">
@@ -109,12 +102,17 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                                 setTyped(event.target.value);
                             }}
                         />
-
-                        <p className="text-xs text-faint text-pretty">{translate('draft.editKept')}</p>
                     </>
                 ) : (
                     <p className="text-sm leading-relaxed whitespace-pre-line text-text-soft text-pretty">{body}</p>
                 )}
+
+                {/* The sentence stays with the text it is about rather than with the text area: once the editor closes,
+                    the paragraph above draws what the reader wrote under a chip saying what became of the draft, and
+                    nothing else would say that the text on the screen is not the text the deployment holds. */}
+                {editing || typed !== null ? (
+                    <p className="text-xs text-faint text-pretty">{translate('draft.editKept')}</p>
+                ) : null}
 
                 {evidence.citations.length === 0 ? null : (
                     <p className="flex flex-wrap items-center gap-1.5">

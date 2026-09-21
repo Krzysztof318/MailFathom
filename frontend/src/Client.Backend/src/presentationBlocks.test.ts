@@ -423,7 +423,7 @@ describe('parseAttachmentEntries', () => {
 describe('parsePersonEntries', () => {
     const anna = {
         displayName: 'Anna Kowalska',
-        address: { displayName: 'Anna', address: 'anna@contoso.example', normalizedAddress: 'ANNA@CONTOSO.EXAMPLE' },
+        address: 'anna@contoso.example',
         relationship: 'Contoso · waiting for a reply',
         lastContactAt: '2026-09-20T08:47:00+00:00',
         sources: ['c-1'],
@@ -450,6 +450,10 @@ describe('parsePersonEntries', () => {
 
     it('refuses a last contact that is not an instant, which would be drawn as though nothing was stated', () => {
         expect(parsePersonEntries([{ ...anna, lastContactAt: 0 }])).toBeNull();
+    });
+
+    it('refuses an address that arrived as a record rather than as the text a message wrote', () => {
+        expect(parsePersonEntries([{ ...anna, address: { address: 'anna@contoso.example' } }])).toBeNull();
     });
 
     it('refuses an entry naming nobody, the name being what a reader recognises them by', () => {
@@ -528,14 +532,8 @@ describe('parseConversationStanding', () => {
 });
 
 describe('parseComposedDraft', () => {
-    const anna = {
-        displayName: 'Anna Kowalska',
-        address: 'anna@contoso.example',
-        normalizedAddress: 'ANNA@CONTOSO.EXAMPLE',
-    };
-
     const draft = {
-        recipients: [anna],
+        recipients: ['anna@contoso.example'],
         subject: 'Re: proposed terms for 2027',
         body: 'We accept shortening the response time.',
         disposition: 'Composed',
@@ -543,44 +541,35 @@ describe('parseComposedDraft', () => {
 
     it('reads who it is addressed to, what it says, and what has become of it locally', () => {
         expect(parseComposedDraft(draft)).toEqual({
-            recipients: [{ displayName: 'Anna Kowalska', address: 'anna@contoso.example' }],
+            recipients: ['anna@contoso.example'],
             subject: 'Re: proposed terms for 2027',
             body: 'We accept shortening the response time.',
             disposition: 'Composed',
         });
     });
 
-    it('carries no name for a recipient the message wrote none beside, rather than the address twice', () => {
-        const parsed = parseComposedDraft({
-            ...draft,
-            recipients: [{ address: 'anna@contoso.example', normalizedAddress: 'ANNA@CONTOSO.EXAMPLE' }],
-        });
-
-        expect(parsed?.recipients[0]).toEqual({ displayName: null, address: 'anna@contoso.example' });
-    });
-
     it('refuses a draft addressed to nobody, the recipients being part of what a message is', () => {
         expect(parseComposedDraft({ ...draft, recipients: [] })).toBeNull();
     });
 
-    it('refuses a draft naming one recipient twice, which would be drawn as two people', () => {
-        expect(parseComposedDraft({ ...draft, recipients: [anna, { ...anna }] })).toBeNull();
+    it('refuses a recipient that is not an address, the addresses being what the draft is sent to', () => {
+        expect(parseComposedDraft({ ...draft, recipients: [{ address: 'anna@contoso.example' }] })).toBeNull();
     });
 
-    it('refuses one recipient named twice in two spellings of one address, case deciding nothing here', () => {
-        expect(
-            parseComposedDraft({
-                ...draft,
-                recipients: [anna, { ...anna, address: 'Anna@Contoso.example' }],
-            }),
-        ).toBeNull();
+    it('reads a draft naming one mailbox twice, the service having compared them in a form this side cannot', () => {
+        const parsed = parseComposedDraft({
+            ...draft,
+            recipients: ['anna@contoso.example', 'Anna@Contoso.example'],
+        });
+
+        expect(parsed?.recipients).toEqual(['anna@contoso.example', 'Anna@Contoso.example']);
     });
 
     it('refuses more recipients than one draft may name', () => {
         expect(
             parseComposedDraft({
                 ...draft,
-                recipients: Array.from({ length: 21 }, (_, at) => ({ ...anna, address: `anna-${String(at)}@a.test` })),
+                recipients: Array.from({ length: 21 }, (_, at) => `anna-${String(at)}@a.test`),
             }),
         ).toBeNull();
     });

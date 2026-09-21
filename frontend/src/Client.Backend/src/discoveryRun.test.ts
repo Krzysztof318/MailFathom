@@ -260,7 +260,15 @@ describe('readDiscoveryRunTail', () => {
                                 citations: ['c-1'],
                                 freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
                             },
-                            entries: [],
+                            entries: [
+                                {
+                                    displayName: 'Anna Kowalska',
+                                    address: 'anna@contoso.example',
+                                    relationship: 'Contoso · waiting for a reply',
+                                    lastContactAt: '2026-09-20T08:47:00+00:00',
+                                    sources: ['c-1'],
+                                },
+                            ],
                         },
                     },
                 ]),
@@ -270,8 +278,14 @@ describe('readDiscoveryRunTail', () => {
         );
 
         const event = answered.outcome === 'read' ? answered.value.events[0] : null;
+        const block = event?.kind === 'block' && event.block.type === 'people' ? event.block : null;
 
-        expect(event?.kind === 'block' ? [event.block.type, event.block.named] : null).toEqual(['people', 'people']);
+        // The address is the bare text the plan publishes rather than a record around it, which is what
+        // `EmailAddressJsonConverter` writes — so this reads one block of the shape the service actually serves.
+        expect(block?.entries[0]?.person).toEqual({
+            displayName: 'Anna Kowalska',
+            address: 'anna@contoso.example',
+        });
     });
 
     it('keeps the name of a block type the catalogue does not carry rather than refusing the run', async () => {

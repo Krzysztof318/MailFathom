@@ -283,24 +283,16 @@ export type DraftDisposition = 'Composed' | 'Saved' | 'Queued';
 
 const dispositions: readonly DraftDisposition[] = ['Composed', 'Saved', 'Queued'];
 
-/**
- * One address a draft is addressed to.
- *
- * Its two halves arrive the other way round from every other participant in this contract, which is why it is a type of
- * its own: the address is what a draft is addressed to and is always there, and the name is whatever the correspondence
- * wrote beside it. Which of the two a screen shows where the correspondence wrote no name is that screen's decision.
- */
-export interface DraftRecipient {
-    readonly address: string;
-
-    /** The name the correspondence wrote beside the address, and `null` where it wrote none. */
-    readonly displayName: string | null;
-}
-
 /** Text to be sent, where the answer to the question is a message rather than a fact about one. */
 export interface ComposedDraft {
-    /** Who it is addressed to, each of them named once. */
-    readonly recipients: readonly DraftRecipient[];
+    /**
+     * Who it is addressed to, as addresses.
+     *
+     * An address alone rather than a name beside one, because that is all a plan publishes: the contract writes every
+     * address as the bare text a message wrote, and the display name a reader sees belongs to whichever block carries
+     * the person. A draft carries no such block, so the address is what a screen has to show.
+     */
+    readonly recipients: readonly string[];
 
     readonly subject: string;
 
@@ -370,8 +362,8 @@ const longestText = 4000;
 const longestCitationId = 32;
 const longestIdentity = 256;
 
-// An address is bounded well above what any mail server accepts and well below a presentation text, because it is one
-// value on one line of a screen rather than prose.
+// What RFC 5321 leaves room for, which is the bound the contract itself states for an address: sixty-four octets of
+// local part, the separator, and two hundred and fifty-five of domain.
 const longestAddress = 320;
 
 /** What the correspondence does for one block, or `null` where what arrived is not evidence this client can read. */
@@ -561,7 +553,10 @@ export function parseConversationStanding(value: unknown): ConversationStanding 
  *
  * A draft addressed to nobody, or carrying no subject or no body, is refused rather than drawn: the three are what a
  * message is, and a card offering somebody text to check with the recipients missing is worse than the block being
- * absent. A recipient named twice is refused for the same reason a citation named twice is — one person drawn as two.
+ * absent. A recipient named twice is not refused here: `DraftBlock` already refuses one, comparing addresses in the form
+ * this side cannot reproduce — `ToUpperInvariant` is simple case mapping where JavaScript's is the full mapping, so a
+ * second comparison here would refuse a pair of mailboxes the service compared and accepted, and take the whole run
+ * tail with it.
  */
 export function parseComposedDraft(value: unknown): ComposedDraft | null {
     const record = asRecord(value);
@@ -574,17 +569,9 @@ export function parseComposedDraft(value: unknown): ComposedDraft | null {
     const body = parseText(record['body']);
     const disposition = oneOf(record['disposition'], dispositions);
 
-    if (recipients === null || recipients.length === 0 || subject === null || body === null || disposition === null) {
-        return null;
-    }
-
-    // In the form two addresses compare equal in, which is the upper-cased one the contract's own comparison form is
-    // written in: a repeat differing only in case is one mailbox, and comparing what the header wrote would draw it as
-    // two people. The field carrying that form is not read instead, because requiring it would refuse a draft over a
-    // value no screen shows.
-    const addressed = recipients.map((recipient) => recipient.address.toUpperCase());
-
-    return new Set(addressed).size !== addressed.length ? null : { recipients, subject, body, disposition };
+    return recipients === null || recipients.length === 0 || subject === null || body === null || disposition === null
+        ? null
+        : { recipients, subject, body, disposition };
 }
 
 /**
@@ -751,9 +738,9 @@ function parseThreadCommitment(value: unknown): ThreadCommitment | null {
 /**
  * Somebody the correspondence names, read from the record that names them.
  *
- * The display name is the block's own presentation text and the address is the mail address beside it, which the
- * contract carries as a value of its own — so the name a reader sees and the name a message happened to write in a
- * header are two different strings, and this takes the first.
+ * The display name is the block's own presentation text and the address is the bare address beside it — so the name a
+ * reader sees is the block's rather than whatever a header happened to write, which is why the contract publishes the
+ * name here and never inside the address.
  */
 function parseParticipant(value: unknown): BlockParticipant | null {
     const record = asRecord(value);
@@ -773,37 +760,18 @@ function parseParticipant(value: unknown): BlockParticipant | null {
 
     const address = parseAddress(named);
 
-    return address === null ? null : { displayName, address: address.address };
+    return address === null ? null : { displayName, address };
 }
 
 /**
- * One mail address as the contract carries it, or `null` where what arrived is not one.
+ * One mail address as the contract publishes it, or `null` where what arrived is not one.
  *
- * That pairing is what a draft's recipient is, which is why it answers with `DraftRecipient` rather than with a shape of
- * its own: an address the draft is addressed to, and whatever name the correspondence wrote beside it.
+ * A string rather than a record, because that is the whole of what an address is on this wire: the contract writes the
+ * bare text a message wrote and publishes neither the comparison form, which is an internal key, nor a display name,
+ * which belongs to whichever block carries the person. The bound is the one the contract itself states.
  */
-function parseAddress(value: unknown): DraftRecipient | null {
-    const record = asRecord(value);
-    if (record === null) {
-        return null;
-    }
-
-    const address = record['address'];
-    if (typeof address !== 'string' || address.length === 0 || address.length > longestAddress) {
-        return null;
-    }
-
-    // The comparison form the contract carries beside it is not read: where this side does ask whether two addresses are
-    // one — a draft addressed to somebody twice — it upper-cases what arrived rather than requiring a field no screen
-    // shows, which `parseComposedDraft` says at the comparison itself.
-    const named = record['displayName'];
-    if (named === undefined || named === null) {
-        return { address, displayName: null };
-    }
-
-    return typeof named === 'string' && named.length > 0 && named.length <= longestAddress
-        ? { address, displayName: named }
-        : null;
+function parseAddress(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestAddress ? value : null;
 }
 
 /**

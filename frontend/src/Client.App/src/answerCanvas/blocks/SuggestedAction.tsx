@@ -43,7 +43,7 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
     const { evidence, suggestion } = block;
     const verdict = supportVerdicts[evidence.support];
     const step = suggestedActions[suggestion.action];
-    const confirmed = mustBeConfirmed(suggestion.impact, suggestion.requiresConfirmation);
+    const confirmationRequired = mustBeConfirmed(suggestion.impact, suggestion.requiresConfirmation);
 
     return (
         <AnswerBlockCard label={translate('suggestedAction.label')} state="ready">
@@ -63,12 +63,12 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
                         {translate('proposal.impact', { impact: translate(actionImpacts[suggestion.impact]) })}
                     </p>
 
-                    {confirmed ? (
+                    {confirmationRequired ? (
                         <p className="text-xs text-muted text-pretty">{translate('proposal.confirmed')}</p>
                     ) : null}
                 </div>
 
-                {confirmed ? (
+                {confirmationRequired ? (
                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2.25 py-0.5 text-2xs whitespace-nowrap text-warning-text workspace:ms-auto">
                         <Icon className="size-3.25" name="gpp_maybe" />
                         {translate('suggestedAction.needsConfirmation')}
