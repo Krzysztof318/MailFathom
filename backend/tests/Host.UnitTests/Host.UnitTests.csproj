@@ -11,6 +11,7 @@
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\RecordingClientSignalChannel.cs" Link="RecordingClientSignalChannel.cs" />
     <Compile Include="..\shared\ClientSignalPublishers.cs" Link="ClientSignalPublishers.cs" />
+    <Compile Include="..\shared\LocalMailCopiers.cs" Link="LocalMailCopiers.cs" />
     <!-- The Discover routes reach a run through the same store the application writes it through, so both suites drive one fake. -->
     <Compile Include="..\shared\InMemoryDiscoveryRunStore.cs" Link="InMemoryDiscoveryRunStore.cs" />
     <Compile Include="..\shared\RecordingLoggerFactory.cs" Link="RecordingLoggerFactory.cs" />

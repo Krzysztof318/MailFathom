@@ -432,8 +432,8 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 | `EmailNotOnMailServer` | The stored email carries no occurrence, because no mail server holds it any longer, so there is nowhere a change could be carried to |
-| `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
 | `EmailNoLongerStored` | The account's mailbox is one MailFathom holds itself, and the email was erased between the pass reading it and the change being made |
+| `EmailContentNotStored` | The account's mailbox is one MailFathom holds itself, and the action is a copy, but the message's own content is not stored — and a copy is a second stored message, which there is nothing to make out of |
 | `LocalDestinationFolderMissing` | The account's mailbox is one MailFathom holds itself, and no local folder corresponds to the destination: its source folder has delivered nothing locally, or its local folder was deleted into the trash. No run will supply one, so the rule's destination is what to correct |
 
 Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
@@ -442,9 +442,14 @@ another matching rule had already settled the same message, and how many named s
 together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
 metric, or a span.
 
-On a held account every other action is made to the stored email as the pass commits, in the transaction that records
+On a held account every action is made to the stored email as the pass commits, in the transaction that records
 the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
-or source folder corresponds to, and a delete moves the message into the local trash. A delete meeting a message already
+or source folder corresponds to, and a delete moves the message into the local trash. A copy writes a **second stored
+message** into that local folder — its own row, its own content, carrying the copied message's flags and keywords —
+which is what [a copy becomes locally](imap-synchronization.md#what-a-message-mailfathom-copied-becomes-locally) on
+any account. It answers the same way a move into the same place does: a destination no local folder corresponds to is
+`LocalDestinationFolderMissing`, and copying a message into the local folder it is already in writes nothing and counts
+as done. A delete meeting a message already
 in the trash does nothing: erasing it is a person's act, taken with the window a person can withdraw it in, and never a
 rule's. The rule's history records each such action as requested with no mutation identifier, because the change was
 committed rather than recorded: there is no mutation behind it and no mutation trail to follow, so a requested action

@@ -7,6 +7,9 @@
     <!-- PropertyCheck from backend/tests/shared wraps this generator, so the project that compiles every shared file needs it
          the same way a consumer does. -->
     <PackageReference Include="CsCheck" />
+    <!-- LocalMailCopiers from backend/tests/shared substitutes the ports a copier is built over, so this project needs
+         what every consumer of that file already has. -->
+    <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
   <ItemGroup>

@@ -142,6 +142,37 @@ public interface IEmailMetadataRepository
         OutgoingEmailId? filedFrom,
         CancellationToken cancellationToken);
 
+    /// <summary>Stores the second message a copy on a held account produces, with no occurrence on any server.</summary>
+    /// <param name="session">The explicit persistence session this write participates in.</param>
+    /// <param name="account">The account the copy is stored for.</param>
+    /// <param name="binding">The folder binding the copy is stored under, which is the copied message's own.</param>
+    /// <param name="extractedMetadata">What was read out of the copied message's MIME, or <see langword="null" /> when nothing could be.</param>
+    /// <param name="sizeOctets">How large the message is.</param>
+    /// <param name="flags">The flags and keywords the copied message carries, which the copy takes.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The copy's identity, or <see langword="null" /> where <paramref name="binding" /> names a folder binding that is no longer stored.</returns>
+    /// <remarks>
+    /// <para>
+    /// A binding that is gone is answered rather than raised, for the reason <see cref="StoreFiledEmailAsync" /> answers
+    /// one: it was read before the transaction, and the rest of the change the copy belongs to still commits.
+    /// </para>
+    /// <para>
+    /// The row is stamped as evaluated by the rules, because the copy is MailFathom's own act rather than mail that
+    /// arrived. It is the local counterpart of the suppression
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+    /// gives a copy on a mirrored account, where the arrival is withheld from rule evaluation by the record that placed
+    /// it: without it, a rule that copies into a folder it also matches on would meet its own copy and copy it again.
+    /// </para>
+    /// </remarks>
+    Task<StoredEmailId?> StoreLocalCopyAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailFolderResolutionId binding,
+        ExtractedEmailMetadata? extractedMetadata,
+        long sizeOctets,
+        CopiedMailFlags flags,
+        CancellationToken cancellationToken);
+
     /// <summary>Finds the sent copies MailFathom filed locally that carry one of a batch's <c>Message-ID</c> values and no occurrence yet.</summary>
     /// <param name="account">The account whose filed copies are searched.</param>
     /// <param name="internetMessageIds">The non-empty <c>Message-ID</c> values one discovered batch carries, bounded by that batch.</param>

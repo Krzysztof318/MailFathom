@@ -2,18 +2,22 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Signals;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -33,6 +37,12 @@ public sealed class MailboxChangeSubmissionTests
 
     private static readonly StoredEmailId Email = StoredEmailId.Create(Guid.CreateVersion7());
 
+    private static readonly StoredEmailId Copy = StoredEmailId.Create(Guid.CreateVersion7());
+
+    private static readonly ReadOnlyMemory<byte> RawMime = "Subject: copied\r\n\r\nbody"u8.ToArray();
+
+    private static readonly RemoteEmailKeywords CarriedKeywords = RemoteEmailKeywords.Create(["$label1"]);
+
     private static readonly EmailOccurrenceId Occurrence =
         EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(41));
 
@@ -49,6 +59,8 @@ public sealed class MailboxChangeSubmissionTests
     private readonly IMailboxMutationAuditEntryStore auditEntries = Substitute.For<IMailboxMutationAuditEntryStore>();
 
     private readonly IPersistenceSession session = Substitute.For<IPersistenceSession>();
+
+    private readonly IEmailMetadataRepository copies = Substitute.For<IEmailMetadataRepository>();
 
     /// <summary>An account whose source is the truth keeps the record it always had, so nothing about it changes.</summary>
     [Fact]
@@ -293,21 +305,133 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Trash), this.states.States[Email].Folder);
     }
 
-    /// <summary>A local copy is a second stored message with a payload of its own, which is refused rather than faked.</summary>
+    /// <summary>A copy is a second stored message, filed where it was copied to and leaving the copied one alone.</summary>
     [Fact]
-    public async Task SubmitAsync_ACopyOnAHeldAccount_IsRefusedAndWritesNothing()
+    public async Task SubmitAsync_ACopyOnAHeldAccount_CommitsASecondStoredMessage()
     {
         // Arrange
         this.Store();
         var junk = JunkDestination();
-        var request = MailboxMutationRequest.Copy(Email, Occurrence, Requester, junk.Path);
+        var prepared = await this.PrepareCopyAsync();
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, request, junk, null, Token);
+        var submitted = await this.Held(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
 
         // Assert
-        Assert.Equal(MailboxChangeSubmissionOutcome.NotAvailableLocally, submitted.Outcome);
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(Copy, submitted.Change!.Email);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.heldFolders.Placements[Copy]);
+        Assert.Null(this.states.States[Email].Folder);
         Assert.Equal(0, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>The copy is the copied message's state as well as its content, so it carries the flags and the keywords.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyOnAHeldAccount_CarriesTheCopiedMessagesFlagsAndKeywords()
+    {
+        // Arrange
+        this.states.Store(
+            Email,
+            new LocalEmailState(Inbox, Folder: null, IsSeen: true, IsFlagged: true, CarriedKeywords));
+        var junk = JunkDestination();
+        var prepared = await this.PrepareCopyAsync();
+
+        // Act
+        await this.Held(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
+
+        // Assert
+        await this.copies.Received(1).StoreLocalCopyAsync(
+            Arg.Any<IPersistenceSession>(),
+            Account,
+            Inbox.Id,
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<long>(),
+            Arg.Is<CopiedMailFlags>(flags =>
+                flags.IsSeen && flags.IsFlagged && flags.Keywords == CarriedKeywords),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A copy needs the message itself, so one whose payload the account does not store is refused.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyWhosePayloadIsNotStored_ReportsTheContentMissing()
+    {
+        // Arrange
+        this.Store();
+        var junk = JunkDestination();
+
+        // Act
+        var submitted = await this.Held().SubmitAsync(this.session, CopyRequest(junk), junk, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.SourceContentMissing, submitted.Outcome);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.Empty(this.heldFolders.Placements);
+    }
+
+    /// <summary>Copying a message into the folder it is already in is the nothing a move into it is.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyIntoTheLocalFolderTheMessageIsIn_AnswersAlreadyThere()
+    {
+        // Arrange
+        this.Store();
+        var junk = JunkDestination();
+        await this.Held().SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
+        var prepared = await this.PrepareCopyAsync();
+
+        // Act
+        var submitted = await this.Held(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.AlreadyInDestination, submitted.Outcome);
+        Assert.DoesNotContain(Copy, this.heldFolders.Placements.Keys);
+    }
+
+    /// <summary>A destination no local folder corresponds to is nowhere to file a copy, exactly as it is nowhere to move one.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyIntoADestinationWithNoLocalFolder_ReportsTheDestinationMissing()
+    {
+        // Arrange
+        this.Store();
+        var unheld = new MailboxDestination(
+            MailFolderResolution.FirstBindingOf(Archive, RemoteFolderPath.Create("Archive")),
+            IsMirrored: true);
+        var prepared = await this.PrepareCopyAsync();
+
+        // Act
+        var submitted = await this.Held(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(unheld), unheld, null, prepared, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.DestinationMissing, submitted.Outcome);
+        Assert.Empty(this.heldFolders.Placements);
+    }
+
+    /// <summary>An account whose source is still the truth copies through a record, so nothing is placed for it.</summary>
+    [Fact]
+    public async Task PrepareCopiesAsync_OnAnAccountThatIsNotHeld_PlacesNothing()
+    {
+        // Arrange
+        var submission = MailboxChangeSubmissions.Over(this.records, copier: this.Copying());
+
+        // Act
+        var prepared = await submission.PrepareCopiesAsync(Account, [Email], Token);
+
+        // Assert
+        Assert.Empty(prepared.Of(Email));
+    }
+
+    /// <summary>Two rules copying one message produce two stored messages, so two payloads are placed for it.</summary>
+    [Fact]
+    public async Task PrepareCopiesAsync_ForAMessageCopiedTwice_PlacesAPayloadPerCopy()
+    {
+        // Act
+        var prepared = await this.Held(copier: this.Copying()).PrepareCopiesAsync(Account, [Email, Email], Token);
+
+        // Assert
+        Assert.Equal(2, prepared.Of(Email).Count);
     }
 
     /// <summary>A message the held account no longer stores has nothing to change.</summary>
@@ -466,6 +590,36 @@ public sealed class MailboxChangeSubmissionTests
         AuthoredDeleteEmailDisposition.RetainLocalCopy,
         AuthoredDeleteServerDisposition.Expunge);
 
+    private static MailboxMutationRequest CopyRequest(MailboxDestination destination) =>
+        MailboxMutationRequest.Copy(Email, Occurrence, Requester, destination.Path);
+
+    /// <summary>Builds a content store that answers the copied message's payload and places what it is handed.</summary>
+    private static IEmailContentStore StoredContentFound()
+    {
+        var contents = ContentStores.Substituted();
+
+        contents
+            .FindStoredContentAsync(Email, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(new StoredEmailContent(
+                RawMime,
+                RawMime.Length,
+                ReadOnlyMemory<byte>.Empty)));
+
+        return contents;
+    }
+
+    /// <summary>Builds a MIME reader that reads no metadata, which is the envelope-only path a copy may take.</summary>
+    private static IEmailMimeReader MimeReadingNothing()
+    {
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
+
+        return mimeReader;
+    }
+
     private static MailboxDestination JunkDestination() => new(
         MailFolderResolution.FirstBindingOf(MailFolderAlias.Create("Junk"), RemoteFolderPath.Create("Junk")),
         IsMirrored: true,
@@ -473,14 +627,23 @@ public sealed class MailboxChangeSubmissionTests
 
     private MailboxChangeSubmission Held(
         IMailboxMutationAuditSettingsReader? auditSettings = null,
-        ClientSignals? signals = null) => MailboxChangeSubmissions.Over(
+        ClientSignals? signals = null,
+        LocalMailCopier? copier = null) => MailboxChangeSubmissions.Over(
         this.records,
         this.heldFolders,
         this.states,
+        copier ?? LocalMailCopiers.Over(this.heldFolders),
         this.auditEntries,
         auditSettings,
         signals,
         new FakeTimeProvider(Now));
+
+    /// <summary>Builds a copier that finds the copied message's payload and writes the copy as <see cref="Copy" />.</summary>
+    private LocalMailCopier Copying() => LocalMailCopiers.Over(
+        this.heldFolders,
+        StoredContentFound(),
+        this.copies,
+        MimeReadingNothing());
 
     private void Store(IEnumerable<string>? keywords = null) => this.states.Store(
         Email,
@@ -488,4 +651,22 @@ public sealed class MailboxChangeSubmissionTests
 
     private LocalMailFolderId FolderWithRole(MailFolderSpecialUse role) =>
         this.heldFolders.Folders.Single(folder => folder.Role == role).Id;
+
+    /// <summary>Places the payload one copy is committed from, which is what a caller does before its transaction.</summary>
+    private async Task<PreparedLocalCopy> PrepareCopyAsync()
+    {
+        this.copies
+            .StoreLocalCopyAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<long>(),
+                Arg.Any<CopiedMailFlags>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailId?>(Copy));
+
+        return Assert.Single(
+            (await this.Held(copier: this.Copying()).PrepareCopiesAsync(Account, [Email], Token)).Of(Email));
+    }
 }

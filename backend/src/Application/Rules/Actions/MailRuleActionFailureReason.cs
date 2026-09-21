@@ -69,7 +69,11 @@ public enum MailRuleActionFailureReason
     EmailNotOnMailServer = 6,
 
     /// <summary>The account is held, and the change is one a held account cannot commit to stored state yet.</summary>
-    /// <remarks>A copy is the one such change: a held account's copy is a second stored message with a payload of its own, which cannot be placed inside the transaction a rule's batch commits in.</remarks>
+    /// <remarks>
+    /// Nothing produces this any longer. A held copy was the one change it named, and it now commits as a second stored
+    /// message like every other copy. The member stays because the history already written names it by this text, and a
+    /// run whose reason no longer resolves is a run that cannot be read at all.
+    /// </remarks>
     ActionNotAvailableOnHeldAccount = 7,
 
     /// <summary>The account is held, and it no longer stores the email the rule matched.</summary>
@@ -88,4 +92,13 @@ public enum MailRuleActionFailureReason
     /// why this is not <see cref="DestinationFolderUnresolved" />.
     /// </remarks>
     LocalDestinationFolderMissing = 9,
+
+    /// <summary>The account is held, and it stores no payload for the email the rule asked to copy.</summary>
+    /// <remarks>
+    /// A copy is a second stored message carrying the copied message's own content, so it is the one action that needs
+    /// the payload rather than only what is recorded about the email. The payload is absent while a storage ceiling has
+    /// deferred it or a read has found it unusable, which is what the operator acts on: raising the ceiling or repairing
+    /// the content is the remedy, and every other action on the same email still applied.
+    /// </remarks>
+    EmailContentNotStored = 10,
 }

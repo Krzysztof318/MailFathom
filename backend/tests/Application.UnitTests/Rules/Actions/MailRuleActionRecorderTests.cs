@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
@@ -12,6 +14,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Signals;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -34,6 +37,10 @@ public sealed class MailRuleActionRecorderTests
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7());
+
+    private static readonly StoredEmailId CopiedEmail = StoredEmailId.Create(Guid.CreateVersion7());
+
+    private static readonly ReadOnlyMemory<byte> CopiedRawMime = "Subject: copied\r\n\r\nbody"u8.ToArray();
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
@@ -620,6 +627,60 @@ public sealed class MailRuleActionRecorderTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A rule copying on a held account produces a second stored message rather than a refusal.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountCopying_AppliesItAsASecondStoredMessage()
+    {
+        // Arrange
+        var folders = new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held);
+        var copies = Substitute.For<IEmailMetadataRepository>();
+        copies
+            .StoreLocalCopyAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<long>(),
+                Arg.Any<CopiedMailFlags>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailId?>(CopiedEmail));
+        this.MapJunkRole();
+        var recorder = this.RecorderCopyingThrough(folders, CopiedContent(), copies);
+        var plan = Planned("keep-a-copy", MailRuleAction.Copy(MailFolderReference.ToAlias(Junk)));
+        var placed = await recorder.PrepareCopiesAsync(Account, [LocalEmail], TestContext.Current.CancellationToken);
+
+        // Act
+        var recording = await this.RecordAsync(recorder, LocalEmail, OccurrenceAt(7), plan, Revision, placed);
+
+        // Assert
+        Assert.Empty(recording.Failures);
+        Assert.Null(Assert.Single(recording.Recorded).RecordId);
+        Assert.Equal(CopiedEmail, Assert.Single(recording.Applied).Email);
+        Assert.Contains(CopiedEmail, folders.Placements.Keys);
+    }
+
+    /// <summary>A copy needs the message's payload, so one the account does not store names that rather than the destination.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountCopyingAnEmailWithNoStoredPayload_RefusesItAsContentNotStored()
+    {
+        // Arrange
+        this.MapJunkRole();
+        var contents = ContentStores.Substituted();
+        var recorder = this.RecorderCopyingThrough(
+            new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+            contents,
+            Substitute.For<IEmailMetadataRepository>());
+        var plan = Planned("keep-a-copy", MailRuleAction.Copy(MailFolderReference.ToAlias(Junk)));
+        var placed = await recorder.PrepareCopiesAsync(Account, [LocalEmail], TestContext.Current.CancellationToken);
+
+        // Act
+        var recording = await this.RecordAsync(recorder, LocalEmail, OccurrenceAt(7), plan, Revision, placed);
+
+        // Assert
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(MailRuleActionFailureReason.EmailContentNotStored, Assert.Single(recording.Failures).Reason);
+    }
+
     /// <summary>A held account files into a local folder, so one with no local folder for the destination says that, rather than waiting for a run it will never have.</summary>
     [Fact]
     public async Task RecordAsync_AHeldAccountWithNoLocalFolderForTheDestination_RefusesItAsLocallyMissing()
@@ -676,6 +737,56 @@ public sealed class MailRuleActionRecorderTests
         ScriptedMailRuleCondition.Answering(matches: true),
         MailRuleActionSet.Create([action]));
 
+    /// <summary>Builds a recorder over a held account whose copies are committed through the stores a test supplies.</summary>
+    private MailRuleActionRecorder RecorderCopyingThrough(
+        InMemoryLocalMailFolderStore folders,
+        IEmailContentStore contents,
+        IEmailMetadataRepository copies)
+    {
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+
+        return new MailRuleActionRecorder(
+            MailboxChangeSubmissions.Over(
+                this.records,
+                folders,
+                states,
+                LocalMailCopiers.Over(folders, contents, copies, MimeReadingNothing())),
+            this.dispositions,
+            this.permissions);
+    }
+
+    /// <summary>Builds a content store holding the copied message's payload.</summary>
+    private static IEmailContentStore CopiedContent()
+    {
+        var contents = ContentStores.Substituted();
+
+        contents
+            .FindStoredContentAsync(LocalEmail, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(
+                new StoredEmailContent(CopiedRawMime, CopiedRawMime.Length, ReadOnlyMemory<byte>.Empty)));
+
+        return contents;
+    }
+
+    private static IEmailMimeReader MimeReadingNothing()
+    {
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
+
+        return mimeReader;
+    }
+
     private static EmailOccurrenceId OccurrenceAt(uint uid) => EmailOccurrenceId.Create(
         Account,
         new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
@@ -691,7 +802,8 @@ public sealed class MailRuleActionRecorderTests
         StoredEmailId storedEmailId,
         EmailOccurrenceId? occurrence,
         MailRuleActionPlan plan,
-        MailRuleSetRevision revision)
+        MailRuleSetRevision revision,
+        PreparedLocalCopies? copies = null)
     {
         var resolved = await this.destinations.ResolveAsync(
             Account,
@@ -705,7 +817,20 @@ public sealed class MailRuleActionRecorderTests
             plan,
             revision,
             resolved,
+            copies ?? PreparedLocalCopies.None,
             TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Maps the junk alias to the role a held account files into its own protected folder by.</summary>
+    private void MapJunkRole()
+    {
+        this.folderMappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(
+                Junk,
+                RemoteFolderPath.Create("INBOX.Spam"),
+                specialUse: MailFolderSpecialUse.Junk));
+        this.folders.Bind(Account, Junk);
     }
 
     /// <summary>Maps a folder the account mirrors, which is what every destination but the unmirrored one here is.</summary>

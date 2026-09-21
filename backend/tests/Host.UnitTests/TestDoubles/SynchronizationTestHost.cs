@@ -243,6 +243,10 @@ internal static class SynchronizationTestHost
         // held, so the substituted state store is composed and never asked.
         services.AddSingleton(Substitute.For<ILocalEmailStateStore>());
         services.AddSingleton(ClientSignalPublishers.ReachingNobody);
+
+        // The copier is composed beside the submission because the submission holds it, and for no other reason: a
+        // copy is a rule's act and no account these tests configure is held, so nothing here ever asks it for one.
+        services.AddScoped<LocalMailCopier>();
         services.AddScoped<MailboxChangeSubmission>();
 
         // The trail and its retention pass are composed here for the same reason convergence is: a supervisor resolves

@@ -2,12 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -15,8 +18,10 @@ using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
@@ -37,6 +42,9 @@ public sealed class MailRuleEvaluationPassTests
         MailAccountId.Create("personal");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Backup = MailFolderAlias.Create("backup");
+    private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
+    private static readonly StoredEmailId Copy = StoredEmailId.Create(Guid.CreateVersion7());
+    private static readonly ReadOnlyMemory<byte> CopiedRawMime = "Subject: copied\r\n\r\nbody"u8.ToArray();
 
     private readonly InMemoryMailRuleEvaluationStore store = new();
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
@@ -109,6 +117,51 @@ public sealed class MailRuleEvaluationPassTests
         Assert.Equal(MailboxMutation.Relocate, request.Mutation);
         Assert.Equal(arrived, request.StoredEmailId);
         Assert.Equal(MailboxMutationOrigin.Rule, request.Requester.Origin);
+        Assert.Equal(1, report.Arrivals.RequestedActionCount);
+    }
+
+    /// <summary>A copy's payload is placed before the batch's transaction opens, which is the pass's own step and nothing else's.</summary>
+    [Fact]
+    public async Task RunAsync_ARuleCopyingOnAHeldAccount_PlacesThePayloadAndCommitsTheSecondStoredMessage()
+    {
+        // Arrange
+        this.permissions
+            .GetRuleActionPermissions(Arg.Any<MailAccountId>())
+            .Returns(MailRuleActionPermissions.Default with { PermitsCopy = true });
+        this.folderMappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(
+                Junk,
+                RemoteFolderPath.Create("INBOX/junk"),
+                specialUse: MailFolderSpecialUse.Junk));
+        this.folders.Bind(Account, Junk);
+        var arrived = this.store.Add(FactsFor(Account));
+        var heldFolders = new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held);
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            arrived,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(
+                    MailFolderAlias.Create("inbox"),
+                    RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        var pass = this.CreatePass(
+            RuleSetOf(CopyingRule("keep-a-copy")),
+            submission: MailboxChangeSubmissions.Over(
+                this.mutations,
+                heldFolders,
+                states,
+                LocalMailCopiers.Over(heldFolders, ContentHolding(arrived), CopyingInto(Copy), MimeReadingNothing())));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Copy, Assert.Single(heldFolders.Placements.Keys));
+        Assert.Empty(this.mutations.OpenedRequests);
         Assert.Equal(1, report.Arrivals.RequestedActionCount);
     }
 
@@ -701,6 +754,54 @@ public sealed class MailRuleEvaluationPassTests
             [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers], rule.Schedule))]),
         MailRuleConditionBounds.Default);
 
+    private static MailRule CopyingRule(string name) => ArrivalRule(
+        name,
+        ScriptedMailRuleCondition.Answering(matches: true),
+        MailRuleActionSet.Create([MailRuleAction.Copy(MailFolderReference.ToAlias(Junk))]));
+
+    /// <summary>Holds one message's payload, which is what a copy is made out of.</summary>
+    private static IEmailContentStore ContentHolding(StoredEmailId storedEmailId)
+    {
+        var contents = ContentStores.Substituted();
+
+        contents
+            .FindStoredContentAsync(storedEmailId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(
+                new StoredEmailContent(CopiedRawMime, CopiedRawMime.Length, ReadOnlyMemory<byte>.Empty)));
+
+        return contents;
+    }
+
+    /// <summary>Writes every copy as one identifier, which is what the placement is then read back under.</summary>
+    private static IEmailMetadataRepository CopyingInto(StoredEmailId written)
+    {
+        var emails = Substitute.For<IEmailMetadataRepository>();
+
+        emails
+            .StoreLocalCopyAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolutionId>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<long>(),
+                Arg.Any<CopiedMailFlags>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailId?>(written));
+
+        return emails;
+    }
+
+    private static IEmailMimeReader MimeReadingNothing()
+    {
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
+
+        return mimeReader;
+    }
+
     /// <summary>Resolves destinations over a server advertising nothing, so only a recorded binding ever answers.</summary>
     private MailboxDestinationResolver CreateDestinationResolver()
     {
@@ -727,7 +828,8 @@ public sealed class MailRuleEvaluationPassTests
     private MailRuleEvaluationPass CreatePass(
         MailRuleSet ruleSet,
         int batchSize = 100,
-        int maxBatchesPerPass = 5)
+        int maxBatchesPerPass = 5,
+        MailboxChangeSubmission? submission = null)
     {
         var ruleSetSource = Substitute.For<IMailRuleSetSource>();
         ruleSetSource.Current.Returns(ruleSet);
@@ -741,7 +843,7 @@ public sealed class MailRuleEvaluationPassTests
             this.store,
             this.runStore,
             new MailRuleActionRecorder(
-                MailboxChangeSubmissions.Over(this.mutations),
+                submission ?? MailboxChangeSubmissions.Over(this.mutations),
                 this.deleteDispositions,
                 this.permissions),
             this.CreateDestinationResolver(),

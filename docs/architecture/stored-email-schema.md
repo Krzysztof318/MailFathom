@@ -337,11 +337,16 @@ gives an account whose mailbox MailFathom holds a folder hierarchy of its own, a
 account. It is set once, when synchronization stores the message or when MailFathom files one of its own, and a message
 met again is not moved back.
 
-A message MailFathom files itself on a held account — a draft revision, or the sent copy of a delivery where
-`Delivery:FileSentCopy` holds — is a `stored_emails` row with no occurrence: `UidValidity` and `Uid` are null, its
+A message MailFathom files itself on a held account — a draft revision, the sent copy of a delivery where
+`Delivery:FileSentCopy` holds, or the second stored message a copy
+produces — is a `stored_emails` row with no occurrence: `UidValidity` and `Uid` are null, its
 content row is written in the same transaction, and its `MailFolderId` is the current binding of the source folder
 mapped to the role it is filed under, because a stored message always names a binding and that is where the source keeps
-the same kind of message. A draft is written with `rules_evaluated_at` already stamped, since nothing arrived; a sent
+the same kind of message. A copy is the one of the three that names a binding of its own rather than a role's: it takes
+the binding the message it was made from names, because it is that same message from that same source folder, and it
+carries that message's `IsRemotelySeen`, `IsRemotelyFlagged`, and `RemoteKeywords` with it. A draft is written with
+`rules_evaluated_at` already stamped, since nothing arrived, and so is a copy, so that a rule copying into a folder it
+also matches on does not meet its own copy; a sent
 copy is left unstamped and carries `FiledFromOutgoingEmailId`, which is how the rule queue and the derivations recognise
 it. The draft names the message it filed in `mail_drafts.FiledStoredEmailId` and the revision it shows in
 `mail_drafts.FiledRevision`. When
