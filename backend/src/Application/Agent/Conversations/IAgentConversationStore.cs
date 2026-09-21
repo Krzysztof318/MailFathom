@@ -84,6 +84,61 @@ public interface IAgentConversationStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
+    /// <summary>Writes a person's question and opens the answer to it, starting the conversation where it has not been started.</summary>
+    /// <param name="id">The conversation, which the client named and which is started here when nothing stands under it yet.</param>
+    /// <param name="user">The person asking, whose conversation it is or becomes.</param>
+    /// <param name="question">The question, written by the person.</param>
+    /// <param name="answer">The answer the question opens, which is the run composing it.</param>
+    /// <param name="now">The instant the question was asked, in UTC.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>What became of the question, and the answer it opened.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="question" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="question" /> is not the person's own.</exception>
+    /// <remarks>
+    /// <para>
+    /// <strong>The question and the opening of its answer are written together or not at all.</strong> A question left
+    /// in the record with no answer opened behind it would read as an instruction to whatever answer came next, so the
+    /// conversation's row is held for the whole of it and a question asked while an answer is still being composed
+    /// writes nothing.
+    /// </para>
+    /// <para>
+    /// <strong>A question already in the conversation is not written twice.</strong> Its identifier is the client's, so
+    /// a second post under it is the first one retried, and what comes back is what the first one wrote — the same
+    /// answer and the same place — rather than a refusal the client could not tell from a real one.
+    /// </para>
+    /// </remarks>
+    Task<AgentMessagePosting> AskAsync(
+        AgentConversationId id,
+        UserId user,
+        AgentMessageWritten question,
+        AgentMessageId answer,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>Writes a person's further instruction into the answer being composed, which takes it from its next turn.</summary>
+    /// <param name="id">The conversation holding the answer.</param>
+    /// <param name="user">The person steering, whose conversation it has to be.</param>
+    /// <param name="answer">The answer being steered, which has to be the one being composed.</param>
+    /// <param name="instruction">What the person added, written by the person.</param>
+    /// <param name="now">The instant it was written, in UTC.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>What became of the instruction.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="instruction" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="instruction" /> is not the person's own.</exception>
+    /// <remarks>
+    /// It adds and never interrupts: nothing already composed is touched, and the answer goes on from where it stands. An
+    /// instruction for an answer that has ended writes nothing, because it would otherwise stand in the record as a
+    /// question nobody answers. A repeated identifier is reported as <see cref="AgentMessagePostingOutcome.AlreadyWritten" />,
+    /// exactly as a repeated question is.
+    /// </remarks>
+    Task<AgentMessagePosting> SteerAsync(
+        AgentConversationId id,
+        UserId user,
+        AgentMessageId answer,
+        AgentMessageWritten instruction,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
     /// <summary>Records where a proposal this person was offered now stands.</summary>
     /// <param name="id">The conversation holding the proposal.</param>
     /// <param name="user">The person the caller was admitted for, and whose proposal it has to be.</param>

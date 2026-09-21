@@ -58,6 +58,14 @@
         ],
         "type": "object"
       },
+      "AgentScopeKind": {
+        "enum": [
+          "Mailbox",
+          "Thread",
+          "CalendarEvent",
+          "DiscoveryRun"
+        ]
+      },
       "AttachmentAvailability": {
         "enum": [
           "Stored",
@@ -532,6 +540,233 @@
         },
         "required": [
           "events"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationEntry": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "sequence",
+          "entry"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationListResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ClientAgentConversationSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversations"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationReadResponse": {
+        "properties": {
+          "composing": {
+            "type": "boolean"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ClientAgentConversationEntry"
+            },
+            "type": "array"
+          },
+          "moreFollows": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "startedAt",
+          "composing",
+          "entries",
+          "moreFollows"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationSummary": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "startedAt",
+          "lastActivityAt"
+        ],
+        "type": "object"
+      },
+      "ClientAgentInstructionRequest": {
+        "properties": {
+          "messageId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "messageId",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ClientAgentMessageRequest": {
+        "properties": {
+          "messageId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientAgentMessageScope"
+              }
+            ]
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "messageId",
+          "text",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ClientAgentMessageResponse": {
+        "properties": {
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "runId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "messageId",
+          "runId",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "ClientAgentMessageScope": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AgentScopeKind"
+          },
+          "subject": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "subject"
+        ],
+        "type": "object"
+      },
+      "ClientAgentProposalAnswerRequest": {
+        "properties": {
+          "decision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
+      "ClientAgentProposalAnswerResponse": {
+        "properties": {
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "sequence"
         ],
         "type": "object"
       },
@@ -5713,6 +5948,7 @@
         ],
         "type": "object"
       },
+      "JsonElement": {},
       "MailAccountAssignmentRequest": {
         "properties": {
           "userId": {
@@ -13716,6 +13952,327 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentConversationListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/{conversationId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "schema": {
+              "format": "int64",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentConversationReadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/{conversationId}/messages": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientAgentMessageRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentMessageResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/{conversationId}/proposals/{proposedAt}": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposedAt",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientAgentProposalAnswerRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentProposalAnswerResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/{conversationId}/runs/{runId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/{conversationId}/runs/{runId}/messages": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversationId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientAgentInstructionRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentMessageResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

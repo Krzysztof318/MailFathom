@@ -132,6 +132,13 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.MessagesRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ProposalRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.RunRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.RunMessagesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEndpoints.CalendarRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}",
@@ -273,6 +280,8 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.Equal(
             [
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.RunRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"DELETE {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"DELETE {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute} -> {MailFathomPermission.MailAsk.Name}",
@@ -281,6 +290,8 @@ public sealed class ClientApiEndpointsTests
                 $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"DELETE {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationsRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"GET {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -319,6 +330,8 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.MessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.RunMessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientCalendarImportEndpoints.CalendarImportRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -370,6 +383,7 @@ public sealed class ClientApiEndpointsTests
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
                 $"POST {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"PUT {prefix}{ClientAgentConversationEndpoints.ProposalRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -444,6 +458,7 @@ public sealed class ClientApiEndpointsTests
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
                         || AsksAQuestionOfTheCallersOwnMail(endpoint)
+                        || HoldsTheCallersOwnAgentConversation(endpoint)
                         || SetsTheCallersOwnTimeZone(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
@@ -632,6 +647,21 @@ public sealed class ClientApiEndpointsTests
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientTaskEndpoints.TodayLayoutRoute}");
+
+    /// <summary>Reports whether a route writes into, stops, answers, or deletes the caller's own conversation with the Agent, by the prefix they are served beneath.</summary>
+    /// <remarks>
+    /// The prefix rather than the grant, for the reason the question routes above are named. What these change is the
+    /// caller's own conversation and nothing else: a question and an instruction are written into it, a run in it is
+    /// ended, a proposal in it is recorded as accepted or declined, and the whole of it can be deleted. Accepting a
+    /// proposal performs nothing — it is what permits the composition to act later, under that act's own grant — so no
+    /// route here reaches a mailbox, a calendar, or a task list, and the grant that admits them is the one that sends
+    /// the person's mail to a chat provider in the first place.
+    /// </remarks>
+    private static bool HoldsTheCallersOwnAgentConversation(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}".StartsWith(
+            $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationsRoute}",
+            StringComparison.Ordinal);
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

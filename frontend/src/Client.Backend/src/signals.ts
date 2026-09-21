@@ -92,7 +92,12 @@ export type ClientSignal =
           readonly unreadCount: number;
       }
     | { readonly kind: 'account.state'; readonly account: string }
-    | { readonly kind: 'discovery.run.advanced'; readonly run: string; readonly sequence: number };
+    | {
+          readonly kind: 'run.advanced';
+          readonly run: string | null;
+          readonly conversation: string | null;
+          readonly sequence: number;
+      };
 
 /** The ticket one connection is opened against, and when presenting it stops working. */
 export interface SignalTicket {
@@ -200,7 +205,7 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
             return parseRaisedNotification(record);
         case 'account.state':
             return isIdentity(record['account']) ? { kind: 'account.state', account: record['account'] } : null;
-        case 'discovery.run.advanced':
+        case 'run.advanced':
             return parseRunAdvance(record);
         default:
             return null;
@@ -483,18 +488,34 @@ function optionalFlag(value: unknown): boolean | null | undefined {
     return typeof value === 'boolean' ? value : undefined;
 }
 
-// The one statement that names no mailbox at all: a run and how far it has got, and no part of what the run composed.
-// A sequence of zero is what an event that was never published carries, so a statement bearing one says nothing this
+// The one statement that names no mailbox at all: a running answer and how far it has got, and no part of what it
+// composed. A Discover run names its run alone; an Agent conversation names itself, and the run where the advance
+// belongs to one — an answered proposal belongs to none — so a statement naming neither says nothing to read. A
+// sequence of zero is what an event that was never published carries, so a statement bearing one says nothing this
 // client could read a tail from and is refused with the rest of what it does not act on.
 function parseRunAdvance(record: Readonly<Record<string, unknown>>): ClientSignal | null {
-    const run = record['run'];
+    const run = optionalIdentity(record['run']);
+    const conversation = optionalIdentity(record['conversation']);
     const sequence = record['sequence'];
 
-    if (!isIdentity(run) || !isCount(sequence) || sequence === 0) {
+    if (run === undefined || conversation === undefined || (run === null && conversation === null)) {
         return null;
     }
 
-    return { kind: 'discovery.run.advanced', run, sequence };
+    if (!isCount(sequence) || sequence === 0) {
+        return null;
+    }
+
+    return { kind: 'run.advanced', run, conversation, sequence };
+}
+
+// `undefined` reports a value that is neither an identity nor absent, for the reason `optionalFlag` gives.
+function optionalIdentity(value: unknown): string | null | undefined {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    return isIdentity(value) ? value : undefined;
 }
 
 function parseRaisedNotification(record: Readonly<Record<string, unknown>>): ClientSignal | null {

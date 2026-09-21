@@ -332,6 +332,106 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         }
     }
 
+    /// <summary>One question posted by several callers at once — a client retrying over a dropped connection — is written once, and every caller is handed the same answer.</summary>
+    /// <remarks>
+    /// The question starts the conversation too, so this is also the claim that starting one is safe to race: the key
+    /// absorbs the second start, the held row serializes the posts, and the retry finds the question the winner wrote
+    /// rather than writing a second copy the fold would refuse.
+    /// </remarks>
+    [Fact]
+    public async Task AskAsync_OneQuestionPostedByManyAtOnce_WritesItOnceAndHandsEveryCallerTheSameAnswer()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var conversation = AgentConversationId.New();
+            var question = Question();
+
+            // Act
+            var attempts = await ConcurrentIdempotency.RunAsync(
+                "Posting one question from several callers",
+                ContendingCallers,
+                (_, token) => store.AskAsync(conversation, UserId.Create(user), question, AgentMessageId.New(), Instant, token),
+                cancellationToken);
+
+            // Assert
+            var postings = attempts.Results.ToArray();
+            Assert.Equal(ContendingCallers, postings.Length);
+            Assert.Single(postings, posting => posting.Outcome is AgentMessagePostingOutcome.Written);
+            Assert.All(postings, posting => Assert.True(posting.Stands));
+            Assert.Single(postings.Select(posting => (posting.Answer, posting.Reached)).Distinct());
+            Assert.Equal(2, await CountEntriesOfAsync(host, conversation, cancellationToken));
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+        }
+    }
+
+    /// <summary>A question waits for the answer being composed while an instruction joins it, and neither reaches an answer that has ended or a conversation that is somebody else's.</summary>
+    /// <remarks>
+    /// What is being proved is that the decision is taken from the held row: a question left behind with no answer would
+    /// read as an instruction to whatever answered next, and an instruction to an ended answer would stand in the record
+    /// as a question nobody answers. The record then folds, which is the proof that nothing either refusal left behind
+    /// broke the order.
+    /// </remarks>
+    [Fact]
+    public async Task AskAsync_AndSteerAsync_AdmitWhatTheAnswerBeingComposedAllowsAndNothingElse()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+        var somebodyElse = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+        await OrchestratedForeignUser.ProvisionAsync(host, somebodyElse, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var conversation = AgentConversationId.New();
+            var person = UserId.Create(user);
+            var asked = await store.AskAsync(conversation, person, Question(), AgentMessageId.New(), Instant, cancellationToken);
+            var running = asked.Answer!.Value;
+
+            // Act
+            var askedOver = await store.AskAsync(conversation, person, Question(), AgentMessageId.New(), Instant, cancellationToken);
+            var steered = await store.SteerAsync(conversation, person, running, Question(), Instant, cancellationToken);
+            var steeredElsewhere = await store.SteerAsync(conversation, person, AgentMessageId.New(), Question(), Instant, cancellationToken);
+            await store.AppendAsync(conversation, person, new AgentAnswerEnded(running, AgentAnswerOutcome.Stopped), Instant, cancellationToken);
+            var steeredLate = await store.SteerAsync(conversation, person, running, Question(), Instant, cancellationToken);
+            var askedAfter = await store.AskAsync(conversation, person, Question(), AgentMessageId.New(), Instant, cancellationToken);
+            var askedAsSomebodyElse = await store.AskAsync(conversation, UserId.Create(somebodyElse), Question(), AgentMessageId.New(), Instant, cancellationToken);
+
+            // Assert
+            Assert.Equal((AgentMessagePostingOutcome.Written, 2L), (asked.Outcome, asked.Reached));
+            Assert.Equal(AgentMessagePostingOutcome.AnswerInProgress, askedOver.Outcome);
+            Assert.Equal((AgentMessagePostingOutcome.Written, 3L, running), (steered.Outcome, steered.Reached, steered.Answer!.Value));
+            Assert.Equal(AgentMessagePostingOutcome.NoAnswerInProgress, steeredElsewhere.Outcome);
+            Assert.Equal(AgentMessagePostingOutcome.NoAnswerInProgress, steeredLate.Outcome);
+            Assert.Equal((AgentMessagePostingOutcome.Written, 6L), (askedAfter.Outcome, askedAfter.Reached));
+            Assert.Equal(AgentMessagePostingOutcome.NoSuchConversation, askedAsSomebodyElse.Outcome);
+
+            var read = await store.ReadAsync(conversation, person, afterSequence: 0, limit: 50, cancellationToken);
+            Assert.NotNull(read);
+            Assert.True(read.Composing);
+            Assert.Equal(5, AgentConversation.Compose(conversation, read.Title, read.StartedAt, read.Entries).Messages.Count);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+            await OrchestratedForeignUser.EraseAsync(host, somebodyElse);
+        }
+    }
+
     /// <summary>An offer several callers accept at once is accepted once, because accepting is what permits the act.</summary>
     /// <remarks>
     /// The whole reason where a proposal stands is read inside the statement that moves it. A read followed by a write

@@ -111,7 +111,7 @@ describe('useFollowedRun', () => {
         });
 
         act(() => {
-            heard.tell({ kind: 'discovery.run.advanced', run, sequence: 3 });
+            heard.tell({ kind: 'run.advanced', conversation: null, run, sequence: 3 });
         });
 
         await waitFor(() => {
@@ -134,7 +134,26 @@ describe('useFollowedRun', () => {
         });
 
         act(() => {
-            heard.tell({ kind: 'discovery.run.advanced', run: 'another', sequence: 9 });
+            heard.tell({ kind: 'run.advanced', conversation: null, run: 'another', sequence: 9 });
+        });
+
+        expect(requests).toHaveLength(1);
+    });
+
+    it('leaves a run alone when an Agent conversation advanced, whatever run it names', async () => {
+        const { transport, requests } = answering([
+            tailOf([{ event: 'block', sequence: 2, block: { type: 'RiskScore' } }], true),
+        ]);
+
+        const heard = hearing();
+        const { result } = following(transport, heard.changes);
+
+        await waitFor(() => {
+            expect(result.current.blocks).toHaveLength(1);
+        });
+
+        act(() => {
+            heard.tell({ kind: 'run.advanced', conversation: 'c9d0', run, sequence: 9 });
         });
 
         expect(requests).toHaveLength(1);
@@ -187,7 +206,7 @@ describe('useFollowedRun', () => {
         });
 
         act(() => {
-            heard.tell({ kind: 'discovery.run.advanced', run, sequence: 3 });
+            heard.tell({ kind: 'run.advanced', conversation: null, run, sequence: 3 });
         });
 
         expect(requests).toHaveLength(1);
@@ -219,7 +238,7 @@ describe('useFollowedRun', () => {
         unmount();
 
         act(() => {
-            heard.tell({ kind: 'discovery.run.advanced', run, sequence: 9 });
+            heard.tell({ kind: 'run.advanced', conversation: null, run, sequence: 9 });
         });
 
         expect(requests).toHaveLength(1);

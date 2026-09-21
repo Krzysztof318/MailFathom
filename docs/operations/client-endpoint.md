@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientTimeZoneEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarImportEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientTimeZoneEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/ClientCalendarEventDraftEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientContactEndpoints.cs, backend/src/Host/Api/ClientCalendarEndpoints.cs, backend/src/Host/Api/ClientCalendarImportEndpoints.cs, backend/src/Host/Api/ClientCalendarResponses.cs, backend/src/Host/Api/ClientContactCorrespondenceEndpoint.cs, backend/src/Host/Api/ClientContactRelationshipEndpoint.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTaskEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Api/ClientAgentConversationEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -154,6 +154,13 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/discovery/runs` | `mailfathom.mail.ask` |
 | `GET /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
+| `GET /api/client/agent/conversations` | `mailfathom.mail.ask` |
+| `GET /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
+| `DELETE /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
+| `POST /api/client/agent/conversations/{conversationId}/messages` | `mailfathom.mail.ask` |
+| `POST /api/client/agent/conversations/{conversationId}/runs/{runId}/messages` | `mailfathom.mail.ask` |
+| `DELETE /api/client/agent/conversations/{conversationId}/runs/{runId}` | `mailfathom.mail.ask` |
+| `PUT /api/client/agent/conversations/{conversationId}/proposals/{proposedAt}` | `mailfathom.mail.ask` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
@@ -3318,7 +3325,7 @@ DELETE /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90
 204 No Content
 ```
 
-**A client is told when to read again rather than polling for it.** Every write raises `discovery.run.advanced` over
+**A client is told when to read again rather than polling for it.** Every write raises `run.advanced` over
 [the signal channel](#the-signal-channel), naming the run and the sequence it reached and no part of the answer, so the
 read above is what a client does when it hears that rather than on a timer. A client with no channel reads on its own
 interval and is given exactly the same thing.
@@ -3340,6 +3347,99 @@ person already has as many runs going as they may — eight, counted across the 
 `400` naming what was wrong with the question or the mail it named.
 [The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each event carries,
 what a run reports having spent, what bounds a run, and why it is delivered this way.
+
+### The Agent conversation routes
+
+A conversation with the Agent is the person's own record, and every route below reads whose it is off the credential:
+somebody else's conversation answers exactly as one that never existed does. The history is a listing, and one
+conversation is read from a cursor the same way a Discover run is:
+
+```http
+GET /api/client/agent/conversations
+GET /api/client/agent/conversations/0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d?since=4
+```
+
+```http
+200 OK
+Content-Type: application/json
+
+{
+  "title": "Supplier quotes",
+  "startedAt": "2026-09-21T09:00:00+00:00",
+  "composing": true,
+  "entries": [
+    {"sequence":5,"entry":{"entry":"status","messageId":"0199a2c4-6a7b-7c8d-9e0f-1a2b3c4d5e6f","status":"Reading the quotes"}},
+    {"sequence":6,"entry":{"entry":"block","messageId":"0199a2c4-6a7b-7c8d-9e0f-1a2b3c4d5e6f","block":{ … }}}
+  ],
+  "moreFollows": false
+}
+```
+
+Each entry is handed over as the record states it — its `entry` discriminator and its members under their stored
+names — beside the place it was written at, so the order a client draws is the database's. `composing` says an answer
+is still being written, and `moreFollows` says more is written than one read returns, at most 250; the client reads
+again from the last place it was given. The listing returns at most 100 conversations, the one that moved last first.
+
+**Asking never waits for the answer.** The client names the conversation and the message, so the first question of a
+conversation starts it and a post retried over a dropped connection writes nothing twice:
+
+```http
+POST /api/client/agent/conversations/0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d/messages
+Content-Type: application/json
+
+{ "messageId": "0199a2c4-6000-7a1b-8c2d-3e4f5a6b7c8d", "text": "What did the supplier quote?", "scope": { "kind": "Thread", "subject": "0199a2c4-7000-7a1b-8c2d-3e4f5a6b7c8d" } }
+```
+
+```http
+202 Accepted
+Location: /api/client/agent/conversations/0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d
+
+{ "messageId": "0199a2c4-6000-7a1b-8c2d-3e4f5a6b7c8d", "runId": "0199a2c4-6a7b-7c8d-9e0f-1a2b3c4d5e6f", "sequence": 2 }
+```
+
+The question and the opening of the answer to it — the run — are written together, and the run's identifier is the
+answer's. A repeated `messageId` answers with what the first post wrote. `scope` is `Mailbox` with no subject, or
+`Thread`, `CalendarEvent`, or `DiscoveryRun` naming the one it was asked about, and may be left out. A question asked
+while an answer is still being composed is `409`, and so is one into a conversation holding 5 000 entries; an empty or
+over-long text, an empty identifier, or a scope naming no subject is `400`.
+
+**Steering adds to a running answer; stopping ends it.** They are different routes because they are different acts:
+
+```http
+POST   /api/client/agent/conversations/{conversationId}/runs/{runId}/messages
+DELETE /api/client/agent/conversations/{conversationId}/runs/{runId}
+```
+
+An instruction posted into a run — `messageId` and `text`, answered `202` as a question is — is added to what the run is
+composing and taken from its next turn: nothing already composed is touched, and nothing restarts. A run that has
+ended has nothing left to steer, which is `409`. The `DELETE` ends the run where it stands, answered `204`: everything
+it wrote stays, the answer is recorded as stopped, and the agent writes a line in the person's language saying so and
+asking where to pick it up. A run that ended a moment earlier answers `204` as well. Both are recorded rather than
+delivered to the replica composing the answer, so either works through any replica and while the hub is down — the run
+meets a stop as the next write it is refused.
+
+**A proposal is accepted or declined by the place it was written at, and accepting executes nothing:**
+
+```http
+PUT /api/client/agent/conversations/{conversationId}/proposals/7
+Content-Type: application/json
+
+{ "decision": "accepted" }
+```
+
+The answer is `200` with the place the decision was written at, `400` for any decision but `accepted` or `declined`, and
+`409` where there is no proposal at that place this person can answer that way — none offered, or already decided —
+which is also what a second press gets. What an accepted proposal permits is carried out by the Agent's own composition
+under the grant that act needs, never by this route. `DELETE /api/client/agent/conversations/{conversationId}` removes
+the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
+
+**Every write is announced as `run.advanced`** over [the signal channel](#the-signal-channel), naming the conversation,
+the run where the write belongs to one, and the place reached — never the question, a block, a status line, or a
+title. A client reads the conversation from its cursor when it hears one, on mount, and after every reconnect, so a
+client with no channel loses latency rather than any of the conversation.
+[ADR 0035](../decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md) is why
+it is delivered this way, and [the schema](../architecture/stored-email-schema.md#an-agent-conversation-and-what-was-said-in-it)
+what the record holds.
 
 ### The telemetry routes
 
@@ -3479,7 +3579,7 @@ record's already-derived text and reach a client entitled to read that record ov
 | `folders.changed` | The set of folders an account mirrors, or a held account's local folders, has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
-| `discovery.run.advanced` | A [Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) wrote something, naming the run and the sequence it reached and no part of what it composed |
+| `run.advanced` | A [Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) or an [Agent conversation](#the-agent-conversation-routes) had something written, naming the run, the conversation where it is one, and the place reached — and no part of what was written |
 
 **A flag is the one change stated rather than pointed at.** `mail.flags.changed` carries, per row, the stored identity
 and where each of the two flags now stands, so a client redraws the row it already holds without reading the page it is

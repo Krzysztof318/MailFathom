@@ -1140,6 +1140,9 @@ public static class ServiceCollectionExtensions
         // outlives every request it was reached over and read by requests that reach any replica, and the store holds
         // nothing between calls beyond the data source every one of them opens a command on.
         services.AddSingleton<IAgentConversationStore, AgentConversationStore>();
+        // What a person does to a conversation, beside the store it writes through: it holds nothing between calls
+        // either, and a stop has to reach a run executing anywhere, which it does through the store rather than here.
+        services.AddSingleton<AgentConversationControls>();
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one
