@@ -172,8 +172,9 @@ public sealed record PersonalTask
     /// <param name="sourceMessage">The message it was read out of, or <see langword="null" /> where it names none.</param>
     /// <param name="isCompleted">Whether the person has done it.</param>
     /// <returns>The task as it stands.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when <paramref name="user" /> names nobody, or when <paramref name="id" /> is the struct default.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin, or when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when <paramref name="user" /> names nobody, when <paramref name="id" /> is the struct default, when one lead is stated twice, or when leads are stated against no due day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin, when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />, when more than <see cref="Reminder.MaximumCount" /> leads are stated, or when the stated offset is not one a UTC offset can be.</exception>
     /// <remarks>
     /// It validates exactly what <see cref="Compose" /> validates rather than trusting the store, because a row read
     /// back is input from outside this process however it got there. The two things it takes that composing does not
@@ -211,8 +212,9 @@ public sealed record PersonalTask
     /// <param name="dueOn">The day it is due on, or <see langword="null" /> where the person took the date off it.</param>
     /// <param name="announcement">What announces it afterwards and the offset its due day runs in, or <see cref="TaskAnnouncement.Silent" /> to announce nothing.</param>
     /// <returns>The task as it now stands.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="announcement" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> is blank, when one lead is stated twice, or when leads are stated against no due day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="title" /> exceeds <see cref="MaximumTitleLength" />, when more than <see cref="Reminder.MaximumCount" /> leads are stated, or when the stated offset is not one a UTC offset can be.</exception>
     /// <remarks>
     /// Only the two values an edit is about, because the rest of the record is not the editor's to state: the identity
     /// and the person are what address the task, the origin moves by accepting a proposal rather than by typing, the

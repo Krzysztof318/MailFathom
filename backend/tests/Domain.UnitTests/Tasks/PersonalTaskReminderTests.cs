@@ -214,6 +214,49 @@ public sealed class PersonalTaskReminderTests
         Assert.Throws<InvalidOperationException>(asking);
     }
 
+    /// <summary>
+    /// A stored row is input from outside this process however it got there, so restoring one refuses the leads
+    /// composing refuses. The two run through one helper today, and this is what says so from the outside — a later
+    /// change that reordered the validation or special-cased a restored row would otherwise let a corrupted row back
+    /// in, and the first thing to notice would be a producer announcing an hour nobody can place.
+    /// </summary>
+    [Fact]
+    public void Restore_ARemindedRowNobodyDated_IsRefused()
+    {
+        // Act
+        var restoring = () => Restore(dueOn: null, Warsaw);
+
+        // Assert
+        Assert.Equal("announcement", Assert.Throws<ArgumentException>(restoring).ParamName);
+    }
+
+    /// <summary>The offset a stored row states is untrusted for the same reason its leads are, and refused the same way.</summary>
+    [Theory]
+    [InlineData(15, 0)]
+    [InlineData(-15, 0)]
+    [InlineData(2, 30)]
+    public void Restore_AnOffsetNoDueDayCanRunIn_IsRefused(int hours, int seconds)
+    {
+        // Arrange
+        var offset = TimeSpan.FromHours(hours) + TimeSpan.FromSeconds(seconds);
+
+        // Act
+        var restoring = () => Restore(DueOn, offset);
+
+        // Assert
+        Assert.Equal("announcement", Assert.Throws<ArgumentOutOfRangeException>(restoring).ParamName);
+    }
+
+    private static PersonalTask Restore(DateOnly? dueOn, TimeSpan offset) => PersonalTask.Restore(
+        Identifier,
+        User,
+        "Send the counter-proposal",
+        dueOn,
+        new TaskAnnouncement(offset, [Reminder.Create(60)]),
+        PersonalTaskOrigin.Asserted,
+        sourceMessage: null,
+        isCompleted: false);
+
     private static PersonalTask Announcing(int minutesBefore) => Compose([Reminder.Create(minutesBefore)]);
 
     private static PersonalTask Compose(Reminder[] reminders) => PersonalTask.Compose(
