@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Discovery.Presentation.Blocks;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Retrieval.AskMail;
@@ -39,14 +41,24 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
     /// <summary>How many replicas write to one run at once, enough that an execution reliably loses a race for the next sequence.</summary>
     private const int ContendingReplicas = 8;
 
+    /// <summary>What the composed block says, which is invented here rather than drawn from anything a mailbox holds.</summary>
+    private const string AnswerText = "Nothing in the mailbox answers the question.";
+
     /// <summary>The instant every statement here is stamped with, so a retention window is this class's rather than the wall clock's.</summary>
     private static readonly DateTimeOffset Instant = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>A run one replica composed is read whole by another, in the order it was written and with what it wrote.</summary>
     /// <remarks>
-    /// The payload crosses as <c>jsonb</c> through a polymorphic serializer, so this is also where a derived event that
-    /// lost its discriminator would be found: a run read back as a list of base events renders as nothing on a screen
-    /// and fails no unit test.
+    /// <para>
+    /// The payload crosses a column through a polymorphic serializer, so this is also where a derived event that lost
+    /// its discriminator would be found: a run read back as a list of base events renders as nothing on a screen and
+    /// fails no unit test.
+    /// </para>
+    /// <para>
+    /// <strong>A composed block is in the run for that reason and not as a fourth event.</strong> It is the one kind
+    /// whose own member sorts before the discriminator, so a column that reorders what it stores loses this run and no
+    /// other — which is what a round trip in one process cannot see, both halves of it being the writer's own order.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task ReadAsync_ARunAnotherReplicaComposed_ReadsEveryEventInTheOrderItWasWritten()
@@ -67,6 +79,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
 
             await executing.AppendAsync(run, new DiscoveryRunStarted(), Instant, cancellationToken);
             await executing.AppendAsync(run, Progressed(1), Instant, cancellationToken);
+            await executing.AppendAsync(run, Composed(), Instant, cancellationToken);
             await executing.AppendAsync(run, Completed(), Instant, cancellationToken);
 
             // Act
@@ -75,11 +88,19 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             // Assert
             Assert.NotNull(read);
             Assert.False(read.Running);
-            Assert.Equal([1L, 2L, 3L], read.Events.Select(written => written.Sequence));
+            Assert.Equal([1L, 2L, 3L, 4L], read.Events.Select(written => written.Sequence));
             Assert.Equal(
-                [DiscoveryRunStarted.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRunCompleted.Kind],
+                [
+                    DiscoveryRunStarted.Kind,
+                    DiscoveryRetrievalProgressed.Kind,
+                    DiscoveryBlockComposed.Kind,
+                    DiscoveryRunCompleted.Kind,
+                ],
                 read.Events.Select(written => written.EventName));
             Assert.All(read.Events, written => Assert.Equal(run, written.RunId));
+            Assert.Equal(
+                AnswerText,
+                Assert.IsType<AnswerBlock>(Assert.IsType<DiscoveryBlockComposed>(read.Events[2]).Block).Text.Value);
         }
         finally
         {
@@ -371,6 +392,12 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
         new(
             new DiscoveryRetrievalProgress(lookupsRun, LookupsRefused: 0, LookupsPlanned: 6, PassagesFound: 0),
             MailAnsweringRunSpend.Nothing);
+
+    private static DiscoveryBlockComposed Composed() =>
+        new(new AnswerBlock(
+            PresentationEvidence.Unsupported(PresentationFreshness.Unknown),
+            PresentationText.Create(AnswerText),
+            PresentationConfidence.Low));
 
     private static DiscoveryRunCompleted Completed() => new([], [], MailAnsweringRunSpend.Nothing);
 
