@@ -116,7 +116,7 @@ internal sealed class ClientSignalTickets
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The minted ticket and when it expires, or <see langword="null" /> when the bound is reached.</returns>
     /// <exception cref="ClientSignalTicketStoreUnavailableException">Thrown when the deployment's tickets could not be reached, which the route answers rather than minting a ticket nothing holds.</exception>
-    internal async Task<MintedClientSignalTicket?> MintAsync(MailUserId user, CancellationToken cancellationToken)
+    internal async Task<MintedClientSignalTicket?> MintAsync(UserId user, CancellationToken cancellationToken)
     {
         await this.SweepExpiredIfDueAsync(cancellationToken);
 
@@ -150,7 +150,7 @@ internal sealed class ClientSignalTickets
     /// a ticket single-use even against two connections presenting it at once, whichever replica each of them reaches:
     /// the loser finds no row to remove and is refused.
     /// </remarks>
-    internal async Task<MailUserId?> RedeemAsync(string? presented, CancellationToken cancellationToken)
+    internal async Task<UserId?> RedeemAsync(string? presented, CancellationToken cancellationToken)
     {
         if (!TrySplit(presented, out var identifier, out var secret))
         {

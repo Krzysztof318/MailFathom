@@ -12,7 +12,7 @@ internal static class StoredSecretBinding
 {
     /// <summary>Binds material to its user, row, name, and stored-secret purpose.</summary>
     internal static DataEncryptionBinding Create(
-        MailUserId user,
+        UserId user,
         DatabaseSecretReference reference,
         SecretName name)
     {

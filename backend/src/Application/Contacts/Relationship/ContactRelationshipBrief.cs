@@ -24,4 +24,4 @@ namespace MailFathom.Application.Contacts.Relationship;
 /// </remarks>
 public sealed record ContactRelationshipBrief(
     ContactCorrespondence Correspondence,
-    MailUserLanguage Language);
+    UserLanguage Language);

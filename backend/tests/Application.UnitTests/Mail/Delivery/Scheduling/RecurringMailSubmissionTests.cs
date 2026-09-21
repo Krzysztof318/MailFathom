@@ -199,7 +199,7 @@ public sealed class RecurringMailSubmissionTests
         var submission = SubmissionOver(
             store,
             out _,
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailSend));
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another, MailFathomPermission.MailSend));
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(

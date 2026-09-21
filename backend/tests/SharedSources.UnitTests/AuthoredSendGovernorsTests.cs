@@ -116,7 +116,7 @@ public sealed class AuthoredSendGovernorsTests
 
         return OutgoingEmailRequest.Create(
             MailAccountId.Create("work"),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command(requesterIdentity),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }

@@ -33,7 +33,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -55,7 +55,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         await attachments.StageAsync(
@@ -78,7 +78,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -99,7 +99,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         await attachments.StageAsync(draft.Id, File("one.txt", "text/plain", 8), TestContext.Current.CancellationToken);
@@ -123,7 +123,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -143,7 +143,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
+        var theirs = await OpenAsync(drafts, SyntheticUser.Another);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -164,7 +164,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         var staged = await attachments.StageAsync(
@@ -188,7 +188,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(
             drafts,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
@@ -259,7 +259,7 @@ public sealed class MailDraftAttachmentsTests
         new(fileName, mediaType, Encoding.UTF8.GetBytes(content).AsMemory());
 
     /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
-    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
+    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, UserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
             Work,

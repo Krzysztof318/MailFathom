@@ -38,7 +38,7 @@ namespace MailFathom.Application.Reminders;
 /// <param name="Reminder">The lead the person set.</param>
 /// <param name="DueAt">The instant that lead falls at, as the record now stands.</param>
 public sealed record DueReminder(
-    MailUserId Owner,
+    UserId Owner,
     ReminderSubject Subject,
     Guid Identity,
     string Headline,

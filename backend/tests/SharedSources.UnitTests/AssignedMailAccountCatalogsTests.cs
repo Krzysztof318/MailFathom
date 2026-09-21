@@ -25,7 +25,7 @@ public sealed class AssignedMailAccountCatalogsTests
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment),
             SyntheticServedAccount.Of(Work));
 
         // Act
@@ -40,7 +40,7 @@ public sealed class AssignedMailAccountCatalogsTests
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another),
             SyntheticServedAccount.Of(Work));
 
         // Act
@@ -69,7 +69,7 @@ public sealed class AssignedMailAccountCatalogsTests
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another),
             SyntheticServedAccount.Of(Work));
 
         // Act & Assert
@@ -82,7 +82,7 @@ public sealed class AssignedMailAccountCatalogsTests
     {
         // Arrange
         var catalog = AssignedMailAccountCatalogs.For(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment),
             SyntheticServedAccount.Of("private"),
             SyntheticServedAccount.Of("archive"));
 

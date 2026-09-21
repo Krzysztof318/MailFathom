@@ -34,7 +34,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
     }
 
     public Task<IReadOnlyList<PersonalTask>> ReadAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskOrigin? origin,
         PersonalTaskCursor? after,
         int limit,
@@ -56,7 +56,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
         return Task.FromResult<IReadOnlyList<PersonalTask>>([.. page.Take(limit)]);
     }
 
-    public Task<PersonalTask?> FindAsync(MailUserId user, PersonalTaskId task, CancellationToken cancellationToken) =>
+    public Task<PersonalTask?> FindAsync(UserId user, PersonalTaskId task, CancellationToken cancellationToken) =>
         Task.FromResult(this.tasks.FirstOrDefault(held => held.User == user && held.Id == task));
 
     public Task<PersonalTaskChangeOutcome> ReviseAsync(PersonalTask revision, CancellationToken cancellationToken)
@@ -70,7 +70,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
     }
 
     public Task<PersonalTaskChangeOutcome> AcceptAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.Replace(
@@ -87,7 +87,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
                 held.IsCompleted)));
 
     public Task<PersonalTaskChangeOutcome> SetCompletionAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         bool isCompleted,
         CancellationToken cancellationToken) =>
@@ -109,7 +109,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
         ? new TaskAnnouncement(offset, task.Reminders)
         : TaskAnnouncement.Silent;
 
-    public Task<bool> EraseAsync(MailUserId user, PersonalTaskId task, CancellationToken cancellationToken) =>
+    public Task<bool> EraseAsync(UserId user, PersonalTaskId task, CancellationToken cancellationToken) =>
         Task.FromResult(this.tasks.RemoveAll(held => held.User == user && held.Id == task) > 0);
 
     /// <summary>Reports whether a task stands after a boundary in the order this store serves.</summary>
@@ -119,7 +119,7 @@ internal sealed class InMemoryPersonalTaskStore : IPersonalTaskStore
 
     /// <summary>Applies a change to one of a person's tasks, reporting what became of the request.</summary>
     private PersonalTaskChangeOutcome Replace(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         Func<PersonalTask, PersonalTask> change)
     {

@@ -206,7 +206,7 @@ public sealed class ClientContactCorrespondenceEndpointTests
 
     /// <summary>The caller these routes are reached by, which holds both grants the answer needs.</summary>
     private static AccessAuthorization Granted() => AccessAuthorizations.ForUserGranted(
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         MailFathomPermission.MailRead,
         MailFathomPermission.MailContactsRead);
 

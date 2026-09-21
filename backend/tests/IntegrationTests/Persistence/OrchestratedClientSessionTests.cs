@@ -76,7 +76,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
 
             // Assert
             Assert.Equal(ClientSessionMintOutcome.Minted, minted.Outcome);
-            Assert.Equal(MailUserId.Create(user), admitted?.User);
+            Assert.Equal(UserId.Create(user), admitted?.User);
             Assert.Equal(credential, admitted?.CredentialId);
             Assert.Equal(WholeMailSurface, admitted?.Permissions);
         }
@@ -261,9 +261,9 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
             var credential = await ProvisionCredentialAsync(host, user, "kept-off-the-client", cancellationToken);
             var committed = await host.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IUserSettingsDocumentWriter>().CommitAsync(
-                    MailUserId.Create(user),
+                    UserId.Create(user),
                     """{"EndpointAccess":{"ClientEndpoint":"false"}}""",
-                    new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
+                    new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
                     expectedVersion: 1,
                     token),
                 cancellationToken);
@@ -343,7 +343,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
 
             // Act
             var removed = await administeringHost.InScopeAsync(
-                (scope, token) => Credentials(scope).DeleteAsync(MailUserId.Create(user), credential, token),
+                (scope, token) => Credentials(scope).DeleteAsync(UserId.Create(user), credential, token),
                 cancellationToken);
 
             // Assert
@@ -396,7 +396,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
     }
 
     private static AdmittedUserCredential Admitted(Guid user, Guid credentialId) =>
-        new(credentialId, MailUserId.Create(user), WholeMailSurface, MailUserEndpointAccess.Everywhere);
+        new(credentialId, UserId.Create(user), WholeMailSurface, UserEndpointAccess.Everywhere);
 
     /// <summary>Mints and verifies through the host's own registered store, the way the exchange and the handler do.</summary>
     /// <remarks>Over a clock this class fixes rather than the wall clock, so a session's expiry and the sweep's threshold are this class's. Each replica gets its own instance at the same instant, as two processes would.</remarks>
@@ -423,7 +423,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
         var outcome = await host.InScopeAsync(
             (scope, token) => Credentials(scope).CreateAsync(
                 credentialId,
-                MailUserId.Create(user),
+                UserId.Create(user),
                 UserCredentialMethod.Password,
                 UserCredentialLookup.ForUsername(UserCredentialUsername.Create($"session-{lookup}")),
                 StoredHash,
@@ -442,7 +442,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
         Guid credentialId,
         bool enabled,
         CancellationToken cancellationToken) => host.InScopeAsync(
-            (scope, token) => Credentials(scope).SetEnabledAsync(MailUserId.Create(user), credentialId, enabled, token),
+            (scope, token) => Credentials(scope).SetEnabledAsync(UserId.Create(user), credentialId, enabled, token),
             cancellationToken);
 
     /// <summary>Counts what the deployment holds for one credential, which is what the racing cases are stated against.</summary>

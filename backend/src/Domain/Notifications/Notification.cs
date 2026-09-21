@@ -39,7 +39,7 @@ public sealed record Notification
 
     private Notification(
         NotificationId id,
-        MailUserId user,
+        UserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -67,7 +67,7 @@ public sealed record Notification
     public NotificationId Id { get; }
 
     /// <summary>Gets the user it happened to.</summary>
-    public MailUserId User { get; }
+    public UserId User { get; }
 
     /// <summary>Gets what part of MailFathom it is about.</summary>
     public NotificationKind Kind { get; }
@@ -128,7 +128,7 @@ public sealed record Notification
     /// </remarks>
     public static Notification Compose(
         NotificationId id,
-        MailUserId user,
+        UserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -178,7 +178,7 @@ public sealed record Notification
     /// </remarks>
     public static Notification Restore(
         NotificationId id,
-        MailUserId user,
+        UserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -207,7 +207,7 @@ public sealed record Notification
 
     /// <summary>Refuses the identities and the kind that no notification can be built from, whether composed or restored.</summary>
     private static void Validate(
-        MailUserId user,
+        UserId user,
         NotificationKind kind,
         NotificationId id,
         NotificationDeduplicationKey deduplicationKey,

@@ -28,7 +28,7 @@ internal sealed class InMemoryClientSignalTicketStore : IClientSignalTicketStore
     /// <inheritdoc />
     public Task<bool> TryMintAsync(
         string identifier,
-        MailUserId user,
+        UserId user,
         ReadOnlyMemory<byte> secretDigest,
         DateTimeOffset expiresAt,
         int mostOutstanding,

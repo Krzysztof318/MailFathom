@@ -31,9 +31,9 @@ public sealed class UnlinkedStoredFileSweepTests
     public async Task RunAsync_ACandidateItsOwnersRecordLinks_IsLeftAloneWhileTheUnlinkedOneIsRemoved()
     {
         // Arrange
-        var files = FilesNaming(new HeldStoredFile(Linked, SyntheticMailUser.Deployment), new HeldStoredFile(Unlinked, SyntheticMailUser.Deployment));
+        var files = FilesNaming(new HeldStoredFile(Linked, SyntheticUser.Deployment), new HeldStoredFile(Unlinked, SyntheticUser.Deployment));
         var links = Substitute.For<IUserRecordFileLinks>();
-        links.ReadLinkedFilesAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+        links.ReadLinkedFilesAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns(new HashSet<StoredFileId> { Linked });
 
         var sweep = Sweeping(files, links, new GrantingLeaseRunner());
@@ -43,8 +43,8 @@ public sealed class UnlinkedStoredFileSweepTests
 
         // Assert
         Assert.Equal(1, removed);
-        await files.Received(1).RemoveAsync(SyntheticMailUser.Deployment, Unlinked, Arg.Any<CancellationToken>());
-        await files.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Linked, Arg.Any<CancellationToken>());
+        await files.Received(1).RemoveAsync(SyntheticUser.Deployment, Unlinked, Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Linked, Arg.Any<CancellationToken>());
     }
 
     /// <summary>A file younger than the floor may be a write whose link has not committed yet.</summary>
@@ -69,7 +69,7 @@ public sealed class UnlinkedStoredFileSweepTests
     public async Task RunAsync_AReplicaRefusedTheLease_RemovesNothingAndSaysSo()
     {
         // Arrange
-        var files = FilesNaming(new HeldStoredFile(Unlinked, SyntheticMailUser.Deployment));
+        var files = FilesNaming(new HeldStoredFile(Unlinked, SyntheticUser.Deployment));
         var runner = Substitute.For<IWorkLeaseRunner>();
         runner.TryRunUnderLeaseAsync(Arg.Any<WorkScope>(), Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(false);
@@ -81,7 +81,7 @@ public sealed class UnlinkedStoredFileSweepTests
 
         // Assert
         Assert.Null(removed);
-        await files.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

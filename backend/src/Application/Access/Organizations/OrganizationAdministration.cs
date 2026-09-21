@@ -137,7 +137,7 @@ public sealed class OrganizationAdministration
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public Task<OrganizationWriteResult> SetUserOrganizationAsync(
-        MailUserId user,
+        UserId user,
         Guid? organizationId,
         CancellationToken cancellationToken)
     {

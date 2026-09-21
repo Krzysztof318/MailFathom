@@ -44,7 +44,7 @@ public sealed class ContactRelationshipReader
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
-    private readonly IMailUserLanguages languages;
+    private readonly IUserLanguages languages;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="correspondenceReader">Correlates the contact with the mail this caller may read, which is what the derivation is scoped to.</param>
@@ -60,7 +60,7 @@ public sealed class ContactRelationshipReader
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
-        IMailUserLanguages languages)
+        IUserLanguages languages)
     {
         ArgumentNullException.ThrowIfNull(correspondenceReader);
         ArgumentNullException.ThrowIfNull(deriver);

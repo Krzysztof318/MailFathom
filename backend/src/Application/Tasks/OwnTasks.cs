@@ -281,7 +281,7 @@ public sealed class OwnTasks
     /// credential, so a cursor presented by somebody it was not issued to is refused; the origin is the route, so one
     /// issued for the proposals names no boundary in the commitments.
     /// </remarks>
-    private static string FingerprintOf(MailUserId user, PersonalTaskOrigin origin) => PageFilterFingerprint.Of(
+    private static string FingerprintOf(UserId user, PersonalTaskOrigin origin) => PageFilterFingerprint.Of(
         user.Value.ToString("N", CultureInfo.InvariantCulture),
         origin.ToString());
 
@@ -324,7 +324,7 @@ public sealed class OwnTasks
     /// the read is reported as one the person does not hold, which is the state they are in by then.
     /// </remarks>
     private async Task<PersonalTask?> ReadBackAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         Task<PersonalTaskChangeOutcome> change,
         CancellationToken cancellationToken) =>

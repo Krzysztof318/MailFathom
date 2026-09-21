@@ -156,7 +156,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var stranger = MailUserId.Create(Guid.CreateVersion7());
+        var stranger = UserId.Create(Guid.CreateVersion7());
         var lookup = UserCredentialLookup.ForUsername(UserCredentialUsername.Create("orchestrated-unheld-user"));
 
         // Act
@@ -189,7 +189,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var contenderId = Guid.CreateVersion7();
-        var contender = MailUserId.Create(contenderId);
+        var contender = UserId.Create(contenderId);
 
         try
         {
@@ -511,7 +511,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => Store(scope).CreateAsync(
                 Guid.CreateVersion7(),
-                MailUserId.Create(userId),
+                UserId.Create(userId),
                 method,
                 lookup,
                 method.StoresMaterial ? StoredHash : null,
@@ -549,7 +549,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
             Assert.Equal(OrganizationWriteOutcome.Written, created.Outcome);
 
             var moved = await services.InScopeAsync(
-                (scope, token) => Organizations(scope).SetUserOrganizationAsync(MailUserId.Create(user), organization, token),
+                (scope, token) => Organizations(scope).SetUserOrganizationAsync(UserId.Create(user), organization, token),
                 cancellationToken);
 
             Assert.Equal(OrganizationWriteOutcome.Written, moved.Outcome);
@@ -604,7 +604,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
     /// </remarks>
     private static Task<int> FillToOnePlaceLeftAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) =>
             {
@@ -626,7 +626,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
 
     private static Task<int> CountForUserAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
                 .UserCredentials

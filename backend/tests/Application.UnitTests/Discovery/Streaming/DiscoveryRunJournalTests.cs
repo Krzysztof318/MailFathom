@@ -67,7 +67,7 @@ public sealed class DiscoveryRunJournalTests
         var announced = Assert.Single(channel.Published, signal => signal.Sequence == 2);
         Assert.Equal(ClientSignalKind.DiscoveryRunAdvanced, announced.Kind);
         Assert.Equal(journal.Id, announced.Run);
-        Assert.Equal(SyntheticMailUser.Deployment, announced.User);
+        Assert.Equal(SyntheticUser.Deployment, announced.User);
         Assert.Equal(0, announced.Count);
         Assert.Empty(announced.Emails);
         Assert.Empty(announced.Flags);
@@ -136,7 +136,7 @@ public sealed class DiscoveryRunJournalTests
         await journal.AppendAsync(new DiscoveryRunStarted(), TestContext.Current.CancellationToken);
         await store.TryRequestStopAsync(
             journal.Id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Now,
             TestContext.Current.CancellationToken);
 
@@ -174,7 +174,7 @@ public sealed class DiscoveryRunJournalTests
         await using var signals = this.Signals(out _);
         using var journal = new DiscoveryRunJournal(
             DiscoveryRunId.New(),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             store,
             signals,
             this.clock);
@@ -190,9 +190,9 @@ public sealed class DiscoveryRunJournalTests
     private async Task<DiscoveryRunJournal> OpenedAsync(InMemoryDiscoveryRunStore store, ClientSignals signals)
     {
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
-        return new DiscoveryRunJournal(id, SyntheticMailUser.Deployment, store, signals, this.clock);
+        return new DiscoveryRunJournal(id, SyntheticUser.Deployment, store, signals, this.clock);
     }
 
     private ClientSignals Signals(out RecordingClientSignalChannel channel)

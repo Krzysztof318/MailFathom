@@ -57,7 +57,7 @@ internal sealed class DatabaseSecretReferenceResolver(
 
         try
         {
-            MailUserId user;
+            UserId user;
             SecretName name;
             SealedValue sealedValue;
 
@@ -99,7 +99,7 @@ internal sealed class DatabaseSecretReferenceResolver(
                     return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
                 }
 
-                user = MailUserId.Create(userId);
+                user = UserId.Create(userId);
                 sealedValue = new SealedValue(reader.GetString(2), reader.GetFieldValue<byte[]>(4));
             }
 
@@ -121,7 +121,7 @@ internal sealed class DatabaseSecretReferenceResolver(
     }
 
     private async Task<SecretResolutionResult> OpenAsync(
-        MailUserId user,
+        UserId user,
         DatabaseSecretReference reference,
         SecretName name,
         SealedValue sealedValue,

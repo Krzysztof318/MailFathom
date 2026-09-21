@@ -272,7 +272,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             // What is left names an account this deployment no longer holds a row for — a mailbox removed from the
             // configuration keeps the history it produced, and only three of these tables key into mailbox_accounts at
             // all. Such a row belongs to the one user the deployment was serving when it was written, which is the
-            // invariant IDeploymentMailUserSource states and which #1248 is what ends. The subquery names the row
+            // invariant IDeploymentUserSource states and which #1248 is what ends. The subquery names the row
             // AddUserAccounts inserted rather than a value repeated here.
             FillUserFromDeployment(migrationBuilder, "mail_drafts");
             FillUserFromDeployment(migrationBuilder, "mail_answering_audit_entries");

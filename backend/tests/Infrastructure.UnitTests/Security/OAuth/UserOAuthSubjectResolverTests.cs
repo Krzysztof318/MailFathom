@@ -21,7 +21,7 @@ public sealed class UserOAuthSubjectResolverTests
 
     private const string Subject = "9f0a2c";
 
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000003");
 
@@ -141,7 +141,7 @@ public sealed class UserOAuthSubjectResolverTests
                     Grant,
                     enabled,
                     Material: null,
-                    MailUserEndpointAccess.Everywhere));
+                    UserEndpointAccess.Everywhere));
         }
 
         internal Task<AdmittedUserCredential?> ResolveAsync(string? issuer, string? subject) =>

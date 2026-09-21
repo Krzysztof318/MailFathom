@@ -32,9 +32,9 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alex")
+        deployment.Held(new UserRecord(SyntheticUser.Deployment, "alex")
         {
-            EndpointAccess = new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            EndpointAccess = new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
         });
 
         // Act
@@ -45,7 +45,7 @@ public sealed class UserRecordEndpointsTests
         // Assert
         var entry = Assert.Single(result.Value!.Users);
 
-        Assert.Equal(SyntheticMailUser.Deployment.Value, entry.Id);
+        Assert.Equal(SyntheticUser.Deployment.Value, entry.Id);
         Assert.Equal("alex", entry.DisplayName);
         Assert.False(entry.McpEndpoint);
         Assert.True(entry.ClientEndpoint);
@@ -97,7 +97,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             deployment.Roster,
             TestContext.Current.CancellationToken);
 
@@ -114,13 +114,13 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
-        deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
-        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasureOutcome(true, null));
+        deployment.Serving(new ServedUser(SyntheticUser.Deployment, "alex", []));
+        deployment.Erasure.EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserErasureOutcome(true, null));
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Roster,
             TestContext.Current.CancellationToken);
 
@@ -140,14 +140,14 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
-        deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
-        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasureOutcome(true, null));
+        deployment.Serving(new ServedUser(SyntheticUser.Deployment, "alex", []));
+        deployment.Erasure.EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserErasureOutcome(true, null));
         deployment.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Roster,
             TestContext.Current.CancellationToken);
 
@@ -183,11 +183,11 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 3);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 3);
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: false),
             TestContext.Current.CancellationToken);
@@ -206,7 +206,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: false, ClientEndpoint: null),
             TestContext.Current.CancellationToken);
@@ -221,19 +221,19 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 3);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 3);
         deployment.Store
             .CommitAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<string>(),
-                Arg.Any<MailUserEndpointAccess>(),
+                Arg.Any<UserEndpointAccess>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns((long?)null);
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: false, ClientEndpoint: null),
             TestContext.Current.CancellationToken);
@@ -251,7 +251,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: null),
             TestContext.Current.CancellationToken);
@@ -268,11 +268,11 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
+        deployment.Held(new UserRecord(SyntheticUser.Deployment, "alexandra"));
 
         // Act
         var result = await UserRecordEndpoints.RelabelAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Roster,
             new UserRelabelRequest("alex"),
             TestContext.Current.CancellationToken);
@@ -280,7 +280,7 @@ public sealed class UserRecordEndpointsTests
         // Assert
         Assert.IsType<NoContent>(result.Result);
         await deployment.Provisioning.Received(1)
-            .RelabelAsync(SyntheticMailUser.Deployment, "alex", Arg.Any<CancellationToken>());
+            .RelabelAsync(SyntheticUser.Deployment, "alex", Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -297,7 +297,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.RelabelAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             deployment.Roster,
             new UserRelabelRequest("sam"),
             TestContext.Current.CancellationToken);
@@ -336,7 +336,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => UserRecordEndpoints.RelabelAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Roster,
             new UserRelabelRequest("alex"),
             TestContext.Current.CancellationToken));
@@ -347,18 +347,18 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
 
         // Act
         var result = await UserRecordEndpoints.ReadRecordAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             TestContext.Current.CancellationToken);
 
         // Assert
         var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
 
-        Assert.Equal(SyntheticMailUser.Deployment.Value, record.User);
+        Assert.Equal(SyntheticUser.Deployment.Value, record.User);
         Assert.Equal(3, record.Version);
     }
 
@@ -371,7 +371,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.ReadRecordAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             deployment.Records,
             TestContext.Current.CancellationToken);
 
@@ -379,7 +379,7 @@ public sealed class UserRecordEndpointsTests
         var refusal = Assert.IsType<NotFound<ProblemDetails>>(result.Result).Value!;
 
         Assert.DoesNotContain(
-            SyntheticMailUser.Another.Value.ToString("D"),
+            SyntheticUser.Another.Value.ToString("D"),
             refusal.Detail!,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -393,11 +393,11 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"MailAccounts":[{"AccountId":"alex-private"}""", version: 1);
+        deployment.Holding(SyntheticUser.Deployment, """{"MailAccounts":[{"AccountId":"alex-private"}""", version: 1);
 
         // Act
         var result = await UserRecordEndpoints.ReadRecordAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             TestContext.Current.CancellationToken);
 
@@ -433,7 +433,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.SaveRecordAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             new UserRecordSaveRequest(-1, EmptyRecord),
             TestContext.Current.CancellationToken);
@@ -454,7 +454,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.SaveRecordAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             deployment.Records,
             new UserRecordSaveRequest(1, document),
             TestContext.Current.CancellationToken);
@@ -468,11 +468,11 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act
         var result = await UserRecordEndpoints.StoreSecretAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new StoredSecretWriteRequest("primary-password", "not-a-real-mailbox-password"),
             deployment.Secrets,
             TestContext.Current.CancellationToken);
@@ -491,7 +491,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.StoreSecretAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new StoredSecretWriteRequest("primary-password", string.Empty),
             deployment.Secrets,
             TestContext.Current.CancellationToken);
@@ -515,7 +515,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.StoreSecretAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             new StoredSecretWriteRequest("primary-password", "not-a-real-mailbox-password"),
             deployment.Secrets,
             TestContext.Current.CancellationToken);
@@ -533,7 +533,7 @@ public sealed class UserRecordEndpointsTests
 
         // Act
         var result = await UserRecordEndpoints.StoreSecretAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new StoredSecretWriteRequest("primary-password", material),
             deployment.Secrets,
             TestContext.Current.CancellationToken);

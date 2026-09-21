@@ -30,7 +30,7 @@ internal static class OutgoingMailScreenings
     /// <remarks>
     /// Named here rather than per suite because the screening resolves the user it scans under from the mailbox's
     /// assignments, so the mailbox a test names and the assignment behind it have to be the same pair. It is assigned
-    /// to <see cref="SyntheticMailUser.Deployment" />, whose posture <see cref="ScanningSensitiveContentEgress" />
+    /// to <see cref="SyntheticUser.Deployment" />, whose posture <see cref="ScanningSensitiveContentEgress" />
     /// states.
     /// </remarks>
     internal static MailAccountId Account => SyntheticMailAccount.Deployment;

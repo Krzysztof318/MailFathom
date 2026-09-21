@@ -207,7 +207,7 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
     /// <inheritdoc />
     public async Task<bool> TryOpenAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -263,7 +263,7 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
     /// <inheritdoc />
     public async Task<DiscoveryRunReading?> ReadAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         long afterSequence,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -306,7 +306,7 @@ internal sealed class DiscoveryRunStore(NpgsqlDataSource dataSource) : IDiscover
     /// <inheritdoc />
     public async Task<bool> TryRequestStopAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {

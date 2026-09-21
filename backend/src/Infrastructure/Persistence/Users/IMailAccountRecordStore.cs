@@ -35,7 +35,7 @@ public interface IMailAccountRecordStore
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did; an address another account holds leaves nothing written.</returns>
     Task<MailAccountWrite> CreateAsync(
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
         CancellationToken cancellationToken);
@@ -54,7 +54,7 @@ public interface IMailAccountRecordStore
     /// <returns>What the write did.</returns>
     Task<MailAccountWrite> AssignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         CancellationToken cancellationToken);
 
@@ -63,7 +63,7 @@ public interface IMailAccountRecordStore
     /// <param name="user">The user whose assignment ends.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the write did.</returns>
-    Task<MailAccountUnassignment> UnassignAsync(Guid accountId, MailUserId user, CancellationToken cancellationToken);
+    Task<MailAccountUnassignment> UnassignAsync(Guid accountId, UserId user, CancellationToken cancellationToken);
 
     /// <summary>Erases an account, every assignment to it, and everything stored for it.</summary>
     /// <param name="accountId">The account.</param>
@@ -93,13 +93,13 @@ public interface IMailAccountRecordStore
     /// wrong one.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(UserId user, CancellationToken cancellationToken);
 }
 
 /// <summary>One account and the users it is assigned to.</summary>
 /// <param name="Account">The account.</param>
 /// <param name="Users">Every user it is assigned to, which may be none only while an erasure is under way.</param>
-public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList<MailUserId> Users);
+public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList<UserId> Users);
 
 /// <summary>One account as a listing names it: by its record's columns and the users it is assigned to, without its settings.</summary>
 /// <param name="Id">The identifier the deployment generated for the account.</param>
@@ -112,7 +112,7 @@ public sealed record MailAccountSummary(
     string? EmailAddress,
     string DisplayName,
     long Version,
-    IReadOnlyList<MailUserId> Users);
+    IReadOnlyList<UserId> Users);
 
 /// <summary>What one write to an account did.</summary>
 /// <param name="Result">How the write ended.</param>

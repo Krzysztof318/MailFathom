@@ -94,7 +94,7 @@ internal static class AnsweringDeployment
             new FakeTimeProvider(Now),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
-            MailUserClocks.Reading(Now));
+            UserClocks.Reading(Now));
     }
 
     /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>

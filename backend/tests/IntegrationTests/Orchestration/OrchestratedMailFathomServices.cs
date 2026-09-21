@@ -144,7 +144,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// user's — rather than one deciding whose data it wants. It is the same value the composed graph hands every use
     /// case, read from the same registration.
     /// </remarks>
-    internal MailUserId ServedUser => this.host.Services.GetRequiredService<IDeploymentMailUserSource>().User;
+    internal UserId ServedUser => this.host.Services.GetRequiredService<IDeploymentUserSource>().User;
 
     /// <summary>Gets the replica this graph is, which is what every per-process figure it answers with is named beside.</summary>
     /// <remarks>
@@ -334,11 +334,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // written here is keyed onto the user record that identifier names.
         var deploymentUser = OrchestratedDeploymentUser.Shared;
 
-        builder.Services.AddSingleton<IDeploymentMailUserSource>(deploymentUser);
+        builder.Services.AddSingleton<IDeploymentUserSource>(deploymentUser);
         // The zone that user's own days are read in, which the composition root answers out of its published roster
         // and this harness answers directly. Every operation resolving a relative period resolves a clock over it, so
         // a harness without it would fail to compose rather than behave like a deployment nobody stated a zone to.
-        builder.Services.AddSingleton<IMailUserTimeZones>(new OrchestratedMailUserTimeZones());
+        builder.Services.AddSingleton<IUserTimeZones>(new OrchestratedUserTimeZones());
         // The port every folder decision is read through, registered by the composition root from the same options
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
         // would fail to compose rather than behave like a deployment that configured no folder switch.
@@ -629,8 +629,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         }
 
         await scope.ServiceProvider
-            .GetRequiredService<IMailUserProvisioning>()
-            .ProvisionAsync(MailUserId.Create(Guid.NewGuid()), SuiteUserDisplayName, cancellationToken);
+            .GetRequiredService<IUserProvisioning>()
+            .ProvisionAsync(UserId.Create(Guid.NewGuid()), SuiteUserDisplayName, cancellationToken);
     }
 
     /// <summary>Records the account this suite's mail belongs to and assigns it to the suite's user, unless an earlier start did.</summary>
@@ -650,7 +650,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// </remarks>
     private static async Task AssignTheSuiteAccountUnlessItIsHeldAsync(
         IHost host,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         await using var scope = host.Services.CreateAsyncScope();
@@ -698,7 +698,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// second one while it runs, and a start made during that stretch belongs to the suite's user exactly as any other
     /// does; the label's unique index is what makes the read single.
     /// </remarks>
-    private static async Task<MailUserId> ReadSuiteUserAsync(IHost host, CancellationToken cancellationToken)
+    private static async Task<UserId> ReadSuiteUserAsync(IHost host, CancellationToken cancellationToken)
     {
         await using var scope = host.Services.CreateAsyncScope();
 
@@ -710,7 +710,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             .Select(user => user.Id)
             .SingleAsync(cancellationToken);
 
-        return MailUserId.Create(userId);
+        return UserId.Create(userId);
     }
 
     /// <summary>Runs one unit of work in its own dependency-injection scope, the way a worker does.</summary>
@@ -746,7 +746,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             {
                 scope.GetRequiredService<StatedAuthorizedPrincipalSource>()
                     .Assume(AuthorizedPrincipal.CallerActingFor(
-                        scope.GetRequiredService<IDeploymentMailUserSource>().User,
+                        scope.GetRequiredService<IDeploymentUserSource>().User,
                         "orchestrated-caller",
                         grantedPermissions));
 

@@ -174,7 +174,7 @@ internal sealed class SyntheticMailAccount(
     /// Read rather than stated, because the migration that provisions the user record generates its identifier: a
     /// value written here would name a row no database holds, and every write keyed onto it would be refused.
     /// </remarks>
-    public static MailUserId User => OrchestratedDeploymentUser.Shared.User;
+    public static UserId User => OrchestratedDeploymentUser.Shared.User;
 
     /// <summary>Gets the account every test writes under, named by the identifier the deployment gave it.</summary>
     public static MailAccountId Account => AccountId;
@@ -254,11 +254,11 @@ internal sealed class SyntheticMailAccount(
     /// table state as well. Anybody else is assigned nothing, so a test acting for a user this deployment never
     /// established reads nothing rather than reading the suite's mail.
     /// </remarks>
-    public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) =>
+    public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) =>
         user == User ? [AccountId] : [];
 
     /// <inheritdoc />
-    public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) =>
+    public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) =>
         account == AccountId ? [User] : [];
 
     /// <inheritdoc />

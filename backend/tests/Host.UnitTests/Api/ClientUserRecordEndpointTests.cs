@@ -32,8 +32,8 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReadAsync_AUserSignedIn_HandsThemTheirOwnRecordAndTheVersionAChangeIsAcceptedAgainst()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 2);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReadAsync(
@@ -43,7 +43,7 @@ public sealed class ClientUserRecordEndpointTests
         // Assert
         var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
 
-        Assert.Equal(SyntheticMailUser.Deployment.Value, record.User);
+        Assert.Equal(SyntheticUser.Deployment.Value, record.User);
         Assert.Equal(2, record.Version);
     }
 
@@ -55,13 +55,13 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReadAsync_ADeploymentAlsoHoldingAnotherUsersRecord_ReadsOnlyTheSignedInUsers()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
         deployment.Holding(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             EmptyRecord,
             version: 9,
-            Mailbox(SyntheticMailUser.Another, "not-theirs"));
+            Mailbox(SyntheticUser.Another, "not-theirs"));
 
         // Act
         var result = await ClientUserRecordEndpoint.ReadAsync(
@@ -71,7 +71,7 @@ public sealed class ClientUserRecordEndpointTests
         // Assert
         var record = Assert.IsType<Ok<UserRecordResponse>>(result.Result).Value!;
 
-        Assert.Equal(SyntheticMailUser.Deployment.Value, record.User);
+        Assert.Equal(SyntheticUser.Deployment.Value, record.User);
         Assert.DoesNotContain("not-theirs", record.Document, StringComparison.Ordinal);
     }
 
@@ -80,7 +80,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReadAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReadAsync(
@@ -96,8 +96,8 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReadAsync_ARowThatIsNotADocumentOfSettings_IsRefusedWithoutRepeatingWhatTheParserSaw()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Portraits":[{"Caption":"alex-private"}""", version: 1);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
+        deployment.Holding(SyntheticUser.Deployment, """{"Portraits":[{"Caption":"alex-private"}""", version: 1);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReadAsync(
@@ -116,7 +116,7 @@ public sealed class ClientUserRecordEndpointTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -128,13 +128,13 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddMailAccountAsync_ACallerHoldingOnlyTheMailRead_IsRefused()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => ClientUserRecordEndpoint.AddMailAccountAsync(
                 deployment.MailAccounts,
-                new UserMailAccountRequest(1, DeclarationProvisionedFor(SyntheticMailUser.Deployment, "archive")),
+                new UserMailAccountRequest(1, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
                 TestContext.Current.CancellationToken));
     }
 
@@ -147,13 +147,13 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddMailAccountAsync_ADeclarationTheirMailboxesAccept_CreatesTheAccountAndAnswersTheirRecordsNewVersion()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 4);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 4);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
             deployment.MailAccounts,
-            new UserMailAccountRequest(4, DeclarationProvisionedFor(SyntheticMailUser.Deployment, "archive")),
+            new UserMailAccountRequest(4, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -163,7 +163,7 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Equal(5, written.Version);
         Assert.Equal(
             ["archive@example.test"],
-            deployment.MailAccountRecords.DocumentOf(SyntheticMailUser.Deployment)!.MailAccounts.Select(account => account.EmailAddress));
+            deployment.MailAccountRecords.DocumentOf(SyntheticUser.Deployment)!.MailAccounts.Select(account => account.EmailAddress));
     }
 
     /// <summary>
@@ -174,13 +174,13 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddMailAccountAsync_AVersionSomebodyElseHasMovedPast_AnswersWithTheOutcomeRatherThanAnError()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 8);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 8);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddMailAccountAsync(
             deployment.MailAccounts,
-            new UserMailAccountRequest(3, DeclarationProvisionedFor(SyntheticMailUser.Deployment, "archive")),
+            new UserMailAccountRequest(3, DeclarationProvisionedFor(SyntheticUser.Deployment, "archive")),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -197,7 +197,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task SaveAsync_ARequestCarryingNoRecord_IsRefused(string? document)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.SaveAsync(
@@ -213,7 +213,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task SaveAsync_ARequestStatingANegativeVersion_IsRefusedWithoutReachingTheStore()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.SaveAsync(
@@ -235,8 +235,8 @@ public sealed class ClientUserRecordEndpointTests
     public async Task SaveAsync_ARecordNamingMailAccounts_IsRefusedBeforeItIsCommitted()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 6);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 6);
 
         // Act
         var result = await ClientUserRecordEndpoint.SaveAsync(
@@ -262,7 +262,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task RemoveMailAccountAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveMailAccountAsync(
@@ -279,10 +279,10 @@ public sealed class ClientUserRecordEndpointTests
     public async Task RemoveMailAccountAsync_AnAccountAssignedToThem_EndsTheAssignmentAndLeavesTheOthers()
     {
         // Arrange
-        var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
-        var archive = Mailbox(SyntheticMailUser.Deployment, "archive");
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary, archive);
+        var primary = Mailbox(SyntheticUser.Deployment, "primary");
+        var archive = Mailbox(SyntheticUser.Deployment, "archive");
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary, archive);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveMailAccountAsync(
@@ -302,7 +302,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddFolderAsync(
@@ -318,9 +318,9 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddFolderAsync_AFolderTheirAccountAccepts_SavesItIntoThatAccount()
     {
         // Arrange
-        var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
+        var primary = Mailbox(SyntheticUser.Deployment, "primary");
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddFolderAsync(
@@ -344,9 +344,9 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddFolderAsync_AnAliasNestedPastThreeLevels_AnswersARefusalNamingItAndSavesNothing()
     {
         // Arrange
-        var primary = Mailbox(SyntheticMailUser.Deployment, "primary");
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
+        var primary = Mailbox(SyntheticUser.Deployment, "primary");
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.AddFolderAsync(
@@ -369,7 +369,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task AddFolderAsync_ACallerHoldingOnlyTheMailRead_IsRefused()
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailRead);
 
         // Act and assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -384,9 +384,9 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReplaceFolderAsync_AFolderRenamed_SavesTheAccountCarryingTheNewAliasAndNotTheOld()
     {
         // Arrange
-        var primary = Mailbox(SyntheticMailUser.Deployment, "primary", folderAlias: "INBOX/OLD");
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
+        var primary = Mailbox(SyntheticUser.Deployment, "primary", folderAlias: "INBOX/OLD");
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
@@ -412,7 +412,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReplaceFolderAsync_ARequestNamingNoFolder_IsRefused(string? alias)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
@@ -431,7 +431,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task ReplaceFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
@@ -450,7 +450,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task RemoveFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
@@ -469,7 +469,7 @@ public sealed class ClientUserRecordEndpointTests
     public async Task RemoveFolderAsync_ARequestNamingNoFolder_IsRefused(string? alias)
     {
         // Arrange
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
@@ -486,9 +486,9 @@ public sealed class ClientUserRecordEndpointTests
     public async Task RemoveFolderAsync_AnAliasTheAccountDoesNotDeclare_SavesNothing()
     {
         // Arrange
-        var primary = Mailbox(SyntheticMailUser.Deployment, "primary", folderAlias: "INBOX");
-        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1, primary);
+        var primary = Mailbox(SyntheticUser.Deployment, "primary", folderAlias: "INBOX");
+        var deployment = SignedInAs(SyntheticUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1, primary);
 
         // Act
         var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
@@ -501,11 +501,11 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Equal(primary, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
-    private static UserRecordDeployment SignedInAs(MailUserId user, MailFathomPermission granted) =>
+    private static UserRecordDeployment SignedInAs(UserId user, MailFathomPermission granted) =>
         new([granted], user);
 
     /// <summary>A mailbox whose credential this deployment provisioned for one user, as that user declares it.</summary>
-    private static string DeclarationProvisionedFor(MailUserId user, string name) =>
+    private static string DeclarationProvisionedFor(UserId user, string name) =>
         $$"""
           {
             "EmailAddress": "{{name}}@example.test",
@@ -518,7 +518,7 @@ public sealed class ClientUserRecordEndpointTests
           """;
 
     /// <summary>A mailbox already held and assigned, whose credential was provisioned for the user it belongs to.</summary>
-    private static MailAccountRecord Mailbox(MailUserId user, string name, string? folderAlias = null)
+    private static MailAccountRecord Mailbox(UserId user, string name, string? folderAlias = null)
     {
         var folders = folderAlias is null
             ? string.Empty

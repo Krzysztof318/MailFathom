@@ -49,7 +49,7 @@ public interface ICallerMailAccountCatalog
     /// and reading the user here rather than from the principal directly is what keeps a caller's assignments and the
     /// user they were resolved for from being two answers.
     /// </remarks>
-    MailUserId User { get; }
+    UserId User { get; }
 
     /// <summary>Gets the accounts the user in hand is assigned, deduplicated and ordered, or empty when they are assigned none.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>

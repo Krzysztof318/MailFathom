@@ -177,6 +177,6 @@ public sealed class StubEmailThreadReaderTests
 
         public IReadOnlyList<ServedMailAccount> AssignedAccounts => served;
 
-        public MailUserId User => SyntheticMailUser.Deployment;
+        public UserId User => SyntheticUser.Deployment;
     }
 }

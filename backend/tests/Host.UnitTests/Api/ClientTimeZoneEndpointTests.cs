@@ -24,7 +24,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientTimeZoneEndpointTests
 {
-    private static readonly MailUserId Person = MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static readonly UserId Person = UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>The path a client appends to the address it was configured with, pinned because the client composes it from a constant of its own.</summary>
     [Fact]
@@ -36,9 +36,9 @@ public sealed class ClientTimeZoneEndpointTests
     public void Read_APersonWhoseRecordStatesAZone_HandsThemThatZone()
     {
         // Arrange
-        Assert.True(MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(Person, "alex", []) { TimeZone = warsaw });
+        Assert.True(UserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(Person, "alex", []) { TimeZone = warsaw });
 
         // Act
         var result = ClientTimeZoneEndpoint.Read(
@@ -61,7 +61,7 @@ public sealed class ClientTimeZoneEndpointTests
     public void Read_APersonWhoseRecordStatesNoZone_SaysTheAnswerIsStillTheDefault()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(new ServedMailUser(Person, "alex", []));
+        var roster = ResolvedServedUsers.Serving(new ServedUser(Person, "alex", []));
 
         // Act
         var result = ClientTimeZoneEndpoint.Read(
@@ -84,8 +84,8 @@ public sealed class ClientTimeZoneEndpointTests
     public void Read_APersonWhoChoseTheCoordinatedZone_DoesNotSayItIsTheDefault()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(Person, "alex", []) { TimeZone = MailUserTimeZone.Coordinated });
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(Person, "alex", []) { TimeZone = UserTimeZone.Coordinated });
 
         // Act
         var result = ClientTimeZoneEndpoint.Read(
@@ -120,7 +120,7 @@ public sealed class ClientTimeZoneEndpointTests
         await deployment.Store.Received(1).CommitAsync(
             Person,
             Arg.Is<string>(written => written!.Contains("Asia/Tokyo", StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             Arg.Any<long>(),
             Arg.Any<CancellationToken>());
     }
@@ -192,7 +192,7 @@ public sealed class ClientTimeZoneEndpointTests
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Person);
 
         deployment.Holding(Person, json, version: 1);
-        deployment.Serving(new ServedMailUser(Person, "alex", []));
+        deployment.Serving(new ServedUser(Person, "alex", []));
 
         return deployment;
     }

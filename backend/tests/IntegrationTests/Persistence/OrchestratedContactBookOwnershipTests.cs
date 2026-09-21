@@ -88,7 +88,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     private static readonly MailAccountId SecondAccount = MailAccountId.Create("ownership-contacts-account-two");
 
     /// <summary>A reader whose own book nothing ever writes into, so a scope built on it answers from the account alone.</summary>
-    private static readonly MailUserId NobodysBook = MailUserId.Create(Guid.CreateVersion7());
+    private static readonly UserId NobodysBook = UserId.Create(Guid.CreateVersion7());
 
     /// <summary>Reads one page of one user's book in the order the listing index declares.</summary>
     private const string FirstListingPageSql =
@@ -120,7 +120,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var servedUser = services.ServedUser;
         var foreignUserId = Guid.CreateVersion7();
-        var foreignUser = MailUserId.Create(foreignUserId);
+        var foreignUser = UserId.Create(foreignUserId);
         Contact? ours = null;
 
         try
@@ -200,7 +200,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var servedUser = services.ServedUser;
         var foreignUserId = Guid.CreateVersion7();
-        var foreignUser = MailUserId.Create(foreignUserId);
+        var foreignUser = UserId.Create(foreignUserId);
 
         try
         {
@@ -337,7 +337,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
 
         // A second reader of the same mailbox. Nothing is written into their own book, so they need no user record:
         // what the claim is about is the account's book being in both scopes.
-        var otherUser = MailUserId.Create(Guid.CreateVersion7());
+        var otherUser = UserId.Create(Guid.CreateVersion7());
         var collected = CollectedContactOf(SharedCollectedDisplayName, SharedCollectedAddress);
         Contact? written = null;
 
@@ -439,7 +439,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var foreignUserId = Guid.CreateVersion7();
-        var foreignUser = MailUserId.Create(foreignUserId);
+        var foreignUser = UserId.Create(foreignUserId);
 
         try
         {
@@ -542,7 +542,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     private static ContactEntity ContactRowOf(Guid userId, Contact contact) => new()
     {
         Id = contact.Id.Value,
-        BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
+        BookHolderId = ContactBookHolder.Of(UserId.Create(userId)).Key,
         UserId = userId,
         DisplayName = contact.DisplayName.Value,
         DisplayNameSortKey = contact.DisplayName.SortKey,
@@ -556,7 +556,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     {
         Id = Guid.CreateVersion7(RecordedAt),
         ContactId = contact.Id.Value,
-        BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
+        BookHolderId = ContactBookHolder.Of(UserId.Create(userId)).Key,
         Address = contact.PreferredAddress.Address,
         NormalizedAddress = contact.PreferredAddress.NormalizedAddress,
     };
@@ -643,7 +643,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
             cancellationToken);
 
     /// <summary>Names one user's own book, which is the whole of what a caller assigned no mailbox reads.</summary>
-    private static ContactBookScope OwnBookOf(MailUserId user) => ContactBookScope.OfOwnBookAlone(user);
+    private static ContactBookScope OwnBookOf(UserId user) => ContactBookScope.OfOwnBookAlone(user);
 
     /// <summary>Names one mail account's collected book beside an empty own book, for reading the account's back directly.</summary>
     /// <remarks>A scope is always one user's, so the reader named here is one nothing ever writes for — their own book is empty and the account's is the whole answer.</remarks>

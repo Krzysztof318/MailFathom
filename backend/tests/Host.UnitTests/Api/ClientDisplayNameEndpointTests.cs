@@ -166,21 +166,21 @@ public sealed class ClientDisplayNameEndpointTests
     /// <summary>The use case over a substituted envelope, reached by a caller granted what a test states.</summary>
     private sealed class NameDeployment
     {
-        private readonly IMailUserDirectory directory = Substitute.For<IMailUserDirectory>();
+        private readonly IUserDirectory directory = Substitute.For<IUserDirectory>();
 
         internal NameDeployment(MailFathomPermission[] granted)
         {
             this.directory
-                .ReadUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
-                .Returns((MailUserRecord?)null);
+                .ReadUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+                .Returns((UserRecord?)null);
 
-            var provisioning = Substitute.For<IMailUserProvisioning>();
+            var provisioning = Substitute.For<IUserProvisioning>();
             provisioning
-                .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
 
             this.Names = new OwnDisplayName(
-                AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
+                AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, granted),
                 this.directory,
                 provisioning);
         }
@@ -190,7 +190,7 @@ public sealed class ClientDisplayNameEndpointTests
         /// <summary>States the name the envelope of the person these tests act for carries.</summary>
         internal void Recording(string displayName) =>
             this.directory
-                .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
-                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName));
+                .ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+                .Returns(new UserRecord(SyntheticUser.Deployment, displayName));
     }
 }

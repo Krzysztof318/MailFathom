@@ -285,8 +285,8 @@ public sealed class ContactCollectionConfigurationTests
         work.ContactCollection = new ContactCollectionOptions { Enabled = true };
         var options = new MailSynchronizationOptions().WithServedUsers(
         [
-            User(SyntheticMailUser.Deployment, work),
-            User(SyntheticMailUser.Another, AccountAt("theirs", "other@elsewhere.example")),
+            User(SyntheticUser.Deployment, work),
+            User(SyntheticUser.Another, AccountAt("theirs", "other@elsewhere.example")),
         ]);
 
         // Act
@@ -314,7 +314,7 @@ public sealed class ContactCollectionConfigurationTests
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
         new MailSynchronizationOptions().Serving(accounts);
 
-    private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
+    private static ServedUser User(UserId user, params MailSynchronizationAccountOptions[] accounts) =>
         new(user, "a user this deployment serves", accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()

@@ -70,7 +70,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -103,7 +103,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -114,7 +114,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Assert
         var span = Assert.Single(this.published);
 
-        Assert.Equal(SyntheticMailUser.Another.Value.ToString(), span.GetTagItem("mailfathom.user"));
+        Assert.Equal(SyntheticUser.Another.Value.ToString(), span.GetTagItem("mailfathom.user"));
     }
 
     /// <summary>A flow scoped to one mailbox names it instead of a user, because the posture it ran under is the mailbox's.</summary>
@@ -176,7 +176,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -204,7 +204,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         {
             using var operation = telemetry.BeginGuardedOperation(
                 SensitiveContentEgressPoint.McpEmailContent,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 account: null,
                 TestContext.Current.CancellationToken);
 
@@ -227,7 +227,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -253,7 +253,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             shutdown.Token))
         {

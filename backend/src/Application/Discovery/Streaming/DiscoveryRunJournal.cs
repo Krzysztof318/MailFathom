@@ -48,7 +48,7 @@ public sealed class DiscoveryRunJournal : IDisposable
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public DiscoveryRunJournal(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         IDiscoveryRunStore store,
         ClientSignals signals,
         TimeProvider timeProvider)
@@ -68,7 +68,7 @@ public sealed class DiscoveryRunJournal : IDisposable
     public DiscoveryRunId Id { get; }
 
     /// <summary>Gets whose mail the run reads.</summary>
-    public MailUserId User { get; }
+    public UserId User { get; }
 
     /// <summary>Gets the token a stop reaches the execution through, which the run links its own cancellation to.</summary>
     public CancellationToken Stopping => this.stopping.Token;

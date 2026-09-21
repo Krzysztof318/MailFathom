@@ -309,7 +309,7 @@ public sealed class MailContactCollectorTests
         Assert.Equal(ContactOrigin.Collected, collected.Origin);
         Assert.Equal([ContactCollectionOutcome.Recorded], telemetry.Outcomes);
 
-        var untouched = Assert.Single(book.ContactsOf(SyntheticMailUser.Deployment));
+        var untouched = Assert.Single(book.ContactsOf(SyntheticUser.Deployment));
         Assert.Equal(asserted.Id, untouched.Id);
         Assert.Equal("Anna Kowalska", untouched.DisplayName.Value);
         Assert.Equal("Met at the conference.", untouched.Note?.Value);

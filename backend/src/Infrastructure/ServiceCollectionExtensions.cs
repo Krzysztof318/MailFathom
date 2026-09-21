@@ -329,7 +329,7 @@ public static class ServiceCollectionExtensions
         // its anchor. Scoped because the person is the request's, over a zone reader and a clock that are both the
         // deployment's; the zone reader itself is the composition root's, for the reason the language reader beside it
         // is registered there.
-        services.AddScoped<MailUserClock>();
+        services.AddScoped<UserClock>();
 
         // The record a refused caller is never told about. A singleton for the reason every other publisher here is
         // one: the counter it holds is a fact about the process, and a scoped instance would create an instrument per
@@ -595,11 +595,11 @@ public static class ServiceCollectionExtensions
         // Who this deployment holds user records for. Read once while the host comes up rather than per request, which
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
-        services.AddScoped<IMailUserDirectory, PersistedMailUserDirectory>();
+        services.AddScoped<IUserDirectory, PersistedUserDirectory>();
         // The envelope a user is given, beside the read that establishes who is already there. Scoped for the
         // same reason and used from the same startup step: a start reaches this at most once, and never while a
         // request is being served.
-        services.AddScoped<IMailUserProvisioning, PersistedMailUserProvisioning>();
+        services.AddScoped<IUserProvisioning, PersistedUserProvisioning>();
         // The credentials a user is admitted by, of every method. Scoped because it reads and writes through the
         // request's own context, and separate from the directory above because that answers which users exist and this
         // answers what one of them may present.
@@ -669,7 +669,7 @@ public static class ServiceCollectionExtensions
         // Taking a user off the deployment, with everything it recorded for them. Scoped because the whole walk runs
         // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
         // on every start and is idempotent while this runs when a person asked for it and cannot be undone.
-        services.AddScoped<IMailUserErasure, PersistedMailUserErasure>();
+        services.AddScoped<IUserErasure, PersistedUserErasure>();
         // Whose mail a background unit of work is acting on. A worker acts for nobody, so the ceilings it is bounded by
         // reach a user through this rather than through a principal, and it is scoped because both reads are ordinary
         // queries on the caller's context.

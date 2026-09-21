@@ -15,11 +15,11 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 {
-    private readonly Dictionary<MailUserId, HeldUser> users = [];
+    private readonly Dictionary<UserId, HeldUser> users = [];
 
     private readonly List<MailAccountRecord> accounts = [];
 
-    private readonly Dictionary<Guid, List<MailUserId>> assignments = [];
+    private readonly Dictionary<Guid, List<UserId>> assignments = [];
 
     /// <summary>Gets every account the store holds, in the order they were created in.</summary>
     internal IReadOnlyList<MailAccountRecord> Accounts => this.accounts;
@@ -29,7 +29,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <param name="json">The record, as the row holds it.</param>
     /// <param name="version">The version the row stands at.</param>
     /// <param name="assigned">The accounts assigned to the user, created when the store does not hold them yet.</param>
-    internal void HoldUser(MailUserId user, string json, long version, params MailAccountRecord[] assigned)
+    internal void HoldUser(UserId user, string json, long version, params MailAccountRecord[] assigned)
     {
         this.users[user] = new HeldUser(json, version);
 
@@ -59,7 +59,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <summary>Composes the record a reader answers for one user, carrying the accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
     /// <returns>The record, or <see langword="null" /> when the store holds no such user.</returns>
-    internal UserSettingsDocument? DocumentOf(MailUserId user) =>
+    internal UserSettingsDocument? DocumentOf(UserId user) =>
         this.users.TryGetValue(user, out var held)
             ? new UserSettingsDocument(user, $"user-{user.Value:D}", held.Json, held.Version)
             {
@@ -90,7 +90,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
 
     /// <inheritdoc />
     public Task<MailAccountWrite> CreateAsync(
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
         CancellationToken cancellationToken)
@@ -146,7 +146,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     /// <inheritdoc />
     public Task<MailAccountWrite> AssignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         CancellationToken cancellationToken)
     {
@@ -172,7 +172,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     }
 
     /// <inheritdoc />
-    public Task<MailAccountUnassignment> UnassignAsync(Guid accountId, MailUserId user, CancellationToken cancellationToken)
+    public Task<MailAccountUnassignment> UnassignAsync(Guid accountId, UserId user, CancellationToken cancellationToken)
     {
         if (!this.assignments.TryGetValue(accountId, out var assigned) || !assigned.Remove(user))
         {
@@ -206,7 +206,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(MailUserId user, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(UserId user, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Guid>>(
         [
             .. this.assignments
@@ -228,7 +228,7 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
             account.Id != exceptAccount
             && MailAccountRecord.NormalizedFormOf(account.EmailAddress) == normalized);
 
-    private void MoveVersionOf(MailUserId user) =>
+    private void MoveVersionOf(UserId user) =>
         this.users[user] = this.users[user] with { Version = this.users[user].Version + 1 };
 
     private void Remove(Guid accountId)

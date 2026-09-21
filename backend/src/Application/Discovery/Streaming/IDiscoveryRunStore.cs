@@ -39,7 +39,7 @@ public interface IDiscoveryRunStore
     /// <remarks>The bound is one person's across the whole deployment rather than one process's, which is what lets a client be told a number that means something: what somebody may start no longer depends on which replica the start request reached.</remarks>
     Task<bool> TryOpenAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
@@ -81,7 +81,7 @@ public interface IDiscoveryRunStore
     /// </remarks>
     Task<DiscoveryRunReading?> ReadAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         long afterSequence,
         DateTimeOffset now,
         CancellationToken cancellationToken);
@@ -107,7 +107,7 @@ public interface IDiscoveryRunStore
     /// </remarks>
     Task<bool> TryRequestStopAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken);
 

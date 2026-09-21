@@ -41,7 +41,7 @@ internal sealed class UserAccountEntity
 
     /// <summary>The longest label a user is told apart by, which is what a mail account's identifier is bounded at.</summary>
     /// <remarks>Taken from the application's own statement of the bound, so the column and the rule that judges a declaration carrying a label cannot disagree about it.</remarks>
-    public const int MaximumDisplayNameLength = MailUserRecord.MaximumDisplayNameLength;
+    public const int MaximumDisplayNameLength = UserRecord.MaximumDisplayNameLength;
 
     /// <summary>The stable user identity every mail account of theirs points at.</summary>
     /// <remarks>

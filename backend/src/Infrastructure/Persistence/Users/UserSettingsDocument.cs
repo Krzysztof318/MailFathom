@@ -18,7 +18,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// version it read in a second query, which is the race the version exists to refuse.
 /// </remarks>
 public sealed record UserSettingsDocument(
-    MailUserId User,
+    UserId User,
     string DisplayName,
     string Json,
     long Version)

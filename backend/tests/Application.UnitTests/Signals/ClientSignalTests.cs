@@ -37,7 +37,7 @@ public sealed class ClientSignalTests
     [InlineData(-1)]
     public void DiscoveryRunAdvanced_WithoutAPositiveSequence_IsRefused(long sequence) =>
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => ClientSignal.DiscoveryRunAdvanced(SyntheticMailUser.Deployment, DiscoveryRunId.New(), sequence));
+            () => ClientSignal.DiscoveryRunAdvanced(SyntheticUser.Deployment, DiscoveryRunId.New(), sequence));
 
     /// <summary>A window that attributed one occurrence twice names it once, so a client re-reads each row once.</summary>
     [Fact]
@@ -78,7 +78,7 @@ public sealed class ClientSignalTests
         // Arrange
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(Instant)),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             NotificationKind.Mail,
             title: "Mail arrived",
             body: "Four messages arrived in work.",
@@ -92,7 +92,7 @@ public sealed class ClientSignalTests
         var signal = ClientSignal.NotificationRaised(notification, unreadCount: 3);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
+        Assert.Equal(SyntheticUser.Deployment, signal.User);
         Assert.Equal(NotificationKind.Mail, signal.NotificationKind);
         Assert.Equal("Mail arrived", signal.Headline);
         Assert.Equal("Four messages arrived in work.", signal.SecondLine);

@@ -104,7 +104,7 @@ internal static class ClientCalendarEventDraftEndpoint
     internal static async Task<Results<Ok<ClientCalendarEventDraftResponse>, ProblemHttpResult>> DraftEventAsync(
         [FromBody] ClientCalendarEventDraftRequest? request,
         [FromServices] ICalendarEventExtractor extractor,
-        [FromServices] MailUserClock userClock,
+        [FromServices] UserClock userClock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(extractor);

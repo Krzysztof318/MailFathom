@@ -53,7 +53,7 @@ internal sealed class MailAccountAdministration(
     IMailAccountRecordStore accounts,
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
-    ServedMailUsersConvergence convergence,
+    ServedUsersConvergence convergence,
     ConfigurationChangeAnnouncements announcements)
 {
     /// <summary>The greatest number of accounts one listing reads.</summary>
@@ -107,7 +107,7 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declarationJson" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     internal async Task<MailAccountCreation?> CreateAsync(
-        MailUserId user,
+        UserId user,
         string declarationJson,
         CancellationToken cancellationToken)
     {
@@ -228,7 +228,7 @@ internal sealed class MailAccountAdministration(
     /// </remarks>
     internal async Task<UserRecordWriteOutcome?> AssignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         RequireNamed(user);
@@ -281,7 +281,7 @@ internal sealed class MailAccountAdministration(
     /// <remarks>The erasure grant rather than the configuration write, because ending the last assignment disposes of every message the deployment holds for the mailbox.</remarks>
     internal async Task<MailAccountUnassignment> UnassignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         RequireNamed(user);
@@ -643,7 +643,7 @@ internal sealed class MailAccountAdministration(
             version,
             ["This mail account cannot be added for you. Ask whoever administers this deployment to add it."]);
 
-    private static void RequireNamed(MailUserId user)
+    private static void RequireNamed(UserId user)
     {
         if (!user.IsSpecified)
         {
@@ -842,8 +842,8 @@ internal sealed class MailAccountAdministration(
     private async Task<Judgement> JudgeAsync(
         MailAccountRecord candidate,
         string standingDocument,
-        IReadOnlyList<MailUserId> users,
-        MailUserId? actingUser,
+        IReadOnlyList<UserId> users,
+        UserId? actingUser,
         CancellationToken cancellationToken)
     {
         if (actingUser is { } user

@@ -28,7 +28,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientTaskEndpointsTests
 {
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
     private static readonly DateTimeOffset Stamped = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
 

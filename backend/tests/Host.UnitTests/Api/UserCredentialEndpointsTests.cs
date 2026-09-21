@@ -40,12 +40,12 @@ public sealed class UserCredentialEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
-        harness.Credentials.ReadForUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+        harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns([AHeldCredential(UserCredentialMethod.Password, "user")]);
 
         // Act
         var result = await UserCredentialEndpoints.ListAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             harness.Administration,
             TestContext.Current.CancellationToken);
 
@@ -53,7 +53,7 @@ public sealed class UserCredentialEndpointsTests
         var listing = Assert.IsType<Ok<UserCredentialListResponse>>(result.Result).Value!;
         var credential = Assert.Single(listing.Credentials);
 
-        Assert.Equal(SyntheticMailUser.Deployment.Value, listing.User);
+        Assert.Equal(SyntheticUser.Deployment.Value, listing.User);
         Assert.Equal(CredentialId, credential.Id);
         Assert.Equal(UserCredentialMethod.Password.Name, credential.Method);
         Assert.Equal("user", credential.Lookup);
@@ -92,11 +92,11 @@ public sealed class UserCredentialEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
-        harness.Credentials.ReadForUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+        harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns([
                 new UserCredential(
                     CredentialId,
-                    SyntheticMailUser.Deployment,
+                    SyntheticUser.Deployment,
                     UserCredentialMethod.Password,
                     UserCredentialLookup.ForUsername(UserCredentialUsername.Create("jan")),
                     [MailFathomPermission.MailRead],
@@ -109,7 +109,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ListAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             harness.Administration,
             TestContext.Current.CancellationToken);
 
@@ -128,12 +128,12 @@ public sealed class UserCredentialEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
-        harness.Credentials.ReadForUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+        harness.Credentials.ReadForUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
             .Returns([AHeldCredential(UserCredentialMethod.ApiKey, "a-digest")]);
 
         // Act
         var result = await UserCredentialEndpoints.ListAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             harness.Administration,
             TestContext.Current.CancellationToken);
 
@@ -169,7 +169,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("User", Password),
             harness.Administration,
             harness.PublicKeys,
@@ -192,7 +192,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("  User@Example.Test  ", Password),
             harness.Administration,
             harness.PublicKeys,
@@ -201,7 +201,7 @@ public sealed class UserCredentialEndpointsTests
         // Assert
         await harness.Credentials.Received(1).CreateAsync(
             Arg.Any<Guid>(),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             UserCredentialMethod.Password,
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user@example.test"),
             Arg.Any<string>(),
@@ -218,7 +218,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 UserCredentialMethod.ApiKey.Name,
                 Username: null,
@@ -247,7 +247,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 UserCredentialMethod.PublicKey.Name,
                 Username: null,
@@ -275,7 +275,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 UserCredentialMethod.OAuthSubject.Name,
                 Username: null,
@@ -308,7 +308,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 method,
                 Username: null,
@@ -348,7 +348,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 method,
                 "user",
@@ -378,7 +378,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", Password, ["mailfathom.mail.read", "mailfathom.mail.teleport"]),
             harness.Administration,
             harness.PublicKeys,
@@ -399,7 +399,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", Password, [MailFathomPermission.AdminErase.Name]),
             harness.Administration,
             harness.PublicKeys,
@@ -419,7 +419,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", Password, [MailFathomPermission.MailRead.Name]),
             harness.Administration,
             harness.PublicKeys,
@@ -428,7 +428,7 @@ public sealed class UserCredentialEndpointsTests
         // Assert
         await harness.Credentials.Received(1).CreateAsync(
             Arg.Any<Guid>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<UserCredentialMethod>(),
             Arg.Any<UserCredentialLookup>(),
             Arg.Any<string>(),
@@ -447,7 +447,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
@@ -469,7 +469,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
@@ -494,7 +494,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             PasswordRequest("user", Password),
             harness.Administration,
             harness.PublicKeys,
@@ -502,7 +502,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Assert
         var refusal = AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-        Assert.Contains(SyntheticMailUser.Another.Value.ToString(), refusal, StringComparison.Ordinal);
+        Assert.Contains(SyntheticUser.Another.Value.ToString(), refusal, StringComparison.Ordinal);
     }
 
     /// <summary>A refusal reaches a terminal, a log, and a script's output, so it says which rule was broken and repeats nothing that was typed.</summary>
@@ -517,7 +517,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest("user", password),
             harness.Administration,
             harness.PublicKeys,
@@ -547,7 +547,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             PasswordRequest(username, Password),
             harness.Administration,
             harness.PublicKeys,
@@ -567,7 +567,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(UserCredentialMethod.Password.Name, "user", Password, PublicKey: null),
             harness.Administration,
@@ -578,7 +578,7 @@ public sealed class UserCredentialEndpointsTests
         Assert.IsType<Ok<UserCredentialRotatedResponse>>(result.Result);
 
         await harness.Credentials.Received(1).ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             CredentialId,
             UserCredentialMethod.Password,
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
@@ -595,7 +595,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(
                 UserCredentialMethod.ApiKey.Name,
@@ -622,7 +622,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(
                 UserCredentialMethod.PublicKey.Name,
@@ -640,7 +640,7 @@ public sealed class UserCredentialEndpointsTests
         Assert.Null(rotated.Key);
 
         await harness.Credentials.Received(1).ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             CredentialId,
             UserCredentialMethod.PublicKey,
             Arg.Is<UserCredentialLookup>(lookup => lookup.Value == StatedPublicKeyReader.Fingerprint),
@@ -666,7 +666,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(
                 UserCredentialMethod.PublicKey.Name,
@@ -681,7 +681,7 @@ public sealed class UserCredentialEndpointsTests
         Assert.IsType<ProblemHttpResult>(result.Result);
 
         await harness.Credentials.DidNotReceive().ReplaceMaterialAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<Guid>(),
             Arg.Any<UserCredentialMethod>(),
             Arg.Any<UserCredentialLookup>(),
@@ -698,7 +698,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ProvisionAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserCredentialProvisioningRequest(
                 UserCredentialMethod.PublicKey.Name,
                 Username: null,
@@ -716,7 +716,7 @@ public sealed class UserCredentialEndpointsTests
 
         await harness.Credentials.DidNotReceive().CreateAsync(
             Arg.Any<Guid>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<UserCredentialMethod>(),
             Arg.Any<UserCredentialLookup>(),
             Arg.Any<string?>(),
@@ -733,7 +733,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(
                 UserCredentialMethod.OAuthSubject.Name,
@@ -768,7 +768,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialMaterialRequest(UserCredentialMethod.Password.Name, "user", Password, PublicKey: null),
             harness.Administration,
@@ -777,7 +777,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Assert
         var refusal = AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-        Assert.Contains(SyntheticMailUser.Deployment.Value.ToString(), refusal, StringComparison.Ordinal);
+        Assert.Contains(SyntheticUser.Deployment.Value.ToString(), refusal, StringComparison.Ordinal);
         Assert.Contains(CredentialId.ToString(), refusal, StringComparison.Ordinal);
     }
 
@@ -789,7 +789,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.ReplaceMaterialAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             Guid.Empty,
             new UserCredentialMaterialRequest(UserCredentialMethod.Password.Name, "user", Password, PublicKey: null),
             harness.Administration,
@@ -811,7 +811,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.SetEnabledAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialEnablementRequest(enabled),
             harness.Administration,
@@ -820,7 +820,7 @@ public sealed class UserCredentialEndpointsTests
         // Assert
         Assert.IsType<NoContent>(result.Result);
         await harness.Credentials.Received(1).SetEnabledAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             CredentialId,
             enabled,
             Arg.Any<CancellationToken>());
@@ -835,7 +835,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.SetEnabledAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             new UserCredentialEnablementRequest(null),
             harness.Administration,
@@ -855,7 +855,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act
         var result = await UserCredentialEndpoints.DeleteAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             harness.Administration,
             TestContext.Current.CancellationToken);
@@ -863,7 +863,7 @@ public sealed class UserCredentialEndpointsTests
         // Assert
         Assert.IsType<NoContent>(result.Result);
         await harness.Credentials.Received(1).DeleteAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             CredentialId,
             Arg.Any<CancellationToken>());
     }
@@ -877,7 +877,7 @@ public sealed class UserCredentialEndpointsTests
 
         // Act, Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => UserCredentialEndpoints.DeleteAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             CredentialId,
             harness.Administration,
             TestContext.Current.CancellationToken));
@@ -897,7 +897,7 @@ public sealed class UserCredentialEndpointsTests
 
     private static UserCredential AHeldCredential(UserCredentialMethod method, string lookup) => new(
         CredentialId,
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         method,
         UserCredentialLookup.ForDigest(lookup),
         [MailFathomPermission.MailRead],
@@ -988,14 +988,14 @@ public sealed class UserCredentialEndpointsTests
             this.AnswerCreateWith(UserCredentialWriteOutcome.Written);
             this.AnswerReplaceWith(UserCredentialWriteOutcome.Written);
             this.Credentials.SetEnabledAsync(
-                    Arg.Any<MailUserId>(),
+                    Arg.Any<UserId>(),
                     Arg.Any<Guid>(),
                     Arg.Any<bool>(),
                     Arg.Any<CancellationToken>())
                 .Returns(UserCredentialWriteOutcome.Written);
-            this.Credentials.DeleteAsync(Arg.Any<MailUserId>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            this.Credentials.DeleteAsync(Arg.Any<UserId>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                 .Returns(UserCredentialWriteOutcome.Written);
-            this.Credentials.ReadForUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            this.Credentials.ReadForUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
                 .Returns([]);
 
             this.PasswordHasher = new RecordingPasswordHasher();
@@ -1020,7 +1020,7 @@ public sealed class UserCredentialEndpointsTests
 
         internal void AnswerCreateWith(UserCredentialWriteOutcome outcome) => this.Credentials.CreateAsync(
                 Arg.Any<Guid>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
@@ -1029,7 +1029,7 @@ public sealed class UserCredentialEndpointsTests
             .Returns(outcome);
 
         internal void AnswerReplaceWith(UserCredentialWriteOutcome outcome) => this.Credentials.ReplaceMaterialAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<Guid>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),

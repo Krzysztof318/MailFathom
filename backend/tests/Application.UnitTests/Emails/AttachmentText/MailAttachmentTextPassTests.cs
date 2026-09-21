@@ -397,7 +397,7 @@ public sealed class MailAttachmentTextPassTests
         Assert.Equal(AttachmentDerivationBound.None, report.PeriodCeilingBound);
         Assert.Equal(
             AttachmentOctets,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment)]);
     }
 
     /// <summary>
@@ -425,7 +425,7 @@ public sealed class MailAttachmentTextPassTests
         Assert.True(report.RunBudgetExhausted);
         Assert.Equal(
             AttachmentOctets,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment)]);
     }
 
     /// <summary>A user's own ceiling refuses that user's mail while the deployment's ceiling is nowhere near spent.</summary>
@@ -434,7 +434,7 @@ public sealed class MailAttachmentTextPassTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 1024);
+        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment, 1024);
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
             new RecordingEmailEmbeddingBacklog(),
@@ -517,7 +517,7 @@ public sealed class MailAttachmentTextPassTests
         long maxDescriptionsPerPeriod = 0,
         long maxDescriptionsPerPeriodPerUser = 0) => new(
         ledger,
-        new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
+        new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, Account),
         AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod,
             maxInputOctetsPerPeriodPerUser,

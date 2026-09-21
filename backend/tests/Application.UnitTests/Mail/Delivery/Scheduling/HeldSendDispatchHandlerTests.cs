@@ -135,7 +135,7 @@ public sealed class HeldSendDispatchHandlerTests
         return OutgoingEmailRequest
             .Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command(invocationIdentity),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)])
             .HeldUntil(ZonedInstant.At(Authored.AddHours(9)));

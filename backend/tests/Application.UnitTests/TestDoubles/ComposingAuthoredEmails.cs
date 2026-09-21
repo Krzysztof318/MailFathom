@@ -30,14 +30,14 @@ internal static class ComposingAuthoredEmails
         composer
             .Compose(
                 Arg.Any<MailAccountId>(),
-                Arg.Any<MailUserId?>(),
+                Arg.Any<UserId?>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
                 OutgoingEmailRequest.Create(
                     call.ArgAt<MailAccountId>(0),
-                    call.ArgAt<MailUserId?>(1),
+                    call.ArgAt<UserId?>(1),
                     call.ArgAt<OutgoingEmailRequester>(2),
                     RecipientsOf(call.ArgAt<AuthoredEmail>(3))),
                 InternetMessageId.Mint("example.test"),

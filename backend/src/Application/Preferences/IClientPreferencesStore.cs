@@ -27,7 +27,7 @@ public interface IClientPreferencesStore
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the stored row is not a document of preferences, which is a row something other than this store wrote.</exception>
     /// <remarks>Having set nothing is answered apart from having set the defaults, because a client drawing a first run may want to know which it is; both are rendered the same way today.</remarks>
-    Task<ClientPreferences?> ReadAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<ClientPreferences?> ReadAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Replaces what one person set about their own client.</summary>
     /// <param name="user">The user whose preferences are written.</param>
@@ -37,5 +37,5 @@ public interface IClientPreferencesStore
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="preferences" /> is <see langword="null" />.</exception>
     /// <remarks>A user this deployment does not hold is reported rather than raised, because the caller is a person whose row was erased under a credential that has not yet been withdrawn and the answer to them is that there is nothing here of theirs.</remarks>
-    Task<bool> SaveAsync(MailUserId user, ClientPreferences preferences, CancellationToken cancellationToken);
+    Task<bool> SaveAsync(UserId user, ClientPreferences preferences, CancellationToken cancellationToken);
 }

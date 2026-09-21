@@ -123,8 +123,8 @@ public sealed class PersistedUserSettingsDocumentWriterTests
     }
 
     /// <summary>A user this suite writes for, which no statement here ever reaches.</summary>
-    private static MailUserId SyntheticUser { get; } =
-        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static UserId SyntheticUser { get; } =
+        UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>Composes a document whose stored rendering is past the bound, which is what the rule measures.</summary>
     /// <remarks>The compact form is smaller than the rendering, so the padding is sized against the bound itself rather than against what this string occupies.</remarks>
@@ -132,7 +132,7 @@ public sealed class PersistedUserSettingsDocumentWriterTests
         $$"""{"Padding":"{{new string('a', octets)}}"}""";
 
     private static async Task<Exception?> CommitAsync(
-        MailUserId user,
+        UserId user,
         string json,
         long expectedVersion)
     {
@@ -147,7 +147,7 @@ public sealed class PersistedUserSettingsDocumentWriterTests
             () => writer.CommitAsync(
                 user,
                 json,
-                MailUserEndpointAccess.Everywhere,
+                UserEndpointAccess.Everywhere,
                 expectedVersion,
                 TestContext.Current.CancellationToken));
     }

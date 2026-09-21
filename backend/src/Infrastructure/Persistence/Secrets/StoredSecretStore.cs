@@ -31,7 +31,7 @@ internal sealed class StoredSecretStore(
     public async Task<DatabaseSecretReference> StoreAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailUserId user,
+        UserId user,
         SecretName name,
         ResolvedSecret material,
         CancellationToken cancellationToken)
@@ -119,7 +119,7 @@ internal sealed class StoredSecretStore(
     public async Task<bool> RemoveAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -168,7 +168,7 @@ internal sealed class StoredSecretStore(
         [
             .. stored.Select(secret => new StoredSecretKeyReference(
                 DatabaseSecretReference.Create(secret.Id),
-                MailUserId.Create(secret.UserId),
+                UserId.Create(secret.UserId),
                 SecretName.TryCreate(secret.Name, out var name)
                     ? name
                     : throw new InvalidOperationException("A stored secret carries a name the current schema refuses."))),

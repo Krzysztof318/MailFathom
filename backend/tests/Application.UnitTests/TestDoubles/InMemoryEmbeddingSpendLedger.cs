@@ -19,10 +19,10 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class InMemoryEmbeddingSpendLedger : IEmbeddingSpendLedger
 {
-    private readonly Dictionary<(DateTimeOffset PeriodStart, MailUserId User), long> consumedByPeriodAndUser = [];
+    private readonly Dictionary<(DateTimeOffset PeriodStart, UserId User), long> consumedByPeriodAndUser = [];
 
     /// <summary>Gets what each period and user has been charged so far.</summary>
-    public IReadOnlyDictionary<(DateTimeOffset PeriodStart, MailUserId User), long> ConsumedByPeriodAndUser =>
+    public IReadOnlyDictionary<(DateTimeOffset PeriodStart, UserId User), long> ConsumedByPeriodAndUser =>
         this.consumedByPeriodAndUser;
 
     /// <summary>Gets what each period actually sent, which is the deployment's own row rather than the users' sum.</summary>
@@ -34,7 +34,7 @@ internal sealed class InMemoryEmbeddingSpendLedger : IEmbeddingSpendLedger
     /// <param name="periodStart">The period to charge.</param>
     /// <param name="user">The user the spend is attributed to.</param>
     /// <param name="inputCharacterCount">The characters to charge it.</param>
-    public void Seed(DateTimeOffset periodStart, MailUserId user, long inputCharacterCount) =>
+    public void Seed(DateTimeOffset periodStart, UserId user, long inputCharacterCount) =>
         this.consumedByPeriodAndUser[(periodStart, user)] =
             this.consumedByPeriodAndUser.GetValueOrDefault((periodStart, user)) + inputCharacterCount;
 
@@ -47,7 +47,7 @@ internal sealed class InMemoryEmbeddingSpendLedger : IEmbeddingSpendLedger
     /// <inheritdoc />
     public Task<EmbeddingSpendTotals> ReadConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -71,7 +71,7 @@ internal sealed class InMemoryEmbeddingSpendLedger : IEmbeddingSpendLedger
     public Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long inputCharacterCount,
         CancellationToken cancellationToken)
     {

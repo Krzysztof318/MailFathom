@@ -25,7 +25,7 @@ public sealed class UserPasswordAuthenticatorTests
 
     private const int AttemptsPerMinute = 10;
 
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000001");
 
@@ -465,7 +465,7 @@ public sealed class UserPasswordAuthenticatorTests
 
         // Assert
         await harness.Credentials.DidNotReceive().RewriteMaterialAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<Guid>(),
             Arg.Is<string>(static verified => verified != StoredHash),
             Arg.Any<string>(),
@@ -481,7 +481,7 @@ public sealed class UserPasswordAuthenticatorTests
         harness.Holds(enabled: true);
         harness.PasswordHasher.Result = PasswordVerification.SucceededAndShouldBeRehashed;
         harness.Credentials.RewriteMaterialAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -759,7 +759,7 @@ public sealed class UserPasswordAuthenticatorTests
             Grant,
             enabled,
             StoredHash,
-            MailUserEndpointAccess.Everywhere);
+            UserEndpointAccess.Everywhere);
 
         internal Task<UserPasswordAuthenticationResult> AuthenticateAsync(
             string? authorizationHeaderValue,

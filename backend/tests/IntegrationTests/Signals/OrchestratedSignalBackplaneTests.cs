@@ -81,7 +81,7 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
         // The person is the deployment's own rather than stated, because a ticket is a row keyed onto the user record
         // and a stated identifier would be refused by that foreign key. The mailbox they are served is this class's,
         // through the substitute both replicas are composed with.
-        var user = MailUserId.Create(await orchestration.ComposedHostUserAsync(cancellationToken));
+        var user = UserId.Create(await orchestration.ComposedHostUserAsync(cancellationToken));
 
         await using var raising = await this.StartAsync(ports[0], user, cancellationToken);
         await using var holding = await this.StartAsync(ports[1], user, cancellationToken);
@@ -167,7 +167,7 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
             .Build();
 
     /// <summary>Composes one replica: the client surface on its own socket, over the endpoint the orchestration published.</summary>
-    private Task<InProcessComposedHost> StartAsync(int port, MailUserId served, CancellationToken cancellationToken) =>
+    private Task<InProcessComposedHost> StartAsync(int port, UserId served, CancellationToken cancellationToken) =>
         InProcessComposedHost.StartAsync(
             [
                 // The orchestration's own database rather than the shape's unreachable default, because a ticket is
@@ -207,12 +207,12 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     /// connection is served the mailbox the signal names, and writing a record for that would make the class about
     /// the records instead of about the crossing.
     /// </remarks>
-    private sealed class OneMailboxOnePerson(MailUserId served) : IMailAccountAssignments
+    private sealed class OneMailboxOnePerson(UserId served) : IMailAccountAssignments
     {
         /// <inheritdoc />
-        public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) => user == served ? [Account] : [];
+        public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) => user == served ? [Account] : [];
 
         /// <inheritdoc />
-        public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) => account == Account ? [served] : [];
+        public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) => account == Account ? [served] : [];
     }
 }

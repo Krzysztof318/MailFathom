@@ -218,7 +218,7 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
     /// is refused by the lookup index instead, and is answered as the same refusal without the name.
     /// </remarks>
     public async Task<OrganizationWriteResult> SetUserOrganizationAsync(
-        MailUserId user,
+        UserId user,
         Guid? organizationId,
         CancellationToken cancellationToken)
     {

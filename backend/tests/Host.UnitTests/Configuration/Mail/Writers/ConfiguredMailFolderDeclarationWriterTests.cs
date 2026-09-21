@@ -25,7 +25,7 @@ public sealed class ConfiguredMailFolderDeclarationWriterTests
     /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
     private const string EmptyRecord = "{}";
 
-    private static readonly MailUserId Alex = SyntheticMailUser.Deployment;
+    private static readonly UserId Alex = SyntheticUser.Deployment;
 
     /// <summary>What the surface may act on is what this record declares, and an account it does not hold declares nothing.</summary>
     [Fact]

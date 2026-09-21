@@ -33,8 +33,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientTelemetryEndpointTests
 {
-    private static readonly MailUserId AuthenticatedUser =
-        MailUserId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
+    private static readonly UserId AuthenticatedUser =
+        UserId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
 
     /// <summary>A deployment that named no collector serves nothing, which is what "the endpoint is off" looks like here.</summary>
     [Fact]

@@ -40,7 +40,7 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// <para>
 /// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several mailboxes and each
 /// of them has a posture of its own, so the use case names what it resolved once — with <see cref="ActingFor(MailAccountId)" />
-/// where it is acting on one account, and with <see cref="ActingFor(MailUserId)" /> where it reads across every account
+/// where it is acting on one account, and with <see cref="ActingFor(UserId)" /> where it reads across every account
 /// one user is assigned — and every value guarded anywhere inside that flow is read under the posture that names.
 /// Guarding outside such a scope while this deployment scans anything is a defect rather than a permissive default, and
 /// says so.
@@ -146,7 +146,7 @@ public sealed class SensitiveContentEgressGuard
     /// <c>BeginScope</c> is: what a caller does with it is dispose it at the end of the method that opened it.
     /// </para>
     /// </remarks>
-    public IDisposable ActingFor(MailUserId user) => this.Enter(new MailInScope(user, Account: null));
+    public IDisposable ActingFor(UserId user) => this.Enter(new MailInScope(user, Account: null));
 
     /// <summary>Opens the report of one guarded operation, and reports every text guarded inside it as part of it.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
@@ -395,7 +395,7 @@ public sealed class SensitiveContentEgressGuard
     /// <summary>What the mail guarded on this flow belongs to.</summary>
     /// <param name="User">The user the use case resolved, which is what a guarded operation is reported against.</param>
     /// <param name="Account">The one account the flow is acting on, or <see langword="null" /> where it reads across the user's own.</param>
-    private readonly record struct MailInScope(MailUserId? User, MailAccountId? Account);
+    private readonly record struct MailInScope(UserId? User, MailAccountId? Account);
 
     /// <summary>Keeps one scope current for as long as the use case that resolved it is reading that mail.</summary>
     /// <remarks>

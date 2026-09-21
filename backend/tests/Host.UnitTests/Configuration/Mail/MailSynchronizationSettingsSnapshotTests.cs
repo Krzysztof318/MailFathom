@@ -13,8 +13,8 @@ namespace MailFathom.Host.UnitTests.Configuration.Mail;
 
 public sealed class MailSynchronizationSettingsSnapshotTests
 {
-    private static readonly MailUserId User =
-        MailUserId.Create(new Guid("b4306d24-b373-4101-8cc3-9f81b6b1be87"));
+    private static readonly UserId User =
+        UserId.Create(new Guid("b4306d24-b373-4101-8cc3-9f81b6b1be87"));
 
     /// <summary>A run already under way keeps one user-document version while the next run observes the commit.</summary>
     [Fact]
@@ -23,7 +23,7 @@ public sealed class MailSynchronizationSettingsSnapshotTests
         // Arrange
         var original = Account("original");
         var changed = Account("changed");
-        var users = new ServedMailUsers();
+        var users = new ServedUsers();
         users.Resolved([Serving(original)]);
         var boundSettings = new StubSettingsSnapshot<MailSynchronizationOptions>(new MailSynchronizationOptions());
         var settings = new MailSynchronizationSettingsSnapshot(boundSettings, users);
@@ -42,7 +42,7 @@ public sealed class MailSynchronizationSettingsSnapshotTests
         Assert.Same(changed, current.FindConfiguredAccount(MailAccountId.Create("changed")));
     }
 
-    private static ServedMailUser Serving(params MailSynchronizationAccountOptions[] accounts) =>
+    private static ServedUser Serving(params MailSynchronizationAccountOptions[] accounts) =>
         new(User, "user", accounts);
 
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };

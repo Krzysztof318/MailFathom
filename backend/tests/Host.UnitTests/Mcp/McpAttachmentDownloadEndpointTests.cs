@@ -342,9 +342,9 @@ public sealed class McpAttachmentDownloadEndpointTests
         // Arrange
         var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
-        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
+        var deploymentUser = Substitute.For<IDeploymentUserSource>();
 
-        deploymentUser.User.Returns(_ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor());
+        deploymentUser.User.Returns(_ => throw DeploymentUserUnresolvedException.NoSoleUserToActFor());
 
         // Act
         var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
@@ -361,7 +361,7 @@ public sealed class McpAttachmentDownloadEndpointTests
 
         Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
         Assert.Equal(
-            MailFathomErrorCode.DeploymentMailUserUnresolved.Value,
+            MailFathomErrorCode.DeploymentUserUnresolved.Value,
             refusal.ProblemDetails.Extensions[RouteAuthorization.ErrorCodeExtension]);
     }
 
@@ -393,10 +393,10 @@ public sealed class McpAttachmentDownloadEndpointTests
     }
 
     /// <summary>Names the user this deployment serves, which is the user a redeemed capability acts for.</summary>
-    private static IDeploymentMailUserSource DeploymentUser()
+    private static IDeploymentUserSource DeploymentUser()
     {
-        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
-        deploymentUser.User.Returns(SyntheticMailUser.Deployment);
+        var deploymentUser = Substitute.For<IDeploymentUserSource>();
+        deploymentUser.User.Returns(SyntheticUser.Deployment);
 
         return deploymentUser;
     }

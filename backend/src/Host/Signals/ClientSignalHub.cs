@@ -60,14 +60,14 @@ internal sealed partial class ClientSignalHub : Hub
     /// <param name="user">Whose connections the group holds.</param>
     /// <returns>The group name.</returns>
     /// <remarks>Composed from the user's identifier alone, which is a value this deployment generated rather than anything a caller can state, so no group name is reachable by writing one.</remarks>
-    internal static string GroupOf(MailUserId user) =>
+    internal static string GroupOf(UserId user) =>
         string.Create(CultureInfo.InvariantCulture, $"user:{user.Value}");
 
     /// <inheritdoc />
     public override async Task OnConnectedAsync()
     {
         var presented = this.Context.GetHttpContext()?.Request.Query[TicketParameter].ToString();
-        MailUserId? user;
+        UserId? user;
 
         try
         {

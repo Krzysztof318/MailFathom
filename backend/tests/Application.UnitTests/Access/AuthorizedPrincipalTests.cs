@@ -68,7 +68,7 @@ public sealed class AuthorizedPrincipalTests
     public void SignedCapability_AVerifiedTicket_NamesItsObjectAndHoldsNothing()
     {
         // Arrange & Act
-        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticUser.Deployment, "/mcp/attachments/an-object/0");
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.SignedCapability, capability.Kind);

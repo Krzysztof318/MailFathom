@@ -176,7 +176,7 @@ differently — and a use case that raised either shape directly would have deci
 A use case that acts on one user's mail and is reached by a principal acting for no user is refused the same way and
 with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
 about. A deployment that cannot resolve its own user never reaches a use case at all, and answers
-`14002 DeploymentMailUserUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
+`14002 DeploymentUserUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
 is a refusal to start, so nothing serves. A roster of several is a start that succeeds, and the code is then answered
 per request, as `409` on the handful of acts above that resolve the sole user and name none themselves.
 

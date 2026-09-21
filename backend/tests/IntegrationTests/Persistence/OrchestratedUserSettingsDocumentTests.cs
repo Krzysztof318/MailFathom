@@ -54,7 +54,7 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
                     .FirstAsync(token);
 
                 return await scope.GetRequiredService<IUserSettingsDocumentReader>()
-                    .ReadAsync(MailUserId.Create(user), token);
+                    .ReadAsync(UserId.Create(user), token);
             },
             cancellationToken);
 
@@ -72,7 +72,7 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var unheldUser = MailUserId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00cf4fc964ff"));
+        var unheldUser = UserId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00cf4fc964ff"));
 
         // Act
         var record = await services.InScopeAsync(
@@ -107,13 +107,13 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
 
                     return (
                         await documents.ReadVersionsAsync(limit: 1000, token),
-                        await documents.ReadAsync(MailUserId.Create(provisioned), token));
+                        await documents.ReadAsync(UserId.Create(provisioned), token));
                 },
                 cancellationToken);
 
             // Assert
             Assert.NotNull(record);
-            Assert.Contains(new UserSettingsDocumentVersion(MailUserId.Create(provisioned), record.Version), versions);
+            Assert.Contains(new UserSettingsDocumentVersion(UserId.Create(provisioned), record.Version), versions);
             Assert.Equal(versions.Count, versions.Select(held => held.User).Distinct().Count());
         }
         finally
@@ -235,7 +235,7 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
             // Act
             var refused = await Record.ExceptionAsync(() => services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>()
-                    .ReadAsync(MailUserId.Create(overfilled), token),
+                    .ReadAsync(UserId.Create(overfilled), token),
                 cancellationToken));
 
             // Assert

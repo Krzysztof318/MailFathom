@@ -65,7 +65,7 @@ internal sealed class PersistedMailAccountRecordStore(
                 [
                     .. assignments
                         .Where(assignment => assignment.MailAccountId == account.Id)
-                        .Select(assignment => MailUserId.Create(assignment.UserId)),
+                        .Select(assignment => UserId.Create(assignment.UserId)),
                 ])),
         ];
     }
@@ -89,12 +89,12 @@ internal sealed class PersistedMailAccountRecordStore(
             .Select(assignment => assignment.UserId)
             .ToListAsync(cancellationToken);
 
-        return new MailAccountHolding(ToRecord(account), [.. users.Select(MailUserId.Create)]);
+        return new MailAccountHolding(ToRecord(account), [.. users.Select(UserId.Create)]);
     }
 
     /// <inheritdoc />
     public Task<MailAccountWrite> CreateAsync(
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         MailAccountRecord account,
         CancellationToken cancellationToken)
@@ -203,7 +203,7 @@ internal sealed class PersistedMailAccountRecordStore(
     /// <inheritdoc />
     public Task<MailAccountWrite> AssignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         long expectedUserVersion,
         CancellationToken cancellationToken)
     {
@@ -255,7 +255,7 @@ internal sealed class PersistedMailAccountRecordStore(
     /// <inheritdoc />
     public Task<MailAccountUnassignment> UnassignAsync(
         Guid accountId,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         var userId = RequireNamed(user);
@@ -340,7 +340,7 @@ internal sealed class PersistedMailAccountRecordStore(
     /// an account shared, and the erasure asks again under its own lock and leaves that account whole.
     /// </remarks>
     public async Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         var userId = RequireNamed(user);
@@ -423,7 +423,7 @@ internal sealed class PersistedMailAccountRecordStore(
     private static MailAccountRecord ToRecord(MailAccountRecordEntity account) =>
         new(account.Id, account.EmailAddress, account.DisplayName, account.Document, account.Version);
 
-    private static Guid RequireNamed(MailUserId user) =>
+    private static Guid RequireNamed(UserId user) =>
         user.IsSpecified
             ? user.Value
             : throw new ArgumentException("A mail account is assigned to a named user.", nameof(user));

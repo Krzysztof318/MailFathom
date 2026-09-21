@@ -153,7 +153,7 @@ public sealed class DiscoveryRunRetentionWorkerTests
         var id = DiscoveryRunId.New();
         var now = timeProvider.GetUtcNow();
 
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, now, TestContext.Current.CancellationToken);
         await store.AppendAsync(
             id,
             new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing),

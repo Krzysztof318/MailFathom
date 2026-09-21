@@ -81,7 +81,7 @@ public sealed class MailboxQuestionReaderTests
         var answerer = new RecordingMailQuestionAnswerer();
         var reader = ReaderOver(
             answerer,
-            userClock: MailUserClocks.Reading(
+            userClock: UserClocks.Reading(
                 new DateTimeOffset(2026, 9, 9, 21, 30, 0, TimeSpan.Zero),
                 "Asia/Tokyo"));
 
@@ -782,7 +782,7 @@ public sealed class MailboxQuestionReaderTests
         IMailAnsweringAuditTrail? auditTrail = null,
         SensitiveContentEgressGuard? egressGuard = null,
         AccessAuthorization? authorization = null,
-        MailUserClock? userClock = null)
+        UserClock? userClock = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -827,7 +827,7 @@ public sealed class MailboxQuestionReaderTests
             timeProvider,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
-            userClock ?? MailUserClocks.Reading(Now));
+            userClock ?? UserClocks.Reading(Now));
     }
 
     /// <summary>A ledger with an allowance for whatever a test asks it.</summary>

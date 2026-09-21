@@ -27,7 +27,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(Chosen);
+        store.ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>()).Returns(Chosen);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
 
@@ -44,7 +44,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
+        store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
 
@@ -61,14 +61,14 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        var preferences = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await preferences.ReadAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        await store.Received(1).ReadAsync(SyntheticMailUser.Another, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().ReadAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
+        await store.Received(1).ReadAsync(SyntheticUser.Another, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().ReadAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -101,17 +101,17 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var preferences = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticUser.Another, MailFathomPermission.MailRead);
 
         // Act
         var written = await preferences.SaveAsync(Chosen, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(written);
-        await store.Received(1).SaveAsync(SyntheticMailUser.Another, Chosen, Arg.Any<CancellationToken>());
+        await store.Received(1).SaveAsync(SyntheticUser.Another, Chosen, Arg.Any<CancellationToken>());
     }
 
     /// <summary>The row behind an authenticated caller can be gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
@@ -120,7 +120,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
@@ -162,17 +162,17 @@ public sealed class OwnClientPreferencesTests
             () => preferences.SaveAsync(null!, TestContext.Current.CancellationToken));
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     private static OwnClientPreferences ReachedBy(
         IClientPreferencesStore store,
         params MailFathomPermission[] granted) =>
-        ReachedBy(store, SyntheticMailUser.Deployment, granted);
+        ReachedBy(store, SyntheticUser.Deployment, granted);
 
     private static OwnClientPreferences ReachedBy(
         IClientPreferencesStore store,
-        MailUserId user,
+        UserId user,
         params MailFathomPermission[] granted) =>
         new(AccessAuthorizations.ForUserGranted(user, granted), store);
 }

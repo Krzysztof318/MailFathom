@@ -109,7 +109,7 @@ public sealed class OrchestratedStoredSecretTests(MailFathomOrchestrationFixture
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var userId = new Guid("083737f1-fe8f-4525-b4ea-477ac9431e51");
-        var user = MailUserId.Create(userId);
+        var user = UserId.Create(userId);
 
         try
         {
@@ -147,7 +147,7 @@ public sealed class OrchestratedStoredSecretTests(MailFathomOrchestrationFixture
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var otherUserId = new Guid("89cc409d-da55-472f-b156-bc18c3583c54");
-        var otherUser = MailUserId.Create(otherUserId);
+        var otherUser = UserId.Create(otherUserId);
 
         try
         {
@@ -197,7 +197,7 @@ public sealed class OrchestratedStoredSecretTests(MailFathomOrchestrationFixture
     private static Task<PersistenceCommitResult> StoreAsync(
         OrchestratedMailFathomServices services,
         DatabaseSecretReference reference,
-        MailUserId user,
+        UserId user,
         SecretName name,
         string material,
         CancellationToken cancellationToken) => services.CommitAsync(

@@ -25,13 +25,13 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Act
         var user = await tickets.RedeemAsync(minted?.Value, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, user);
+        Assert.Equal(SyntheticUser.Deployment, user);
     }
 
     /// <summary>Two users minting at once each get their own, so one connection can never be opened as the other person.</summary>
@@ -40,16 +40,16 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
-        var mine = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
-        var theirs = await tickets.MintAsync(SyntheticMailUser.Another, TestContext.Current.CancellationToken);
+        var mine = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
+        var theirs = await tickets.MintAsync(SyntheticUser.Another, TestContext.Current.CancellationToken);
 
         // Act
         var firstUser = await tickets.RedeemAsync(mine?.Value, TestContext.Current.CancellationToken);
         var secondUser = await tickets.RedeemAsync(theirs?.Value, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, firstUser);
-        Assert.Equal(SyntheticMailUser.Another, secondUser);
+        Assert.Equal(SyntheticUser.Deployment, firstUser);
+        Assert.Equal(SyntheticUser.Another, secondUser);
     }
 
     /// <summary>A ticket opens one connection, so one read out of a log or a browser's history opens none.</summary>
@@ -58,14 +58,14 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Act
         var first = await tickets.RedeemAsync(minted?.Value, TestContext.Current.CancellationToken);
         var second = await tickets.RedeemAsync(minted?.Value, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, first);
+        Assert.Equal(SyntheticUser.Deployment, first);
         Assert.Null(second);
     }
 
@@ -80,13 +80,13 @@ public sealed class ClientSignalTicketsTests
         var deployment = new InMemoryClientSignalTicketStore();
         var mintingReplica = TicketsOver(deployment);
         var connectingReplica = TicketsOver(deployment);
-        var minted = await mintingReplica.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await mintingReplica.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Act
         var user = await connectingReplica.RedeemAsync(minted?.Value, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, user);
+        Assert.Equal(SyntheticUser.Deployment, user);
     }
 
     /// <summary>A ticket nobody presented in time stops working, which is what bounds one left where it should not be.</summary>
@@ -96,7 +96,7 @@ public sealed class ClientSignalTicketsTests
         // Arrange
         var clock = new FakeTimeProvider(Instant);
         var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), clock);
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Act
         clock.Advance(ClientSignalTickets.Lifetime + TimeSpan.FromSeconds(1));
@@ -118,7 +118,7 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
-        await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(await tickets.RedeemAsync(presented, TestContext.Current.CancellationToken));
@@ -149,7 +149,7 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         var identifier = minted!.Value[..minted.Value.IndexOf('.', StringComparison.Ordinal)];
 
         // Act
@@ -193,7 +193,7 @@ public sealed class ClientSignalTicketsTests
 
         for (var ticket = 0; ticket <= ClientSignalTickets.MostRedemptionsInFlight; ticket++)
         {
-            minted.Add((await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken))!.Value);
+            minted.Add((await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken))!.Value);
         }
 
         deployment.HoldRedemptions();
@@ -213,12 +213,12 @@ public sealed class ClientSignalTicketsTests
         Assert.Equal(ClientSignalTickets.MostRedemptionsInFlight, deployment.RedemptionCount);
 
         deployment.ReleaseRedemptions();
-        Assert.All(await Task.WhenAll(inFlight), user => Assert.Equal(SyntheticMailUser.Deployment, user));
+        Assert.All(await Task.WhenAll(inFlight), user => Assert.Equal(SyntheticUser.Deployment, user));
 
         // The bound is a ceiling on what is in flight rather than a quota spent for good, so the ticket refused while it
         // was full opens a connection on the next attempt.
         Assert.Equal(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             await tickets.RedeemAsync(minted[^1], TestContext.Current.CancellationToken));
     }
 
@@ -233,7 +233,7 @@ public sealed class ClientSignalTicketsTests
         // Act
         for (var ticket = 0; ticket < 50; ticket++)
         {
-            minted.Add((await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken))!.Value);
+            minted.Add((await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken))!.Value);
         }
 
         // Assert
@@ -249,7 +249,7 @@ public sealed class ClientSignalTicketsTests
         var tickets = TicketsOver(deployment);
 
         // Act
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         var identifier = minted!.Value[..minted.Value.IndexOf('.', StringComparison.Ordinal)];
         var secret = Base64Url.DecodeFromChars(minted.Value.AsSpan(identifier.Length + 1));
         var held = await deployment.RedeemAsync(identifier, TestContext.Current.CancellationToken);
@@ -268,7 +268,7 @@ public sealed class ClientSignalTicketsTests
         var tickets = TicketsOver(new InMemoryClientSignalTicketStore());
 
         // Act
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(Instant + ClientSignalTickets.Lifetime, minted?.ExpiresAt);
@@ -288,11 +288,11 @@ public sealed class ClientSignalTicketsTests
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            await mintingReplica.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            await mintingReplica.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         }
 
         // Assert
-        Assert.Null(await secondReplica.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken));
+        Assert.Null(await secondReplica.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
     }
 
     /// <summary>Expired tickets stop counting against the bound, so a quiet deployment never runs out of them.</summary>
@@ -305,16 +305,16 @@ public sealed class ClientSignalTicketsTests
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         }
 
-        Assert.Null(await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken));
+        Assert.Null(await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
 
         // Act
         clock.Advance(ClientSignalTickets.Lifetime + TimeSpan.FromSeconds(1));
 
         // Assert
-        Assert.NotNull(await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken));
+        Assert.NotNull(await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The sweep runs on the minting path at most once per lifetime, so a busy deployment issues one delete rather than one per connection.</summary>
@@ -331,7 +331,7 @@ public sealed class ClientSignalTicketsTests
         // Act
         for (var minted = 0; minted < 5; minted++)
         {
-            await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         }
 
         // Assert
@@ -368,7 +368,7 @@ public sealed class ClientSignalTicketsTests
 
         public Task<bool> TryMintAsync(
             string identifier,
-            MailUserId user,
+            UserId user,
             ReadOnlyMemory<byte> secretDigest,
             DateTimeOffset expiresAt,
             int mostOutstanding,

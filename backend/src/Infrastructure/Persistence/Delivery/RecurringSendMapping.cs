@@ -36,7 +36,7 @@ internal static class RecurringSendMapping
         {
             Id = RecurringSendId.Create(entity.Id),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
-            User = MailUserId.Create(entity.UserId),
+            User = UserId.Create(entity.UserId),
             Requester = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Recipients = recipients,
             Schedule = entity.Schedule,

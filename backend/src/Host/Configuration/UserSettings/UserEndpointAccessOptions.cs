@@ -37,7 +37,7 @@ internal sealed class UserEndpointAccessOptions
     public bool ClientEndpoint { get; set; } = true;
 
     /// <summary>Gets the switches as the value the user's row carries.</summary>
-    internal MailUserEndpointAccess Access => new(this.McpEndpoint, this.ClientEndpoint);
+    internal UserEndpointAccess Access => new(this.McpEndpoint, this.ClientEndpoint);
 
     /// <summary>Reads the switches a flattened record states, taking an absent or unreadable one as on.</summary>
     /// <param name="settings">The record, flattened to its colon-separated keys.</param>
@@ -46,7 +46,7 @@ internal sealed class UserEndpointAccessOptions
     /// Asked of a record the deployment already holds, which its binder accepted when it was committed, so an
     /// unreadable value is not a case a held record reaches; on is what the binder would have taken for an absent one.
     /// </remarks>
-    internal static MailUserEndpointAccess ReadFrom(IReadOnlyDictionary<string, string> settings) =>
+    internal static UserEndpointAccess ReadFrom(IReadOnlyDictionary<string, string> settings) =>
         new(Switch(settings, McpEndpointKey), Switch(settings, ClientEndpointKey));
 
     private static bool Switch(IReadOnlyDictionary<string, string> settings, string key) =>

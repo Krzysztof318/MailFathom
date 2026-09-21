@@ -223,7 +223,7 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
-        [FromServices] IMailUserDirectory users,
+        [FromServices] IUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -350,7 +350,7 @@ internal static class ContactEndpoints
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
-        [FromServices] IMailUserDirectory users,
+        [FromServices] IUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -414,7 +414,7 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
-        [FromServices] IMailUserDirectory users,
+        [FromServices] IUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -464,7 +464,7 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
-        [FromServices] IMailUserDirectory users,
+        [FromServices] IUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -544,7 +544,7 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
-        [FromServices] IMailUserDirectory users,
+        [FromServices] IUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
@@ -602,7 +602,7 @@ internal static class ContactEndpoints
     /// variable, so both arrive here as a value no user record can carry. Refusing it is what keeps such a request from
     /// reading an empty book and being answered that the deployment holds nobody.
     /// </remarks>
-    private static bool TryReadUser(Guid user, out MailUserId identity)
+    private static bool TryReadUser(Guid user, out UserId identity)
     {
         identity = default;
 
@@ -611,7 +611,7 @@ internal static class ContactEndpoints
             return false;
         }
 
-        identity = MailUserId.Create(user);
+        identity = UserId.Create(user);
 
         return true;
     }
@@ -623,7 +623,7 @@ internal static class ContactEndpoints
     /// <summary>States that the user a write named is not one this deployment holds a record for.</summary>
     /// <param name="user">The user that was looked up, which is MailFathom's own identifier rather than request text.</param>
     /// <returns>The refusal.</returns>
-    private static ProblemHttpResult UnknownUser(MailUserId user) =>
+    private static ProblemHttpResult UnknownUser(UserId user) =>
         Refused($"This deployment holds no user '{user.Value:D}'.");
 
     /// <summary>Reads the origin a listing was narrowed to, refusing a value naming no origin.</summary>

@@ -54,8 +54,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, scanning => scanning.Secrets.Enabled = true),
-            (SyntheticMailUser.Deployment, Archive, null));
+            (SyntheticUser.Deployment, Work, scanning => scanning.Secrets.Enabled = true),
+            (SyntheticUser.Deployment, Archive, null));
 
         // Act
         var asked = postures.ForAccount(Work);
@@ -84,7 +84,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, scanning => scanning.Secrets.Enabled = false));
+            (SyntheticUser.Deployment, Work, scanning => scanning.Secrets.Enabled = false));
 
         // Act
         var posture = postures.ForAccount(Work);
@@ -105,8 +105,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, scanning => scanning.Pii.Enabled = true),
-            (SyntheticMailUser.Another, Archive, null));
+            (SyntheticUser.Deployment, Work, scanning => scanning.Pii.Enabled = true),
+            (SyntheticUser.Another, Archive, null));
 
         // Act
         var tightener = postures.ForAccount(Work);
@@ -147,11 +147,11 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, screeningSecrets),
-            (SyntheticMailUser.Deployment, Archive, screeningPersonalData));
+            (SyntheticUser.Deployment, Work, screeningSecrets),
+            (SyntheticUser.Deployment, Archive, screeningPersonalData));
 
         // Act
-        var posture = postures.AcrossAccountsOf(SyntheticMailUser.Deployment);
+        var posture = postures.AcrossAccountsOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Equal(
@@ -177,7 +177,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         deployment.Secrets.Enabled = true;
         deployment.ScreenOutgoingMailFor = ["Secrets"];
 
-        var postures = this.PosturesOver(deployment, (SyntheticMailUser.Deployment, Work, null));
+        var postures = this.PosturesOver(deployment, (SyntheticUser.Deployment, Work, null));
 
         // Act
         var posture = postures.ForAccount(Work);
@@ -196,7 +196,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
 
-        var postures = this.PosturesOver(deployment, (SyntheticMailUser.Deployment, Work, null));
+        var postures = this.PosturesOver(deployment, (SyntheticUser.Deployment, Work, null));
 
         // Act
         var posture = postures.ForAccount(Archive);
@@ -216,7 +216,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
 
-        var postures = this.PosturesOver(deployment, new ServedMailUsers());
+        var postures = this.PosturesOver(deployment, new ServedUsers());
 
         // Act
         var posture = postures.ForAccount(Work);
@@ -236,8 +236,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, null),
-            (SyntheticMailUser.Another, Archive, null));
+            (SyntheticUser.Deployment, Work, null),
+            (SyntheticUser.Another, Archive, null));
 
         // Act
         var first = postures.ForAccount(Work);
@@ -261,8 +261,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, null),
-            (SyntheticMailUser.Another, Archive, scanning => scanning.Pii.Enabled = true));
+            (SyntheticUser.Deployment, Work, null),
+            (SyntheticUser.Another, Archive, scanning => scanning.Pii.Enabled = true));
 
         // Act, Assert
         Assert.True(postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii));
@@ -277,7 +277,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         // Arrange
         var postures = this.PosturesOver(
             new SensitiveContentOptions(),
-            (SyntheticMailUser.Deployment, Work, null));
+            (SyntheticUser.Deployment, Work, null));
 
         // Act
         var posture = postures.ForAccount(Work);
@@ -297,9 +297,9 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     public void ForAccount_ARecordCommittedAfterTheRosterWasEstablished_IsReadUnderWhatItAsksFor()
     {
         // Arrange
-        var servedUsers = new ServedMailUsers();
+        var servedUsers = new ServedUsers();
 
-        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, (Work, null))]);
+        servedUsers.Resolved([Serving(SyntheticUser.Deployment, (Work, null))]);
 
         var postures = this.PosturesOver(new SensitiveContentOptions(), servedUsers);
 
@@ -311,7 +311,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         };
 
         // Act
-        servedUsers.UserDocumentPublished(SyntheticMailUser.Deployment, "user", asked, 1);
+        servedUsers.UserDocumentPublished(SyntheticUser.Deployment, "user", asked, 1);
 
         // Assert
         Assert.Equal(
@@ -324,12 +324,12 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     public void ForAccount_OneAccountCommittingARecord_LeavesAnotherAccountsPostureAsItWas()
     {
         // Arrange
-        var servedUsers = new ServedMailUsers();
+        var servedUsers = new ServedUsers();
 
         servedUsers.Resolved(
         [
-            Serving(SyntheticMailUser.Deployment, (Work, null)),
-            Serving(SyntheticMailUser.Another, (Archive, null)),
+            Serving(SyntheticUser.Deployment, (Work, null)),
+            Serving(SyntheticUser.Another, (Archive, null)),
         ]);
 
         var postures = this.PosturesOver(new SensitiveContentOptions(), servedUsers);
@@ -339,7 +339,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         };
 
         // Act
-        servedUsers.UserDocumentPublished(SyntheticMailUser.Deployment, "user", asked, 1);
+        servedUsers.UserDocumentPublished(SyntheticUser.Deployment, "user", asked, 1);
 
         // Assert
         Assert.True(postures.ForAccount(Work).IsActive);
@@ -356,8 +356,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, scanning => scanning.Pii.Enabled = true),
-            (SyntheticMailUser.Another, Archive, null));
+            (SyntheticUser.Deployment, Work, scanning => scanning.Pii.Enabled = true),
+            (SyntheticUser.Another, Archive, null));
 
         // Act
         var current = postures.Current;
@@ -373,7 +373,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
-        var servedUsers = new ServedMailUsers();
+        var servedUsers = new ServedUsers();
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new MailAccountSensitiveContentPostures(
@@ -430,8 +430,8 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
             DateTimeOffset.UnixEpoch);
 
     /// <summary>Builds the roster entry a user assigned these mailboxes arrives as.</summary>
-    private static ServedMailUser Serving(
-        MailUserId user,
+    private static ServedUser Serving(
+        UserId user,
         params (MailAccountId Account, Action<MailAccountSensitiveContentOptions>? Asking)[] accounts) =>
         new(
             user,
@@ -457,9 +457,9 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     /// <summary>Composes the postures of a deployment whose roster is settled and names exactly these mailboxes.</summary>
     private MailAccountSensitiveContentPostures PosturesOver(
         SensitiveContentOptions deployment,
-        params (MailUserId User, MailAccountId Account, Action<MailAccountSensitiveContentOptions>? Asking)[] accounts)
+        params (UserId User, MailAccountId Account, Action<MailAccountSensitiveContentOptions>? Asking)[] accounts)
     {
-        var servedUsers = new ServedMailUsers();
+        var servedUsers = new ServedUsers();
 
         servedUsers.Resolved(
         [
@@ -476,7 +476,7 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     /// <summary>Composes the postures over a roster the test drives itself, which is how a later write is exercised.</summary>
     private MailAccountSensitiveContentPostures PosturesOver(
         SensitiveContentOptions deployment,
-        ServedMailUsers servedUsers) => new(
+        ServedUsers servedUsers) => new(
         deployment,
         [SecretsCatalog, PersonalDataCatalog],
         this.Detectors,

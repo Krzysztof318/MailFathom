@@ -185,7 +185,7 @@ public readonly record struct MailFathomErrorCode
     /// user meets a deployment serving nobody or several, or a start meets a roster it may not serve, and an operator
     /// resolves either in the user records rather than in a grant, which is what separates it from the code above.
     /// </remarks>
-    public static MailFathomErrorCode DeploymentMailUserUnresolved { get; } = new(14002);
+    public static MailFathomErrorCode DeploymentUserUnresolved { get; } = new(14002);
 
     #endregion
 
@@ -1130,7 +1130,7 @@ public readonly record struct MailFathomErrorCode
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,
-        DeploymentMailUserUnresolved,
+        DeploymentUserUnresolved,
         MailAuthenticationMechanismUnavailable,
         MailboxCredentialRefused,
         MailboxUnavailable,

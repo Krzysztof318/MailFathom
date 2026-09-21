@@ -322,7 +322,7 @@ public sealed class WatchedDiscoveryRunTests
     public async Task RunAsync_ARunStoppedWhileItPublishesWhatItComposed_EndsTheRunAsCancelled()
     {
         // Arrange
-        var stoppedElsewhere = new StoppedAsItStartsPublishing(this.store, SyntheticMailUser.Deployment);
+        var stoppedElsewhere = new StoppedAsItStartsPublishing(this.store, SyntheticUser.Deployment);
         using var journal = await this.NewJournalAsync(stoppedElsewhere);
         var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
@@ -533,13 +533,13 @@ public sealed class WatchedDiscoveryRunTests
         var id = DiscoveryRunId.New();
         await store.TryOpenAsync(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             DiscoveryRuns.Now,
             TestContext.Current.CancellationToken);
 
         return new DiscoveryRunJournal(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             store,
             ClientSignalPublishers.ReachingNobody,
             this.clock);
@@ -556,9 +556,9 @@ public sealed class WatchedDiscoveryRunTests
     /// the case this execution cannot see coming: nothing local is cancelled, the retrieval finishes, and the first
     /// thing to know about it is the refused write.
     /// </remarks>
-    private sealed class StoppedAsItStartsPublishing(InMemoryDiscoveryRunStore store, MailUserId user) : IDiscoveryRunStore
+    private sealed class StoppedAsItStartsPublishing(InMemoryDiscoveryRunStore store, UserId user) : IDiscoveryRunStore
     {
-        public Task<bool> TryOpenAsync(DiscoveryRunId id, MailUserId opening, DateTimeOffset now, CancellationToken cancellationToken) =>
+        public Task<bool> TryOpenAsync(DiscoveryRunId id, UserId opening, DateTimeOffset now, CancellationToken cancellationToken) =>
             store.TryOpenAsync(id, opening, now, cancellationToken);
 
         public async Task<long?> AppendAsync(DiscoveryRunId id, DiscoveryRunEvent written, DateTimeOffset now, CancellationToken cancellationToken)
@@ -571,10 +571,10 @@ public sealed class WatchedDiscoveryRunTests
             return await store.AppendAsync(id, written, now, cancellationToken);
         }
 
-        public Task<DiscoveryRunReading?> ReadAsync(DiscoveryRunId id, MailUserId reading, long afterSequence, DateTimeOffset now, CancellationToken cancellationToken) =>
+        public Task<DiscoveryRunReading?> ReadAsync(DiscoveryRunId id, UserId reading, long afterSequence, DateTimeOffset now, CancellationToken cancellationToken) =>
             store.ReadAsync(id, reading, afterSequence, now, cancellationToken);
 
-        public Task<bool> TryRequestStopAsync(DiscoveryRunId id, MailUserId stopping, DateTimeOffset now, CancellationToken cancellationToken) =>
+        public Task<bool> TryRequestStopAsync(DiscoveryRunId id, UserId stopping, DateTimeOffset now, CancellationToken cancellationToken) =>
             store.TryRequestStopAsync(id, stopping, now, cancellationToken);
 
         public Task<int> RemoveForgottenAsync(DateTimeOffset now, CancellationToken cancellationToken) =>

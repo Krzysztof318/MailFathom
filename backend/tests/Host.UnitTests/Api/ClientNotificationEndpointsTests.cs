@@ -26,7 +26,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientNotificationEndpointsTests
 {
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 8, 30, 0, TimeSpan.Zero);
 
@@ -197,7 +197,7 @@ public sealed class ClientNotificationEndpointsTests
         // Assert
         Assert.Equal(4, result.Value!.UnreadCount);
         await notifications.DidNotReceive().ReadPageAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<NotificationCursor?>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
@@ -239,7 +239,7 @@ public sealed class ClientNotificationEndpointsTests
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
         notifications.SetReadAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<NotificationId>(),
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
@@ -273,7 +273,7 @@ public sealed class ClientNotificationEndpointsTests
         // Assert
         Assert.IsType<NotFound>(result.Result);
         await notifications.DidNotReceive().SetReadAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<NotificationId>(),
             Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
@@ -286,7 +286,7 @@ public sealed class ClientNotificationEndpointsTests
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
         notifications.SetReadAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<NotificationId>(),
                 false,
                 Arg.Any<CancellationToken>())
@@ -366,7 +366,7 @@ public sealed class ClientNotificationEndpointsTests
 
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         await notifications.DidNotReceive().EraseAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<IReadOnlyCollection<NotificationId>>(),
             Arg.Any<CancellationToken>());
     }

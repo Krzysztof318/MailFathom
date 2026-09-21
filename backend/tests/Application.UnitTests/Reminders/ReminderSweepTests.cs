@@ -52,7 +52,7 @@ public sealed class ReminderSweepTests
         Assert.Equal(1, announced);
 
         var raised = Assert.Single(this.notifications.Recorded);
-        Assert.Equal(SyntheticMailUser.Deployment, raised.User);
+        Assert.Equal(SyntheticUser.Deployment, raised.User);
         Assert.Equal(NotificationKind.Calendar, raised.Kind);
         Assert.Equal("Standup", raised.Title);
         Assert.Equal(NotificationCause.CalendarReminderDue, raised.Statement!.Cause);
@@ -313,7 +313,7 @@ public sealed class ReminderSweepTests
     }
 
     private static DueReminder Due(DateTimeOffset dueAt, int minutesBefore) => new(
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         ReminderSubject.CalendarEvent,
         Standup,
         "Standup",
@@ -321,7 +321,7 @@ public sealed class ReminderSweepTests
         dueAt);
 
     private static DueReminder DueTask(DateTimeOffset dueAt, int minutesBefore) => new(
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         ReminderSubject.PersonalTask,
         CounterProposal,
         "Send the counter-proposal",

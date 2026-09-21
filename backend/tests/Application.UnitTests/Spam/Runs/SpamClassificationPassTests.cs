@@ -42,7 +42,7 @@ public sealed class SpamClassificationPassTests
     /// <summary>Stores content for every occurrence but the ones a test says nothing is stored for.</summary>
     public SpamClassificationPassTests()
     {
-        this.harness.Assignments.Assigning(SyntheticMailUser.Deployment, Account, OtherAccount);
+        this.harness.Assignments.Assigning(SyntheticUser.Deployment, Account, OtherAccount);
         this.harness.ContentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(call => this.emailsWithoutContent.Contains(call.Arg<StoredEmailId>())

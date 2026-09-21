@@ -51,7 +51,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         // Act
         var read = await store.ReadAsync(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             afterSequence: 1,
             Now,
             TestContext.Current.CancellationToken);
@@ -73,7 +73,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         // Act
         var read = await store.ReadAsync(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             afterSequence: 99,
             Now,
             TestContext.Current.CancellationToken);
@@ -94,7 +94,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         // Act
         var read = await store.ReadAsync(
             id,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             afterSequence: 0,
             Now,
             TestContext.Current.CancellationToken);
@@ -111,7 +111,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         var store = new InMemoryDiscoveryRunStore();
         var id = await OpenedAsync(store);
         await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
-        await store.TryRequestStopAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryRequestStopAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
         // Act
         var refused = await store.AppendAsync(id, Progressed(1), Now, TestContext.Current.CancellationToken);
@@ -143,7 +143,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         // Act
         var admittedNinth = await store.TryOpenAsync(
             DiscoveryRunId.New(),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Now,
             TestContext.Current.CancellationToken);
 
@@ -155,7 +155,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
 
         var admittedAfterOneEnded = await store.TryOpenAsync(
             DiscoveryRunId.New(),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Now,
             TestContext.Current.CancellationToken);
 
@@ -179,7 +179,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         // Act
         var admitted = await store.TryOpenAsync(
             DiscoveryRunId.New(),
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             Now,
             TestContext.Current.CancellationToken);
 
@@ -204,7 +204,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
         Assert.Equal(1, forgotten);
         Assert.Null(await store.ReadAsync(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             afterSequence: 0,
             Now,
             TestContext.Current.CancellationToken));
@@ -235,7 +235,7 @@ public sealed class InMemoryDiscoveryRunStoreTests
     private static async Task<DiscoveryRunId> OpenedAsync(InMemoryDiscoveryRunStore store)
     {
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
         return id;
     }

@@ -16,13 +16,13 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal sealed class StubMailAccountAssignments : IMailAccountAssignments
 {
-    private readonly List<(MailUserId User, MailAccountId Account)> assignments = [];
+    private readonly List<(UserId User, MailAccountId Account)> assignments = [];
 
     /// <summary>Assigns one mailbox to one user.</summary>
     /// <param name="user">The user the mailbox is served to.</param>
     /// <param name="accounts">The mailboxes assigned to them.</param>
     /// <returns>These assignments, so arrangements read as one expression.</returns>
-    public StubMailAccountAssignments Assigning(MailUserId user, params MailAccountId[] accounts)
+    public StubMailAccountAssignments Assigning(UserId user, params MailAccountId[] accounts)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         this.assignments.AddRange(accounts.Select(account => (user, account)));
@@ -31,10 +31,10 @@ internal sealed class StubMailAccountAssignments : IMailAccountAssignments
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) =>
+    public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) =>
         [.. this.assignments.Where(assignment => assignment.User == user).Select(assignment => assignment.Account)];
 
     /// <inheritdoc />
-    public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) =>
+    public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) =>
         [.. this.assignments.Where(assignment => assignment.Account == account).Select(assignment => assignment.User)];
 }

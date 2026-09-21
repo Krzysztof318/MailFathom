@@ -52,16 +52,16 @@ public sealed class ClientSessionTokensTests
     {
         // Arrange
         var sessions = Sessions(out _);
-        var mine = await sessions.MintAsync(Admitted(SyntheticMailUser.Deployment), TestContext.Current.CancellationToken);
-        var theirs = await sessions.MintAsync(Admitted(SyntheticMailUser.Another), TestContext.Current.CancellationToken);
+        var mine = await sessions.MintAsync(Admitted(SyntheticUser.Deployment), TestContext.Current.CancellationToken);
+        var theirs = await sessions.MintAsync(Admitted(SyntheticUser.Another), TestContext.Current.CancellationToken);
 
         // Act
         var admittedAsMe = await sessions.VerifyAsync(mine.Token?.Value, TestContext.Current.CancellationToken);
         var admittedAsThem = await sessions.VerifyAsync(theirs.Token?.Value, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, admittedAsMe?.User);
-        Assert.Equal(SyntheticMailUser.Another, admittedAsThem?.User);
+        Assert.Equal(SyntheticUser.Deployment, admittedAsMe?.User);
+        Assert.Equal(SyntheticUser.Another, admittedAsThem?.User);
     }
 
     /// <summary>A session outlives the request that presented it, which is the whole difference between this and a one-connection ticket.</summary>
@@ -341,7 +341,7 @@ public sealed class ClientSessionTokensTests
         var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
 
         // Act
-        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+        store.EndpointAccess = new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
         var renewed = await sessions.RenewAsync(minted.Token!.Value, TestContext.Current.CancellationToken);
 
         // Assert
@@ -406,7 +406,7 @@ public sealed class ClientSessionTokensTests
     {
         // Arrange
         var sessions = Sessions(out var store);
-        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+        store.EndpointAccess = new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
 
         // Act
         var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
@@ -429,9 +429,9 @@ public sealed class ClientSessionTokensTests
         var sessions = Sessions(out var store);
         var admitted = new AdmittedUserCredential(
             Guid.Empty,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             [MailFathomPermission.MailRead],
-            MailUserEndpointAccess.Everywhere);
+            UserEndpointAccess.Everywhere);
 
         // Act
         var minted = await sessions.MintAsync(admitted, TestContext.Current.CancellationToken);
@@ -439,7 +439,7 @@ public sealed class ClientSessionTokensTests
 
         // Assert
         Assert.Equal(ClientSessionMintOutcome.Minted, minted.Outcome);
-        Assert.Equal(SyntheticMailUser.Deployment, verified?.User);
+        Assert.Equal(SyntheticUser.Deployment, verified?.User);
         Assert.Equal(Guid.Empty, verified?.CredentialId);
         Assert.Null(Assert.Single(store.Grants).CredentialId);
     }
@@ -484,10 +484,10 @@ public sealed class ClientSessionTokensTests
             store.Hold(
                 $"abandoned-{ordinal}",
                 new HeldClientSession(
-                    new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
+                    new ClientSessionGrant(SyntheticUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
                     Instant - TimeSpan.FromSeconds(1),
-                    MailUserEndpointAccess.Everywhere));
+                    UserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -512,10 +512,10 @@ public sealed class ClientSessionTokensTests
             store.Hold(
                 $"live-{ordinal}",
                 new HeldClientSession(
-                    new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
+                    new ClientSessionGrant(SyntheticUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
                     Instant + ClientSessionTokens.Lifetime,
-                    MailUserEndpointAccess.Everywhere));
+                    UserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -617,10 +617,10 @@ public sealed class ClientSessionTokensTests
         new("The deployment's client sessions could not be reached.", new InvalidOperationException("No connection."));
 
     private static AdmittedUserCredential Admitted(params MailFathomPermission[] permissions) =>
-        new(CredentialId, SyntheticMailUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions, MailUserEndpointAccess.Everywhere);
+        new(CredentialId, SyntheticUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions, UserEndpointAccess.Everywhere);
 
-    private static AdmittedUserCredential Admitted(MailUserId user) =>
-        new(CredentialId, user, [MailFathomPermission.MailRead], MailUserEndpointAccess.Everywhere);
+    private static AdmittedUserCredential Admitted(UserId user) =>
+        new(CredentialId, user, [MailFathomPermission.MailRead], UserEndpointAccess.Everywhere);
 
     /// <summary>The half of a token that is looked up, separator included, so a test can compose one from two.</summary>
     private static string NameOf(string token) => token[..(token.IndexOf('.', StringComparison.Ordinal) + 1)];

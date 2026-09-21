@@ -72,7 +72,7 @@ public sealed class UserMailDraftsTests
     {
         // Arrange
         var harness = Harness();
-        var theirs = await SaveAsync(harness, Account, SyntheticMailUser.Another);
+        var theirs = await SaveAsync(harness, Account, SyntheticUser.Another);
         var drafts = UserDraftsOver(harness);
 
         // Act
@@ -108,7 +108,7 @@ public sealed class UserMailDraftsTests
         // Arrange
         var harness = Harness();
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var theirs = await SaveAsync(harness, Account, SyntheticMailUser.Another);
+        var theirs = await SaveAsync(harness, Account, SyntheticUser.Another);
         var drafts = UserDraftsOver(harness, outgoingEmails: outgoingEmails);
 
         // Act
@@ -218,11 +218,11 @@ public sealed class UserMailDraftsTests
     private static Task<MailDraftRecord> SaveAsync(
         MailDraftHarness harness,
         MailAccountId account,
-        MailUserId? author = null) =>
+        UserId? author = null) =>
         harness.Book.SaveAsync(
             account,
-            author ?? SyntheticMailUser.Deployment,
-            OutgoingEmailRequester.Command($"mfctl-{account.Value:N}-{(author ?? SyntheticMailUser.Deployment).Value:N}"),
+            author ?? SyntheticUser.Deployment,
+            OutgoingEmailRequester.Command($"mfctl-{account.Value:N}-{(author ?? SyntheticUser.Deployment).Value:N}"),
             new ComposedMailDraft(
                 [Recipient()],
                 "a draft",

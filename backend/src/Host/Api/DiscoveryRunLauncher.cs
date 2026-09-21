@@ -97,7 +97,7 @@ internal sealed partial class DiscoveryRunLauncher
     /// say is when this process has finished with the run — the ending is written a moment before the journal is
     /// released — which is why it is handed back rather than discarded here.
     /// </remarks>
-    internal Task Start(MailQuestion question, DiscoveryRunId id, MailUserId user, AuthorizedPrincipal caller)
+    internal Task Start(MailQuestion question, DiscoveryRunId id, UserId user, AuthorizedPrincipal caller)
     {
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(caller);
@@ -127,7 +127,7 @@ internal sealed partial class DiscoveryRunLauncher
     private async Task ExecuteAsync(
         MailQuestion question,
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         AuthorizedPrincipal caller)
     {
         using var journal = new DiscoveryRunJournal(id, user, this.runs, this.signals, this.timeProvider);

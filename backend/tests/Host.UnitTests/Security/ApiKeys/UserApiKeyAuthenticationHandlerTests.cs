@@ -23,8 +23,8 @@ public sealed class UserApiKeyAuthenticationHandlerTests
 {
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000002");
 
-    private static readonly MailUserId CredentialUser =
-        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId CredentialUser =
+        UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     /// <summary>A key whose user is kept off the endpoint authenticates nobody there, which is the challenge an unknown key meets.</summary>
     [Fact]
@@ -33,7 +33,7 @@ public sealed class UserApiKeyAuthenticationHandlerTests
         // Arrange
         var handler = await InitializeAsync(
             TransportSurface.Mcp,
-            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
 
         // Act
         var result = await handler.AuthenticateAsync();
@@ -50,7 +50,7 @@ public sealed class UserApiKeyAuthenticationHandlerTests
         // Arrange
         var handler = await InitializeAsync(
             TransportSurface.Client,
-            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
 
         // Act
         var result = await handler.AuthenticateAsync();
@@ -62,7 +62,7 @@ public sealed class UserApiKeyAuthenticationHandlerTests
 
     private static async Task<IAuthenticationHandler> InitializeAsync(
         TransportSurface surface,
-        MailUserEndpointAccess endpointAccess)
+        UserEndpointAccess endpointAccess)
     {
         var credentials = Substitute.For<IUserCredentialStore>();
         credentials.FindAsync(UserCredentialMethod.ApiKey, StatedApiKeyMinter.Lookup, Arg.Any<CancellationToken>())

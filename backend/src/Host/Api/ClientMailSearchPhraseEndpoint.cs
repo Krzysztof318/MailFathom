@@ -103,7 +103,7 @@ internal static class ClientMailSearchPhraseEndpoint
     internal static async Task<Results<Ok<ClientMailSearchPhraseResponse>, ProblemHttpResult>> ReadPhraseAsync(
         [FromBody] ClientMailSearchPhraseRequest? request,
         [FromServices] IMailSearchPhraseReader? reader,
-        [FromServices] MailUserClock userClock,
+        [FromServices] UserClock userClock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(userClock);

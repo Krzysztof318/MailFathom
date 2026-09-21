@@ -190,7 +190,7 @@ public sealed class MailboxScopeResolver
     /// about the person in hand. It is also available before any scope is — what a use case needs, since a search
     /// reaches a model provider with its query text before it has a page to narrow.
     /// </remarks>
-    public MailUserId User => this.accountCatalog.User;
+    public UserId User => this.accountCatalog.User;
 
     /// <summary>Gets the accounts this unit of work may reach, which is what a read that builds no scope narrows by.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>

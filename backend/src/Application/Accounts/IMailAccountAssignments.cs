@@ -47,7 +47,7 @@ public interface IMailAccountAssignments
     /// <see cref="Emails.Mailboxes.MailboxScope.NothingReadable" /> rather than into a scope carrying an empty account
     /// list, so nothing downstream has to decide what an empty list means.
     /// </remarks>
-    IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user);
+    IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user);
 
     /// <summary>Gets the users one account is assigned to, or empty when it is assigned to nobody.</summary>
     /// <param name="account">The account asked about.</param>
@@ -59,5 +59,5 @@ public interface IMailAccountAssignments
     /// holding a mailbox and owing something per person: a signal a synchronization run raises, the per-user spend
     /// ceilings, and the language a shared mailbox's derived text is composed in.
     /// </remarks>
-    IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account);
+    IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account);
 }

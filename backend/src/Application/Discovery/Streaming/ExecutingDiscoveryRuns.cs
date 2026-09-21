@@ -57,7 +57,7 @@ public sealed class ExecutingDiscoveryRuns
     /// <see langword="false" /> says nothing about whether the run exists — it may be executing on another replica —
     /// which is why the caller's answer to the client comes from the record rather than from here.
     /// </remarks>
-    public bool TryRequestStop(DiscoveryRunId id, MailUserId user)
+    public bool TryRequestStop(DiscoveryRunId id, UserId user)
     {
         if (!this.executing.TryGetValue(id, out var journal) || journal.User != user)
         {

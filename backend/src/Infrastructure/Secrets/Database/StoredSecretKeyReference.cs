@@ -12,5 +12,5 @@ namespace MailFathom.Infrastructure.Secrets.Database;
 /// <param name="Name">The safe declared name used for rotation and audit.</param>
 public sealed record StoredSecretKeyReference(
     DatabaseSecretReference Reference,
-    MailUserId User,
+    UserId User,
     SecretName Name);

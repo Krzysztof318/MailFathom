@@ -51,8 +51,8 @@ public sealed class UnlinkedStoredFileSweepWorkerTests
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var files = Substitute.For<IStoredFileStore>();
         files.FindUnmentionedAsync(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns([new HeldStoredFile(Unlinked, SyntheticMailUser.Deployment)]);
-        files.RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>())
+            .Returns([new HeldStoredFile(Unlinked, SyntheticUser.Deployment)]);
+        files.RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 removed.TrySetResult();
@@ -163,7 +163,7 @@ public sealed class UnlinkedStoredFileSweepWorkerTests
         timeProvider = new FakeTimeProvider();
 
         var links = Substitute.For<IUserRecordFileLinks>();
-        links.ReadLinkedFilesAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+        links.ReadLinkedFilesAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<StoredFileId>());
 
         var services = new ServiceCollection();

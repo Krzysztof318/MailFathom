@@ -207,8 +207,8 @@ public sealed class SenderTrustPolicyConfigurationTests
         // Arrange
         var options = new MailSynchronizationOptions().WithServedUsers(
         [
-            User(SyntheticMailUser.Deployment, AccountAt("work", "user@work.example")),
-            User(SyntheticMailUser.Another, AccountAt("theirs", "other@elsewhere.example")),
+            User(SyntheticUser.Deployment, AccountAt("work", "user@work.example")),
+            User(SyntheticUser.Another, AccountAt("theirs", "other@elsewhere.example")),
         ]);
 
         // Act
@@ -238,7 +238,7 @@ public sealed class SenderTrustPolicyConfigurationTests
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
         new MailSynchronizationOptions().Serving(accounts);
 
-    private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
+    private static ServedUser User(UserId user, params MailSynchronizationAccountOptions[] accounts) =>
         new(user, "a user this deployment serves", accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()

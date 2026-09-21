@@ -43,7 +43,7 @@ public sealed class AuthorizedPrincipal
     private AuthorizedPrincipal(
         AuthorizedPrincipalKind kind,
         string identity,
-        MailUserId? user,
+        UserId? user,
         IReadOnlySet<MailFathomPermission> permissions)
     {
         this.Kind = kind;
@@ -97,7 +97,7 @@ public sealed class AuthorizedPrincipal
     /// reading.
     /// </para>
     /// </remarks>
-    public MailUserId? User { get; }
+    public UserId? User { get; }
 
     /// <summary>Gets the permissions this principal holds, which is empty for every kind but a caller.</summary>
     public IReadOnlySet<MailFathomPermission> Permissions { get; }
@@ -137,7 +137,7 @@ public sealed class AuthorizedPrincipal
     /// however broad cannot widen the mail it reaches beyond that user's own.
     /// </remarks>
     public static AuthorizedPrincipal CallerActingFor(
-        MailUserId user,
+        UserId user,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions)
     {
@@ -165,7 +165,7 @@ public sealed class AuthorizedPrincipal
     /// capability is redeemed by whoever holds the URL, and the mail behind it is one user's rather than the
     /// deployment's.
     /// </remarks>
-    public static AuthorizedPrincipal SignedCapability(MailUserId user, string authorizedObject)
+    public static AuthorizedPrincipal SignedCapability(UserId user, string authorizedObject)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(authorizedObject);
 
@@ -184,7 +184,7 @@ public sealed class AuthorizedPrincipal
     }
 
     private static AuthorizedPrincipal AdmittedCaller(
-        MailUserId? user,
+        UserId? user,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions)
     {

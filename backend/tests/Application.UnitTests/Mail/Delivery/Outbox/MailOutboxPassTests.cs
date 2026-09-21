@@ -487,7 +487,7 @@ public sealed class MailOutboxPassTests
 
             var request = OutgoingEmailRequest.Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
 
@@ -557,7 +557,7 @@ public sealed class MailOutboxPassTests
 
             return this.DraftSide.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 new ComposedMailDraft(
                     [

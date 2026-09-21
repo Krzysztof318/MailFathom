@@ -148,7 +148,7 @@ public sealed class ClientSignalPayloadTests
         // Arrange
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(Instant)),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             NotificationKind.Mail,
             title: "Mail arrived",
             body: "Four messages arrived in work.",
@@ -209,7 +209,7 @@ public sealed class ClientSignalPayloadTests
     {
         // Arrange
         var run = DiscoveryRunId.New();
-        var signal = ClientSignal.DiscoveryRunAdvanced(SyntheticMailUser.Deployment, run, sequence: 7);
+        var signal = ClientSignal.DiscoveryRunAdvanced(SyntheticUser.Deployment, run, sequence: 7);
 
         // Act
         var payload = ClientSignalPayload.For(signal);
@@ -252,7 +252,7 @@ public sealed class ClientSignalPayloadTests
         Assert.DoesNotContain(BodyFragment, rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(AttachmentName, rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
-            SyntheticMailUser.Deployment.Value.ToString(),
+            SyntheticUser.Deployment.Value.ToString(),
             rendered,
             StringComparison.OrdinalIgnoreCase);
     }

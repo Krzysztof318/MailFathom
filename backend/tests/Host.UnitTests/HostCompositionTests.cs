@@ -807,7 +807,7 @@ public sealed class HostCompositionTests
         // Act
         startupGates.MarkCompleted(HostStartupGate.SecretConfiguration);
         startupGates.MarkCompleted(HostStartupGate.DatabaseSchema);
-        startupGates.MarkCompleted(HostStartupGate.ServedMailUsers);
+        startupGates.MarkCompleted(HostStartupGate.ServedUsers);
 
         // Assert
         Assert.True(startupGates.Completed);

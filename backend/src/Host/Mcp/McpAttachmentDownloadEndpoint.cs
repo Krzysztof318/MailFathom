@@ -88,7 +88,7 @@ internal static class McpAttachmentDownloadEndpoint
         IAttachmentDownloadTicketReader ticketReader,
         EmailAttachmentDownloadReader downloadReader,
         TransportAuthorizedPrincipalSource principals,
-        IDeploymentMailUserSource deploymentUser,
+        IDeploymentUserSource deploymentUser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
@@ -111,13 +111,13 @@ internal static class McpAttachmentDownloadEndpoint
         // outside every group deliberately, so nothing else would classify it and the caller would meet an unhandled
         // fault carrying the capability into a framework log. Recording the user in the ticket is what ends the
         // refusal itself, and it changes the capability's own format.
-        MailUserId user;
+        UserId user;
 
         try
         {
             user = deploymentUser.User;
         }
-        catch (DeploymentMailUserUnresolvedException unattributable)
+        catch (DeploymentUserUnresolvedException unattributable)
         {
             return RouteAuthorization.Unattributable(unattributable);
         }

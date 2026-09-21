@@ -45,7 +45,7 @@ public interface IEmbeddingSpendLedger
     /// </remarks>
     Task<EmbeddingSpendTotals> ReadConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken);
 
     /// <summary>Reads what one period actually sent to a provider, whoever it was counted against.</summary>
@@ -86,7 +86,7 @@ public interface IEmbeddingSpendLedger
     Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long inputCharacterCount,
         CancellationToken cancellationToken);
 }

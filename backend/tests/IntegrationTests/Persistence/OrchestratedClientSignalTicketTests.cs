@@ -55,13 +55,13 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
         try
         {
             // Arrange
-            var minted = await (await TicketsOnAsync(mintingHost, cancellationToken)).MintAsync(MailUserId.Create(user), cancellationToken);
+            var minted = await (await TicketsOnAsync(mintingHost, cancellationToken)).MintAsync(UserId.Create(user), cancellationToken);
 
             // Act
             var admitted = await (await TicketsOnAsync(connectingHost, cancellationToken)).RedeemAsync(minted?.Value, cancellationToken);
 
             // Assert
-            Assert.Equal(MailUserId.Create(user), admitted);
+            Assert.Equal(UserId.Create(user), admitted);
         }
         finally
         {
@@ -86,14 +86,14 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
         try
         {
             // Arrange
-            var minted = await (await TicketsOnAsync(mintingHost, cancellationToken)).MintAsync(MailUserId.Create(user), cancellationToken);
+            var minted = await (await TicketsOnAsync(mintingHost, cancellationToken)).MintAsync(UserId.Create(user), cancellationToken);
 
             // Act
             var first = await (await TicketsOnAsync(connectingHost, cancellationToken)).RedeemAsync(minted?.Value, cancellationToken);
             var replayed = await (await TicketsOnAsync(mintingHost, cancellationToken)).RedeemAsync(minted?.Value, cancellationToken);
 
             // Assert
-            Assert.Equal(MailUserId.Create(user), first);
+            Assert.Equal(UserId.Create(user), first);
             Assert.Null(replayed);
         }
         finally
@@ -127,7 +127,7 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
             // Arrange
             var oneReplica = await TicketsOnAsync(oneHost, cancellationToken);
             var anotherReplica = await TicketsOnAsync(anotherHost, cancellationToken);
-            var minted = await oneReplica.MintAsync(MailUserId.Create(user), cancellationToken);
+            var minted = await oneReplica.MintAsync(UserId.Create(user), cancellationToken);
 
             // Act
             var attempts = await ConcurrentIdempotency.RunAsync(
@@ -163,8 +163,8 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
             // Arrange
             var clock = new FakeTimeProvider(Instant);
             var tickets = new ClientSignalTickets(await StoreOfAsync(host, cancellationToken), clock);
-            var expiring = await tickets.MintAsync(MailUserId.Create(user), cancellationToken);
-            var guessedAt = await tickets.MintAsync(MailUserId.Create(user), cancellationToken);
+            var expiring = await tickets.MintAsync(UserId.Create(user), cancellationToken);
+            var guessedAt = await tickets.MintAsync(UserId.Create(user), cancellationToken);
             var identifier = guessedAt!.Value[..guessedAt.Value.IndexOf('.', StringComparison.Ordinal)];
 
             // Act
@@ -215,7 +215,7 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
             // Act
             var refused = await secondReplica.TryMintAsync(
                 Guid.NewGuid().ToString("N"),
-                MailUserId.Create(user),
+                UserId.Create(user),
                 new byte[32],
                 Instant + ClientSignalTickets.Lifetime,
                 (int)held,
@@ -223,7 +223,7 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
 
             var admitted = await deployment.TryMintAsync(
                 Guid.NewGuid().ToString("N"),
-                MailUserId.Create(user),
+                UserId.Create(user),
                 new byte[32],
                 Instant + ClientSignalTickets.Lifetime,
                 (int)held + 1,
@@ -252,7 +252,7 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
         try
         {
             // Arrange
-            var minted = await (await TicketsOnAsync(host, cancellationToken)).MintAsync(MailUserId.Create(user), cancellationToken);
+            var minted = await (await TicketsOnAsync(host, cancellationToken)).MintAsync(UserId.Create(user), cancellationToken);
 
             // Act
             await OrchestratedForeignUser.EraseAsync(host, user);

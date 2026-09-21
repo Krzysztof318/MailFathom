@@ -22,8 +22,8 @@
     <!-- Every use case behind a protected surface takes the authorization, so the principal a test states is composed
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
-    <Compile Include="..\shared\MailUserClocks.cs" Link="MailUserClocks.cs" />
-    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
+    <Compile Include="..\shared\UserClocks.cs" Link="UserClocks.cs" />
+    <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
     <Compile Include="..\shared\SyntheticMailAccount.cs" Link="SyntheticMailAccount.cs" />
     <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
     <Compile Include="..\shared\SyntheticAccountLanguages.cs" Link="SyntheticAccountLanguages.cs" />

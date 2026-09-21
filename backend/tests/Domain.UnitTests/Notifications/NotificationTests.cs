@@ -12,7 +12,7 @@ namespace MailFathom.Domain.UnitTests.Notifications;
 /// <summary>Covers what a notification refuses to be composed as, and the three shapes its target takes.</summary>
 public sealed class NotificationTests
 {
-    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
+    private static readonly UserId User = UserId.Create(Guid.NewGuid());
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
@@ -21,7 +21,7 @@ public sealed class NotificationTests
     public void Compose_UnspecifiedUser_IsRefused()
     {
         // Act
-        var refusal = Assert.Throws<ArgumentException>(() => Compose(user: default(MailUserId)));
+        var refusal = Assert.Throws<ArgumentException>(() => Compose(user: default(UserId)));
 
         // Assert
         Assert.Equal("user", refusal.ParamName);
@@ -142,7 +142,7 @@ public sealed class NotificationTests
     }
 
     private static Notification Compose(
-        MailUserId? user = null,
+        UserId? user = null,
         NotificationKind kind = NotificationKind.System,
         string title = "Something happened",
         string? source = "work") =>

@@ -296,9 +296,9 @@ public sealed class MailReplyDraftingTests
 
     /// <summary>The language is the acting user's own, which is the one thing a drafting answering nothing has to go on.</summary>
     [Theory]
-    [InlineData(MailUserLanguage.English)]
-    [InlineData(MailUserLanguage.Polish)]
-    public async Task DraftAsync_AnyDrafting_CarriesTheLanguageTheUserRecordNames(MailUserLanguage language)
+    [InlineData(UserLanguage.English)]
+    [InlineData(UserLanguage.Polish)]
+    public async Task DraftAsync_AnyDrafting_CarriesTheLanguageTheUserRecordNames(UserLanguage language)
     {
         // Arrange
         var writer = WriterReturning(Written("We accept."));
@@ -367,13 +367,13 @@ public sealed class MailReplyDraftingTests
         IReadOnlyList<MailAccountId>? servedAccounts = null,
         AccessAuthorization? authorization = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        MailUserLanguage language = MailUserLanguage.English,
+        UserLanguage language = UserLanguage.English,
         bool derivesStyleFromSentMail = true)
     {
         var accounts = servedAccounts ?? [Account];
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
-        catalog.User.Returns(SyntheticMailUser.Deployment);
+        catalog.User.Returns(SyntheticUser.Deployment);
 
         var scopeResolver = new MailboxScopeResolver(
             catalog,
@@ -393,11 +393,11 @@ public sealed class MailReplyDraftingTests
     }
 
     /// <summary>Answers that language for the acting user alone, so a drafting composed for anybody else would read English and fail the assertion.</summary>
-    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    private static IUserLanguages LanguagesAnswering(UserLanguage language)
     {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(MailUserLanguage.English);
-        languages.LanguageOf(SyntheticMailUser.Deployment).Returns(language);
+        var languages = Substitute.For<IUserLanguages>();
+        languages.LanguageOf(Arg.Any<UserId>()).Returns(UserLanguage.English);
+        languages.LanguageOf(SyntheticUser.Deployment).Returns(language);
 
         return languages;
     }

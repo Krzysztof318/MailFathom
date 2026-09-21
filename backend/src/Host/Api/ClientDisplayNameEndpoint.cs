@@ -40,7 +40,7 @@ internal static class ClientDisplayNameEndpoint
 
     /// <summary>The greatest request body the write route reads before refusing it.</summary>
     /// <remarks>
-    /// One string bounded at <see cref="MailUserRecord.MaximumDisplayNameLength" /> characters, with room for the
+    /// One string bounded at <see cref="UserRecord.MaximumDisplayNameLength" /> characters, with room for the
     /// widest UTF-8 encoding of each and the JSON escaping around them. Far below the record's bound, because a body
     /// sized for a page of mail-account declarations would be a bound nobody decided on; a body past it is answered
     /// <c>413</c> before the handler is reached, as every other write on this surface is.

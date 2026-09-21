@@ -59,8 +59,8 @@ internal sealed partial record ReplyDraftScenario(
     string Manner,
     bool AsksForWhatNothingSupports,
     int MinimumTaskAdherence,
-    MailUserLanguage ReaderLanguage = MailUserLanguage.English,
-    MailUserLanguage? WritesIn = null)
+    UserLanguage ReaderLanguage = UserLanguage.English,
+    UserLanguage? WritesIn = null)
 {
     /// <summary>The check that the answer read as a draft.</summary>
     public const string ReadAsADraftMetricName = "Read as a draft";
@@ -225,8 +225,8 @@ internal sealed partial record ReplyDraftScenario(
             "Krótko i uprzejmie.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.Polish,
-            MailUserLanguage.Polish),
+            UserLanguage.Polish,
+            UserLanguage.Polish),
         new(
             "ReplyDraft.Polish.AfterACorrection",
             PolishCorpus.ConversationUpTo(position: 12),
@@ -234,8 +234,8 @@ internal sealed partial record ReplyDraftScenario(
             "Dwa zdania.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.Polish,
-            MailUserLanguage.Polish),
+            UserLanguage.Polish,
+            UserLanguage.Polish),
         new(
             "ReplyDraft.Polish.AssertsWhatTheConversationDoesNot",
             PolishCorpus.ConversationUpTo(position: 2),
@@ -243,8 +243,8 @@ internal sealed partial record ReplyDraftScenario(
             "Krótko.",
             AsksForWhatNothingSupports: true,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.Polish,
-            MailUserLanguage.Polish),
+            UserLanguage.Polish,
+            UserLanguage.Polish),
         new(
             "ReplyDraft.Mixed.PolishAskOnAnEnglishConversation",
             CorpusMessage.ConversationUpTo(position: 22),
@@ -252,8 +252,8 @@ internal sealed partial record ReplyDraftScenario(
             "Dwa lub trzy zdania, ciepło, ale rzeczowo.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.Polish,
-            MailUserLanguage.English),
+            UserLanguage.Polish,
+            UserLanguage.English),
         new(
             "ReplyDraft.Mixed.EnglishAskOnAPolishConversation",
             PolishCorpus.ConversationUpTo(position: 2),
@@ -261,8 +261,8 @@ internal sealed partial record ReplyDraftScenario(
             "Short and polite.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.English,
-            MailUserLanguage.Polish),
+            UserLanguage.English,
+            UserLanguage.Polish),
         new(
             "ReplyDraft.Mixed.AskedForPolishOnAnEnglishConversation",
             CorpusMessage.ConversationUpTo(position: 22),
@@ -270,8 +270,8 @@ internal sealed partial record ReplyDraftScenario(
             "Two or three sentences.",
             AsksForWhatNothingSupports: false,
             MinimumTaskAdherence: 4,
-            MailUserLanguage.English,
-            MailUserLanguage.Polish),
+            UserLanguage.English,
+            UserLanguage.Polish),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>

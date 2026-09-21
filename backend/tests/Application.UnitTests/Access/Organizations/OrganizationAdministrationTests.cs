@@ -14,7 +14,7 @@ namespace MailFathom.Application.UnitTests.Access.Organizations;
 /// <summary>Covers which grant admits each act on organizations, and what recording one mints.</summary>
 public sealed class OrganizationAdministrationTests
 {
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-4000-8000-000000000001"));
+    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-4000-8000-000000000001"));
 
     private static readonly Guid OrganizationId = new("0197c0de-0000-4000-8000-000000000002");
 

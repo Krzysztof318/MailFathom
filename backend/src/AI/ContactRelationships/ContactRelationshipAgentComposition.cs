@@ -33,7 +33,7 @@ internal static class ContactRelationshipAgentComposition
     internal static ChatClientAgent Compose(
         IChatClient chatClient,
         ChatGenerationPlan plan,
-        MailUserLanguage language,
+        UserLanguage language,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {

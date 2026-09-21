@@ -18,7 +18,7 @@ namespace MailFathom.Infrastructure.UnitTests.Security.ApiKeys;
 /// </remarks>
 public sealed class UserApiKeyAuthenticatorTests
 {
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000002");
 
@@ -165,7 +165,7 @@ public sealed class UserApiKeyAuthenticatorTests
                     Grant,
                     enabled,
                     Material: null,
-                    MailUserEndpointAccess.Everywhere));
+                    UserEndpointAccess.Everywhere));
 
         internal Task<UserApiKeyAuthenticationResult> AuthenticateAsync(string? authorizationHeaderValue) =>
             this.Authenticator.AuthenticateAsync(authorizationHeaderValue, TestContext.Current.CancellationToken);

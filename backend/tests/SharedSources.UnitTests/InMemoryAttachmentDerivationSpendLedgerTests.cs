@@ -29,7 +29,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
         var totals = await ledger.ReadConsumedAsync(
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -43,14 +43,14 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
         ledger.SeedDeployment(Period, AttachmentDerivationStep.Extraction, 4_608);
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another, 512);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment, 4_096);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Another, 512);
 
         // Act
         var totals = await ledger.ReadConsumedAsync(
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -92,7 +92,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            [SyntheticMailUser.Deployment, SyntheticMailUser.Another],
+            [SyntheticUser.Deployment, SyntheticUser.Another],
             4_096,
             TestContext.Current.CancellationToken);
 
@@ -105,10 +105,10 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
         Assert.Equal(4_096, deployment);
         Assert.Equal(
             4_096,
-            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment)]);
         Assert.Equal(
             4_096,
-            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another)]);
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Another)]);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment, 4_096);
 
         // Act
         var next = await ledger.ReadDeploymentConsumedAsync(
@@ -139,21 +139,21 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            [SyntheticMailUser.Deployment],
+            [SyntheticUser.Deployment],
             1_000,
             TestContext.Current.CancellationToken);
         await ledger.RecordSpendAsync(
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            [SyntheticMailUser.Deployment],
+            [SyntheticUser.Deployment],
             24,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
             1_024,
-            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment)]);
     }
 
     /// <summary>A step that consumed nothing writes no row, which is what keeps a period free of charges of zero.</summary>
@@ -168,7 +168,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Description,
-            [SyntheticMailUser.Deployment],
+            [SyntheticUser.Deployment],
             0,
             TestContext.Current.CancellationToken);
 
@@ -187,7 +187,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            [SyntheticMailUser.Deployment],
+            [SyntheticUser.Deployment],
             -1,
             TestContext.Current.CancellationToken));
     }

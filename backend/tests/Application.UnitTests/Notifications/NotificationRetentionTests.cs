@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Notifications;
 /// <summary>Covers how far back a person's notification centre is allowed to reach.</summary>
 public sealed class NotificationRetentionTests
 {
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 

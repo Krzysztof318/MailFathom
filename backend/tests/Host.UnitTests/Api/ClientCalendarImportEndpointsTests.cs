@@ -57,7 +57,7 @@ public sealed class ClientCalendarImportEndpointsTests
 
         await this.store.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<CalendarEvent>(),
             Arg.Any<CancellationToken>());
     }
@@ -162,7 +162,7 @@ public sealed class ClientCalendarImportEndpointsTests
     {
         this.store
             .ReadImportedUidsAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<IReadOnlyCollection<ImportedCalendarEventUid>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new HashSet<ImportedCalendarEventUid>());
@@ -171,11 +171,11 @@ public sealed class ClientCalendarImportEndpointsTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
-        var zones = Substitute.For<IMailUserTimeZones>();
-        zones.ZoneOf(Arg.Any<MailUserId>()).Returns(MailUserTimeZone.Coordinated);
+        var zones = Substitute.For<IUserTimeZones>();
+        zones.ZoneOf(Arg.Any<UserId>()).Returns(UserTimeZone.Coordinated);
 
         return new CalendarFileImport(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
             this.reader,
             this.store,
             zones,

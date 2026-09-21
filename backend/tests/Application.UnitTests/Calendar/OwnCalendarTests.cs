@@ -25,8 +25,8 @@ namespace MailFathom.Application.UnitTests.Calendar;
 /// </summary>
 public sealed class OwnCalendarTests
 {
-    private static readonly MailUserId Person = SyntheticMailUser.Deployment;
-    private static readonly MailUserId SomebodyElse = SyntheticMailUser.Another;
+    private static readonly UserId Person = SyntheticUser.Deployment;
+    private static readonly UserId SomebodyElse = SyntheticUser.Another;
     private static readonly DateTimeOffset Now = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Monday = new(2026, 9, 21, 8, 0, 0, TimeSpan.Zero);
 

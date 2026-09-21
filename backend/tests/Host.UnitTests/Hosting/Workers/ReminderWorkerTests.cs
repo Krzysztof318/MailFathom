@@ -118,7 +118,7 @@ public sealed class ReminderWorkerTests
     }
 
     private static DueReminder Due() => new(
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         ReminderSubject.CalendarEvent,
         Standup,
         "Design review",

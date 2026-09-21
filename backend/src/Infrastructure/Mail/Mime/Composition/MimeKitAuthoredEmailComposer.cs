@@ -66,7 +66,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// <inheritdoc />
     public AuthoredEmailComposition Compose(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities)
@@ -149,7 +149,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// <inheritdoc />
     public AuthoredEmailComposition RecomposeAsOccurrence(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> draftMime,
@@ -651,7 +651,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// </remarks>
     private static AuthoredEmailComposition AsOutgoing(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         MailDraftComposition composition)
     {

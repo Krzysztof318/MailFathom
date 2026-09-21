@@ -38,7 +38,7 @@ public sealed class FixedSensitiveContentPosturesTests
             (Archive, SensitiveContentPosture.ScanningNothing));
 
         // Act
-        var strictest = postures.AcrossAccountsOf(SyntheticMailUser.Deployment);
+        var strictest = postures.AcrossAccountsOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Same(scanning, strictest);
@@ -65,7 +65,7 @@ public sealed class FixedSensitiveContentPosturesTests
 
         // Act
         var refusal = Assert.Throws<InvalidOperationException>(
-            () => postures.AcrossAccountsOf(SyntheticMailUser.Deployment));
+            () => postures.AcrossAccountsOf(SyntheticUser.Deployment));
 
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
@@ -85,12 +85,12 @@ public sealed class FixedSensitiveContentPosturesTests
 
         var postures = FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SomebodyElses, scanning, SyntheticMailUser.Another),
-            (Archive, SensitiveContentPosture.ScanningNothing, SyntheticMailUser.Deployment));
+            (SomebodyElses, scanning, SyntheticUser.Another),
+            (Archive, SensitiveContentPosture.ScanningNothing, SyntheticUser.Deployment));
 
         // Act
-        var strictest = postures.AcrossAccountsOf(SyntheticMailUser.Deployment);
-        var theirs = postures.AcrossAccountsOf(SyntheticMailUser.Another);
+        var strictest = postures.AcrossAccountsOf(SyntheticUser.Deployment);
+        var theirs = postures.AcrossAccountsOf(SyntheticUser.Another);
 
         // Assert
         Assert.Same(SensitiveContentPosture.ScanningNothing, strictest);
@@ -116,7 +116,7 @@ public sealed class FixedSensitiveContentPosturesTests
 
         // Act
         var refusal = Assert.Throws<InvalidOperationException>(
-            () => postures.AcrossAccountsOf(SyntheticMailUser.Deployment));
+            () => postures.AcrossAccountsOf(SyntheticUser.Deployment));
 
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);

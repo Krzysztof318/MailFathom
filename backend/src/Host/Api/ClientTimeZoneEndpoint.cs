@@ -71,7 +71,7 @@ internal static class ClientTimeZoneEndpoint
     /// propose the zone the browser reports, and comparing identifiers would propose over a person who chose UTC.
     /// </remarks>
     internal static Ok<ClientTimeZoneResponse> Read(
-        [FromServices] IMailUserTimeZones zones,
+        [FromServices] IUserTimeZones zones,
         [FromServices] AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(zones);
@@ -80,7 +80,7 @@ internal static class ClientTimeZoneEndpoint
         var stated = zones.StatedZoneOf(authorization.RequireUser());
 
         return TypedResults.Ok(
-            new ClientTimeZoneResponse((stated ?? MailUserTimeZone.Coordinated).Id, stated is null));
+            new ClientTimeZoneResponse((stated ?? UserTimeZone.Coordinated).Id, stated is null));
     }
 
     /// <summary>Records the zone the acting person states their own days are read in.</summary>
@@ -96,7 +96,7 @@ internal static class ClientTimeZoneEndpoint
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!MailUserTimeZone.TryRead(request.TimeZone, out var zone))
+        if (!UserTimeZone.TryRead(request.TimeZone, out var zone))
         {
             return TypedResults.Problem(
                 $"The time zone is an IANA identifier this deployment knows, such as 'Europe/Warsaw', at most {ZonedInstant.MaximumZoneIdLength} characters.",

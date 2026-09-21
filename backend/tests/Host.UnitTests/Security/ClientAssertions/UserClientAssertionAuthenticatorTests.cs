@@ -35,7 +35,7 @@ public sealed class UserClientAssertionAuthenticatorTests
 {
     private static readonly DateTimeOffset VerifiedAt = new(2026, 8, 28, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailUserId User = MailUserId.Create(
+    private static readonly UserId User = UserId.Create(
         Guid.Parse("6f1c0f6c-1f3f-4a9a-9a1e-0e0f1b2c3d4e"));
 
     private static readonly Guid CredentialId = Guid.Parse("41d7e2b0-2a3b-4c5d-8e9f-0a1b2c3d4e5f");
@@ -254,7 +254,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var harness = HarnessHolding(
             clientKey,
-            endpointAccess: new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+            endpointAccess: new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
 
         // Act
         var result = await AuthenticateThroughTheHandlerAsync(harness, TransportSurface.Mcp, Presenting(clientKey));
@@ -272,7 +272,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var harness = HarnessHolding(
             clientKey,
-            endpointAccess: new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+            endpointAccess: new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
 
         // Act
         var result = await AuthenticateThroughTheHandlerAsync(harness, TransportSurface.Mcp, Presenting(clientKey));
@@ -312,7 +312,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         AsymmetricAlgorithm clientKey,
         bool enabled = true,
         string? material = null,
-        MailUserEndpointAccess? endpointAccess = null)
+        UserEndpointAccess? endpointAccess = null)
     {
         Assert.True(UserCredentialLookup.TryCreate(FingerprintOf(clientKey), out var lookup));
 
@@ -331,7 +331,7 @@ public sealed class UserClientAssertionAuthenticatorTests
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     enabled,
                     material ?? registeredMaterial,
-                    endpointAccess ?? MailUserEndpointAccess.Everywhere)
+                    endpointAccess ?? UserEndpointAccess.Everywhere)
                 : null);
 
         var clock = new FakeTimeProvider(VerifiedAt);

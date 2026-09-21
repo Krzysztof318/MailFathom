@@ -54,7 +54,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -64,7 +64,7 @@ public sealed class ClientSessionTokenEndpointsTests
         Assert.Equal(Instant + ClientSessionTokens.Lifetime, answered.Value.ExpiresAt);
 
         var admitted = await sessions.VerifyAsync(answered.Value.Token, TestContext.Current.CancellationToken);
-        Assert.Equal(SyntheticMailUser.Deployment, admitted?.User);
+        Assert.Equal(SyntheticUser.Deployment, admitted?.User);
         Assert.Equal(CredentialId, admitted?.CredentialId);
     }
 
@@ -78,7 +78,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticMailUser.Deployment, MailFathomPermission.MailRead, MailFathomPermission.MailAsk),
+            AuthorizationFor(SyntheticUser.Deployment, MailFathomPermission.MailRead, MailFathomPermission.MailAsk),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -100,7 +100,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying($"Bearer {held.Token!.Value}"),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -127,7 +127,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Bearer an.access.token"),
-            AuthorizationNamedBy("https://sso.example.test|subject-7", SyntheticMailUser.Deployment),
+            AuthorizationNamedBy("https://sso.example.test|subject-7", SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -156,7 +156,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             request,
-            AuthorizationNamedBy("https://sso.example.test|subject-7", SyntheticMailUser.Deployment),
+            AuthorizationNamedBy("https://sso.example.test|subject-7", SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -172,7 +172,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Arrange
         var sessions = Sessions(out _);
         var request = RequestAdmittedBy("Basic dXNlcjpwYXNzd29yZA==", credentialId: null);
-        var authorization = AuthorizationFor(SyntheticMailUser.Deployment);
+        var authorization = AuthorizationFor(SyntheticUser.Deployment);
 
         // Act
         var refusal = await Record.ExceptionAsync(() => ClientSessionTokenEndpoints.Exchange(
@@ -199,7 +199,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             request,
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -207,7 +207,7 @@ public sealed class ClientSessionTokenEndpointsTests
         Assert.IsType<Ok<ClientSessionTokenResponse>>(result.Result);
         var grant = Assert.Single(store.Grants);
         Assert.Null(grant.CredentialId);
-        Assert.Equal(SyntheticMailUser.Deployment, grant.User);
+        Assert.Equal(SyntheticUser.Deployment, grant.User);
     }
 
     /// <summary>A deployment already holding every session it will hold says so as a condition that passes, not as a fault.</summary>
@@ -225,7 +225,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -248,7 +248,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Bearer mfs_nodeploymentheldit.bm90LWEtc2Vzc2lvbg"),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -269,7 +269,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken);
 
@@ -296,7 +296,7 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act, Assert
         await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(() => ClientSessionTokenEndpoints.Exchange(
             RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             sessions,
             TestContext.Current.CancellationToken));
     }
@@ -375,7 +375,7 @@ public sealed class ClientSessionTokenEndpointsTests
     }
 
     private static AdmittedUserCredential Admitted() =>
-        new(CredentialId, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead], MailUserEndpointAccess.Everywhere);
+        new(CredentialId, SyntheticUser.Deployment, [MailFathomPermission.MailRead], UserEndpointAccess.Everywhere);
 
     private static DefaultHttpContext RequestCarrying(string headerValue) =>
         RequestAdmittedBy(headerValue, CredentialId);
@@ -391,12 +391,12 @@ public sealed class ClientSessionTokenEndpointsTests
         return context;
     }
 
-    private static AccessAuthorization AuthorizationFor(MailUserId user, params MailFathomPermission[] granted) =>
+    private static AccessAuthorization AuthorizationFor(UserId user, params MailFathomPermission[] granted) =>
         AuthorizationNamedBy(CredentialId.ToString("D", CultureInfo.InvariantCulture), user, granted);
 
     private static AccessAuthorization AuthorizationNamedBy(
         string principalIdentity,
-        MailUserId user,
+        UserId user,
         params MailFathomPermission[] granted)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();

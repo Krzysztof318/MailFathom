@@ -86,7 +86,7 @@ public sealed class RecipientVouchingTests
         var vouching = Vouching(
             new InMemoryContactBookStore(),
             ownAddress: "user@example.test",
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailSend));
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another, MailFathomPermission.MailSend));
 
         // Act
         var unvouched = await vouching.CountUnvouchedAsync(
@@ -170,12 +170,12 @@ public sealed class RecipientVouchingTests
     {
         // Arrange
         var book = new InMemoryContactBookStore();
-        book.Hold(SyntheticMailUser.Deployment, ContactOf("Anna", "anna@example.test"));
+        book.Hold(SyntheticUser.Deployment, ContactOf("Anna", "anna@example.test"));
 
         var vouching = Vouching(
             book,
             authorization: AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 MailFathomPermission.MailSend));
 
         // Act

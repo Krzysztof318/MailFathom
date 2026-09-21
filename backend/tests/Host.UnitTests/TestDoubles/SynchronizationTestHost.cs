@@ -396,11 +396,11 @@ internal static class SynchronizationTestHost
         // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
         // composes it, so the account list a supervision pass reads is the one the latest reload published. The roster
         // is the one those options were published over, because a mailbox belongs to the user whose record holds it.
-        services.AddSingleton(ResolvedServedMailUsers.Serving([.. options.ServedUsers ?? []]));
-        services.AddSingleton<IDeploymentMailUserSource>(provider => provider.GetRequiredService<ServedMailUsers>());
+        services.AddSingleton(ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]));
+        services.AddSingleton<IDeploymentUserSource>(provider => provider.GetRequiredService<ServedUsers>());
         services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedMailUsers>()));
+            provider.GetRequiredService<ServedUsers>()));
         services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
             provider.GetRequiredService<ConfiguredMailAccountCatalog>());
         services.AddScoped<IMailAccountAssignments>(provider =>

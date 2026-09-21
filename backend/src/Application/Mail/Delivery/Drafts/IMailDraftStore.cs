@@ -50,7 +50,7 @@ public interface IMailDraftStore
     Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
         MailAccountId account,
-        MailUserId writtenBy,
+        UserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -116,7 +116,7 @@ public interface IMailDraftStore
     /// rather than handed a cursor into their own composition.
     /// </remarks>
     Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
-        MailUserId user,
+        UserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken);

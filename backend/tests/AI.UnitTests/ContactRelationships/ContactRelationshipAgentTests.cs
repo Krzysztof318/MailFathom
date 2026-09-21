@@ -190,7 +190,7 @@ public sealed class ContactRelationshipAgentTests
     private static ContactRelationshipBrief Brief(
         string subject = "the addendum",
         string fileName = "addendum.pdf",
-        MailUserLanguage language = MailUserLanguage.English) =>
+        UserLanguage language = UserLanguage.English) =>
         new(
             new ContactCorrespondence(
                 [new CorrespondingThread(TheThread, TheMessage, subject, FirstJuly)],

@@ -28,7 +28,7 @@ namespace MailFathom.Host.Configuration.Records;
 internal sealed class HeldBackRecords
 {
     private readonly Lock mutex = new();
-    private readonly Dictionary<MailUserId, IReadOnlyList<HeldBackRecord>> byUser = [];
+    private readonly Dictionary<UserId, IReadOnlyList<HeldBackRecord>> byUser = [];
 
     /// <summary>Gets every record this replica currently holds back, in no particular order.</summary>
     internal IReadOnlyList<HeldBackRecord> Current
@@ -46,7 +46,7 @@ internal sealed class HeldBackRecords
     /// <param name="user">The user the records were read for.</param>
     /// <param name="records">What was refused, which is empty when the user and every account assigned to them bound.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="records" /> is <see langword="null" />.</exception>
-    internal void Replace(MailUserId user, IReadOnlyList<HeldBackRecord> records)
+    internal void Replace(UserId user, IReadOnlyList<HeldBackRecord> records)
     {
         ArgumentNullException.ThrowIfNull(records);
 
@@ -65,7 +65,7 @@ internal sealed class HeldBackRecords
 
     /// <summary>Drops everything held back for a user this deployment no longer holds.</summary>
     /// <param name="user">The erased user.</param>
-    internal void Cleared(MailUserId user)
+    internal void Cleared(UserId user)
     {
         lock (this.mutex)
         {

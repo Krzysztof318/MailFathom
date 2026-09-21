@@ -18,7 +18,7 @@ namespace MailFathom.Infrastructure.Persistence.Calendar;
 /// </remarks>
 internal static class CalendarEventMapping
 {
-    internal static CalendarEventEntity ToEntity(MailUserId owner, CalendarEvent calendarEvent)
+    internal static CalendarEventEntity ToEntity(UserId owner, CalendarEvent calendarEvent)
     {
         var entity = new CalendarEventEntity
         {

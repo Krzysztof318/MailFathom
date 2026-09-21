@@ -34,7 +34,7 @@ public interface IStoredFileStore
     /// <returns>The identifier minted for the file, or <see langword="null" /> when this deployment holds no such user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody, <paramref name="mediaType" /> is blank, or <paramref name="content" /> is empty.</exception>
     Task<StoredFileId?> WriteAsync(
-        MailUserId owner,
+        UserId owner,
         string mediaType,
         ReadOnlyMemory<byte> content,
         CancellationToken cancellationToken);
@@ -45,7 +45,7 @@ public interface IStoredFileStore
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The octets, or <see langword="null" /> when this deployment holds no such file for that user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> or <paramref name="file" /> names nothing.</exception>
-    Task<ReadOnlyMemory<byte>?> ReadAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken);
+    Task<ReadOnlyMemory<byte>?> ReadAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken);
 
     /// <summary>Reports whether this deployment holds one file for one user, without reading its octets.</summary>
     /// <param name="owner">The user the file would belong to.</param>
@@ -53,7 +53,7 @@ public interface IStoredFileStore
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns><see langword="true" /> when the file exists and belongs to <paramref name="owner" />.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> or <paramref name="file" /> names nothing.</exception>
-    Task<bool> HoldsAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken);
+    Task<bool> HoldsAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken);
 
     /// <summary>Removes one file of one user, the row with the commit and the object immediately afterwards.</summary>
     /// <param name="owner">The user the file belongs to.</param>
@@ -61,7 +61,7 @@ public interface IStoredFileStore
     /// <param name="cancellationToken">Cancels the removal.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> or <paramref name="file" /> names nothing.</exception>
     /// <remarks>Removing what is not there reports nothing, so a removal is safe to repeat.</remarks>
-    Task RemoveAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken);
+    Task RemoveAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken);
 
     /// <summary>Finds files written before an instant whose identifier their owner's record does not mention.</summary>
     /// <param name="writtenBefore">The instant a candidate was written before.</param>

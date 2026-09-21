@@ -47,7 +47,7 @@ internal static class ConfiguredAccounts
     internal static MailSynchronizationOptions Serving(
         this MailSynchronizationOptions settings,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        settings.WithServedUsers([new ServedMailUser(SyntheticMailUser.Deployment, "user", mailAccounts)]);
+        settings.WithServedUsers([new ServedUser(SyntheticUser.Deployment, "user", mailAccounts)]);
 
     /// <summary>Builds the published mail snapshot of a deployment serving one user who records those accounts.</summary>
     /// <remarks>The roster is what carries a mailbox onto a snapshot, so a test about what a deployment serves states it the way the composition root ends up with it.</remarks>

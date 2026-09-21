@@ -49,7 +49,7 @@ public sealed class DiscoveryRunLauncherTests
         await LauncherOver(store, new ExecutingDiscoveryRuns(), NoLogger).Start(
             Question,
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Caller);
 
         // Assert
@@ -75,7 +75,7 @@ public sealed class DiscoveryRunLauncherTests
         await LauncherOver(store, new ExecutingDiscoveryRuns(), logger).Start(
             Question,
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Caller);
 
         // Assert
@@ -102,7 +102,7 @@ public sealed class DiscoveryRunLauncherTests
         await LauncherOver(store, executing, NoLogger).Start(
             Question,
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Caller);
 
         // Assert
@@ -138,7 +138,7 @@ public sealed class DiscoveryRunLauncherTests
             () => LauncherOver(store, new ExecutingDiscoveryRuns(), NoLogger).Start(
                 Question,
                 DiscoveryRunId.New(),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 Caller));
 
         // Assert
@@ -147,7 +147,7 @@ public sealed class DiscoveryRunLauncherTests
 
     private static AuthorizedPrincipal Caller =>
         AuthorizedPrincipal.CallerActingFor(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "test-caller",
             [MailFathomPermission.MailAsk]);
 
@@ -156,7 +156,7 @@ public sealed class DiscoveryRunLauncherTests
     private static async Task<DiscoveryRunId> OpenedAsync(InMemoryDiscoveryRunStore store)
     {
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
         return id;
     }

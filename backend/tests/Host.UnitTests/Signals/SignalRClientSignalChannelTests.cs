@@ -51,7 +51,7 @@ public sealed class SignalRClientSignalChannelTests
         await channel.PublishAsync(ClientSignal.MailArrived(Account, Inbox, newEmailCount: 3), CancellationToken.None);
 
         // Assert
-        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Deployment));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticUser.Deployment));
         Assert.Equal(ClientSignalHub.SignalMethod, method);
         Assert.NotNull(sent);
         var payload = Assert.IsType<ClientSignalPayload>(Assert.Single(sent));
@@ -104,15 +104,15 @@ public sealed class SignalRClientSignalChannelTests
         var channel = ChannelOver(
             clients,
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, Account)
-                .Assigning(SyntheticMailUser.Another, Account));
+                .Assigning(SyntheticUser.Deployment, Account)
+                .Assigning(SyntheticUser.Another, Account));
 
         // Act
         await channel.PublishAsync(ClientSignal.FoldersChanged(Account), CancellationToken.None);
 
         // Assert
-        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Deployment));
-        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticMailUser.Another));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticUser.Deployment));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(SyntheticUser.Another));
     }
 
     /// <summary>A mailbox assigned to nobody reaches nobody, which is what an empty assignment answer has to mean.</summary>
@@ -142,7 +142,7 @@ public sealed class SignalRClientSignalChannelTests
 
         var services = new ServiceCollection();
         services.AddSingleton(assignments
-            ?? new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account));
+            ?? new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, Account));
 
         return new SignalRClientSignalChannel(
             hub,

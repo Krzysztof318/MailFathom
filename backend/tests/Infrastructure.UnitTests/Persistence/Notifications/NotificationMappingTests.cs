@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Notifications;
 /// <summary>Covers the row a notification is written as, and the four shapes its target flattens into.</summary>
 public sealed class NotificationMappingTests
 {
-    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
+    private static readonly UserId User = UserId.Create(Guid.NewGuid());
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 

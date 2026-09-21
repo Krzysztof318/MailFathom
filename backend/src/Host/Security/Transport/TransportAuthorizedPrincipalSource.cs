@@ -76,7 +76,7 @@ namespace MailFathom.Host.Security.Transport;
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
 {
     private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly IDeploymentMailUserSource deploymentUser;
+    private readonly IDeploymentUserSource deploymentUser;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
@@ -91,7 +91,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
-        IDeploymentMailUserSource deploymentUser,
+        IDeploymentUserSource deploymentUser,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings)
@@ -154,7 +154,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         PathString path,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions,
-        MailUserId? credentialUser) =>
+        UserId? credentialUser) =>
         ServesOneUsersMail(path)
             ? AuthorizedPrincipal.CallerActingFor(
                 credentialUser ?? this.deploymentUser.User,

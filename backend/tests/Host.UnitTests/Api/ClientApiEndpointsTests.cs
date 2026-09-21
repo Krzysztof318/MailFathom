@@ -923,10 +923,10 @@ public sealed class ClientApiEndpointsTests
     public void StatedTelemetryLevelOf_AUserWhoseRecordStatesALevel_AnswersThatLevel()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
+        var roster = ResolvedServedUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
 
         // Act
-        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Deployment));
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticUser.Deployment));
 
         // Assert
         Assert.Equal(ClientTelemetryLevel.Debug, stated);
@@ -937,12 +937,12 @@ public sealed class ClientApiEndpointsTests
     public void StatedTelemetryLevelOf_AnotherUserOfTheSameDeployment_AnswersNothing()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
+        var roster = ResolvedServedUsers.Serving(
             RaisedTo(ClientTelemetryLevel.Debug),
-            new ServedMailUser(SyntheticMailUser.Another, "sam", []));
+            new ServedUser(SyntheticUser.Another, "sam", []));
 
         // Act
-        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Another));
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticUser.Another));
 
         // Assert
         Assert.Null(stated);
@@ -953,11 +953,11 @@ public sealed class ClientApiEndpointsTests
     public void StatedTelemetryLevelOf_AUserWhoseRecordStatesNoLevel_AnswersNothing()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", []));
 
         // Act
-        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Deployment));
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticUser.Deployment));
 
         // Assert
         Assert.Null(stated);
@@ -972,7 +972,7 @@ public sealed class ClientApiEndpointsTests
     public void StatedTelemetryLevelOf_ARequestNamingNoUser_AnswersNothing()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
+        var roster = ResolvedServedUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
 
         // Act
         var stated = ClientApiEndpoints.StatedTelemetryLevelOf(
@@ -987,22 +987,22 @@ public sealed class ClientApiEndpointsTests
     [Fact]
     public void StatedTelemetryLevelOf_ARequestThatEstablishedNoPrincipal_AnswersNothing() =>
         Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
-            ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug)),
+            ResolvedServedUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug)),
             principal: null));
 
     /// <summary>A session read reaching the route before the gate settled the roster answers rather than throwing, the deployment's level being a complete answer.</summary>
     [Fact]
     public void StatedTelemetryLevelOf_ADeploymentWhoseGateHasNotRun_AnswersNothing() =>
         Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
-            new ServedMailUsers(),
-            ActingFor(SyntheticMailUser.Deployment)));
+            new ServedUsers(),
+            ActingFor(SyntheticUser.Deployment)));
 
     /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>
-    private static ServedMailUser RaisedTo(ClientTelemetryLevel level) =>
-        new(SyntheticMailUser.Deployment, "alex", []) { ClientTelemetryLevel = level };
+    private static ServedUser RaisedTo(ClientTelemetryLevel level) =>
+        new(SyntheticUser.Deployment, "alex", []) { ClientTelemetryLevel = level };
 
     /// <summary>Admits a caller for one person's mail, which is what a signed-in client's token establishes.</summary>
-    private static AuthorizedPrincipal ActingFor(MailUserId user) =>
+    private static AuthorizedPrincipal ActingFor(UserId user) =>
         AuthorizedPrincipal.CallerActingFor(user, "reader", [MailFathomPermission.MailRead]);
 
     /// <summary>Composes the mailbox reading a refused request never reaches, from substitutes that answer nothing.</summary>

@@ -17,13 +17,13 @@ namespace MailFathom.TestSupport;
 internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 {
     private readonly IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> byAccount;
-    private readonly IReadOnlyDictionary<MailAccountId, MailUserId> assignees;
+    private readonly IReadOnlyDictionary<MailAccountId, UserId> assignees;
     private readonly SensitiveContentPosture fallback;
 
     private FixedSensitiveContentPostures(
         SensitiveContentPosture fallback,
         IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> byAccount,
-        IReadOnlyDictionary<MailAccountId, MailUserId> assignees)
+        IReadOnlyDictionary<MailAccountId, UserId> assignees)
     {
         this.fallback = fallback;
         this.byAccount = byAccount;
@@ -50,7 +50,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     public static FixedSensitiveContentPostures ScanningNothing() => new(
         SensitiveContentPosture.ScanningNothing,
         new Dictionary<MailAccountId, SensitiveContentPosture>(),
-        new Dictionary<MailAccountId, MailUserId>());
+        new Dictionary<MailAccountId, UserId>());
 
     /// <summary>Builds the postures of a deployment that scans every account's mail the same way.</summary>
     /// <param name="posture">What every account's mail is scanned under.</param>
@@ -67,9 +67,9 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
         return new FixedSensitiveContentPostures(
             posture,
             new Dictionary<MailAccountId, SensitiveContentPosture> { [SoleAccount] = posture },
-            new Dictionary<MailAccountId, MailUserId>
+            new Dictionary<MailAccountId, UserId>
             {
-                [SoleAccount] = SyntheticMailUser.Deployment,
+                [SoleAccount] = SyntheticUser.Deployment,
             });
     }
 
@@ -84,7 +84,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// </remarks>
     public static FixedSensitiveContentPostures Of(
         SensitiveContentPosture fallback,
-        params (MailAccountId Account, SensitiveContentPosture Posture, MailUserId User)[] accounts)
+        params (MailAccountId Account, SensitiveContentPosture Posture, UserId User)[] accounts)
     {
         ArgumentNullException.ThrowIfNull(fallback);
         ArgumentNullException.ThrowIfNull(accounts);
@@ -108,7 +108,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 
         return Of(
             fallback,
-            [.. accounts.Select(entry => (entry.Account, entry.Posture, SyntheticMailUser.Deployment))]);
+            [.. accounts.Select(entry => (entry.Account, entry.Posture, SyntheticUser.Deployment))]);
     }
 
     /// <inheritdoc />
@@ -137,7 +137,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when the user's accounts ask for scanning or screening no one of their postures covers, which this double cannot compose.</exception>
-    public SensitiveContentPosture AcrossAccountsOf(MailUserId user)
+    public SensitiveContentPosture AcrossAccountsOf(UserId user)
     {
         var candidates = this.assignees
             .Where(entry => entry.Value == user)

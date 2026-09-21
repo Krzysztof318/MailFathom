@@ -31,7 +31,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
     public EmailSpamClassificationHandlerTests()
     {
-        this.harness.Assignments.Assigning(SyntheticMailUser.Deployment, Account);
+        this.harness.Assignments.Assigning(SyntheticUser.Deployment, Account);
         this.harness.ContentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(_ => SpamClassificationHarness.SomeContent());

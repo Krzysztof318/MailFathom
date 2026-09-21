@@ -430,17 +430,17 @@ public sealed class ClientTransportSecurityExtensionsTests
 
     private static AdmittedUserCredential AdmittedByACredential() => new(
         MappedCredentialId,
-        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
+        UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
         [MailFathomPermission.MailRead],
-        MailUserEndpointAccess.Everywhere);
+        UserEndpointAccess.Everywhere);
 
     private static void MapsTheSubject(IServiceCollection services) =>
-        MapsTheSubjectServedOn(services, MailUserEndpointAccess.Everywhere);
+        MapsTheSubjectServedOn(services, UserEndpointAccess.Everywhere);
 
     private static void MapsTheSubjectOfAUserKeptOffTheClient(IServiceCollection services) =>
-        MapsTheSubjectServedOn(services, new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+        MapsTheSubjectServedOn(services, new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
 
-    private static void MapsTheSubjectServedOn(IServiceCollection services, MailUserEndpointAccess endpointAccess)
+    private static void MapsTheSubjectServedOn(IServiceCollection services, UserEndpointAccess endpointAccess)
     {
         var credentials = Substitute.For<IUserCredentialStore>();
         Assert.True(UserCredentialLookup.TryCreateForOAuthSubject(MappedIssuer, MappedSubject, out var lookup));
@@ -448,7 +448,7 @@ public sealed class ClientTransportSecurityExtensionsTests
         credentials.FindAsync(UserCredentialMethod.OAuthSubject, lookup, Arg.Any<CancellationToken>())
             .Returns(new ResolvedUserCredential(
                 MappedCredentialId,
-                MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
+                UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
                 UserCredentialMethod.OAuthSubject,
                 [MailFathomPermission.MailRead],
                 Enabled: true,

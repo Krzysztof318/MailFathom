@@ -72,7 +72,7 @@ public interface ISensitiveContentEgressTelemetry
     /// </remarks>
     ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId? user,
+        UserId? user,
         MailAccountId? account,
         CancellationToken cancellationToken);
 }

@@ -47,16 +47,16 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 4);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 4);
 
         // Act
         var reading = await harness.Records.ReadRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(4, reading!.Version);
-        Assert.Equal(SyntheticMailUser.Deployment, reading.User);
+        Assert.Equal(SyntheticUser.Deployment, reading.User);
     }
 
     /// <summary>A link to somebody else's file would serve their octets as this user's picture, and only the database can say whose a file is.</summary>
@@ -65,9 +65,9 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var foreign = Guid.Parse("0197a3c0-0000-7000-8000-00000000f00d");
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -80,9 +80,9 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.Contains("Portrait", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         await harness.Store.DidNotReceive().CommitAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<string>(),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             Arg.Any<long>(),
             Arg.Any<CancellationToken>());
     }
@@ -92,9 +92,9 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var own = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -115,8 +115,8 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ASavedRecordNamingMailAccounts_IsRefusedWithoutCommitting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
@@ -136,8 +136,8 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_TheRecordSavedBackUnchanged_IsSettledWithoutCommitting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
@@ -159,9 +159,9 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var own = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
             .Returns(true);
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
@@ -181,9 +181,9 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var foreign = Guid.Parse("0197a3c0-0000-7000-8000-00000000f00d");
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
             .Returns(false);
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
@@ -204,9 +204,9 @@ public sealed class UserRecordAdministrationTests
         // Arrange
         var earlier = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000001"));
         var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, $$"""{"Portrait":"{{earlier}}"}""", version: 5);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, $$"""{"Portrait":"{{earlier}}"}""", version: 5);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
         // Act
         var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
@@ -214,9 +214,9 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: earlier), relinked);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains(written.ToString(), StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             5,
             Arg.Any<CancellationToken>());
     }
@@ -230,9 +230,9 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ARecordStatingNoLanguage_IsRefusedNamingBothItTakes()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -256,8 +256,8 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ARecordStatingALanguageThisBuildDoesNotWriteIn_IsRefused()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
 
         // Act
         var outcome = await harness.Records.ApplyOwnRecordAsync(
@@ -279,9 +279,9 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, "{}", version: 1);
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
         // Act
         var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
@@ -295,8 +295,8 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordStatingAnotherZone_CommitsTheOneStated()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
 
         // Act
         var changed = await harness.Records.ChangeOwnTimeZoneAsync(
@@ -306,9 +306,9 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.True(changed);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Is<string>(json => json!.Contains("Asia/Tokyo", StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             7,
             Arg.Any<CancellationToken>());
     }
@@ -322,8 +322,8 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordAlreadyStatingThatZone_IsHeldWithoutCommitting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, """{"TimeZone":"Europe/Warsaw"}""", version: 7);
 
         // Act
         var changed = await harness.Records.ChangeOwnTimeZoneAsync(
@@ -344,20 +344,20 @@ public sealed class UserRecordAdministrationTests
     public async Task ChangeOwnTimeZoneAsync_ARecordStatingNoZoneAndTheCoordinatedZoneChosen_IsCommitted()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, "{}", version: 1);
 
         // Act
         var changed = await harness.Records.ChangeOwnTimeZoneAsync(
-            MailUserTimeZone.Coordinated,
+            UserTimeZone.Coordinated,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(changed);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
-            Arg.Is<string>(json => json!.Contains(MailUserTimeZone.Coordinated.Id, StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            SyntheticUser.Deployment,
+            Arg.Is<string>(json => json!.Contains(UserTimeZone.Coordinated.Id, StringComparison.Ordinal)),
+            Arg.Any<UserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -367,7 +367,7 @@ public sealed class UserRecordAdministrationTests
     public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnMail_IsRefusedBeforeTheRecordIsRead()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -375,7 +375,7 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
-        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>Whose record is rewritten is the caller's to say only by being that user, so a caller acting for nobody rewrites nothing.</summary>
@@ -390,7 +390,7 @@ public sealed class UserRecordAdministrationTests
             () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
 
         // Assert
-        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public sealed class UserRecordAdministrationTests
 
         // Act
         var reading = await harness.Records.ReadRecordAsync(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -413,11 +413,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.MailRead);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Records.ReadRecordAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken));
+            () => harness.Records.ReadRecordAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A user's own entry point resolves the user from whoever was admitted, so no request can name another.</summary>
@@ -425,14 +425,14 @@ public sealed class UserRecordAdministrationTests
     public async Task ReadOwnRecordAsync_AUserSignedIn_ReadsTheRecordOfWhoeverWasAdmittedRatherThanOneNamedInARequest()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 2);
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticUser.Deployment);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 2);
 
         // Act
         var reading = await harness.Records.ReadOwnRecordAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, reading!.User);
+        Assert.Equal(SyntheticUser.Deployment, reading!.User);
     }
 
     /// <summary>A caller acting for nobody's mail on a user-facing route is an entrypoint that never said whose record it wanted.</summary>
@@ -466,24 +466,24 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3);
 
         // Act
         var written = await harness.Records.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             mcpEndpoint: false,
             clientEndpoint: null,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(written!.Outcome.IsCommitted);
-        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), written.EndpointAccess);
+        Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), written.EndpointAccess);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Is<string>(candidate =>
                 candidate!.Contains("\"McpEndpoint\":\"false\"", StringComparison.Ordinal)
                 && !candidate.Contains("ClientEndpoint", StringComparison.Ordinal)),
-            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
             3,
             Arg.Any<CancellationToken>());
     }
@@ -495,13 +495,13 @@ public sealed class UserRecordAdministrationTests
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{"EndpointAccess":{"ClientEndpoint":"false"}}""",
             version: 2);
 
         // Act
         var written = await harness.Records.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             mcpEndpoint: true,
             clientEndpoint: false,
             TestContext.Current.CancellationToken);
@@ -509,7 +509,7 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.True(written!.Outcome.IsSettled);
         Assert.False(written.Outcome.IsCommitted);
-        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false), written.EndpointAccess);
+        Assert.Equal(new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false), written.EndpointAccess);
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
@@ -524,7 +524,7 @@ public sealed class UserRecordAdministrationTests
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Records.SetEndpointAccessAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 mcpEndpoint: false,
                 clientEndpoint: null,
                 TestContext.Current.CancellationToken));
@@ -539,11 +539,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 2);
+        harness.Holding(SyntheticUser.Deployment, "{}", version: 2);
 
         // Act
         var written = await harness.Records.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             mcpEndpoint: false,
             clientEndpoint: null,
             TestContext.Current.CancellationToken);
@@ -551,9 +551,9 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.True(written!.Outcome.IsCommitted);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Any<string>(),
-            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
             2,
             Arg.Any<CancellationToken>());
     }
@@ -564,11 +564,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, "not a document", version: 4);
+        harness.Holding(SyntheticUser.Deployment, "not a document", version: 4);
 
         // Act
         var written = await harness.Records.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             mcpEndpoint: false,
             clientEndpoint: null,
             TestContext.Current.CancellationToken);
@@ -586,11 +586,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 5);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 5);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{"Language":"English", "EndpointAccess":{"ClientEndpoint":false}}""",
             expectedVersion: 5,
             TestContext.Current.CancellationToken);
@@ -598,9 +598,9 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.True(outcome!.IsCommitted);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Any<string>(),
-            new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
+            new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
             5,
             Arg.Any<CancellationToken>());
     }
@@ -610,9 +610,9 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ARecordMovingTheUsersOwnSwitch_IsRefusedWithoutWriting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{"EndpointAccess":{"McpEndpoint":"false"}}""",
             version: 1);
 
@@ -633,9 +633,9 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ARecordDroppingTheEndpointAccessBlock_IsRefusedWithoutWriting()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{"EndpointAccess":{"McpEndpoint":"false"}}""",
             version: 1);
 
@@ -657,12 +657,12 @@ public sealed class UserRecordAdministrationTests
     public async Task ApplyOwnRecordAsync_ARecordCarryingTheSwitchesAsTheyStand_CommitsWithThemUnchanged()
     {
         // Arrange
-        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticUser.Deployment);
         harness.Holding(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{"EndpointAccess":{"McpEndpoint":"false"}}""",
             version: 1);
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -674,9 +674,9 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.True(outcome!.IsCommitted);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Any<string>(),
-            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -690,11 +690,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             """{ "MailAccounts": { "0": { "DisplayName": "primary", "Language": "English", "Host": "imap.example.test" } } }""",
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
@@ -714,15 +714,15 @@ public sealed class UserRecordAdministrationTests
         var harness = new RecordHarness(
             MailFathomPermission.AdminConfigurationWrite,
             alsoGranted: MailFathomPermission.AdminRead);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 5);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 5);
 
         var reading = await harness.Records.ReadRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             reading!.Json,
             expectedVersion: 5,
             TestContext.Current.CancellationToken);
@@ -744,13 +744,13 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3, MailboxWhoseSecretReachesNothing());
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3, MailboxWhoseSecretReachesNothing());
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             $$"""{"Language":"English", "Portrait":"{{OwnPortrait:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
@@ -762,9 +762,9 @@ public sealed class UserRecordAdministrationTests
             Assert.Single(outcome.Messages),
             StringComparison.Ordinal);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Is<string>(candidate => !candidate!.Contains("MailAccounts", StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             3,
             Arg.Any<CancellationToken>());
     }
@@ -775,11 +775,11 @@ public sealed class UserRecordAdministrationTests
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 1);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "{ this is not a record",
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
@@ -802,13 +802,13 @@ public sealed class UserRecordAdministrationTests
         scanning.Secrets.Enabled = true;
 
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite, scanning: scanning);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 3, MailboxScanningForLessThanTheDeployment());
-        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
+        harness.Holding(SyntheticUser.Deployment, EmptyRecord, version: 3, MailboxScanningForLessThanTheDeployment());
+        harness.Files.HoldsAsync(SyntheticUser.Deployment, StoredFileId.Create(OwnPortrait), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             $$"""{"Language":"English", "Portrait":"{{OwnPortrait:D}}"}""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
@@ -817,9 +817,9 @@ public sealed class UserRecordAdministrationTests
         Assert.True(outcome!.IsCommitted);
         Assert.Empty(outcome.Messages);
         await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Is<string>(candidate => !candidate!.Contains("MailAccounts", StringComparison.Ordinal)),
-            Arg.Any<MailUserEndpointAccess>(),
+            Arg.Any<UserEndpointAccess>(),
             3,
             Arg.Any<CancellationToken>());
     }
@@ -841,7 +841,7 @@ public sealed class UserRecordAdministrationTests
             """,
             Version: 1);
 
-    private static ServedMailUser Serving(MailUserId user, params string[] accountIds) =>
+    private static ServedUser Serving(UserId user, params string[] accountIds) =>
         new(
             user,
             $"user-{user.Value:D}",
@@ -871,8 +871,8 @@ public sealed class UserRecordAdministrationTests
             Version: 1);
 
     /// <summary>Reads a zone the way the endpoint reaching this use case reads one, so a test cannot state an unknown one.</summary>
-    private static MailUserTimeZone Zone(string zoneId) =>
-        MailUserTimeZone.TryRead(zoneId, out var zone)
+    private static UserTimeZone Zone(string zoneId) =>
+        UserTimeZone.TryRead(zoneId, out var zone)
             ? zone
             : throw new InvalidOperationException($"This host knows no time zone called '{zoneId}'.");
 
@@ -882,7 +882,7 @@ public sealed class UserRecordAdministrationTests
         internal RecordHarness(
             MailFathomPermission granted,
             Dictionary<string, string?>? configuration = null,
-            MailUserId actingFor = default,
+            UserId actingFor = default,
             MailFathomPermission alsoGranted = default,
             SensitiveContentOptions? scanning = null)
         {
@@ -898,9 +898,9 @@ public sealed class UserRecordAdministrationTests
             this.Documents = Substitute.For<IUserSettingsDocumentReader>();
             this.Store = Substitute.For<IUserSettingsDocumentWriter>();
             this.Store.CommitAsync(
-                    Arg.Any<MailUserId>(),
+                    Arg.Any<UserId>(),
                     Arg.Any<string>(),
-                    Arg.Any<MailUserEndpointAccess>(),
+                    Arg.Any<UserEndpointAccess>(),
                     Arg.Any<long>(),
                     Arg.Any<CancellationToken>())
                 .Returns(call => (long?)call.ArgAt<long>(3) + 1);
@@ -908,7 +908,7 @@ public sealed class UserRecordAdministrationTests
             // The roster is settled with somebody the tests never write for, so the default deployment reads as a
             // user nothing declares — which is the ordinary case — until a test states otherwise.
             this.ServedUsers.Resolved(
-                [Serving(MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")))]);
+                [Serving(UserId.Create(new Guid("99999999-9999-9999-9999-999999999999")))]);
 
             var settings = new ConfigurationBuilder()
                 .AddInMemoryCollection(configuration ?? [])
@@ -942,12 +942,12 @@ public sealed class UserRecordAdministrationTests
 
         internal IUserSettingsDocumentWriter Store { get; }
 
-        internal ServedMailUsers ServedUsers { get; } = new();
+        internal ServedUsers ServedUsers { get; } = new();
 
-        internal void Holding(MailUserId user, string json, long version, params MailAccountRecord[] accounts) =>
+        internal void Holding(UserId user, string json, long version, params MailAccountRecord[] accounts) =>
             this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
                 .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version) { MailAccounts = accounts });
 
-        internal void Roster(params ServedMailUser[] served) => this.ServedUsers.Resolved(served);
+        internal void Roster(params ServedUser[] served) => this.ServedUsers.Resolved(served);
     }
 }

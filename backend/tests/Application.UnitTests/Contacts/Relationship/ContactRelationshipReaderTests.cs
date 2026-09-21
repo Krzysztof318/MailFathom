@@ -30,7 +30,7 @@ public sealed class ContactRelationshipReaderTests
 
     private static readonly MailAccountId TheAccount = MailAccountId.Create("work");
 
-    private static readonly MailUserId TheUser = MailUserId.Create(Guid.CreateVersion7());
+    private static readonly UserId TheUser = UserId.Create(Guid.CreateVersion7());
 
     /// <summary>A run reads the one contact's own correlation and nothing else, which is what keeps opening one person off everybody else's mail.</summary>
     [Fact]
@@ -119,13 +119,13 @@ public sealed class ContactRelationshipReaderTests
         var message = StoredEmailId.Create(Guid.CreateVersion7());
         var index = new InMemoryContactCorrespondenceIndex().WithThreads(ConversationOn(message, "the addendum"));
         var deriver = new RecordingContactRelationshipDeriver();
-        var reader = ReaderOver(index, deriver, language: MailUserLanguage.Polish);
+        var reader = ReaderOver(index, deriver, language: UserLanguage.Polish);
 
         // Act
         await reader.ReadAsync(ContactOf("anna@example.com"), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailUserLanguage.Polish, Assert.Single(deriver.Briefs).Language);
+        Assert.Equal(UserLanguage.Polish, Assert.Single(deriver.Briefs).Language);
     }
 
     /// <summary>The grant is the one that puts mail in front of a provider, asked here rather than at the transport, so an entrypoint added later meets the same refusal.</summary>
@@ -151,7 +151,7 @@ public sealed class ContactRelationshipReaderTests
         IContactRelationshipDeriver deriver,
         SensitiveContentEgressGuard? egressGuard = null,
         AccessAuthorization? authorization = null,
-        MailUserLanguage language = MailUserLanguage.English)
+        UserLanguage language = UserLanguage.English)
     {
         var guard = egressGuard ?? SensitiveContentEgressGuards.Inactive();
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(
@@ -200,10 +200,10 @@ public sealed class ContactRelationshipReaderTests
         FirstJuly);
 
     /// <summary>Answers that language for the acting user alone, so a card composed for anybody else would read English and fail the assertion.</summary>
-    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    private static IUserLanguages LanguagesAnswering(UserLanguage language)
     {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(MailUserLanguage.English);
+        var languages = Substitute.For<IUserLanguages>();
+        languages.LanguageOf(Arg.Any<UserId>()).Returns(UserLanguage.English);
         languages.LanguageOf(TheUser).Returns(language);
 
         return languages;

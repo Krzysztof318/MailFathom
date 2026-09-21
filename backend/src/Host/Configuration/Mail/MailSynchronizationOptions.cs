@@ -75,10 +75,10 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// settings snapshot, so a run already under way never sees its account declaration change beneath it.
     /// </para>
     /// </remarks>
-    internal IReadOnlyList<ServedMailUser>? ServedUsers { get; set; }
+    internal IReadOnlyList<ServedUser>? ServedUsers { get; set; }
 
     /// <summary>Copies these bound settings onto one immutable user roster, with readers of its own.</summary>
-    internal MailSynchronizationOptions WithServedUsers(IReadOnlyList<ServedMailUser> servedUsers)
+    internal MailSynchronizationOptions WithServedUsers(IReadOnlyList<ServedUser> servedUsers)
     {
         ArgumentNullException.ThrowIfNull(servedUsers);
 

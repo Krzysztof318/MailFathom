@@ -32,5 +32,5 @@ internal sealed class StubMailAccountCatalog(params string[] servedAccountIds)
     /// The caller this stub acts for, which is the deployment's own user unless a test states another. No account
     /// carries one any more — a mailbox is assigned rather than owned — so it is stated here rather than derived.
     /// </remarks>
-    public MailUserId User { get; init; } = SyntheticMailUser.Deployment;
+    public UserId User { get; init; } = SyntheticUser.Deployment;
 }

@@ -17,7 +17,7 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(200)
             .Holding(SyntheticMailAccount.Deployment, 200)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 800);
 
         // Act
@@ -127,7 +127,7 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(300)
             .Holding(SyntheticMailAccount.Deployment, 300)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 400);
 
         // Act
@@ -154,8 +154,8 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore()
             .Holding(SyntheticMailAccount.Deployment, 100)
             .Holding(SyntheticMailAccount.Another, 800)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 1000);
 
         // Act
@@ -177,7 +177,7 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(900)
             .Holding(SyntheticMailAccount.Deployment, 900)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 1000);
 
         // Act
@@ -198,8 +198,8 @@ public sealed class StoredContentCeilingTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(800)
             .Holding(SyntheticMailAccount.Another, 800)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another)
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 900);
 
         // Act

@@ -101,7 +101,7 @@ public static class TransportRateLimitPartitions
     /// </remarks>
     public static string KeyFor(
         string surfaceName,
-        MailUserId? authenticatedUser,
+        UserId? authenticatedUser,
         string? authenticatedClientName,
         string? matchedCertificateProfileName)
     {
@@ -112,7 +112,7 @@ public static class TransportRateLimitPartitions
 
     /// <summary>Names the identity half of a partition key, without the surface it belongs to.</summary>
     private static string IdentityFor(
-        MailUserId? authenticatedUser,
+        UserId? authenticatedUser,
         string? authenticatedClientName,
         string? matchedCertificateProfileName)
     {

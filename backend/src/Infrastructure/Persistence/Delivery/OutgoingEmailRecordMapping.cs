@@ -38,7 +38,7 @@ internal static class OutgoingEmailRecordMapping
         {
             Id = OutgoingEmailId.Create(entity.Id),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
-            User = entity.UserId is { } author ? MailUserId.Create(author) : null,
+            User = entity.UserId is { } author ? UserId.Create(author) : null,
             Requester = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Principal = ToPrincipal(entity.Id, entity.PrincipalFingerprint),
             Recipients = recipients,

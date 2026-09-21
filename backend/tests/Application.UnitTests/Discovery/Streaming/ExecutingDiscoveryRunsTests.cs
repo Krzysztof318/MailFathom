@@ -29,11 +29,11 @@ public sealed class ExecutingDiscoveryRunsTests
         // Arrange
         var executing = new ExecutingDiscoveryRuns();
         await using var signals = NoChannels();
-        using var journal = await OpenedAsync(signals, SyntheticMailUser.Deployment);
+        using var journal = await OpenedAsync(signals, SyntheticUser.Deployment);
         executing.Register(journal);
 
         // Act
-        var reached = executing.TryRequestStop(journal.Id, SyntheticMailUser.Deployment);
+        var reached = executing.TryRequestStop(journal.Id, SyntheticUser.Deployment);
 
         // Assert
         Assert.True(reached);
@@ -48,7 +48,7 @@ public sealed class ExecutingDiscoveryRunsTests
         var executing = new ExecutingDiscoveryRuns();
 
         // Act
-        var reached = executing.TryRequestStop(DiscoveryRunId.New(), SyntheticMailUser.Deployment);
+        var reached = executing.TryRequestStop(DiscoveryRunId.New(), SyntheticUser.Deployment);
 
         // Assert
         Assert.False(reached);
@@ -61,11 +61,11 @@ public sealed class ExecutingDiscoveryRunsTests
         // Arrange
         var executing = new ExecutingDiscoveryRuns();
         await using var signals = NoChannels();
-        using var journal = await OpenedAsync(signals, SyntheticMailUser.Deployment);
+        using var journal = await OpenedAsync(signals, SyntheticUser.Deployment);
         executing.Register(journal);
 
         // Act
-        var reached = executing.TryRequestStop(journal.Id, MailUserId.Create(Guid.NewGuid()));
+        var reached = executing.TryRequestStop(journal.Id, UserId.Create(Guid.NewGuid()));
 
         // Assert
         Assert.False(reached);
@@ -79,7 +79,7 @@ public sealed class ExecutingDiscoveryRunsTests
         // Arrange
         var executing = new ExecutingDiscoveryRuns();
         await using var signals = NoChannels();
-        using var journal = await OpenedAsync(signals, SyntheticMailUser.Deployment);
+        using var journal = await OpenedAsync(signals, SyntheticUser.Deployment);
         executing.Register(journal);
 
         // Act
@@ -87,10 +87,10 @@ public sealed class ExecutingDiscoveryRunsTests
 
         // Assert
         Assert.Equal(0, executing.Count);
-        Assert.False(executing.TryRequestStop(journal.Id, SyntheticMailUser.Deployment));
+        Assert.False(executing.TryRequestStop(journal.Id, SyntheticUser.Deployment));
     }
 
-    private static async Task<DiscoveryRunJournal> OpenedAsync(ClientSignals signals, MailUserId user)
+    private static async Task<DiscoveryRunJournal> OpenedAsync(ClientSignals signals, UserId user)
     {
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();

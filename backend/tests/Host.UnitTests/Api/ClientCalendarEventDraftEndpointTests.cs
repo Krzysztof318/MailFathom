@@ -67,7 +67,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
         var result = await ClientCalendarEventDraftEndpoint.DraftEventAsync(
             request: null,
             this.extractor,
-            MailUserClocks.Reading(WrittenAt),
+            UserClocks.Reading(WrittenAt),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -227,6 +227,6 @@ public sealed class ClientCalendarEventDraftEndpointTests
         ClientCalendarEventDraftEndpoint.DraftEventAsync(
             new ClientCalendarEventDraftRequest(description),
             this.extractor,
-            MailUserClocks.Reading(WrittenAt),
+            UserClocks.Reading(WrittenAt),
             TestContext.Current.CancellationToken);
 }

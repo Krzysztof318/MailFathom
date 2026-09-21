@@ -17,16 +17,16 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// </para>
 /// <para>
 /// A deployment before its gate has run, and a user it does not serve, are one answer rather than two — English, which
-/// is what <see cref="IMailUserLanguages" /> states and why. Neither is a state a derivation can reach in an ordinary
+/// is what <see cref="IUserLanguages" /> states and why. Neither is a state a derivation can reach in an ordinary
 /// run: nothing composes for somebody before the roster exists, and a use case acting for somebody erased mid-run is
 /// racing the erasure rather than reading a record that says nothing.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
-internal sealed class ServedUserLanguages(ServedMailUsers servedUsers) : IMailUserLanguages
+internal sealed class ServedUserLanguages(ServedUsers servedUsers) : IUserLanguages
 {
     /// <inheritdoc />
-    public MailUserLanguage LanguageOf(MailUserId user) =>
+    public UserLanguage LanguageOf(UserId user) =>
         servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.Language
-            ?? MailUserLanguage.English;
+            ?? UserLanguage.English;
 }

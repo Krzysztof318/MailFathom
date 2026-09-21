@@ -1543,12 +1543,12 @@ internal sealed class AdminApiClient
     /// <returns>The users, each with the label and the two states the deployment reports beside the identifier.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a roster.</exception>
-    internal Task<MailUserList> ReadUsersAsync(string token, CancellationToken cancellationToken) =>
+    internal Task<UserList> ReadUsersAsync(string token, CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
             AdminEndpointRoutes.UsersPath,
             token,
-            CliJsonContext.Default.MailUserList,
+            CliJsonContext.Default.UserList,
             cancellationToken);
 
     /// <summary>Records a user the deployment did not hold.</summary>

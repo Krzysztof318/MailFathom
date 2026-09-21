@@ -57,7 +57,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
     private static readonly AuthorizedPrincipal RedeemedCapability =
-        AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, AuthorizedObject);
+        AuthorizedPrincipal.SignedCapability(SyntheticUser.Deployment, AuthorizedObject);
 
     /// <summary>The principal the client surface establishes, which is a credential holding the mailbox read grant.</summary>
     private static readonly AuthorizedPrincipal SignedInReader =
@@ -168,7 +168,7 @@ public sealed class EmailAttachmentDownloadReaderTests
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, AuthorizedObject));
+            AuthorizedPrincipal.SignedCapability(SyntheticUser.Another, AuthorizedObject));
         var reader = ReaderOver(
             summary,
             accountCatalog: AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.Account)),

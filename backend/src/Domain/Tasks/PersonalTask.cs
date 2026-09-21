@@ -54,7 +54,7 @@ public sealed record PersonalTask
 
     private PersonalTask(
         PersonalTaskId id,
-        MailUserId user,
+        UserId user,
         string title,
         DateOnly? dueOn,
         TimeSpan? dueDayOffset,
@@ -78,7 +78,7 @@ public sealed record PersonalTask
     public PersonalTaskId Id { get; }
 
     /// <summary>Gets the person whose list it is on.</summary>
-    public MailUserId User { get; }
+    public UserId User { get; }
 
     /// <summary>Gets the line the list is drawn with.</summary>
     public string Title { get; }
@@ -147,7 +147,7 @@ public sealed record PersonalTask
     /// </remarks>
     public static PersonalTask Compose(
         PersonalTaskId id,
-        MailUserId user,
+        UserId user,
         string title,
         DateOnly? dueOn,
         TaskAnnouncement announcement,
@@ -191,7 +191,7 @@ public sealed record PersonalTask
     /// </remarks>
     public static PersonalTask Restore(
         PersonalTaskId id,
-        MailUserId user,
+        UserId user,
         string title,
         DateOnly? dueOn,
         TaskAnnouncement announcement,
@@ -301,7 +301,7 @@ public sealed record PersonalTask
     }
 
     /// <summary>Refuses the identities and the origin that no task can be built from, whether composed or restored.</summary>
-    private static void Validate(PersonalTaskId id, MailUserId user, PersonalTaskOrigin origin)
+    private static void Validate(PersonalTaskId id, UserId user, PersonalTaskOrigin origin)
     {
         if (!id.IsSpecified)
         {

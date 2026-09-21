@@ -74,16 +74,16 @@ public sealed class ComposedClientEndpointSecurityTests
     private const string PageOrigin = "https://client.example.test";
 
     /// <summary>The user <see cref="ClientKey" /> was provisioned for, served on the client endpoint alone.</summary>
-    private static readonly MailUserId ClientUser =
-        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static readonly UserId ClientUser =
+        UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>The user <see cref="NarrowedClientKey" /> was provisioned for, whose credential holds the answering grant alone.</summary>
-    private static readonly MailUserId NarrowedClientUser =
-        MailUserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+    private static readonly UserId NarrowedClientUser =
+        UserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
 
     /// <summary>The user <see cref="McpKey" /> was provisioned for, served on the MCP endpoint alone.</summary>
-    private static readonly MailUserId McpUser =
-        MailUserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
+    private static readonly UserId McpUser =
+        UserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
 
     private const string AuthorizationServerName = "workforce";
 
@@ -564,16 +564,16 @@ public sealed class ComposedClientEndpointSecurityTests
                 new ProvisionedUserApiKey(
                     ClientKey,
                     ClientUser,
-                    EndpointAccess: new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
+                    EndpointAccess: new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
                 new ProvisionedUserApiKey(
                     NarrowedClientKey,
                     NarrowedClientUser,
                     [MailFathomPermission.MailAsk],
-                    new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
+                    new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
                 new ProvisionedUserApiKey(
                     McpKey,
                     McpUser,
-                    EndpointAccess: new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false))));
+                    EndpointAccess: new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false))));
 
     /// <summary>The two surfaces that existed before this one, each authenticating, and no client endpoint at all.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> OtherSurfacesServed() =>

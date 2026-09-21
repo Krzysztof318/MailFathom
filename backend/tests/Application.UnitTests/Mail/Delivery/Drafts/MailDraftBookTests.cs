@@ -52,7 +52,7 @@ public sealed class MailDraftBookTests
         // Act
         var draft = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version", recipients: []),
             revises: null,
@@ -77,7 +77,7 @@ public sealed class MailDraftBookTests
         // Act
         var revised = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("second version"),
             draft.Id,
@@ -102,7 +102,7 @@ public sealed class MailDraftBookTests
         var draft = await SaveAsync(harness, "first version");
 
         // Act
-        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None);
+        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
@@ -148,7 +148,7 @@ public sealed class MailDraftBookTests
         // Act
         var revised = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("second version"),
             draft.Id,
@@ -184,7 +184,7 @@ public sealed class MailDraftBookTests
         // Act
         await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("second version"),
             draft.Id,
@@ -226,7 +226,7 @@ public sealed class MailDraftBookTests
         // Act
         await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("second version"),
             draft.Id,
@@ -256,7 +256,7 @@ public sealed class MailDraftBookTests
         var draft = await SaveAsync(harness, "first version");
 
         // Act
-        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None);
+        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
@@ -280,7 +280,7 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.DiscardAsync(foreign, SyntheticMailUser.Deployment, CancellationToken.None));
+            () => harness.Book.DiscardAsync(foreign, SyntheticUser.Deployment, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -304,7 +304,7 @@ public sealed class MailDraftBookTests
         var send = outgoingEmails.Publish(
             OutgoingEmailRequest.Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Draft(draft.Id),
                 [.. draft.Recipients.Select(recipient => recipient.Recipient)]),
             mimeByteLength: 64);
@@ -317,7 +317,7 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None));
+            () => harness.Book.DiscardAsync(draft.Id, SyntheticUser.Deployment, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -337,7 +337,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("second version"),
                 MailDraftId.Create(Guid.CreateVersion7(Moment)),
@@ -362,7 +362,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 MailAccountId.Create("personal"),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("second version"),
                 draft.Id,
@@ -386,7 +386,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var theirs = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             OutgoingEmailRequester.Command("mfctl-7b19"),
             Composed("their first version"),
             revises: null,
@@ -396,7 +396,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-7b19"),
                 Composed("second version"),
                 theirs.Id,
@@ -421,7 +421,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var theirs = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             OutgoingEmailRequester.Command("mfctl-3c02"),
             Composed("their draft"),
             revises: null,
@@ -429,7 +429,7 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.DiscardAsync(theirs.Id, SyntheticMailUser.Deployment, CancellationToken.None));
+            () => harness.Book.DiscardAsync(theirs.Id, SyntheticUser.Deployment, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -453,7 +453,7 @@ public sealed class MailDraftBookTests
         // Act
         var refusal = () => harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
@@ -475,7 +475,7 @@ public sealed class MailDraftBookTests
         // Act
         var refusal = () => harness.Book.DiscardAsync(
             MailDraftId.Create(Guid.CreateVersion7(Moment)),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             CancellationToken.None);
 
         // Assert
@@ -493,7 +493,7 @@ public sealed class MailDraftBookTests
         // Act
         var refusal = () => harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
@@ -521,7 +521,7 @@ public sealed class MailDraftBookTests
         // Act
         await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
@@ -548,7 +548,7 @@ public sealed class MailDraftBookTests
         // Act
         var saving = harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
@@ -575,7 +575,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var first = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
@@ -584,7 +584,7 @@ public sealed class MailDraftBookTests
         // Act
         await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2b"),
             Composed("second version"),
             first.Id,
@@ -625,7 +625,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed($"the deployment key is {ScreenedMarker}"),
                 revises: null,
@@ -665,7 +665,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("a draft far longer than this deployment analyzes in one scan"),
                 revises: null,
@@ -698,7 +698,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("an ordinary covering note"),
                 revises: null,
@@ -730,7 +730,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed($"now with {ScreenedMarker}"),
                 draft.Id,
@@ -790,7 +790,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var theirs = await harness.Book.SaveAsync(
             OtherAccount,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-9c31"),
             Composed("their first version"),
             revises: null,
@@ -800,7 +800,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.ReadStagedAttachmentsAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 theirs.Id,
                 CancellationToken.None));
 
@@ -820,7 +820,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var theirs = await harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             OutgoingEmailRequester.Command("mfctl-2d70"),
             Composed("their first version"),
             revises: null,
@@ -830,7 +830,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.ReadStagedAttachmentsAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 theirs.Id,
                 CancellationToken.None));
 
@@ -849,7 +849,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.ReadStagedAttachmentsAsync(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 MailDraftId.Create(Guid.CreateVersion7()),
                 CancellationToken.None));
 
@@ -860,7 +860,7 @@ public sealed class MailDraftBookTests
     private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body) =>
         harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed(body),
             revises: null,

@@ -48,7 +48,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     private readonly Func<IEnumerable<ISensitiveContentScanner>> scanners;
     private readonly TimeProvider timeProvider;
     private readonly SensitiveContentScanConcurrency concurrency;
-    private readonly ServedMailUsers servedUsers;
+    private readonly ServedUsers servedUsers;
     private readonly Lock mutex = new();
 
     /// <summary>What the roster this instance last read composed to, rebuilt when that roster changes.</summary>
@@ -73,7 +73,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         Func<IEnumerable<ISensitiveContentScanner>> scanners,
         TimeProvider timeProvider,
         SensitiveContentScanConcurrency concurrency,
-        ServedMailUsers servedUsers)
+        ServedUsers servedUsers)
     {
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(catalogs);
@@ -105,7 +105,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     }
 
     /// <inheritdoc />
-    public SensitiveContentPosture AcrossAccountsOf(MailUserId user)
+    public SensitiveContentPosture AcrossAccountsOf(UserId user)
     {
         var current = this.Composed();
 
@@ -204,7 +204,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// answer however many people it is declared for. An account whose identifier is unusable is passed over, because
     /// nothing that asks here could name it.
     /// </remarks>
-    private Composition Build(IReadOnlyList<ServedMailUser>? roster)
+    private Composition Build(IReadOnlyList<ServedUser>? roster)
     {
         var built = new Dictionary<EffectivePosture, SensitiveContentPosture>();
         var deploymentAnswer = Compose(this.deployment, null);
@@ -216,7 +216,7 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
                 null,
                 deploymentPosture,
                 new Dictionary<MailAccountId, SensitiveContentPosture>(),
-                new Dictionary<MailUserId, SensitiveContentPosture>(),
+                new Dictionary<UserId, SensitiveContentPosture>(),
                 []);
         }
 
@@ -332,10 +332,10 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
     /// <param name="ByUser">The strictest posture over each user's own accounts, for a read that spans them.</param>
     /// <param name="Accounts">The account postures as an ordered list, for the walk that judges every account's rows at once.</param>
     private sealed record Composition(
-        IReadOnlyList<ServedMailUser>? Roster,
+        IReadOnlyList<ServedUser>? Roster,
         SensitiveContentPosture Deployment,
         IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> ByAccount,
-        IReadOnlyDictionary<MailUserId, SensitiveContentPosture> ByUser,
+        IReadOnlyDictionary<UserId, SensitiveContentPosture> ByUser,
         IReadOnlyList<MailAccountSensitiveContentPosture> Accounts)
     {
         /// <summary>Gets whether anything at all is scanned for on this deployment.</summary>

@@ -248,7 +248,7 @@ public sealed class ClientManagedMailFoldersEndpointTests
                 .Returns(_ => Task.FromResult<IReadOnlySet<MailFolderAlias>>(new HashSet<MailFolderAlias>()));
 
             var authorization = AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
 
             var accounts = Substitute.For<ICallerMailAccountCatalog>();

@@ -58,7 +58,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// a tie — which is also the order the list is drawn in.
     /// </remarks>
     public async Task<IReadOnlyList<PersonalTask>> ReadAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskOrigin? origin,
         PersonalTaskCursor? after,
         int limit,
@@ -109,7 +109,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// predicate rather than checked after it.
     /// </remarks>
     public async Task<PersonalTask?> FindAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         CancellationToken cancellationToken)
     {
@@ -162,7 +162,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// twice writes once.
     /// </remarks>
     public Task<PersonalTaskChangeOutcome> AcceptAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         CancellationToken cancellationToken) =>
         commitPolicy.CommitAsync(
@@ -180,7 +180,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// as one that does not exist.
     /// </remarks>
     public Task<PersonalTaskChangeOutcome> SetCompletionAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         bool isCompleted,
         CancellationToken cancellationToken) =>
@@ -199,7 +199,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// person holds is never matched and never has to be told apart from one that does not exist.
     /// </remarks>
     public async Task<bool> EraseAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         CancellationToken cancellationToken)
     {
@@ -285,7 +285,7 @@ internal sealed class PersistedPersonalTaskStore(
     /// </remarks>
     private static async Task<PersonalTaskChangeOutcome> StageAsync(
         IPersistenceSession session,
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         Action<MailFathomDbContext, PersonalTaskEntity> change,
         CancellationToken cancellationToken)

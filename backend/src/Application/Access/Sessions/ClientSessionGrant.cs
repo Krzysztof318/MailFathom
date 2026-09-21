@@ -24,6 +24,6 @@ namespace MailFathom.Application.Access.Sessions;
 /// </para>
 /// </remarks>
 public sealed record ClientSessionGrant(
-    MailUserId User,
+    UserId User,
     Guid? CredentialId,
     IReadOnlyList<MailFathomPermission> Permissions);

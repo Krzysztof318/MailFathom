@@ -60,9 +60,9 @@ internal sealed class PersistedUserSettingsDocumentWriter(
 
     /// <inheritdoc />
     public async Task<long?> CommitAsync(
-        MailUserId user,
+        UserId user,
         string json,
-        MailUserEndpointAccess endpointAccess,
+        UserEndpointAccess endpointAccess,
         long expectedVersion,
         CancellationToken cancellationToken)
     {

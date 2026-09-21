@@ -127,7 +127,7 @@ public sealed class RecurringSendScheduleSourceTests
         {
             Id = RecurringSendId.Create(Guid.CreateVersion7()),
             AccountId = Account,
-            User = SyntheticMailUser.Deployment,
+            User = SyntheticUser.Deployment,
             Requester = OutgoingEmailRequester.Command("declare-1"),
             Recipients = [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)],
             Schedule = schedule,

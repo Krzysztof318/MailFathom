@@ -23,14 +23,14 @@ public sealed class ContactBookOwnershipsTests
     {
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             MailFathomPermission.MailContactsRead);
 
         // Act
         var ownership = ContactBookOwnerships.For(authorization);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, ownership.User);
+        Assert.Equal(SyntheticUser.Another, ownership.User);
     }
 
     /// <summary>The overload every suite whose subject is something else reaches for, and the one it never states a user to.</summary>
@@ -45,7 +45,7 @@ public sealed class ContactBookOwnershipsTests
         var ownership = ContactBookOwnerships.ForTheServedUser();
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, ownership.User);
+        Assert.Equal(SyntheticUser.Deployment, ownership.User);
     }
 
     /// <summary>The accounts a user is assigned decide which collected books they read, and in which order.</summary>
@@ -58,7 +58,7 @@ public sealed class ContactBookOwnershipsTests
     {
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             MailFathomPermission.MailContactsRead);
 
         // Act
@@ -70,7 +70,7 @@ public sealed class ContactBookOwnershipsTests
         // Assert
         Assert.Equal(
             [
-                ContactBookHolder.UserKeyPrefix + SyntheticMailUser.Another.Value.ToString("D"),
+                ContactBookHolder.UserKeyPrefix + SyntheticUser.Another.Value.ToString("D"),
                 ContactBookHolder.AccountKeyPrefix + "first-account",
                 ContactBookHolder.AccountKeyPrefix + "second-account",
             ],

@@ -22,9 +22,9 @@ namespace MailFathom.Application.UnitTests.Tasks;
 /// </summary>
 public sealed class OwnTasksTests
 {
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
-    private static readonly MailUserId SomebodyElse = MailUserId.Create(
+    private static readonly UserId SomebodyElse = UserId.Create(
         new Guid("6d0b6a1c-6f5e-4a7e-9a1a-8d2a3f4b5c60"));
 
     private static readonly DateTimeOffset Stamped = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
@@ -463,14 +463,14 @@ public sealed class OwnTasksTests
 
     private static OwnTasks SignedIn(IPersonalTaskStore store) => Signed(store, User);
 
-    private static OwnTasks Signed(IPersonalTaskStore store, MailUserId user) => new(
+    private static OwnTasks Signed(IPersonalTaskStore store, UserId user) => new(
         AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailRead),
         store,
         new FakeTimeProvider(Stamped));
 
     private static async Task<PersonalTask> KeepAsync(
         InMemoryPersonalTaskStore store,
-        MailUserId user,
+        UserId user,
         string title,
         DateOnly? dueOn,
         PersonalTaskOrigin origin = PersonalTaskOrigin.Asserted)

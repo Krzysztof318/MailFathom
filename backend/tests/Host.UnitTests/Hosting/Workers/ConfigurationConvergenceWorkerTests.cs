@@ -168,11 +168,11 @@ public sealed class ConfigurationConvergenceWorkerTests
         TimeProvider clock,
         RecordingLogger<ConfigurationConvergenceWorker>? logger = null)
     {
-        var roster = new ServedMailUsers();
+        var roster = new ServedUsers();
 
         roster.Resolved([]);
 
-        var users = new ServedMailUsersConvergence(
+        var users = new ServedUsersConvergence(
             UserRecordScopes.Resolving(
                 documents,
                 new UserAccountDocumentBinder(
@@ -181,7 +181,7 @@ public sealed class ConfigurationConvergenceWorkerTests
                     Options.Create(new SensitiveContentOptions()))),
             roster,
             new HeldBackRecords(),
-            new RecordingLogger<ServedMailUsersConvergence>());
+            new RecordingLogger<ServedUsersConvergence>());
 
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),

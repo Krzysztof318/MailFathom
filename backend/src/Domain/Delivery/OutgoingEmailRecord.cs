@@ -60,7 +60,7 @@ public sealed record OutgoingEmailRecord
     /// evaluation the same submission twice over.
     /// </para>
     /// </remarks>
-    public MailUserId? User { get; init; }
+    public UserId? User { get; init; }
 
     /// <summary>Gets the authored act that asked, restored exactly as it was written down.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

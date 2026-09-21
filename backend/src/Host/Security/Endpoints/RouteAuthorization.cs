@@ -154,7 +154,7 @@ internal static class RouteAuthorization
 
             return Refused(refusal.RequiredPermission);
         }
-        catch (DeploymentMailUserUnresolvedException refusal)
+        catch (DeploymentUserUnresolvedException refusal)
         {
             return Unattributable(refusal);
         }
@@ -232,7 +232,7 @@ internal static class RouteAuthorization
     /// and the same code.
     /// </para>
     /// </remarks>
-    internal static ProblemHttpResult Unattributable(DeploymentMailUserUnresolvedException refusal) =>
+    internal static ProblemHttpResult Unattributable(DeploymentUserUnresolvedException refusal) =>
         TypedResults.Problem(
             refusal.Message,
             statusCode: StatusCodes.Status409Conflict,

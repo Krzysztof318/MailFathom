@@ -34,7 +34,7 @@ public sealed class MailCalendarProposalsTests
     {
         // Arrange
         var events = Substitute.For<ICalendarEventStore>();
-        var owner = MailUserId.Create(Guid.CreateVersion7());
+        var owner = UserId.Create(Guid.CreateVersion7());
         var sourceMessage = StoredEmailId.Create(Guid.CreateVersion7());
         var proposals = ProposalsFor([owner], events);
 
@@ -71,7 +71,7 @@ public sealed class MailCalendarProposalsTests
     {
         // Arrange
         var events = Substitute.For<ICalendarEventStore>();
-        var owner = MailUserId.Create(Guid.CreateVersion7());
+        var owner = UserId.Create(Guid.CreateVersion7());
         var proposals = ProposalsFor([owner], events);
 
         // Act
@@ -96,8 +96,8 @@ public sealed class MailCalendarProposalsTests
     {
         // Arrange
         var events = Substitute.For<ICalendarEventStore>();
-        var first = MailUserId.Create(Guid.CreateVersion7());
-        var second = MailUserId.Create(Guid.CreateVersion7());
+        var first = UserId.Create(Guid.CreateVersion7());
+        var second = UserId.Create(Guid.CreateVersion7());
         var proposals = ProposalsFor([first, second], events);
 
         // Act
@@ -142,7 +142,7 @@ public sealed class MailCalendarProposalsTests
         Assert.Equal(0, staged);
         await events.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<CalendarEvent>(),
             Arg.Any<CancellationToken>());
     }
@@ -204,7 +204,7 @@ public sealed class MailCalendarProposalsTests
     }
 
     private static MailCalendarProposals ProposalsFor(
-        IReadOnlyList<MailUserId> owners,
+        IReadOnlyList<UserId> owners,
         ICalendarEventStore events,
         ICalendarEventExtractor? extractor = null)
     {

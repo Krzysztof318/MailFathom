@@ -178,7 +178,7 @@ public sealed class ClientPortraitEndpointTests
         var linked = Assert.Single(held.Files);
         Assert.Equal(kind, linked.MediaType);
         Assert.Equal(supplied, linked.Content);
-        Assert.Equal(SyntheticMailUser.Deployment, linked.Owner);
+        Assert.Equal(SyntheticUser.Deployment, linked.Owner);
     }
 
     /// <summary>
@@ -322,7 +322,7 @@ public sealed class ClientPortraitEndpointTests
     }
 
     private static OwnPortrait SignedIn(HeldPortrait held) => new(
-        AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
         held,
         held);
 
@@ -340,14 +340,14 @@ public sealed class ClientPortraitEndpointTests
             var held = new HeldPortrait();
             var file = StoredFileId.Create(Guid.NewGuid());
 
-            held.Files.Add(new HeldFile(file, SyntheticMailUser.Deployment, "application/octet-stream", content));
+            held.Files.Add(new HeldFile(file, SyntheticUser.Deployment, "application/octet-stream", content));
             held.Portrait = file;
 
             return held;
         }
 
         public Task<StoredFileId?> WriteAsync(
-            MailUserId owner,
+            UserId owner,
             string mediaType,
             ReadOnlyMemory<byte> content,
             CancellationToken cancellationToken)
@@ -363,15 +363,15 @@ public sealed class ClientPortraitEndpointTests
             return Task.FromResult<StoredFileId?>(file);
         }
 
-        public Task<ReadOnlyMemory<byte>?> ReadAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken) =>
+        public Task<ReadOnlyMemory<byte>?> ReadAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken) =>
             Task.FromResult(this.Files.FirstOrDefault(held => held.File == file && held.Owner == owner) is { } found
                 ? (ReadOnlyMemory<byte>?)found.Content
                 : null);
 
-        public Task<bool> HoldsAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken) =>
+        public Task<bool> HoldsAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken) =>
             Task.FromResult(this.Files.Exists(held => held.File == file && held.Owner == owner));
 
-        public Task RemoveAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken)
+        public Task RemoveAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken)
         {
             this.Files.RemoveAll(held => held.File == file && held.Owner == owner);
 
@@ -384,10 +384,10 @@ public sealed class ClientPortraitEndpointTests
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(MailUserId user, CancellationToken cancellationToken) =>
+        public Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(UserId user, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken) =>
+        public Task<StoredFileId?> FindPortraitAsync(UserId user, CancellationToken cancellationToken) =>
             Task.FromResult(this.Portrait);
 
         public Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken)
@@ -400,7 +400,7 @@ public sealed class ClientPortraitEndpointTests
     }
 
     /// <summary>One stored file as the in-memory deployment holds it.</summary>
-    private sealed record HeldFile(StoredFileId File, MailUserId Owner, string MediaType, byte[] Content);
+    private sealed record HeldFile(StoredFileId File, UserId Owner, string MediaType, byte[] Content);
 
     /// <summary>A body the server stops reading because it went past the bound the route published, which is how the transport reports an upload over the limit.</summary>
     private sealed class RefusedBodyStream : Stream

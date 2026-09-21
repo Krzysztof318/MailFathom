@@ -479,7 +479,7 @@ public sealed class MirroredMailFolderEditorTests
                 this.Signals,
                 this.Jobs,
                 AccessAuthorizations.ForUserGranted(
-                    SyntheticMailUser.Deployment,
+                    SyntheticUser.Deployment,
                     granted.Length > 0 ? granted : [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]));
         }
 

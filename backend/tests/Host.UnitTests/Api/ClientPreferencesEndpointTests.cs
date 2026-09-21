@@ -31,7 +31,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Chosen);
+        store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(Chosen);
 
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
@@ -56,7 +56,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
+        store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
 
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
@@ -81,7 +81,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+        store.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
             .Returns<ClientPreferences?>(_ => throw new JsonException("theme: 'solarized' at $.theme"));
 
         // Act
@@ -101,7 +101,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -114,7 +114,7 @@ public sealed class ClientPreferencesEndpointTests
         var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
 
         Assert.Equal("dark", preferences.Theme);
-        await store.Received(1).SaveAsync(SyntheticMailUser.Deployment, Chosen, Arg.Any<CancellationToken>());
+        await store.Received(1).SaveAsync(SyntheticUser.Deployment, Chosen, Arg.Any<CancellationToken>());
     }
 
     /// <summary>The document is closed rather than patched, so an omitted preference is stored as its unset answer instead of leaving the row half changed.</summary>
@@ -123,7 +123,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -134,7 +134,7 @@ public sealed class ClientPreferencesEndpointTests
 
         // Assert
         await store.Received(1).SaveAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, ClientMessageView.Reduced, true, 5),
             Arg.Any<CancellationToken>());
     }
@@ -145,7 +145,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -180,7 +180,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Contains("system, light, dark", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -235,7 +235,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Contains("between 1 and 30", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -245,7 +245,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -256,7 +256,7 @@ public sealed class ClientPreferencesEndpointTests
 
         // Assert
         await store.Received(1).SaveAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             ClientPreferences.Unset with { NotificationSeconds = stated },
             Arg.Any<CancellationToken>());
     }
@@ -330,13 +330,13 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Contains("reduced, cleaned, embeddedHtml", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<UserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>
     private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
 
     private static OwnClientPreferences SignedIn(IClientPreferencesStore store) => new(
-        AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, MailFathomPermission.MailRead),
         store);
 }

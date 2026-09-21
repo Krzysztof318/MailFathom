@@ -180,7 +180,7 @@ public sealed class AccessAuthorization
     /// acts are the deployment's rather than one person's.
     /// </para>
     /// </remarks>
-    public MailUserId RequireUser() =>
+    public UserId RequireUser() =>
         this.RequirePrincipal().User ?? throw PrincipalNotAuthorizedException.NoUser();
 
     /// <summary>Requires that this use case was reached as work no caller requested.</summary>

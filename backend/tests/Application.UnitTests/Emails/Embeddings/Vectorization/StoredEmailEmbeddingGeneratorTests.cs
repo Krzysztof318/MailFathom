@@ -44,8 +44,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     /// background these tests are written against.
     /// </remarks>
     private static readonly StubMailAccountAssignments Assignments = new StubMailAccountAssignments()
-        .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-        .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another, ScannedMailbox);
+        .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+        .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another, ScannedMailbox);
 
     [Fact]
     public async Task EmbedAsync_ActiveProfileAndOutstandingPassages_EmbedsEveryPassage()
@@ -387,7 +387,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(3));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticUser.Another, inputCharacterCount: 500);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
         var generator = CreateGenerator(
             store,
@@ -418,7 +418,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         store.AddPassages(Message, CreatePassages(2));
         store.AddPassages(otherMessage, CreatePassages(2));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticUser.Another, inputCharacterCount: 500);
         var generator = CreateGenerator(
             store,
             new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
@@ -453,8 +453,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Another)]);
-        Assert.False(ledger.ConsumedByPeriodAndUser.ContainsKey((PeriodStart, SyntheticMailUser.Deployment)));
+        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticUser.Another)]);
+        Assert.False(ledger.ConsumedByPeriodAndUser.ContainsKey((PeriodStart, SyntheticUser.Deployment)));
     }
 
     /// <summary>
@@ -491,7 +491,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
                 SensitiveContentScreeningPolicy.ScreeningNothing(),
                 SensitiveContentDerivationStamp.Compute(plan, [scanner])),
-                SyntheticMailUser.Another));
+                SyntheticUser.Another));
 
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, PassageCarrying(marker));

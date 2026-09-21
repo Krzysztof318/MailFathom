@@ -247,14 +247,14 @@ public sealed class RouteAuthorizationTests
         // Act
         var answer = await RouteAuthorization.RefuseUnpermittedAsync(
             context,
-            _ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor(),
+            _ => throw DeploymentUserUnresolvedException.NoSoleUserToActFor(),
             Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
         Assert.Equal(
-            MailFathomErrorCode.DeploymentMailUserUnresolved.Value,
+            MailFathomErrorCode.DeploymentUserUnresolved.Value,
             Assert.Contains(RouteAuthorization.ErrorCodeExtension, refusal.ProblemDetails.Extensions));
     }
 

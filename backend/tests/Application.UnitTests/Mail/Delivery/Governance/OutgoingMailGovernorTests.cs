@@ -146,7 +146,7 @@ public sealed class OutgoingMailGovernorTests
 
         return OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             recipients);
     }

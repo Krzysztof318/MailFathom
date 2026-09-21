@@ -33,19 +33,19 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     /// <summary>Puts an event into somebody's calendar without a session, which is how a test arranges one.</summary>
     /// <param name="owner">Whose calendar holds it.</param>
     /// <param name="calendarEvent">The event.</param>
-    internal void Hold(MailUserId owner, CalendarEvent calendarEvent) =>
+    internal void Hold(UserId owner, CalendarEvent calendarEvent) =>
         this.held[(owner.Value, calendarEvent.Id.Value)] = calendarEvent;
 
     /// <inheritdoc />
     public Task<CalendarEvent?> ReadAsync(
-        MailUserId owner,
+        UserId owner,
         CalendarEventId eventId,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.held.GetValueOrDefault((owner.Value, eventId.Value)));
 
     /// <inheritdoc />
     public Task<IReadOnlyList<CalendarEvent>> ReadRangeAsync(
-        MailUserId owner,
+        UserId owner,
         CalendarEventQuery query,
         CancellationToken cancellationToken)
     {
@@ -70,7 +70,7 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
 
     /// <inheritdoc />
     public Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
-        MailUserId owner,
+        UserId owner,
         IReadOnlyCollection<ImportedCalendarEventUid> candidates,
         CancellationToken cancellationToken)
     {
@@ -91,7 +91,7 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     /// <inheritdoc />
     public Task AddAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken)
     {
@@ -106,7 +106,7 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     /// <inheritdoc />
     public Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken)
     {
@@ -128,7 +128,7 @@ internal sealed class InMemoryCalendarEventStore : ICalendarEventStore
     /// <inheritdoc />
     public Task<bool> DeleteAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEventId eventId,
         CancellationToken cancellationToken)
     {

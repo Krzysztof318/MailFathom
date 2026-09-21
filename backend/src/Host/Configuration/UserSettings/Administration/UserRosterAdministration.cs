@@ -38,13 +38,13 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this service.")]
 internal sealed partial class UserRosterAdministration(
     AccessAuthorization authorization,
-    IMailUserDirectory directory,
-    IMailUserProvisioning provisioning,
-    IMailUserErasure erasure,
+    IUserDirectory directory,
+    IUserProvisioning provisioning,
+    IUserErasure erasure,
     IMailAccountRecordStore accounts,
     IMailAccountWorkQuiescing quiescing,
     IUserSettingsDocumentWriter documents,
-    ServedMailUsers servedUsers,
+    ServedUsers servedUsers,
     SeveralUserAdmission admission,
     ConfigurationChangeAnnouncements announcements,
     ILogger<UserRosterAdministration> logger)
@@ -56,7 +56,7 @@ internal sealed partial class UserRosterAdministration(
     /// not be committed again until somebody guessed which line to add. English is the same answer the client reaches
     /// when it can read no preference, and whoever records that user changes it in the same session.
     /// </remarks>
-    private const string ProvisionedLanguage = nameof(MailUserLanguage.English);
+    private const string ProvisionedLanguage = nameof(UserLanguage.English);
 
     /// <summary>The record a user is provisioned with, which names their language and declares nothing else until they ask for something.</summary>
     /// <remarks>
@@ -81,7 +81,7 @@ internal sealed partial class UserRosterAdministration(
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
 
         return
         [
@@ -116,17 +116,17 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
 
         if (held.Count > 0 && admission.AdmitsACallerNamingNoUser)
         {
             return UserProvisioningOutcome.Refused(admission.Refusal);
         }
 
-        if (held.Count + 1 > ServedMailUsers.MaximumUsers)
+        if (held.Count + 1 > ServedUsers.MaximumUsers)
         {
             return UserProvisioningOutcome.Refused(
-                $"This deployment already holds the {ServedMailUsers.MaximumUsers} users one deployment may serve. Remove a user it no longer serves before recording another.");
+                $"This deployment already holds the {ServedUsers.MaximumUsers} users one deployment may serve. Remove a user it no longer serves before recording another.");
         }
 
         if (held.Any(record => StringComparer.Ordinal.Equals(record.DisplayName, label)))
@@ -139,7 +139,7 @@ internal sealed partial class UserRosterAdministration(
 
         try
         {
-            outcome = await this.RecordAndPublishAsync(MailUserId.Create(Guid.NewGuid()), label, cancellationToken);
+            outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.NewGuid()), label, cancellationToken);
         }
         finally
         {
@@ -158,7 +158,7 @@ internal sealed partial class UserRosterAdministration(
 
     /// <summary>Records a user and their first record, and publishes them, under the roster publication the caller holds.</summary>
     private async Task<UserProvisioningOutcome> RecordAndPublishAsync(
-        MailUserId user,
+        UserId user,
         string label,
         CancellationToken cancellationToken)
     {
@@ -174,7 +174,7 @@ internal sealed partial class UserRosterAdministration(
         if (await documents.CommitAsync(
                 user,
                 ProvisionedRecord,
-                MailUserEndpointAccess.Everywhere,
+                UserEndpointAccess.Everywhere,
                 ProvisionedVersion,
                 cancellationToken) is not { } committed)
         {
@@ -209,7 +209,7 @@ internal sealed partial class UserRosterAdministration(
     /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
-        MailUserId user,
+        UserId user,
         string? displayName,
         CancellationToken cancellationToken)
     {
@@ -226,7 +226,7 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedUsers.MaximumUsers + 1, cancellationToken);
 
         if (held.All(record => record.User != user))
         {
@@ -280,7 +280,7 @@ internal sealed partial class UserRosterAdministration(
     /// caller asked about rather than the roster the erasure left.
     /// </para>
     /// </remarks>
-    internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)
+    internal async Task<UserErasureOutcome> EraseAsync(UserId user, CancellationToken cancellationToken)
     {
         if (!user.IsSpecified)
         {
@@ -361,8 +361,8 @@ internal sealed partial class UserRosterAdministration(
 
         var label = displayName.Trim();
 
-        return label.Length > MailUserRecord.MaximumDisplayNameLength
-            ? $"The label is {label.Length} characters, past the {MailUserRecord.MaximumDisplayNameLength} a user's label is stored as. Shorten it."
+        return label.Length > UserRecord.MaximumDisplayNameLength
+            ? $"The label is {label.Length} characters, past the {UserRecord.MaximumDisplayNameLength} a user's label is stored as. Shorten it."
             : null;
     }
 

@@ -17,7 +17,7 @@ public sealed class ContactMappingTests
     private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>The book of the user every asserted record here is written into.</summary>
-    private static readonly ContactBookHolder OwnBook = ContactBookHolder.Of(SyntheticMailUser.Deployment);
+    private static readonly ContactBookHolder OwnBook = ContactBookHolder.Of(SyntheticUser.Deployment);
 
     /// <summary>The book of the mail account every collected record here is written into.</summary>
     private static readonly ContactBookHolder AccountBook =
@@ -76,13 +76,13 @@ public sealed class ContactMappingTests
     {
         // Arrange
         var contact = ContactOf("Anna Kowalska", ["anna@example.test", "anna@personal.test"]);
-        var holder = ContactBookHolder.Of(SyntheticMailUser.Another);
+        var holder = ContactBookHolder.Of(SyntheticUser.Another);
 
         // Act
         var entity = ContactMapping.ToEntity(holder, contact);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another.Value, entity.UserId);
+        Assert.Equal(SyntheticUser.Another.Value, entity.UserId);
         Assert.Null(entity.MailboxAccountId);
         Assert.Equal(holder.Key, entity.BookHolderId);
         Assert.All(entity.Addresses, address => Assert.Equal(holder.Key, address.BookHolderId));

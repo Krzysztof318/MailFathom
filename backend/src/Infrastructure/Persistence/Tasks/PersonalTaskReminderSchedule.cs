@@ -70,7 +70,7 @@ internal sealed class PersonalTaskReminderSchedule(MailFathomDbContext context) 
         return
         [
             .. due.Select(reminder => new DueReminder(
-                MailUserId.Create(reminder.UserId),
+                UserId.Create(reminder.UserId),
                 ReminderSubject.PersonalTask,
                 reminder.PersonalTaskId,
                 reminder.Title,

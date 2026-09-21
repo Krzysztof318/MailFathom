@@ -82,7 +82,7 @@ internal sealed class OutgoingMailTrackingHarness
 
         var request = OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             requester,
             [OutgoingRecipient.Create(Address("anna@example.test"), OutgoingRecipientRole.To)]);
 

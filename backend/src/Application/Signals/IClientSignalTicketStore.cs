@@ -38,7 +38,7 @@ public interface IClientSignalTicketStore
     /// </remarks>
     Task<bool> TryMintAsync(
         string identifier,
-        MailUserId user,
+        UserId user,
         ReadOnlyMemory<byte> secretDigest,
         DateTimeOffset expiresAt,
         int mostOutstanding,
@@ -74,6 +74,6 @@ public interface IClientSignalTicketStore
 /// <param name="SecretDigest">The digest of the secret half, which the presented secret is compared against in constant time.</param>
 /// <param name="ExpiresAt">When presenting the ticket stopped working.</param>
 public sealed record RedeemedClientSignalTicket(
-    MailUserId User,
+    UserId User,
     ReadOnlyMemory<byte> SecretDigest,
     DateTimeOffset ExpiresAt);

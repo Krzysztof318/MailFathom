@@ -23,7 +23,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(
-    MailUserId User,
+    UserId User,
     string DisplayName,
     bool Served,
-    MailUserEndpointAccess EndpointAccess);
+    UserEndpointAccess EndpointAccess);

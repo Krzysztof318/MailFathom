@@ -803,7 +803,7 @@ public sealed class ClientMailMutationsEndpointTests
         MailFathomPermission? granted = null)
     {
         var preferences = Substitute.For<IClientPreferencesStore>();
-        preferences.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(stored));
+        preferences.ReadAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(stored));
 
         return new OwnClientPreferences(
             AccessAuthorizations.ForCallerGranted(granted ?? MailFathomPermission.MailRead),

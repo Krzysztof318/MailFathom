@@ -19,9 +19,9 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// <remarks><see cref="ToString" /> is redacted, because the key is the whole of the credential and a test failure prints whatever a record's own formatting produces.</remarks>
 internal sealed record ProvisionedUserApiKey(
     string Key,
-    MailUserId User,
+    UserId User,
     IReadOnlyList<MailFathomPermission>? Permissions = null,
-    MailUserEndpointAccess? EndpointAccess = null)
+    UserEndpointAccess? EndpointAccess = null)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(ProvisionedUserApiKey)} {{ {this.User.Value:D} }}";
@@ -79,7 +79,7 @@ internal static class ProvisionedUserApiKeys
                 key.Permissions ?? MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                 Enabled: true,
                 Material: null,
-                key.EndpointAccess ?? MailUserEndpointAccess.Everywhere),
+                key.EndpointAccess ?? UserEndpointAccess.Everywhere),
             StringComparer.Ordinal);
 
         credentials.FindAsync(Arg.Any<UserCredentialMethod>(), Arg.Any<UserCredentialLookup>(), Arg.Any<CancellationToken>())

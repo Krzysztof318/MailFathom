@@ -63,7 +63,7 @@ internal sealed class CalendarReminderSchedule(MailFathomDbContext context) : IR
         return
         [
             .. due.Select(reminder => new DueReminder(
-                MailUserId.Create(reminder.UserId),
+                UserId.Create(reminder.UserId),
                 ReminderSubject.CalendarEvent,
                 reminder.CalendarEventId,
                 reminder.Title,

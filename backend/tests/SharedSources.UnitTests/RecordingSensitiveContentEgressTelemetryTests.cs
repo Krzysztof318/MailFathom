@@ -63,7 +63,7 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
         // Act
         using (var refused = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -74,7 +74,7 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
 
         using (var stopped = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {
@@ -83,7 +83,7 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
 
         using (var succeeded = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.ChatPrompt,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             TestContext.Current.CancellationToken))
         {

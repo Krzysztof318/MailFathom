@@ -43,7 +43,7 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 internal sealed class ClientPreferencesStore(MailFathomDbContext context, TimeProvider clock) : IClientPreferencesStore
 {
     /// <inheritdoc />
-    public async Task<ClientPreferences?> ReadAsync(MailUserId user, CancellationToken cancellationToken)
+    public async Task<ClientPreferences?> ReadAsync(UserId user, CancellationToken cancellationToken)
     {
         RequireNamed(user);
 
@@ -60,7 +60,7 @@ internal sealed class ClientPreferencesStore(MailFathomDbContext context, TimePr
 
     /// <inheritdoc />
     public async Task<bool> SaveAsync(
-        MailUserId user,
+        UserId user,
         ClientPreferences preferences,
         CancellationToken cancellationToken)
     {
@@ -77,7 +77,7 @@ internal sealed class ClientPreferencesStore(MailFathomDbContext context, TimePr
         return rows > 0;
     }
 
-    private static void RequireNamed(MailUserId user)
+    private static void RequireNamed(UserId user)
     {
         if (!user.IsSpecified)
         {
