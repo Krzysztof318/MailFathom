@@ -68,6 +68,32 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal("The invoice was attached.", result.AnswerText);
     }
 
+    /// <summary>A period in a question means that person's days, so the anchor is their zone rather than the host's.</summary>
+    /// <remarks>
+    /// The host's clock reads half past nine in the evening on the ninth in the coordinated zone, which is already the
+    /// tenth in Tokyo. A question naming <em>today</em> answered against the host's own reading would be filtered to
+    /// the wrong day for the whole of those two and a half hours, and would come back as mail that does not exist.
+    /// </remarks>
+    [Fact]
+    public async Task AnswerQuestionAsync_AQuestionNamingAPeriod_AnchorsItOnTheAskingPersonsZoneRatherThanTheHosts()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer();
+        var reader = ReaderOver(
+            answerer,
+            userClock: MailUserClocks.Reading(
+                new DateTimeOffset(2026, 9, 9, 21, 30, 0, TimeSpan.Zero),
+                "Asia/Tokyo"));
+
+        // Act
+        await AnswerAsync(reader, new AskMailRequest { QuestionText = "what arrived today" });
+
+        // Assert
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 10, 6, 30, 0, TimeSpan.FromHours(9)),
+            Assert.Single(answerer.Questions).AskedAt);
+    }
+
     [Fact]
     public async Task AnswerQuestionAsync_AQuestionNamingAScope_AsksTheRunWithThatScopeAlone()
     {
@@ -755,7 +781,8 @@ public sealed class MailboxQuestionReaderTests
         IMailAnsweringRunTelemetry? runTelemetry = null,
         IMailAnsweringAuditTrail? auditTrail = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        MailUserClock? userClock = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -799,7 +826,8 @@ public sealed class MailboxQuestionReaderTests
             auditTrail ?? new RecordingMailAnsweringAuditTrail(),
             timeProvider,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            userClock ?? MailUserClocks.Reading(Now));
     }
 
     /// <summary>A ledger with an allowance for whatever a test asks it.</summary>

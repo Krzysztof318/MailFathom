@@ -11,6 +11,7 @@ import { SurfaceControl } from '../controls/SurfaceControl';
 import type { MessageKey } from '../localization/en';
 import { wordInstantRange } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { EventFields } from './EventFields';
 import { ReminderPanel } from './ReminderPanel';
 import { draftOf, recordOf, type EventDraft } from './eventDraft';
@@ -62,6 +63,7 @@ export function EventDialog({
     readonly remindersAsked?: boolean;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
 
     const [amending, setAmending] = useState(false);
     const [draft, setDraft] = useState<EventDraft>(() => draftOf(event));
@@ -125,7 +127,7 @@ export function EventDialog({
                         <p className="text-base text-text-soft">
                             {event.isAllDay
                                 ? translate('calendar.eventAllDay')
-                                : wordInstantRange(event.start, event.end, locale, 'full')}
+                                : wordInstantRange(event.start, event.end, locale, 'full', timeZone)}
                         </p>
 
                         <button

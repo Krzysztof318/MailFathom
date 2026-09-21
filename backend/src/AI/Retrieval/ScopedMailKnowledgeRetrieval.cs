@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel;
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -91,6 +92,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
     private readonly MailboxScope scope;
     private readonly MailAnsweringRunLedger runLedger;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly DateTimeOffset askedAt;
     private readonly Lock gate = new();
     private readonly List<EmailKnowledgePassage> retrieved = [];
     private int candidateCount;
@@ -102,12 +104,14 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// <param name="scope">The accounts and folders every retrieval of this run is answered from.</param>
     /// <param name="runLedger">Decides how much of what a lookup found this run may still send.</param>
     /// <param name="egressGuard">Scans every extract before it is written into the envelope a model reads.</param>
+    /// <param name="askedAt">The instant the run's turn stated, whose offset a written received bound belongs to.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     internal ScopedMailKnowledgeRetrieval(
         IEmailKnowledgeSearch knowledgeSearch,
         MailboxScope scope,
         MailAnsweringRunLedger runLedger,
-        SensitiveContentEgressGuard egressGuard)
+        SensitiveContentEgressGuard egressGuard,
+        DateTimeOffset askedAt)
     {
         ArgumentNullException.ThrowIfNull(knowledgeSearch);
         ArgumentNullException.ThrowIfNull(scope);
@@ -118,6 +122,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
         this.scope = scope;
         this.runLedger = runLedger;
         this.egressGuard = egressGuard;
+        this.askedAt = askedAt;
     }
 
     /// <summary>Gets what this run's retrieval has reached so far, across every lookup it has made.</summary>
@@ -188,10 +193,10 @@ internal sealed class ScopedMailKnowledgeRetrieval
         string? recipientAddress = null,
         [Description("Return only mail whose subject contains this text, without regard to case, up to 256 characters. This narrows which mail is eligible before any of it is ranked and is unrelated to queryText. Omit to match any subject.")]
         string? subjectFragment = null,
-        [Description("Return only mail received at or after this ISO 8601 timestamp. Mail whose received date is unknown is excluded whenever either bound is named. Omit for no lower bound.")]
-        DateTimeOffset? receivedOnOrAfter = null,
-        [Description("Return only mail received strictly before this ISO 8601 timestamp. Omit for no upper bound.")]
-        DateTimeOffset? receivedBefore = null,
+        [Description("Return only mail received at or after this moment, written as yyyy-MM-ddTHH:mm against the date and time the turn states, with no zone and no Z. Mail whose received date is unknown is excluded whenever either bound is named. Omit for no lower bound.")]
+        string? receivedOnOrAfter = null,
+        [Description("Return only mail received strictly before this moment, written as yyyy-MM-ddTHH:mm against the date and time the turn states, with no zone and no Z. Omit for no upper bound.")]
+        string? receivedBefore = null,
         [Description("Return only mail the mail server last reported as read (true) or unread (false). Omit to match either. Searching never changes this state.")]
         bool? isRemotelySeen = null,
         [Description("Return only mail the mail server last reported as flagged (true) or unflagged (false), which is the star most mail clients show. Omit to match either. This is the \\Flagged flag on a message and is unrelated to the Flagged folder role.")]
@@ -202,14 +207,27 @@ internal sealed class ScopedMailKnowledgeRetrieval
         bool? hasAttachments = null,
         CancellationToken cancellationToken = default)
     {
+        // Read against the run's own anchor rather than bound by the framework, because a wall clock the model wrote
+        // against the turn is not an instant until somebody says whose day it belongs to — and the binder, which has
+        // never heard of the asking person, would answer one belonging to nobody. A bound written in some other form
+        // is reported back rather than dropped: this caller is a tool loop, so a model that wrote an unusable value
+        // can write a usable one, while a silently missing bound would answer the wrong question convincingly.
+        var refusedBound = this.RefusedBound(receivedOnOrAfter, "receivedOnOrAfter")
+            ?? this.RefusedBound(receivedBefore, "receivedBefore");
+
+        if (refusedBound is not null)
+        {
+            return refusedBound;
+        }
+
         var query = new EmailKnowledgeQuery
         {
             QueryText = queryText,
             SenderAddress = senderAddress,
             RecipientAddress = recipientAddress,
             SubjectFragment = subjectFragment,
-            ReceivedOnOrAfter = receivedOnOrAfter,
-            ReceivedBefore = receivedBefore,
+            ReceivedOnOrAfter = AnchoredInstant.Read(receivedOnOrAfter, this.askedAt),
+            ReceivedBefore = AnchoredInstant.Read(receivedBefore, this.askedAt),
             IsRemotelySeen = isRemotelySeen,
             IsRemotelyFlagged = isRemotelyFlagged,
             Keyword = keyword,
@@ -245,6 +263,21 @@ internal sealed class ScopedMailKnowledgeRetrieval
             found.RetrievalMode,
             this.WasTruncated);
     }
+
+    /// <summary>Reports a received bound the model wrote in some form this deployment cannot read, or nothing where it wrote a usable one or none.</summary>
+    /// <param name="written">What the model wrote for the bound.</param>
+    /// <param name="filterName">The bound's own name, as the tool publishes it, which is what the model has to correct.</param>
+    /// <returns>The document naming the refused filter, or <see langword="null" /> where there is nothing to refuse.</returns>
+    /// <remarks>
+    /// The refusal names the filter and the form it takes, never the value: what was written is the model's own text
+    /// and quoting it back would put an unbounded string into a document composed for a model to read.
+    /// </remarks>
+    private string? RefusedBound(string? written, string filterName) =>
+        !string.IsNullOrWhiteSpace(written) && AnchoredInstant.Read(written, this.askedAt) is null
+            ? RetrievedMailContextFormatter.FormatRefusal(
+                filterName,
+                $"Write this bound as {AnchoredInstant.WrittenForm} against the date and time the turn states, with no zone and no Z.")
+            : null;
 
     /// <summary>Scans every extract this lookup is about to hand to a model.</summary>
     /// <remarks>

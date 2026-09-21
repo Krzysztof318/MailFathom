@@ -214,7 +214,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             record.User,
             record.DisplayName,
             usable,
-            bound.ReadingLanguage ?? MailUserLanguage.English);
+            bound.ReadingLanguage ?? MailUserLanguage.English)
+        {
+            TimeZone = bound.ReadingTimeZone,
+        };
 
         return (served, document.Version);
     }

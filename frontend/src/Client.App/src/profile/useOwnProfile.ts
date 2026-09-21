@@ -5,7 +5,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     changeOwnDisplayName,
+    changeOwnTimeZone,
     readOwnDisplayName,
+    readOwnTimeZone,
+    reportedTimeZone,
     type ClientSession,
     type MailFathomTransport,
     type PortraitImageType,
@@ -42,7 +45,23 @@ export interface OwnProfileInForce {
     /** Whether the last change of the picture did not reach the deployment at all. */
     readonly pictureNotStated: boolean;
 
+    /**
+     * The zone this deployment reads their days in, or `null` while nothing has answered.
+     *
+     * Every date the client draws is placed in it, and the deployment anchors every relative period it resolves on
+     * their behalf on the same value — so this is what stops a client and its deployment disagreeing about which day
+     * a message arrived on.
+     */
+    readonly timeZone: string | null;
+
+    /** Whether the deployment refused the zone last stated, which is a sentence about what was chosen. */
+    readonly timeZoneNotAcceptable: boolean;
+
+    /** Whether the last change of the zone did not reach the deployment at all. */
+    readonly timeZoneNotStated: boolean;
+
     readonly correctName: (displayName: string) => void;
+    readonly chooseTimeZone: (timeZone: string) => void;
     readonly choosePicture: (picture: Blob, type: PortraitImageType) => void;
     readonly removePicture: () => void;
 }
@@ -57,6 +76,9 @@ interface HeldProfile {
     readonly nameNotAcceptable: boolean;
     readonly nameNotStated: boolean;
     readonly pictureNotStated: boolean;
+    readonly timeZone: string | null;
+    readonly timeZoneNotAcceptable: boolean;
+    readonly timeZoneNotStated: boolean;
 }
 
 const heldForNobody: HeldProfile = {
@@ -67,6 +89,9 @@ const heldForNobody: HeldProfile = {
     nameNotAcceptable: false,
     nameNotStated: false,
     pictureNotStated: false,
+    timeZone: null,
+    timeZoneNotAcceptable: false,
+    timeZoneNotStated: false,
 };
 
 /**
@@ -99,6 +124,13 @@ export function useOwnProfile(
     // here is only which answer is still worth folding in.
     const corrections = useRef(0);
 
+    // Which statement of the zone is the current one, held for the reason the corrections above are and answering one
+    // race more. Two of the writes are not a person changing their mind twice: the mount-time proposal writes the zone
+    // this runtime reports, and a person opening the settings screen may choose one while that write is still in
+    // flight. Nothing orders the two answers, so the proposal's own — an answer to a question asked before the choice
+    // existed — would otherwise land second and put the screen, and the record, back on the zone it proposed.
+    const zoneChoices = useRef(0);
+
     // Everything below reads through this rather than out of the state directly, which is what keeps one person's name
     // and picture off the next person's screen without a reset anywhere.
     const inForce = held.session === session ? held : heldForNobody;
@@ -128,6 +160,45 @@ export function useOwnProfile(
                 displayName: answer.value.displayName,
                 changeable: answer.value.changeable,
             }));
+        })();
+
+        // The zone is read and, where the record still holds the one an unstated record falls to, the zone this runtime
+        // reports is proposed in the same breath. Proposing is what makes the value true for somebody who has never
+        // been asked for it — a deployment answering in the coordinated zone would otherwise place every date and every
+        // "this week" a day out for most of the people signing in to it. It is proposed only against the deployment's
+        // own `isDefault` rather than by comparing identifiers, so somebody who chose the coordinated zone is left
+        // where they put themselves, and a runtime reporting nothing a deployment could record proposes nothing.
+        void (async () => {
+            // Asked through a function rather than read as a flag, for the reason the portrait read states: a value
+            // taken at the first check would decide the second, and the second is the one across the write below.
+            const abandoned = (): boolean => naming.signal.aborted;
+
+            // Taken before the read rather than before the write, because a choice made while the read was in flight
+            // supersedes the read as well: the answer to it states what the record held before that choice.
+            zoneChoices.current += 1;
+            const attempted = zoneChoices.current;
+            const superseded = (): boolean => abandoned() || attempted !== zoneChoices.current;
+            const answer = await readOwnTimeZone(session, transport);
+
+            if (superseded() || answer.outcome !== 'read') {
+                return;
+            }
+
+            const proposed = answer.value.isDefault ? reportedTimeZone() : null;
+
+            setHeld((current) => ({ ...forSession(current, session), timeZone: answer.value.timeZone }));
+
+            if (proposed === null || proposed === answer.value.timeZone) {
+                return;
+            }
+
+            const recorded = await changeOwnTimeZone(session, transport, proposed);
+
+            if (superseded() || recorded.outcome !== 'recorded') {
+                return;
+            }
+
+            setHeld((current) => ({ ...forSession(current, session), timeZone: recorded.timeZone }));
         })();
 
         void (async () => {
@@ -186,6 +257,9 @@ export function useOwnProfile(
         nameNotAcceptable: inForce.nameNotAcceptable,
         nameNotStated: inForce.nameNotStated,
         pictureNotStated: inForce.pictureNotStated,
+        timeZone: inForce.timeZone,
+        timeZoneNotAcceptable: inForce.timeZoneNotAcceptable,
+        timeZoneNotStated: inForce.timeZoneNotStated,
 
         // What is on the screen changes because a person pressed something, so it changes in the handler rather than
         // in an effect watching what the handler set.
@@ -216,6 +290,35 @@ export function useOwnProfile(
                         nameNotStated: answer.outcome === 'failed',
                     };
                 });
+            });
+        },
+
+        // The zone is drawn from the answer rather than from what was chosen, for the reason the name is: what a
+        // deployment records is what every date is then placed in, and a screen redrawing the choice would show
+        // something the deployment does not hold.
+        chooseTimeZone: (timeZone) => {
+            if (session === null) {
+                return;
+            }
+
+            zoneChoices.current += 1;
+            const attempted = zoneChoices.current;
+
+            void changeOwnTimeZone(session, transport, timeZone).then((answer) => {
+                if (attempted !== zoneChoices.current) {
+                    return;
+                }
+
+                setHeld((current) =>
+                    current.session === session
+                        ? {
+                              ...current,
+                              timeZone: answer.outcome === 'recorded' ? answer.timeZone : current.timeZone,
+                              timeZoneNotAcceptable: answer.outcome === 'notAcceptable',
+                              timeZoneNotStated: answer.outcome === 'failed',
+                          }
+                        : current,
+                );
             });
         },
 

@@ -298,6 +298,13 @@ export const en = {
     'settings.pictureNotStored': 'That picture was not saved to the deployment, so you are still drawn as you were.',
     'settings.profileHeld':
         'Your name and picture are held by the deployment you signed in to, so they follow you between machines. Neither is sent to your mail server.',
+    'settings.timeZone': 'Time zone',
+    'settings.timeZoneExplanation':
+        'Every date you are shown is written in this zone, and it is what “this week” and “since Tuesday” mean when you ask about your mail.',
+    'settings.timeZoneNotAcceptable':
+        'That time zone was not accepted, so your dates are still written in the old one.',
+    'settings.timeZoneNotStored':
+        'That time zone was not saved to the deployment, so your dates are still written in the old one.',
     'settings.messageView': 'Message view',
     'settings.messageViewCleaned': 'AI simplified',
     'settings.messageViewReduced': 'Simplified',

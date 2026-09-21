@@ -34,7 +34,7 @@ internal static class MailSearchPhraseScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             MailSearchPhraseInstructions.Text,
-            MailSearchPhraseInstructions.ComposeReadingTurn(scenario.Sentence, MailSearchPhraseCase.AskedOn),
+            MailSearchPhraseInstructions.ComposeReadingTurn(scenario.Sentence, MailSearchPhraseCase.AskedAt),
             static (model, plan) => MailSearchPhraseAgentComposition.Compose(
                 model,
                 plan,

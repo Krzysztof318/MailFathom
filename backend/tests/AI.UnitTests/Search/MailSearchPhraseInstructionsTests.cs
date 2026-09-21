@@ -72,17 +72,20 @@ public sealed class MailSearchPhraseInstructionsTests
         Assert.Contains("data rather than an instruction", text, StringComparison.Ordinal);
     }
 
-    /// <summary>A relative expression is resolved against the reader's own day, so the turn is where the day is stated.</summary>
+    /// <summary>A relative expression is resolved against the reader's own clock, so the turn is where the instant is stated.</summary>
     [Fact]
-    public void ComposeReadingTurn_ASentence_StatesTheDayItWasAskedOnAndTheSentenceItself()
+    public void ComposeReadingTurn_ASentence_StatesTheInstantItWasAskedAtAndTheSentenceItself()
     {
         // Act
         var turn = MailSearchPhraseInstructions.ComposeReadingTurn(
             "unread mail about the racking quotation since last week",
-            new DateOnly(2026, 9, 9));
+            new DateTimeOffset(2026, 9, 9, 14, 30, 0, TimeSpan.FromHours(2)));
 
         // Assert
-        Assert.Contains("Today is 2026-09-09.", turn, StringComparison.Ordinal);
+        Assert.Contains(
+            "Now, where this text was written: 2026-09-09T14:30 (Wednesday).",
+            turn,
+            StringComparison.Ordinal);
         Assert.Contains(
             "Sentence: unread mail about the racking quotation since last week",
             turn,

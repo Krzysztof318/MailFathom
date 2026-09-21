@@ -40,12 +40,12 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
 
         var agent = DiscoveryPlanningAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
         var answer = await agent.RunAsync(
-            DiscoveryPlanningInstructions.ComposePlanningTurn(question.Text.Value, question.Scope, EmailKnowledgeBounds.Default),
+            DiscoveryPlanningInstructions.ComposePlanningTurn(question.Text.Value, question.Scope, question.AskedAt, EmailKnowledgeBounds.Default),
             session: null,
             options: null,
             cancellationToken);
 
-        var reading = DiscoveryPlanReading.Read(answer.Text, question.Text, EmailKnowledgeBounds.Default);
+        var reading = DiscoveryPlanReading.Read(answer.Text, question.Text, EmailKnowledgeBounds.Default, question.AskedAt);
         this.PlanWasRead = reading.WasRead;
 
         return reading.Plan;

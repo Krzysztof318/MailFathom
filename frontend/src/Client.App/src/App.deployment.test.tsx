@@ -96,6 +96,7 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/replies/drafting',
                 'https://elsewhere.example.invalid/api/client/preferences',
                 'https://elsewhere.example.invalid/api/client/display-name',
+                'https://elsewhere.example.invalid/api/client/time-zone',
                 'https://elsewhere.example.invalid/api/client/signals/ticket',
                 'https://elsewhere.example.invalid/api/client/notifications/unread-count',
             ]);
@@ -191,6 +192,7 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/replies/drafting',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
+                'https://mail.example.test/api/client/time-zone',
                 'https://mail.example.test/api/client/signals/ticket',
                 'https://mail.example.test/api/client/notifications/unread-count',
             ]);
@@ -387,6 +389,7 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/replies/drafting',
                 'https://first.example.invalid/api/client/preferences',
                 'https://first.example.invalid/api/client/display-name',
+                'https://first.example.invalid/api/client/time-zone',
                 'https://first.example.invalid/api/client/signals/ticket',
                 'https://first.example.invalid/api/client/notifications/unread-count',
                 'https://first.example.invalid/api/client/session/token/revocation',
@@ -415,6 +418,7 @@ describe('App deployment', () => {
                 'https://second.example.invalid/api/client/replies/drafting',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',
+                'https://second.example.invalid/api/client/time-zone',
                 'https://second.example.invalid/api/client/signals/ticket',
                 'https://second.example.invalid/api/client/notifications/unread-count',
             ]);

@@ -10,6 +10,7 @@ import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import type { Locale } from '../localization/locale';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import type { FollowedAnswer, RunEnding } from './followedRun';
 import type { RunStopping } from './useRunStopping';
 
@@ -71,6 +72,7 @@ export function RunStatus({
     readonly onStop?: (() => void) | undefined;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
 
     const region = useRef<HTMLDivElement>(null);
     const offeredStopping = useRef(false);
@@ -91,7 +93,9 @@ export function RunStatus({
     const tone = ended?.tone ?? 'working';
 
     const allowanceReturns =
-        ended !== null && answer.ending === 'periodSpent' ? wordInstant(answer.retryAt, locale, 'full') : null;
+        ended !== null && answer.ending === 'periodSpent'
+            ? wordInstant(answer.retryAt, locale, 'full', timeZone)
+            : null;
 
     return (
         <div className="flex flex-col gap-2" ref={region} tabIndex={-1}>

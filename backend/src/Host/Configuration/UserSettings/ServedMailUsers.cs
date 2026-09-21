@@ -237,7 +237,10 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
                     user,
                     displayName,
                     [.. record.MailAccounts],
-                    record.ReadingLanguage ?? MailUserLanguage.English);
+                    record.ReadingLanguage ?? MailUserLanguage.English)
+                {
+                    TimeZone = record.ReadingTimeZone,
+                };
 
                 this.resolvedUsers = users.Any(candidate => candidate.User == user)
                     ? [.. users.Select(candidate => candidate.User == user ? published : candidate)]

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Scheduling;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
@@ -204,6 +205,79 @@ public sealed class UserAccountDocumentBinderTests
     public void Bind_AHeldRecordNamingALanguageThisBuildDoesNotWriteIn_IsRefused() =>
         AssertRefusesTheUnwritableLanguage(UserRecordArrival.AlreadyHeld);
 
+    /// <summary>The record states the zone that person's own days are read in, which is what a relative period is resolved against.</summary>
+    [Fact]
+    public void Bind_ARecordNamingATimeZone_BindsThatZoneOntoTheRecord()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(
+            """{"Language": "English", "TimeZone": "Europe/Warsaw"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal("Europe/Warsaw", binding.User!.ReadingTimeZone!.Id);
+    }
+
+    /// <summary>
+    /// A record stating no zone has asked for nothing, which is an ordinary state rather than an unfinished one, and it
+    /// binds as nothing rather than as the coordinated zone: a reader falls back for itself, and the one reader that
+    /// acts on the difference offers this person the zone their own machine reports.
+    /// </summary>
+    [Fact]
+    public void Bind_ARecordBeingWrittenNamingNoTimeZone_BindsStatingNoZone() =>
+        AssertStatesNoZone(UserRecordArrival.BeingWritten);
+
+    /// <summary>A record committed before the field existed states no zone either, and is read exactly as a new one is.</summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingNoTimeZone_BindsStatingNoZone() =>
+        AssertStatesNoZone(UserRecordArrival.AlreadyHeld);
+
+    /// <summary>A zone this deployment cannot resolve would be read in UTC without anybody being told, so it is refused instead.</summary>
+    [Theory]
+    [InlineData("Europe/Warszawa")]
+    [InlineData("+02:00")]
+    public void Bind_ARecordNamingATimeZoneThisDeploymentDoesNotKnow_IsRefusedNamingTheFormItTakes(string zoneId)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language": "English", "TimeZone": "{{zoneId}}"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("is not a time zone this deployment knows", refusal, StringComparison.Ordinal);
+        Assert.Contains("Europe/Warsaw", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>The bound is the stored zone identifier's own, so a value past it is refused rather than truncated.</summary>
+    [Fact]
+    public void Bind_ARecordNamingATimeZoneLongerThanOneMayBe_IsRefused()
+    {
+        // Arrange
+        var binder = CreateBinder();
+        var overLong = new string('a', ZonedInstant.MaximumZoneIdLength + 1);
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language": "English", "TimeZone": "{{overLong}}"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            "is not a time zone this deployment knows",
+            Assert.Single(binding.Refusals),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The name is written by hand in a record too, so it is read the way it was typed.</summary>
     [Theory]
     [InlineData("polish", MailUserLanguage.Polish)]
@@ -232,6 +306,19 @@ public sealed class UserAccountDocumentBinderTests
         // Assert
         Assert.True(binding.IsBound);
         Assert.Null(binding.User!.ReadingLanguage);
+    }
+
+    private static void AssertStatesNoZone(UserRecordArrival arrival)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language": "English"}""", arrival);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Null(binding.User!.ReadingTimeZone);
     }
 
     private static void AssertRefusesTheUnwritableLanguage(UserRecordArrival arrival)

@@ -10,6 +10,7 @@ import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
 import { wordCalendarDay, wordDueDay } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 
 // One thing a person owes, as the design project draws a task: the box that completes it, the line it is drawn with,
 // the mark saying it came out of mail, the way back to the message it came out of, the day it is due, and the act that
@@ -92,6 +93,7 @@ export function TaskRow({
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const press = useRowPress(onPress);
 
     // The act that puts a task in the day and the chip that says it is there are the same place on the row, so the
@@ -215,7 +217,7 @@ export function TaskRow({
                     <span className="text-sm whitespace-nowrap text-faint">{translate('tasks.noDay')}</span>
                 ) : (
                     <time dateTime={task.dueOn} className="text-sm whitespace-nowrap text-faint">
-                        <span aria-hidden="true">{wordDueDay(task.dueOn, locale, now)}</span>
+                        <span aria-hidden="true">{wordDueDay(task.dueOn, locale, now, timeZone)}</span>
                         <span className="sr-only">
                             {translate('tasks.dueOn', { day: wordCalendarDay(task.dueOn, locale) })}
                         </span>

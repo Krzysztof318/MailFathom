@@ -30,6 +30,10 @@ internal static class DiscoveryPlanningScenario
     /// <remarks>It reaches the model only as a count, so which account it names does not matter.</remarks>
     private static readonly MailboxScope WholeMailbox = MailboxScope.Create([MailAccountId.Create("primary")], []);
 
+    /// <summary>The instant every question is asked at, which is the anchor the turn states.</summary>
+    /// <remarks>Stated by the scenario rather than read from a clock, for the reason every evaluation input is fixed: a case resolving <em>this week</em> against today would score differently every day it is run.</remarks>
+    private static readonly DateTimeOffset AskedAt = new(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
+
     /// <summary>Describes one question as the case the shared scenario runs.</summary>
     /// <param name="scenario">The question.</param>
     /// <returns>The request.</returns>
@@ -40,7 +44,7 @@ internal static class DiscoveryPlanningScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             DiscoveryPlanningInstructions.Text,
-            DiscoveryPlanningInstructions.ComposePlanningTurn(scenario.Question, WholeMailbox, EmailKnowledgeBounds.Default),
+            DiscoveryPlanningInstructions.ComposePlanningTurn(scenario.Question, WholeMailbox, AskedAt, EmailKnowledgeBounds.Default),
             static (model, plan) => DiscoveryPlanningAgentComposition.Compose(
                 model,
                 plan,
@@ -56,7 +60,8 @@ internal static class DiscoveryPlanningScenario
         var reading = DiscoveryPlanReading.Read(
             answer,
             MailQuestionText.Create(scenario.Question),
-            EmailKnowledgeBounds.Default);
+            EmailKnowledgeBounds.Default,
+            AskedAt);
 
         return reading.WasRead
             ? scenario.Expectation(reading.Plan)

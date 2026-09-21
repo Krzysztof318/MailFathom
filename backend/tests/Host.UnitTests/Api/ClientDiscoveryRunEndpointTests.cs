@@ -140,6 +140,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         var answered = await ClientDiscoveryRunEndpoints.Start(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
             ResolverFor(SyntheticMailUser.Deployment),
+            MailUserClocks.Reading(Now),
             principals,
             store,
             new FakeTimeProvider(Now),
@@ -467,6 +468,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         ClientDiscoveryRunEndpoints.Start(
             request,
             ResolverFor(SyntheticMailUser.Deployment),
+            MailUserClocks.Reading(Now),
             AdmittedCaller(SyntheticMailUser.Deployment),
             store,
             new FakeTimeProvider(Now),

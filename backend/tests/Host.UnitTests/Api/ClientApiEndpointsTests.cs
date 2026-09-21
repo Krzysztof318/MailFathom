@@ -227,6 +227,8 @@ public sealed class ClientApiEndpointsTests
                     .Order(StringComparer.Ordinal),
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadEndpoint.MailThreadRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTimeZoneEndpoint.TimeZoneRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientTimeZoneEndpoint.TimeZoneRoute}",
             ],
             routes);
     }
@@ -313,6 +315,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientTaskEndpoints.TaskRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCalendarEventDraftEndpoint.CalendarEventDraftRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarEventAcceptanceRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -361,6 +364,7 @@ public sealed class ClientApiEndpointsTests
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
+                $"POST {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -435,6 +439,7 @@ public sealed class ClientApiEndpointsTests
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
                         || AsksAQuestionOfTheCallersOwnMail(endpoint)
+                        || SetsTheCallersOwnTimeZone(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -477,6 +482,18 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}";
+
+    /// <summary>Reports whether a route is the write of the caller's own time zone, by the route it is served at.</summary>
+    /// <remarks>
+    /// The route rather than the grant, for the reason the preferences and portrait writes are named that way. Which
+    /// zone a person's own days are read in changes what this deployment draws for them and what a relative period in
+    /// their own question resolves to, and nothing else: a person whose mail accounts an administrator maintains holds
+    /// no write grant and still has to be able to say where they are. Naming the one route keeps the claim narrow.
+    /// </remarks>
+    private static bool SetsTheCallersOwnTimeZone(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+            == $"{ClientEndpointOptions.RoutePrefix}{ClientTimeZoneEndpoint.TimeZoneRoute}";
 
     /// <summary>Reports whether a route changes the caller's own notification centre, by the three routes they are served at.</summary>
     /// <remarks>

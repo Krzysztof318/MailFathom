@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { largestPortraitOctets } from '@mailfathom/client-backend';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
@@ -45,7 +45,11 @@ const named: OwnProfileInForce = {
     nameNotAcceptable: false,
     nameNotStated: false,
     pictureNotStated: false,
+    timeZone: 'Europe/Warsaw',
+    timeZoneNotAcceptable: false,
+    timeZoneNotStated: false,
     correctName: () => undefined,
+    chooseTimeZone: () => undefined,
     choosePicture: () => undefined,
     removePicture: () => undefined,
 };
@@ -72,8 +76,8 @@ function renderSettings({
     readonly head?: SystemNotifier;
 
     readonly telemetry?: ClientTelemetry;
-} = {}): void {
-    render(
+} = {}): RenderResult {
+    return render(
         <LocalizationProvider>
             <TelemetryContext value={telemetry}>
                 <SystemNotifierContext value={head}>
@@ -194,6 +198,72 @@ describe('Settings', () => {
         fireEvent.blur(field);
 
         expect(correctName).toHaveBeenCalledWith('Grace Hopper');
+    });
+
+    it('draws the zone this deployment reads the person’s days in', () => {
+        renderSettings();
+
+        expect(screen.getByRole('combobox', { name: /^Time zone/u })).toHaveProperty('value', 'Europe/Warsaw');
+    });
+
+    it('sends the zone that was chosen', () => {
+        const chooseTimeZone = vi.fn();
+        renderSettings({ profile: { ...named, chooseTimeZone } });
+
+        fireEvent.change(screen.getByRole('combobox', { name: /^Time zone/u }), {
+            target: { value: 'America/Los_Angeles' },
+        });
+
+        expect(chooseTimeZone).toHaveBeenCalledWith('America/Los_Angeles');
+    });
+
+    // Nothing has answered yet, so there is no zone to draw and none to offer a change of — a control standing empty
+    // would be one somebody could choose from before the deployment had said what it holds.
+    it('draws no zone row until the deployment has answered', () => {
+        renderSettings({ profile: { ...named, timeZone: null } });
+
+        expect(screen.queryByRole('combobox', { name: /^Time zone/u })).toBeNull();
+    });
+
+    it('says so where the deployment refused the zone that was chosen', () => {
+        renderSettings({ profile: { ...named, timeZoneNotAcceptable: true } });
+
+        expect(screen.getByText(/was not accepted/u)).toBeDefined();
+    });
+
+    it('says so where the zone that was chosen never reached the deployment', () => {
+        renderSettings({ profile: { ...named, timeZoneNotStated: true } });
+
+        expect(screen.getByText(/was not saved to the deployment/u)).toBeDefined();
+    });
+
+    // The control is uncontrolled and remounted by the zone the deployment holds, so a re-render while the choice is
+    // still in flight leaves it alone. Drawn from the profile object it would redraw the old zone instead, which reads
+    // as the choice having been silently discarded.
+    it('keeps the chosen zone on the screen while the deployment has not answered', () => {
+        const view = renderSettings();
+
+        fireEvent.change(screen.getByRole('combobox', { name: /^Time zone/u }), {
+            target: { value: 'America/Los_Angeles' },
+        });
+
+        view.rerender(
+            <LocalizationProvider>
+                <TelemetryContext value={noTelemetry}>
+                    <SystemNotifierContext value={raisesNothing}>
+                        <Settings
+                            profile={{ ...named }}
+                            preferences={settings}
+                            telemetryForwarding={forwardedTo}
+                            deploymentVersion="0.9.0"
+                            onClose={() => undefined}
+                        />
+                    </SystemNotifierContext>
+                </TelemetryContext>
+            </LocalizationProvider>,
+        );
+
+        expect(screen.getByRole('combobox', { name: /^Time zone/u })).toHaveProperty('value', 'America/Los_Angeles');
     });
 
     it('sends nothing where the field was left holding the name it was given', () => {

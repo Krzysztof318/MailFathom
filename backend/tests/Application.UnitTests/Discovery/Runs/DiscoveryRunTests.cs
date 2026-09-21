@@ -34,7 +34,8 @@ public sealed class DiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create([MailAccountId.Create("primary")], []));
+        MailboxScope.Create([MailAccountId.Create("primary")], []),
+        new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     /// <summary>Both halves of what a run decided are its record, so neither is discarded once the other exists.</summary>
     [Fact]
@@ -220,7 +221,8 @@ public sealed class DiscoveryRunTests
         var run = DiscoveryRuns.Composing(guarding, new ScriptedEmailKnowledgeSearch(), egressGuard: egress.Guard);
         var question = new MailQuestion(
             MailQuestionText.Create($"what about the key {Marker} a colleague sent"),
-            Question.Scope);
+            Question.Scope,
+            new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
         // Act
         await run.RunAsync(question, progress: null, TestContext.Current.CancellationToken);

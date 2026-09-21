@@ -175,6 +175,7 @@ internal static class ClientApiEndpoints
         api.MapClientSessionTokens();
         api.MapClientUserRecord();
         api.MapClientDisplayName();
+        api.MapClientTimeZone();
         api.MapClientPreferences();
         api.MapClientPortrait();
         api.MapClientMailAccounts();

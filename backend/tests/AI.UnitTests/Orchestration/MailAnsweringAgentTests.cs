@@ -37,7 +37,8 @@ public sealed class MailAnsweringAgentTests
 {
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("was the invoice attached"),
-        MailboxScope.Create([MailAccountId.Create("primary")], []));
+        MailboxScope.Create([MailAccountId.Create("primary")], []),
+        new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";
@@ -139,6 +140,29 @@ public sealed class MailAnsweringAgentTests
         Assert.Equal(0, provider.RequestCount);
     }
 
+    /// <summary>
+    /// The anchor travels on the same turn, so it is inside the ceiling rather than added past it: a question sized
+    /// just under the bound would otherwise leave this deployment tens of characters over what it declared.
+    /// </summary>
+    [Fact]
+    public async Task AnswerAsync_AQuestionThatOnlyExceedsTheBoundOnceTheAnchorIsStated_IsRefusedWithoutReachingTheProvider()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("never reached"));
+        var agent = provider.AgentOver(
+            new RecordingEmailKnowledgeSearch(),
+            ChatDeclarations.Plan(maximumRequestCharacters: 100));
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.AnswerAsync(
+            Question with { Text = MailQuestionText.Create(new string('a', 80)) },
+            Observation(),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
     /// <summary>A question is text somebody typed into a client, and it leaves this deployment as completely as an extract does.</summary>
     [Fact]
     public async Task AnswerAsync_ASwitchedOnScanner_RedactsTheQuestionBeforeItReachesTheProvider()
@@ -160,6 +184,36 @@ public sealed class MailAnsweringAgentTests
 
         Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
         Assert.Contains("[redacted:CloudKey]", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>The retrieval filters take absolute instants, so the turn states the day the asking person is standing on.</summary>
+    /// <remarks>
+    /// Half past eleven in the evening in Warsaw is still the ninth there while the host's own clock already reads the
+    /// tenth in Tokyo, which is the pair of days a question naming <em>today</em> would otherwise be filtered against
+    /// the wrong one of — and the answer comes back as mail that does not exist rather than as a failure.
+    /// </remarks>
+    [Fact]
+    public async Task AnswerAsync_AQuestion_StatesTheAskingPersonsOwnDayOnTheTurn()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("Nothing arrived last week."));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        await agent.AnswerAsync(
+            Question with
+            {
+                Text = MailQuestionText.Create("what arrived this week"),
+                AskedAt = new DateTimeOffset(2026, 9, 9, 23, 30, 0, TimeSpan.FromHours(2)),
+            },
+            Observation(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            "Now, where this text was written: 2026-09-09T23:30 (Wednesday).",
+            Assert.Single(provider.RequestBodies),
+            StringComparison.Ordinal);
     }
 
     /// <summary>Sending a prompt a scanner could not read would be the leak the switch was turned on to prevent.</summary>

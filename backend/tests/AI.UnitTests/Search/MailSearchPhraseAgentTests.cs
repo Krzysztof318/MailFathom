@@ -34,7 +34,7 @@ public sealed class MailSearchPhraseAgentTests
     /// <summary>The literal the scanner in the guarded-egress test reports, standing in for a credential in a sentence.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";
 
-    private static readonly DateOnly Today = new(2026, 9, 9);
+    private static readonly DateTimeOffset AskedAt = new(2026, 9, 9, 14, 30, 0, TimeSpan.FromHours(2));
 
     [Fact]
     public async Task ReadAsync_AProviderThatReadTheSentence_AnswersWithTheFiltersAndTheCriteria()
@@ -112,7 +112,7 @@ public sealed class MailSearchPhraseAgentTests
         var reader = provider.ReaderOver(egressGuard: egress.Guard);
         var phrase = new MailSearchPhrase(
             EmailSearchQueryText.Create($"the message with the key {Marker} in it"),
-            Today);
+            AskedAt);
 
         // Act
         await reader.ReadAsync(phrase, TestContext.Current.CancellationToken);
@@ -121,9 +121,9 @@ public sealed class MailSearchPhraseAgentTests
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
     }
 
-    /// <summary>A relative expression is resolved against the reader's own day, so the day is what the turn states.</summary>
+    /// <summary>A relative expression is resolved against the reader's own clock, so the instant is what the turn states.</summary>
     [Fact]
-    public async Task ReadAsync_AnySentence_TellsTheModelWhichDayItWasAskedOn()
+    public async Task ReadAsync_AnySentence_TellsTheModelWhichInstantItWasAskedAt()
     {
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("""{\"criteria\": [\"invoice\"]}"""));
@@ -202,7 +202,7 @@ public sealed class MailSearchPhraseAgentTests
         var reader = provider.ReaderOver(logs: logs);
         var phrase = new MailSearchPhrase(
             EmailSearchQueryText.Create("unread mail about the racking quotation"),
-            Today);
+            AskedAt);
 
         // Act
         await reader.ReadAsync(phrase, TestContext.Current.CancellationToken);
@@ -215,7 +215,7 @@ public sealed class MailSearchPhraseAgentTests
     }
 
     private static MailSearchPhrase Phrase() =>
-        new(EmailSearchQueryText.Create("unread mail about the racking quotation since last week"), Today);
+        new(EmailSearchQueryText.Create("unread mail about the racking quotation since last week"), AskedAt);
 
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>
     private static string Completion(string content, int? inputTokens = null, int? outputTokens = null) =>

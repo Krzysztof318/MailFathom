@@ -19,6 +19,7 @@ import { SurfaceControl } from '../controls/SurfaceControl';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { readingNames, readingSources } from './messageReadings';
 
 // Where a reading is checked. Every mark a message carries, each with the sentence, why the producer says it, what
@@ -122,6 +123,7 @@ function AskedMessage({
     readonly transport: MailFathomTransport;
 }) {
     const { locale, translate } = useLocalization();
+    const timeZone = useReadingZone();
     const evidence = useCitedEvidence(session, transport, asked);
 
     return (
@@ -135,7 +137,7 @@ function AskedMessage({
             <p className="text-base font-semibold text-pretty">{asked.subject ?? translate('list.noSubject')}</p>
 
             {asked.marks.map((mark) => {
-                const due = mark.dueAt === null ? null : wordInstant(mark.dueAt, locale, 'full');
+                const due = mark.dueAt === null ? null : wordInstant(mark.dueAt, locale, 'full', timeZone);
 
                 return (
                     <section

@@ -474,7 +474,9 @@ Five things follow from reading it that way:
   than for no search.
 - **A relative expression is resolved to concrete days, and the days are shown.** *Since August* is a first day on the
   filter panel that can be moved, rather than an interpretation held somewhere a reader cannot see; it resolves against
-  the day the person typing is standing on rather than against the deployment's clock.
+  the day the person typing is standing on, which this deployment reads from the
+  [time zone their user record states](../operations/configuration-sources.md#the-zone-this-persons-days-are-read-in--timezone)
+  rather than from anything the client sends.
 - **The part nothing was made of is stated.** A sentence half of which was silently discarded is a search nobody can
   correct, because nothing on the screen is wrong — so what the reading could not account for comes back quoted and is
   drawn beside the filters.
@@ -516,7 +518,7 @@ rule [Chat generation § What never reaches a log](chat-generation.md#what-never
   window's own files contributed, with `EmailAttachmentMatch` and `StoredEmailAttachmentMatches`, what it answers with;
   and `EmailAttachmentMatchWindow`, the one step both use cases read that port through and scan what it returned with.
 - `MailFathom.Application.Emails.Search.Phrasing` — `IMailSearchPhraseReader`, the port a deployment registers only
-  where it reads a sentence at all, with `MailSearchPhrase`, the sentence and the day it was typed on, and
+  where it reads a sentence at all, with `MailSearchPhrase`, the sentence and the instant it was typed at, and
   `MailSearchPhraseReading` with `MailSearchPhraseFilters`, the interpretation it answers with. Nothing here searches:
   the port is read before a search rather than inside one.
 - `MailFathom.AI.Search` — `MailSearchPhraseAgent`, the agent that reads a sentence, with

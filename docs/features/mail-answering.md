@@ -58,6 +58,27 @@ instruction every turn carries, so it is sent through the same client the run's 
 run reports as spent rather than outside it — and it reaches no log and no telemetry event, for the reason
 [§ What never reaches a log](#what-never-reaches-a-log) gives for everything else on this path.
 
+### The turn names when the question was asked
+
+An instruction is fixed text whose digest is what a deployment audits, so nothing that changes between two runs may be
+written into one — and the current date changes between every two runs. So the anchor goes on the **turn** instead: the
+question the agent is handed opens with one line naming the date, the time, and the weekday the question was asked on,
+and the instruction merely says to resolve a relative period against what the turn states rather than against a date the
+model recalls.
+
+**The instant is placed in the asking person's own zone**, which the user record states and which defaults to `UTC`.
+That is what makes "this week", "since Tuesday", and "last quarter" reach `receivedOnOrAfter` and `receivedBefore` as
+*their* days rather than as the days of whichever zone the service process happens to run in. `TimeZone` in
+[the user record](../operations/configuration-sources.md#the-zone-this-persons-days-are-read-in--timezone) is where it is
+set, and the same line is composed for every operation that resolves a relative period — the search-phrase agent, the
+calendar-event extractor, and the Discover planner — so no two of them can drift into two wordings of one fact.
+
+**What the model writes back is read against that same anchor**, which is the half without which stating one buys
+nothing. The anchor names a wall clock and no offset, so a bound written the same way — `2026-09-07T00:00` — is placed
+on the anchor's own offset rather than on whatever a JSON binder would supply, which is `UTC` and is nobody's. A bound
+carrying `Z`, an offset, or anything that is not that form is refused rather than guessed at, and the refusal names the
+filter and the form it takes, so the model writes another one instead of being handed an instant it never asked for.
+
 ## The model asks for mail; nothing is pushed at it
 
 Retrieval runs **on demand**. The agent is composed with one tool, `search_mail`, and the model calls it when it decides

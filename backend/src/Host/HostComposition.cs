@@ -278,6 +278,9 @@ internal static class HostComposition
         // rather than about the request being served, and a use case composing text for them must reach it without a
         // query.
         builder.Services.AddSingleton<IMailUserLanguages, ServedUserLanguages>();
+        // And which zone their own days are read in, over the same roster and for the same reason: an agent about to
+        // state its anchor must not put a query in front of the call it is about to make.
+        builder.Services.AddSingleton<IMailUserTimeZones, ServedUserTimeZones>();
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(

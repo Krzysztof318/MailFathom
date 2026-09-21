@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { calendarDayOf, readMailSearchPhrase, readsMailSearchPhrases } from './mailSearchPhrase';
+import { readMailSearchPhrase, readsMailSearchPhrases } from './mailSearchPhrase';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -105,7 +105,6 @@ describe('readMailSearchPhrase', () => {
                 }),
             }),
             'unread mail from sales about racking since August, urgent',
-            '2026-09-09',
         );
 
         expect(answer).toStrictEqual({
@@ -121,17 +120,18 @@ describe('readMailSearchPhrase', () => {
 
     // The sentence is the most revealing value this client sends, and a query string is the part of a request that
     // reaches an access log by default — so it travels in a body, which is the whole reason this is a POST.
-    it('sends the sentence and the reader’s own day in a body rather than in the request line', async () => {
+    //
+    // The body carries the sentence and nothing beside it. The day a relative expression is resolved against is the
+    // deployment's, read from the zone the person's own record states, so a client stating one would be handing the
+    // deployment a second answer to a question it has already settled.
+    it('sends the sentence alone, in a body rather than in the request line', async () => {
         const { transport, requests } = recording({ status: 200, body: readingOf({}) });
 
-        await readMailSearchPhrase(session, transport, 'mail from last week', '2026-09-09');
+        await readMailSearchPhrase(session, transport, 'mail from last week');
 
         expect(requests[0]?.method).toBe('POST');
         expect(requests[0]?.path).not.toContain('last%20week');
-        expect(JSON.parse(requests[0]?.body ?? '{}')).toStrictEqual({
-            phrase: 'mail from last week',
-            askedOn: '2026-09-09',
-        });
+        expect(JSON.parse(requests[0]?.body ?? '{}')).toStrictEqual({ phrase: 'mail from last week' });
     });
 
     it('reads a deployment that read nothing as the plain word search rather than as a failure', async () => {
@@ -139,7 +139,6 @@ describe('readMailSearchPhrase', () => {
             session,
             answering({ status: 200, body: readingOf({ read: false }) }),
             'unread mail about the invoice',
-            '2026-09-09',
         );
 
         expect(answer).toStrictEqual({
@@ -163,7 +162,6 @@ describe('readMailSearchPhrase', () => {
             session,
             answering({ status: 200, body: readingOf(answered) }),
             'unread mail about the invoice',
-            '2026-09-09',
         );
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
@@ -176,14 +174,13 @@ describe('readMailSearchPhrase', () => {
             session,
             answering({ status: 429, body: '' }),
             'unread mail about the invoice',
-            '2026-09-09',
         );
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: 429 } });
     });
 
     it('reports a refused sentence as one this deployment could not read', async () => {
-        const answer = await readMailSearchPhrase(session, answering({ status: 400, body: '' }), '   ', '2026-09-09');
+        const answer = await readMailSearchPhrase(session, answering({ status: 400, body: '' }), '   ');
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 400 } });
     });
@@ -193,23 +190,8 @@ describe('readMailSearchPhrase', () => {
             session,
             () => Promise.reject(new Error('the connection was refused')),
             'unread mail about the invoice',
-            '2026-09-09',
         );
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
-    });
-});
-
-describe('calendarDayOf', () => {
-    // Composed from the local parts rather than from an ISO instant: somebody searching late in the evening east of
-    // Greenwich would otherwise have "today" resolved to tomorrow, and every relative expression with it.
-    it('writes the day the reader is standing on rather than the day in UTC', () => {
-        const lateEvening = new Date(2026, 8, 9, 23, 30);
-
-        expect(calendarDayOf(lateEvening)).toBe('2026-09-09');
-    });
-
-    it('pads a month and a day the way a calendar control writes them', () => {
-        expect(calendarDayOf(new Date(2026, 0, 3))).toBe('2026-01-03');
     });
 });

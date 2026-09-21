@@ -122,7 +122,8 @@ public sealed class DiscoveryPlanningAgentTests
         var planner = provider.PlannerOver(egressGuard: egress.Guard);
         var question = new MailQuestion(
             MailQuestionText.Create($"what do I do about the key {Marker} a colleague sent"),
-            WholeMailbox);
+            WholeMailbox,
+            new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
         // Act
         await planner.DerivePlanAsync(question, TestContext.Current.CancellationToken);
@@ -142,7 +143,8 @@ public sealed class DiscoveryPlanningAgentTests
         var selected = StoredEmailId.Create(new Guid("99999999-9999-9999-9999-999999999999"));
         var question = new MailQuestion(
             MailQuestionText.Create("which supplier quoted least"),
-            WholeMailbox.NarrowedToEmails([selected]));
+            WholeMailbox.NarrowedToEmails([selected]),
+            new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
         // Act
         await planner.DerivePlanAsync(question, TestContext.Current.CancellationToken);
@@ -214,7 +216,7 @@ public sealed class DiscoveryPlanningAgentTests
     }
 
     private static MailQuestion Question() =>
-        new(MailQuestionText.Create("which supplier quoted least"), WholeMailbox);
+        new(MailQuestionText.Create("which supplier quoted least"), WholeMailbox, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>
     private static string Completion(string content, int? inputTokens = null, int? outputTokens = null) =>

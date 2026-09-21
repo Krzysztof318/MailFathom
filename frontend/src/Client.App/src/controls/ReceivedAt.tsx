@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { wordRecentInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 
 // The instant a message was recorded, as the design project words it on a row: the time alone for today, the word for
 // yesterday, and the day and month for anything older. The clock is read once, when the row is first drawn, because a
@@ -14,8 +15,9 @@ import { useLocalization } from '../localization/useLocalization';
 /** The instant a message was recorded, or nothing at all where the message carries none this client can read. */
 export function ReceivedAt({ at }: { readonly at: string | null }) {
     const { locale } = useLocalization();
+    const timeZone = useReadingZone();
     const [now] = useState(() => Date.now());
-    const when = wordRecentInstant(at, locale, now);
+    const when = wordRecentInstant(at, locale, now, timeZone);
 
     if (at === null || when === null) {
         return null;

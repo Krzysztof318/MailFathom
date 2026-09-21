@@ -33,6 +33,14 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";
 
+    /// <summary>The instant the run's turn stated, in a zone two hours ahead of the coordinated one.</summary>
+    /// <remarks>
+    /// Deliberately not UTC. A bound the model writes carries no zone, so an anchor at offset zero would make a
+    /// reading that reattached nothing indistinguishable from one that reattached the right thing — which is the whole
+    /// of what these tests are here to tell apart.
+    /// </remarks>
+    private static readonly DateTimeOffset AskedAt = new(2026, 7, 8, 9, 30, 0, TimeSpan.FromHours(2));
+
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
         [MailAccountId.Create("primary")],
         [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
@@ -52,8 +60,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             ["senderAddress"] = "anna@example.test",
             ["recipientAddress"] = "bruno@example.test",
             ["subjectFragment"] = "claim",
-            ["receivedOnOrAfter"] = "2026-07-01T00:00:00+00:00",
-            ["receivedBefore"] = "2026-07-08T00:00:00+00:00",
+            ["receivedOnOrAfter"] = "2026-07-01T00:00",
+            ["receivedBefore"] = "2026-07-08T00:00",
             ["isRemotelySeen"] = true,
             ["isRemotelyFlagged"] = true,
             ["keyword"] = "$Label",
@@ -70,8 +78,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
                 SenderAddress = "anna@example.test",
                 RecipientAddress = "bruno@example.test",
                 SubjectFragment = "claim",
-                ReceivedOnOrAfter = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
-                ReceivedBefore = new DateTimeOffset(2026, 7, 8, 0, 0, 0, TimeSpan.Zero),
+                ReceivedOnOrAfter = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.FromHours(2)),
+                ReceivedBefore = new DateTimeOffset(2026, 7, 8, 0, 0, 0, TimeSpan.FromHours(2)),
                 IsRemotelySeen = true,
                 IsRemotelyFlagged = true,
                 Keyword = "$Label",
@@ -176,7 +184,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            AskedAt);
 
         // Act
         await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -186,6 +195,41 @@ public sealed class ScopedMailKnowledgeRetrievalTests
 
         Assert.Empty(report.Passages);
         Assert.Equal(0, report.CandidateCount);
+    }
+
+    /// <summary>
+    /// A bound is written against the wall clock the turn states, so one carrying a zone of its own was resolved
+    /// against a day the asking person has nothing to do with, and one that is not an instant at all was not resolved.
+    /// Both are refused rather than guessed at, and the lookup reaches no search: a model told its argument was refused
+    /// writes another one, while a model handed a silently reinterpreted week goes on believing it asked for its own.
+    /// </summary>
+    [Theory]
+    [InlineData("receivedOnOrAfter", "2026-07-01T00:00Z")]
+    [InlineData("receivedOnOrAfter", "2026-07-01T00:00+05:00")]
+    [InlineData("receivedBefore", "1 July 2026")]
+    public async Task SearchTool_ABoundCarryingAZoneOrNamingNoInstant_IsRefusedAndReachesNoSearch(
+        string filterName,
+        string written)
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        var tool = ToolOver(knowledgeSearch);
+
+        // Act
+        var document = await InvokeAsync(tool, new Dictionary<string, object?>
+        {
+            [ScopedMailKnowledgeRetrieval.QueryArgumentName] = Query,
+            [filterName] = written,
+        });
+
+        // Assert
+        var root = RootOf(document);
+
+        Assert.Equal(RetrievedMailContextFormatter.RefusalElementName, root.Name.LocalName);
+        Assert.Equal(
+            filterName,
+            root.Attribute(RetrievedMailContextFormatter.RefusedFilterAttributeName)?.Value);
+        Assert.Empty(knowledgeSearch.Calls);
     }
 
     /// <summary>A run may be handed no more mail than its ceiling allows, whatever the lookup narrowed to.</summary>
@@ -204,7 +248,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
                 maximumRetrievedCharacters: 60,
                 maximumProviderCalls: 8,
                 maximumTokens: 80_000)),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            AskedAt);
 
         // Act
         var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -230,7 +275,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            AskedAt);
         var tool = retrieval.CreateSearchTool();
 
         // Act
@@ -260,7 +306,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            egress.Guard);
+            egress.Guard,
+            AskedAt);
 
         // Act
         var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -301,7 +348,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            egress.Guard);
+            egress.Guard,
+            AskedAt);
 
         // Act
         var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -332,7 +380,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            egress.Guard);
+            egress.Guard,
+            AskedAt);
         var tool = retrieval.CreateSearchTool();
 
         // Act, Assert
@@ -353,7 +402,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            egress.Guard);
+            egress.Guard,
+            AskedAt);
 
         // Act
         await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -391,7 +441,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             knowledgeSearch,
             OnePrimaryAccount,
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
-            SensitiveContentEgressGuards.Inactive()).CreateSearchTool();
+            SensitiveContentEgressGuards.Inactive(),
+            AskedAt).CreateSearchTool();
 
     /// <summary>Calls the tool the way the framework's tool loop does, and reads the document it answered with.</summary>
     /// <remarks>

@@ -2,10 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Host.Api;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
@@ -21,7 +23,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientMailSearchPhraseEndpointTests
 {
-    private const string AskedOn = "2026-09-09";
+    /// <summary>The instant the deployment's own clock stands at while these tests run.</summary>
+    private static readonly DateTimeOffset AskedAt = new(2026, 9, 9, 14, 30, 0, TimeSpan.FromHours(2));
 
     private readonly IMailSearchPhraseReader reader = Substitute.For<IMailSearchPhraseReader>();
 
@@ -59,22 +62,8 @@ public sealed class ClientMailSearchPhraseEndpointTests
         var result = await ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
             request: null,
             this.reader,
+            MailUserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
-    }
-
-    /// <summary>A day read the wrong way round narrows a search to months nobody asked for, so only one shape is accepted.</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("09/09/2026")]
-    [InlineData("2026-13-01")]
-    public async Task ReadPhraseAsync_ADayThatIsNotTheOneShapeThisRouteAccepts_IsRefused(string? askedOn)
-    {
-        // Act
-        var result = await this.ReadAsync("unread mail about the invoice", askedOn);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
@@ -88,7 +77,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
     public async Task ReadPhraseAsync_ARequestCarryingNoSentence_IsRefused(string? phrase)
     {
         // Act
-        var result = await this.ReadAsync(phrase, AskedOn);
+        var result = await this.ReadAsync(phrase);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
@@ -98,7 +87,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
     public async Task ReadPhraseAsync_ASentenceLongerThanASearchMayCarry_IsRefused()
     {
         // Act
-        var result = await this.ReadAsync(new string('a', EmailSearchQueryText.MaximumLength + 1), AskedOn);
+        var result = await this.ReadAsync(new string('a', EmailSearchQueryText.MaximumLength + 1));
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
@@ -112,7 +101,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
         var overLong = new string('z', EmailSearchQueryText.MaximumLength + 1);
 
         // Act
-        var result = await this.ReadAsync(overLong, AskedOn);
+        var result = await this.ReadAsync(overLong);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
@@ -125,8 +114,9 @@ public sealed class ClientMailSearchPhraseEndpointTests
     {
         // Act
         var result = await ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
-            new ClientMailSearchPhraseRequest("unread mail about the invoice", AskedOn),
+            new ClientMailSearchPhraseRequest("unread mail about the invoice"),
             reader: null,
+            MailUserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -155,7 +145,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
                 WasRead: true));
 
         // Act
-        var result = await this.ReadAsync("unread mail from sales about racking last month, urgent", AskedOn);
+        var result = await this.ReadAsync("unread mail from sales about racking last month, urgent");
 
         // Assert
         var answer = Assert.IsType<Ok<ClientMailSearchPhraseResponse>>(result.Result).Value;
@@ -168,9 +158,9 @@ public sealed class ClientMailSearchPhraseEndpointTests
         Assert.Equal("urgent", answer?.Unaccounted);
     }
 
-    /// <summary>The day the client is standing on is what relative time is resolved against, so it reaches the reading unchanged.</summary>
+    /// <summary>The anchor is this deployment's clock read in the asking person's own zone rather than a value a caller sent.</summary>
     [Fact]
-    public async Task ReadPhraseAsync_ASentence_ReadsItAgainstTheDayTheClientStatedRatherThanTheDeploymentsOwn()
+    public async Task ReadPhraseAsync_ASentence_ReadsItAgainstTheAskingPersonsOwnClockRatherThanTheHostsZone()
     {
         // Arrange
         this.reader
@@ -178,13 +168,22 @@ public sealed class ClientMailSearchPhraseEndpointTests
             .Returns(MailSearchPhraseReading.Nothing);
 
         // Act
-        await this.ReadAsync("mail from last week", AskedOn);
+        await ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
+            new ClientMailSearchPhraseRequest("mail from last week"),
+            this.reader,
+
+            // Half past eleven in the evening in Warsaw is still the ninth there and already the tenth in Tokyo, which
+            // is the pair of days a person searching for "yesterday" would be answered with the wrong one of.
+            MailUserClocks.Reading(new DateTimeOffset(2026, 9, 9, 21, 30, 0, TimeSpan.Zero), "Europe/Warsaw"),
+            TestContext.Current.CancellationToken);
 
         // Assert
         await this.reader
             .Received(1)
             .ReadAsync(
-                Arg.Is<MailSearchPhrase>(phrase => phrase != null && phrase.AskedOn == new DateOnly(2026, 9, 9)),
+                Arg.Is<MailSearchPhrase>(phrase =>
+                    phrase != null
+                    && phrase.AskedAt == new DateTimeOffset(2026, 9, 9, 23, 30, 0, TimeSpan.FromHours(2))),
                 Arg.Any<CancellationToken>());
     }
 
@@ -198,7 +197,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
             .Returns<MailSearchPhraseReading>(_ => throw MailAnsweringBudgetExhaustedException.PeriodSpent());
 
         // Act
-        var result = await this.ReadAsync("unread mail about the invoice", AskedOn);
+        var result = await this.ReadAsync("unread mail about the invoice");
 
         // Assert
         Assert.Equal(
@@ -206,11 +205,39 @@ public sealed class ClientMailSearchPhraseEndpointTests
             Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
     }
 
-    private Task<Results<Ok<ClientMailSearchPhraseResponse>, ProblemHttpResult>> ReadAsync(
-        string? phrase,
-        string? askedOn) =>
+    /// <summary>
+    /// The strict binding, which is what a client still sending the day it asked on meets: the field left this contract
+    /// with the zone, and a body carrying it is refused rather than read as a request the deployment answered from its
+    /// own clock while dropping what the caller thought it had stated.
+    /// </summary>
+    [Fact]
+    public void Deserialize_ABodyCarryingTheWithdrawnAskedOnField_IsRefused()
+    {
+        // Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientMailSearchPhraseRequest>(
+            """{"phrase":"unread mail about the invoice","askedOn":"2026-09-14"}""",
+            WebFormat));
+    }
+
+    [Fact]
+    public void Deserialize_ABodyStatingOnlyThePhrase_BindsIt()
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientMailSearchPhraseRequest>(
+            """{"phrase":"unread mail about the invoice"}""",
+            WebFormat);
+
+        // Assert
+        Assert.Equal("unread mail about the invoice", request!.Phrase);
+    }
+
+    /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>
+    private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
+
+    private Task<Results<Ok<ClientMailSearchPhraseResponse>, ProblemHttpResult>> ReadAsync(string? phrase) =>
         ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
-            new ClientMailSearchPhraseRequest(phrase, askedOn),
+            new ClientMailSearchPhraseRequest(phrase),
             this.reader,
+            MailUserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
 }

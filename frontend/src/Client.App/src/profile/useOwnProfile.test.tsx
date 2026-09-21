@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { act, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import type { PortraitExchange, PortraitRead, PortraitWrite } from '../deployment/portraitExchange';
 import { useOwnProfile, type OwnProfileInForce } from './useOwnProfile';
@@ -120,6 +120,44 @@ function refusingWrites(status: number): MailFathomTransport {
                   body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
                   headers: {},
               });
+}
+
+// A deployment answering both text routes: the name route with one stored name, and the zone route with what it holds
+// and whether that is still the one an unstated record falls to. Every zone write is recorded, which is what the
+// proposal below is read from.
+function holdingZone(timeZone: string, isDefault: boolean): { transport: MailFathomTransport; written: string[] } {
+    const written: string[] = [];
+    let held = timeZone;
+
+    return {
+        written,
+        transport: (request) => {
+            if (!request.path.endsWith('/time-zone')) {
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+                    headers: {},
+                });
+            }
+
+            if (request.method === 'POST') {
+                const sent: unknown = JSON.parse(request.body ?? '{}');
+                const stated =
+                    typeof sent === 'object' && sent !== null && 'timeZone' in sent ? String(sent.timeZone) : '';
+
+                written.push(stated);
+                held = stated;
+
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({ timeZone: held, isDefault: false }),
+                    headers: {},
+                });
+            }
+
+            return Promise.resolve({ status: 200, body: JSON.stringify({ timeZone: held, isDefault }), headers: {} });
+        },
+    };
 }
 
 describe('useOwnProfile', () => {
@@ -376,3 +414,210 @@ describe('useOwnProfile', () => {
         expect(held.latest().pictureNotStated).toBe(true);
     });
 });
+
+describe('useOwnProfile, about the zone this person’s days are read in', () => {
+    const zoneBefore = process.env['TZ'];
+
+    afterEach(() => {
+        process.env['TZ'] = zoneBefore;
+    });
+
+    it('hands the screen the zone the deployment records', async () => {
+        const deployment = holdingZone('Europe/Warsaw', false);
+        const held = await renderProfile(drawing({ outcome: 'none' }), deployment.transport);
+
+        expect(held.latest().timeZone).toBe('Europe/Warsaw');
+        expect(deployment.written).toStrictEqual([]);
+    });
+
+    // Somebody signing in for the first time has never been asked where they are, and a deployment answering in the
+    // coordinated zone would place every date and every "this week" a day out for most of them. So the runtime's own
+    // report is proposed once, against the deployment's own statement that nobody has chosen yet.
+    it('proposes the zone this runtime reports where the record still holds the default', async () => {
+        process.env['TZ'] = 'Asia/Tokyo';
+
+        const deployment = holdingZone('UTC', true);
+        const held = await renderProfile(drawing({ outcome: 'none' }), deployment.transport);
+
+        await settled();
+
+        expect(deployment.written).toStrictEqual(['Asia/Tokyo']);
+        expect(held.latest().timeZone).toBe('Asia/Tokyo');
+    });
+
+    // Proposing over a chosen value is the defect this is written against: somebody who reads their mail in the
+    // coordinated zone deliberately would have it overwritten from whichever machine they next signed in on.
+    it('proposes nothing over a zone this person has already chosen', async () => {
+        process.env['TZ'] = 'Asia/Tokyo';
+
+        const deployment = holdingZone('Europe/Warsaw', false);
+        const held = await renderProfile(drawing({ outcome: 'none' }), deployment.transport);
+
+        await settled();
+
+        expect(deployment.written).toStrictEqual([]);
+        expect(held.latest().timeZone).toBe('Europe/Warsaw');
+    });
+
+    it('records the zone somebody chose and draws what the deployment now holds', async () => {
+        const deployment = holdingZone('Europe/Warsaw', false);
+        const held = await renderProfile(drawing({ outcome: 'none' }), deployment.transport);
+
+        act(() => {
+            held.latest().chooseTimeZone('America/Los_Angeles');
+        });
+        await settled();
+
+        expect(deployment.written).toStrictEqual(['America/Los_Angeles']);
+        expect(held.latest().timeZone).toBe('America/Los_Angeles');
+        expect(held.latest().timeZoneNotAcceptable).toBe(false);
+    });
+
+    // A zone the deployment refuses leaves the dates where they were and says so, rather than drawing a choice
+    // nothing recorded.
+    it('keeps the zone in force where the deployment refused the one chosen', async () => {
+        const held = await renderProfile(drawing({ outcome: 'none' }), refusingZoneWrites());
+
+        act(() => {
+            held.latest().chooseTimeZone('Europe/Warszawa');
+        });
+        await settled();
+
+        expect(held.latest().timeZone).toBe('Europe/Warsaw');
+        expect(held.latest().timeZoneNotAcceptable).toBe(true);
+    });
+
+    // A deployment that could not be reached at all is a different sentence from one that refused the zone, and it is
+    // the one a control drawing neither leaves somebody staring at their old zone with no explanation.
+    it('says the zone never reached the deployment where the write failed', async () => {
+        const held = await renderProfile(drawing({ outcome: 'none' }), unreachableZoneWrites());
+
+        act(() => {
+            held.latest().chooseTimeZone('America/Los_Angeles');
+        });
+        await settled();
+
+        expect(held.latest().timeZone).toBe('Europe/Warsaw');
+        expect(held.latest().timeZoneNotAcceptable).toBe(false);
+        expect(held.latest().timeZoneNotStated).toBe(true);
+    });
+
+    // The race the proposal creates and nothing else orders: the mount-time write goes out before the screen exists,
+    // and a person choosing a zone while it is in flight would have the proposal's own answer land on top of theirs.
+    it('leaves a manual choice standing where the proposal answers after it', async () => {
+        process.env['TZ'] = 'Asia/Tokyo';
+
+        const deployment = deferringZoneWrites('UTC');
+        const held = await renderProfile(drawing({ outcome: 'none' }), deployment.transport);
+
+        await settled();
+
+        act(() => {
+            held.latest().chooseTimeZone('America/Los_Angeles');
+        });
+        await settled();
+
+        // The proposal's answer arrives last, which is exactly the ordering the generation guard is written against.
+        await act(async () => {
+            deployment.answerLatestFirst();
+            await settled();
+        });
+
+        expect(held.latest().timeZone).toBe('America/Los_Angeles');
+    });
+});
+
+/** A deployment answering the zone read and reaching nobody on a write, which is what a failed change is read from. */
+function unreachableZoneWrites(): MailFathomTransport {
+    return (request) => {
+        if (!request.path.endsWith('/time-zone')) {
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+                headers: {},
+            });
+        }
+
+        return request.method === 'POST'
+            ? Promise.reject(new Error('the deployment could not be reached'))
+            : Promise.resolve({
+                  status: 200,
+                  body: JSON.stringify({ timeZone: 'Europe/Warsaw', isDefault: false }),
+                  headers: {},
+              });
+    };
+}
+
+/**
+ * A deployment whose zone writes are held open until the test answers them, so the order two of them land in is the
+ * test's to decide rather than the scheduler's.
+ */
+function deferringZoneWrites(held: string): {
+    transport: MailFathomTransport;
+    answerLatestFirst: () => void;
+} {
+    const pending: (() => void)[] = [];
+
+    return {
+        // Newest first, which is the ordering that makes the test about something: an older write answering last is
+        // the one case a screen can be put back on a value nobody chose.
+        answerLatestFirst: () => {
+            const waiting = pending.splice(0, pending.length).reverse();
+
+            waiting.forEach((answer) => {
+                answer();
+            });
+        },
+        transport: (request) => {
+            if (!request.path.endsWith('/time-zone')) {
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+                    headers: {},
+                });
+            }
+
+            if (request.method !== 'POST') {
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({ timeZone: held, isDefault: true }),
+                    headers: {},
+                });
+            }
+
+            const sent: unknown = JSON.parse(request.body ?? '{}');
+            const stated = typeof sent === 'object' && sent !== null && 'timeZone' in sent ? String(sent.timeZone) : '';
+
+            return new Promise((resolve) => {
+                pending.push(() => {
+                    resolve({
+                        status: 200,
+                        body: JSON.stringify({ timeZone: stated, isDefault: false }),
+                        headers: {},
+                    });
+                });
+            });
+        },
+    };
+}
+
+/** A deployment answering the zone read and refusing every zone write, which is what a refused choice is read from. */
+function refusingZoneWrites(): MailFathomTransport {
+    return (request) => {
+        if (!request.path.endsWith('/time-zone')) {
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+                headers: {},
+            });
+        }
+
+        return request.method === 'POST'
+            ? Promise.resolve({ status: 400, body: '', headers: {} })
+            : Promise.resolve({
+                  status: 200,
+                  body: JSON.stringify({ timeZone: 'Europe/Warsaw', isDefault: false }),
+                  headers: {},
+              });
+    };
+}

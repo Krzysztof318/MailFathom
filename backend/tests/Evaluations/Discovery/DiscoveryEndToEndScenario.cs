@@ -150,7 +150,7 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
         var search = new CorpusKnowledgeSearch(CorpusMessage.All);
 
         var run = await DiscoveryRun.AnswerAsync(
-            new MailQuestion(MailQuestionText.Create(this.Question), CorpusKnowledgeSearch.Scope),
+            new MailQuestion(MailQuestionText.Create(this.Question), CorpusKnowledgeSearch.Scope, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2))),
             agents,
             new PlannedMailRetrieval(search, new MailAnsweringRunLedger(MailAnsweringRunBounds.Default)),
             new DiscoveryCoverageReader(new SynchronizedCorpus(), new MailSynchronizationRunLedger(TimeProvider.System)),

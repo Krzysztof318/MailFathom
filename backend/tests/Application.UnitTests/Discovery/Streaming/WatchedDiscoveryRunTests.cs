@@ -33,7 +33,8 @@ public sealed class WatchedDiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create([MailAccountId.Create("primary")], []));
+        MailboxScope.Create([MailAccountId.Create("primary")], []),
+        new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
 
     private readonly FakeTimeProvider clock = new(DiscoveryRuns.Now);
 

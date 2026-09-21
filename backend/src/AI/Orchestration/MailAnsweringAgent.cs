@@ -134,11 +134,13 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         // attempt below, so a run the fallback model answered names that model rather than the one that could not.
         observation.RecordComposition(this.plan.Endpoint.Alias, MailAnsweringInstructions.Version);
 
-        // The question is one turn, so the bound on what one call may carry is the bound on the question. What the
-        // retrieval adds beside it is bounded where the passages are built, and the run's instruction is this build's
-        // own text inside the envelope registration supplied rather than anything a caller composes.
+        // The question and the anchor are one turn, so the bound on what one call may carry is the bound on that turn
+        // rather than on the question alone: a ceiling applied before the anchor is prepended is a ceiling the anchor
+        // then carries the request past. What the retrieval adds beside it is bounded where the passages are built, and
+        // the run's instruction is this build's own text inside the envelope registration supplied rather than
+        // anything a caller composes.
         ChatRequestBounds.Require(
-            [new ChatMessage(ChatRole.User, question.Text.Value)],
+            [new ChatMessage(ChatRole.User, ComposeTurn(question.AskedAt, question.Text.Value))],
             this.plan.MaximumMessagesPerRequest,
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
@@ -148,7 +150,8 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             this.knowledgeSearch,
             question.Scope,
             runLedger,
-            this.egressGuard);
+            this.egressGuard,
+            question.AskedAt);
 
         try
         {
@@ -189,7 +192,9 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     {
         // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower
         // and a question too wide for it is refused here rather than sent and billed for.
-        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, question.Text.Value)], model);
+        ChatRequestBounds.RequireForAttempt(
+            [new ChatMessage(ChatRole.User, ComposeTurn(question.AskedAt, question.Text.Value))],
+            model);
 
         var endpoint = model.Endpoint;
 
@@ -224,13 +229,15 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             question.Text.Value,
             cancellationToken);
 
+        var turn = ComposeTurn(question.AskedAt, questionText);
+
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             model,
             retrieval,
             this.instructionEnvelope,
             this.loggerFactory);
-        var response = await agent.RunAsync(questionText, session: null, options: null, cancellationToken);
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
         var report = retrieval.Report;
 
         if (string.IsNullOrWhiteSpace(response.Text))
@@ -255,4 +262,15 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         return new MailAnswer(response.Text);
     }
+
+    /// <summary>Composes the one turn a run sends: the instant the question was asked at, and the question itself.</summary>
+    /// <remarks>
+    /// The anchor is stated on the turn beside the question and never in the instruction: the instruction is this run's
+    /// audited policy, recorded as the digest of its own text, so a value that changes per call would make that digest
+    /// name a text nothing produced. Without it a question naming a period reaches the retrieval filters, which take
+    /// absolute instants, as a date the model recalled rather than one it was given. Composed through one method so the
+    /// bounds above are applied to the turn that is actually sent rather than to the question the anchor expands.
+    /// </remarks>
+    private static string ComposeTurn(DateTimeOffset askedAt, string questionText) =>
+        $"{AgentTimeAnchor.Stated(askedAt)}\n\n{questionText}";
 }

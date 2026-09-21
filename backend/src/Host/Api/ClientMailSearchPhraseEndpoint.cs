@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using System.Text.Json.Serialization;
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Search.Phrasing;
@@ -82,8 +84,9 @@ internal static class ClientMailSearchPhraseEndpoint
         TypedResults.Ok(new ClientMailSearchPhrasingResponse(reader is not null));
 
     /// <summary>Reads one sentence, or reports what was wrong with the request.</summary>
-    /// <param name="request">The sentence and the reader's own calendar day.</param>
+    /// <param name="request">The sentence to read.</param>
     /// <param name="reader">Reads the sentence, or <see langword="null" /> where this deployment does not.</param>
+    /// <param name="userClock">Reads the instant the person is standing on, which every relative time expression is resolved against.</param>
     /// <param name="cancellationToken">Cancels the reading when the client disconnects.</param>
     /// <returns><c>200</c> with the interpretation, <c>400</c> naming what was wrong with the request, <c>429</c> where the deployment has spent what it allows a provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
     /// <remarks>
@@ -100,16 +103,14 @@ internal static class ClientMailSearchPhraseEndpoint
     internal static async Task<Results<Ok<ClientMailSearchPhraseResponse>, ProblemHttpResult>> ReadPhraseAsync(
         [FromBody] ClientMailSearchPhraseRequest? request,
         [FromServices] IMailSearchPhraseReader? reader,
+        [FromServices] MailUserClock userClock,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(userClock);
+
         if (request is null)
         {
             return Refuse("The request carries no sentence to read.");
-        }
-
-        if (!TryReadDay(request.AskedOn, out var askedOn))
-        {
-            return Refuse("The day the sentence was typed on is written as yyyy-mm-dd.");
         }
 
         EmailSearchQueryText text;
@@ -129,7 +130,7 @@ internal static class ClientMailSearchPhraseEndpoint
 
         try
         {
-            var reading = await reader.ReadAsync(new MailSearchPhrase(text, askedOn), cancellationToken);
+            var reading = await reader.ReadAsync(new MailSearchPhrase(text, userClock.Now()), cancellationToken);
 
             return TypedResults.Ok(ClientMailSearchPhraseResponse.For(reading));
         }
@@ -144,20 +145,6 @@ internal static class ClientMailSearchPhraseEndpoint
     private static ProblemHttpResult Refuse(string stated) =>
         TypedResults.Problem(stated, statusCode: StatusCodes.Status400BadRequest);
 
-    /// <summary>Reads the calendar day a client states it is standing on.</summary>
-    /// <remarks>
-    /// One format and the invariant culture, because the value is composed by a program rather than typed by a person:
-    /// accepting whatever the server's culture would also parse is how a day and a month come to be read the wrong way
-    /// round, and a search silently narrowed to the wrong three months is exactly the failure this screen exists to
-    /// make visible.
-    /// </remarks>
-    private static bool TryReadDay(string? written, out DateOnly day) =>
-        DateOnly.TryParseExact(
-            written,
-            "yyyy-MM-dd",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out day);
 }
 
 /// <summary>What this deployment does with a sentence, which is what says whether a field may promise one.</summary>
@@ -169,15 +156,15 @@ internal static class ClientMailSearchPhraseEndpoint
 /// </remarks>
 internal sealed record ClientMailSearchPhrasingResponse(bool ReadsPhrases);
 
-/// <summary>One sentence to read, and the day whoever typed it is standing on.</summary>
+/// <summary>One sentence to read.</summary>
 /// <param name="Phrase">What was typed, which the deployment bounds exactly as it bounds a search's own text.</param>
-/// <param name="AskedOn">The client's own calendar day as <c>yyyy-mm-dd</c>, which every relative time expression is resolved against.</param>
 /// <remarks>
-/// The day comes from the client rather than from the deployment's clock, and that is the point of it: <em>last
-/// quarter</em> means the quarter of whoever typed it, and a deployment in another zone would resolve it to a range
-/// they never asked for on the two days a year the two disagree.
+/// The day <em>last quarter</em> is resolved against is not here, deliberately. It used to arrive as a request field,
+/// which made an unverified client value part of what a provider's prompt is composed from; the deployment now reads it
+/// from its own clock and the zone that person's record carries, which is a value it holds rather than one it was sent.
 /// </remarks>
-internal sealed record ClientMailSearchPhraseRequest(string? Phrase, string? AskedOn);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ClientMailSearchPhraseRequest(string? Phrase);
 
 /// <summary>What one sentence was read as: the constraints, what is left to rank by, and the part nothing was made of.</summary>
 /// <param name="Read">Whether a reading happened at all, which is <see langword="false" /> where this deployment reads no sentence or the provider could not be reached.</param>

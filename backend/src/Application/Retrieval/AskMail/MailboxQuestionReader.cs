@@ -63,6 +63,7 @@ public sealed class MailboxQuestionReader
     private readonly TimeProvider timeProvider;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
+    private readonly MailUserClock userClock;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
@@ -74,6 +75,7 @@ public sealed class MailboxQuestionReader
     /// <param name="timeProvider">Stamps when the run began and when it ended.</param>
     /// <param name="egressGuard">Scans what the answer is about to publish, where this deployment scans anything.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
+    /// <param name="userClock">Reads the instant the asking person is standing on, which every relative period in the question is resolved against.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxQuestionReader(
         MailAnsweringCapability capability,
@@ -84,7 +86,8 @@ public sealed class MailboxQuestionReader
         IMailAnsweringAuditTrail auditTrail,
         TimeProvider timeProvider,
         SensitiveContentEgressGuard egressGuard,
-        AccessAuthorization authorization)
+        AccessAuthorization authorization,
+        MailUserClock userClock)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -95,6 +98,7 @@ public sealed class MailboxQuestionReader
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(userClock);
 
         this.capability = capability;
         this.scopeResolver = scopeResolver;
@@ -105,6 +109,7 @@ public sealed class MailboxQuestionReader
         this.timeProvider = timeProvider;
         this.egressGuard = egressGuard;
         this.authorization = authorization;
+        this.userClock = userClock;
     }
 
     /// <summary>Answers one question from the mail within its scope.</summary>
@@ -190,7 +195,7 @@ public sealed class MailboxQuestionReader
         {
             return await this.ConductAsync(
                 answerer,
-                new MailQuestion(questionText, scope),
+                new MailQuestion(questionText, scope, this.userClock.Now()),
                 observation,
                 cancellationToken);
         }

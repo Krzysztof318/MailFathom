@@ -51,7 +51,8 @@ internal sealed class ComposedMailQuestionAnswerer(
             knowledgeSearch,
             question.Scope,
             runLedger,
-            SensitiveContentEgressGuards.Inactive());
+            SensitiveContentEgressGuards.Inactive(),
+            question.AskedAt);
 
         try
         {

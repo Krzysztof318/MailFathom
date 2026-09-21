@@ -134,21 +134,19 @@ export function readsMailSearchPhrases(
  * @param session The address to reach and the finished header value to present.
  * @param transport How the request goes out.
  * @param phrase What was typed.
- * @param askedOn The reader's own calendar day as `yyyy-mm-dd`, which every relative time expression is resolved against.
  * @returns The reading, or why it never arrived.
  */
 export function readMailSearchPhrase(
     session: ClientSession,
     transport: MailFathomTransport,
     phrase: string,
-    askedOn: string,
 ): Promise<ClientResult<MailSearchPhraseReading>> {
     return spanned(`POST ${mailSearchPhrasingRoute}`, async () => {
         const response = await send(transport, {
             method: 'POST',
             path: routeFor(session, mailSearchPhrasingRoute),
             headers: { ...headersFor(session), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phrase, askedOn }),
+            body: JSON.stringify({ phrase }),
             longestAnswer: longestPhraseAnswer,
         });
 
@@ -164,22 +162,6 @@ export function readMailSearchPhrase(
 
         return reading === null ? failed('unreadable', response.status) : read(reading);
     });
-}
-
-/**
- * The day a calendar control would show the reader, which is what a relative expression is resolved against.
- *
- * Composed from the local parts rather than from an ISO instant, because `toISOString` answers in UTC: somebody
- * searching at eleven at night east of Greenwich would otherwise have "today" resolved to tomorrow.
- *
- * @param at The instant to read the day off, which the caller supplies so nothing here reads a clock.
- * @returns The calendar day as `yyyy-mm-dd`.
- */
-export function calendarDayOf(at: Date): string {
-    const month = String(at.getMonth() + 1).padStart(2, '0');
-    const day = String(at.getDate()).padStart(2, '0');
-
-    return `${String(at.getFullYear()).padStart(4, '0')}-${month}-${day}`;
 }
 
 /**

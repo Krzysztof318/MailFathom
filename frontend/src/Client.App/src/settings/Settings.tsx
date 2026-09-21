@@ -620,6 +620,8 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
                 </div>
             </div>
 
+            <TimeZone profile={profile} />
+
             <p className="text-2xs text-muted">{translate('settings.profileHeld')}</p>
 
             {profile.changeable ? null : <p className="text-2xs text-muted">{translate('settings.nameNotYours')}</p>}
@@ -633,6 +635,78 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
             ) : null}
         </>
     );
+}
+
+// Which zone this person's own days are read in, which is two things rather than one: every date the client draws is
+// written in it, and the deployment resolves "this week" and "since Tuesday" against it when they ask about their mail.
+// That is why it is held by the deployment and offered here rather than taken from what the runtime reports — the two
+// answers disagree for anybody travelling or reading their mail from a second machine, and the disagreement shows up
+// as a message on the wrong day rather than as a failure.
+//
+// The design project draws no such row, which is stated here rather than worked around: it settles what the profile
+// tab looks like and not which values a deployment holds about somebody, so this takes the shape of the rows around it
+// exactly as the notification rows on the other tab do.
+//
+// A list rather than a field, because an IANA identifier is not a thing anybody types correctly, and the list is the
+// runtime's own — `Intl.supportedValuesOf` is every zone this engine can place a date in, which is the same question
+// the deployment answers for itself. The zone in force is put into the list whether or not the runtime carries it, so a
+// deployment holding one this engine has never heard of draws what it holds rather than silently drawing another zone.
+function TimeZone({ profile }: { readonly profile: OwnProfileInForce }) {
+    const { translate } = useLocalization();
+    const named = useId();
+
+    if (profile.timeZone === null) {
+        return null;
+    }
+
+    const inForce = profile.timeZone;
+    const zones = offeredTimeZones(inForce);
+
+    return (
+        <>
+            <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
+                <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
+                    {translate('settings.timeZone')}
+                    <span className="text-xs text-muted">{translate('settings.timeZoneExplanation')}</span>
+                </label>
+
+                {/* Uncontrolled, and remounted by the zone the deployment holds, for the reason the name field
+                    above is: a re-render while the choice is in flight would otherwise redraw the control on the
+                    old zone, which reads as the choice having been discarded. */}
+                <select
+                    key={inForce}
+                    id={named}
+                    defaultValue={inForce}
+                    className="w-44 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
+                    onChange={(event) => {
+                        profile.chooseTimeZone(event.target.value);
+                    }}
+                >
+                    {zones.map((zone) => (
+                        <option key={zone} value={zone}>
+                            {zone}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {profile.timeZoneNotAcceptable ? (
+                <p className="text-2xs text-warning">{translate('settings.timeZoneNotAcceptable')}</p>
+            ) : null}
+
+            {profile.timeZoneNotStated ? (
+                <p className="text-2xs text-warning">{translate('settings.timeZoneNotStored')}</p>
+            ) : null}
+        </>
+    );
+}
+
+// Every zone this runtime can place a date in, with the one in force among them. An engine without the enumeration
+// answers with the zone in force alone, which is a list of one rather than a control that offers nothing.
+function offeredTimeZones(inForce: string): readonly string[] {
+    const carried = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+
+    return carried.includes(inForce) ? carried : [inForce, ...carried];
 }
 
 // What went wrong with the picture, which is one line whether this client refused the file or the deployment refused

@@ -52,6 +52,10 @@ against the same retrieval the rest of the system uses, and the plan is bounded 
   the surplus is dropped and the first six run.
 - **A lookup whose words could not be searched for is dropped**, and the rest of the plan still runs. Blank query text
   and text longer than a search query may be are both this case.
+- **A date bound is read back against the anchor the turn stated**, and one the model wrote a zone onto is dropped
+  while the lookup itself still runs. The anchor names a wall clock with no offset, so a bound written back the same
+  way is the asking person's own hour and is placed on their offset; a bound carrying `Z` or an offset was resolved
+  against somebody else's day, and running it unbounded is nearer the question than running it against that day.
 - **`sufficientPassages` says when to stop**, and is clamped into what one retrieval may return — never below one, never
   above the deployment's own passage ceiling. A run stops issuing lookups as soon as it holds that many distinct
   passages, so a question the first search answers costs one search.

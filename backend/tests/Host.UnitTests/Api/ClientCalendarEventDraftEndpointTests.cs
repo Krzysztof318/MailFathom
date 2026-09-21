@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Domain.Calendar;
 using MailFathom.Host.Api;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
@@ -20,7 +22,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientCalendarEventDraftEndpointTests
 {
-    private const string WrittenAt = "2026-09-21T09:30:00+02:00";
+    /// <summary>The instant the deployment's own clock stands at, read in the asking person's zone, while these tests run.</summary>
+    private static readonly DateTimeOffset WrittenAt = new(2026, 9, 21, 9, 30, 0, TimeSpan.FromHours(2));
 
     private readonly ICalendarEventExtractor extractor = Substitute.For<ICalendarEventExtractor>();
 
@@ -64,23 +67,8 @@ public sealed class ClientCalendarEventDraftEndpointTests
         var result = await ClientCalendarEventDraftEndpoint.DraftEventAsync(
             request: null,
             this.extractor,
+            MailUserClocks.Reading(WrittenAt),
             TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
-    }
-
-    /// <summary>An instant without an offset would be resolved in whichever zone the deployment runs, so it is refused.</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("2026-09-21")]
-    [InlineData("2026-09-21T09:30:00")]
-    [InlineData("21/09/2026 09:30")]
-    public async Task DraftEventAsync_AnInstantThatIsNotTheOneShapeThisRouteAccepts_IsRefused(string? writtenAt)
-    {
-        // Act
-        var result = await this.DraftAsync("lunch tomorrow at one", writtenAt);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
@@ -93,7 +81,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
     public async Task DraftEventAsync_ARequestCarryingNoDescription_IsRefused(string? description)
     {
         // Act
-        var result = await this.DraftAsync(description, WrittenAt);
+        var result = await this.DraftAsync(description);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
@@ -107,7 +95,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
         var tooLong = new string('a', CalendarEventDescription.MaximumTextLength + 1);
 
         // Act
-        var result = await this.DraftAsync(tooLong, WrittenAt);
+        var result = await this.DraftAsync(tooLong);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
@@ -121,7 +109,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
         this.AnswerWith(CalendarEventExtraction.Settled([Drafted()]));
 
         // Act
-        var result = await this.DraftAsync("racking survey on Thursday at ten", WrittenAt);
+        var result = await this.DraftAsync("racking survey on Thursday at ten");
 
         // Assert
         var drafted = Assert.IsType<Ok<ClientCalendarEventDraftResponse>>(result.Result).Value;
@@ -138,7 +126,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
         this.AnswerWith(CalendarEventExtraction.Settled([]));
 
         // Act
-        var result = await this.DraftAsync("we should catch up some time", WrittenAt);
+        var result = await this.DraftAsync("we should catch up some time");
 
         // Assert
         var drafted = Assert.IsType<Ok<ClientCalendarEventDraftResponse>>(result.Result).Value;
@@ -155,7 +143,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
             CalendarEventExtraction.Withholding(CalendarEventExtractionWithholding.ProviderUnavailable));
 
         // Act
-        var result = await this.DraftAsync("racking survey on Thursday", WrittenAt);
+        var result = await this.DraftAsync("racking survey on Thursday");
 
         // Assert
         Assert.False(Assert.IsType<Ok<ClientCalendarEventDraftResponse>>(result.Result).Value?.Drafted);
@@ -169,7 +157,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
         this.AnswerWith(CalendarEventExtraction.Withholding(CalendarEventExtractionWithholding.NotActivated));
 
         // Act
-        var result = await this.DraftAsync("racking survey on Thursday", WrittenAt);
+        var result = await this.DraftAsync("racking survey on Thursday");
 
         // Assert
         Assert.False(Assert.IsType<Ok<ClientCalendarEventDraftResponse>>(result.Result).Value?.Drafted);
@@ -184,7 +172,7 @@ public sealed class ClientCalendarEventDraftEndpointTests
             CalendarEventExtraction.Withholding(CalendarEventExtractionWithholding.AllowanceExhausted));
 
         // Act
-        var result = await this.DraftAsync("racking survey on Thursday", WrittenAt);
+        var result = await this.DraftAsync("racking survey on Thursday");
 
         // Assert
         Assert.Equal(
@@ -198,6 +186,35 @@ public sealed class ClientCalendarEventDraftEndpointTests
             new DateTimeOffset(2026, 9, 24, 10, 0, 0, TimeSpan.FromHours(2)),
             End: null);
 
+    /// <summary>
+    /// The strict binding, which is what a client still sending the instant it wrote at meets: the field left this
+    /// contract with the zone, and a body carrying it is refused rather than read as a description the deployment
+    /// drafted from its own clock while dropping what the caller thought it had stated.
+    /// </summary>
+    [Fact]
+    public void Deserialize_ABodyCarryingTheWithdrawnWrittenAtField_IsRefused()
+    {
+        // Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientCalendarEventDraftRequest>(
+            """{"description":"survey tomorrow at nine","writtenAt":"2026-09-23T09:00:00+02:00"}""",
+            WebFormat));
+    }
+
+    [Fact]
+    public void Deserialize_ABodyStatingOnlyTheDescription_BindsIt()
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientCalendarEventDraftRequest>(
+            """{"description":"survey tomorrow at nine"}""",
+            WebFormat);
+
+        // Assert
+        Assert.Equal("survey tomorrow at nine", request!.Description);
+    }
+
+    /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>
+    private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
+
     private void AnswerWith(CalendarEventExtraction extraction)
     {
         this.extractor.IsActive.Returns(true);
@@ -206,11 +223,10 @@ public sealed class ClientCalendarEventDraftEndpointTests
             .Returns(_ => Task.FromResult(extraction));
     }
 
-    private Task<Results<Ok<ClientCalendarEventDraftResponse>, ProblemHttpResult>> DraftAsync(
-        string? description,
-        string? writtenAt) =>
+    private Task<Results<Ok<ClientCalendarEventDraftResponse>, ProblemHttpResult>> DraftAsync(string? description) =>
         ClientCalendarEventDraftEndpoint.DraftEventAsync(
-            new ClientCalendarEventDraftRequest(description, writtenAt),
+            new ClientCalendarEventDraftRequest(description),
             this.extractor,
+            MailUserClocks.Reading(WrittenAt),
             TestContext.Current.CancellationToken);
 }

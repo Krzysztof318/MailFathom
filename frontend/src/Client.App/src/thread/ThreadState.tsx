@@ -9,6 +9,7 @@ import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadingZone } from '../localization/useReadingZone';
 import { useScreenLayer } from '../shell/screenLayers';
 import { useDesktopComposition, useWideWorkspace } from '../shell/useWideWorkspace';
 import { sourceOf, type ThreadStateSource } from './threadStateSources';
@@ -329,7 +330,8 @@ function worthCiting(messages: readonly MailThreadMessage[]): boolean {
 // carries only the half it has.
 function Owing({ owedBy, dueAt }: { readonly owedBy: string | null; readonly dueAt: string | null }) {
     const { locale, translate } = useLocalization();
-    const due = wordInstant(dueAt, locale, 'stamp');
+    const timeZone = useReadingZone();
+    const due = wordInstant(dueAt, locale, 'stamp', timeZone);
 
     if (owedBy === null && due === null) {
         return null;

@@ -4,7 +4,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-    calendarDayOf,
     longestSearchText,
     phraseNotRead,
     readMailSearchPhrase,
@@ -58,12 +57,6 @@ import {
 // so the promise is made from an answer rather than from hope: no reading, no description, and the plain word search
 // is exactly what it always was.
 
-// Reading the clock is the caller's, so the day a sentence's *last week* is resolved against is one a test decided
-// rather than the day the suite happened to run on. Declared once rather than defaulted inline, for the reason
-// `useConnection.ts` gives: a new function on every render is a new dependency on every render, and the effect that
-// sends a sentence to be read would restart forever.
-const systemClock = (): Date => new Date();
-
 export function MailSearch({
     session,
     transport,
@@ -73,7 +66,6 @@ export function MailSearch({
     children,
     onOpen,
     onOpenDraft,
-    now = systemClock,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
@@ -92,13 +84,6 @@ export function MailSearch({
 
     /** Opens a result that is a draft in the composer, or `null` where the frame has no composer to open one in. */
     readonly onOpenDraft: ((storedEmailId: string) => void) | null;
-
-    /**
-     * What the current instant is, which is the calendar day the deployment resolves a relative expression against.
-     * It travels with the sentence rather than being taken at the other end, because the day somebody means by
-     * *yesterday* is the one where they are standing rather than the one the deployment is standing in.
-     */
-    readonly now?: () => Date;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
@@ -155,7 +140,7 @@ export function MailSearch({
 
         let listening = true;
 
-        void readMailSearchPhrase(session, transport, beingRead, calendarDayOf(now())).then((result) => {
+        void readMailSearchPhrase(session, transport, beingRead).then((result) => {
             if (!listening) {
                 return;
             }
@@ -169,7 +154,7 @@ export function MailSearch({
         return () => {
             listening = false;
         };
-    }, [session, transport, scope, beingRead, now]);
+    }, [session, transport, scope, beingRead]);
 
     function search(text: string): void {
         if (!askable(text, longestSearchText)) {

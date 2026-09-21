@@ -34,7 +34,10 @@ internal static class MailAnsweringInstructions
         {ScopedMailKnowledgeRetrieval.QueryArgumentName} you write, so write the words you expect the mail itself to
         carry rather than the question as it was put to you, in the language that mail is likely written in, which need
         not be the language you were asked in. Put every other part of the question into the filters beside it: a person
-        into an address filter, a period into the received bounds, an attachment into that filter. A narrowing expressed
+        into an address filter, a period into the received bounds, an attachment into that filter. The turn names the
+        current date and time, so resolve "this week", "since Tuesday" and "last quarter" against what the turn states
+        rather than against a date you recall, and write each bound as {AnchoredInstant.WrittenForm} on that same
+        clock — no zone, no offset and no Z, because the turn's own time carries none either. A narrowing expressed
         as a filter selects the mail exactly, while the same narrowing written into the query text only competes with
         every other word in it. When one lookup returns nothing useful, try another wording, another language this
         mailbox plausibly holds, or a wider set of filters before concluding that the mailbox does not answer the
