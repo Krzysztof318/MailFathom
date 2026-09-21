@@ -313,7 +313,11 @@ describe('readDiscoveryRunTail', () => {
                         sequence: 2,
                         source: {
                             id: 'c-1',
-                            kind: 'fragment',
+                            target: {
+                                kind: 'fragment',
+                                email: '0198f4a1-0000-7000-8000-000000000001',
+                                fragment: 'p-3',
+                            },
                             label: 'Master agreement.pdf',
                             medium: 'Written',
                             unreadable: null,

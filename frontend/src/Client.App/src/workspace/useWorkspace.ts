@@ -97,6 +97,18 @@ export interface Workspace {
     readonly citedAttachment: CitedAttachment | null;
 
     /**
+     * The message an answer's citation named, waiting for its conversation to be opened at it, or `null` where none is.
+     *
+     * The other half of the same shape the file above is, and for the same reason: a citation carries a message and
+     * nothing else, while opening the correspondence it belongs to needs the conversation that message is part of —
+     * which only a read of the message publishes. So following an evidence citation into mail is two steps rather than
+     * one — the message opens, and the pane that read it opens the conversation at that message — and this is the
+     * half-finished act between them. Any message read spends it, so one abandoned by reading something else opens
+     * nothing later, and it is not remembered across a reload for the same reason the file is not.
+     */
+    readonly citedMessage: string | null;
+
+    /**
      * The part of what is open that a question would be asked about, or `null` where the whole of it is.
      *
      * It is the words a person selected rather than a position in anything, because what the intent field does with it
@@ -180,6 +192,7 @@ export const emptyWorkspace: Workspace = {
     fullHtml: null,
     attachment: null,
     citedAttachment: null,
+    citedMessage: null,
     fragment: null,
     selected: [],
     question: '',

@@ -383,7 +383,14 @@ function parseAttachments(value: unknown): readonly MailAttachment[] | null {
     return attachments;
 }
 
-function parseAttachment(value: unknown): MailAttachment | null {
+/**
+ * One file a message carries, or `null` where what arrived is not a description this client can draw.
+ *
+ * Exported for `citedPassages.ts`, which follows a citation to a file and is answered with these same members — the
+ * service composes a cited file out of the message route's own description for exactly that reason, so a second
+ * parser here would be a second reading of one contract.
+ */
+export function parseAttachment(value: unknown): MailAttachment | null {
     const record = asRecord(value);
     if (record === null) {
         return null;

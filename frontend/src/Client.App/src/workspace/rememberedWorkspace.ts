@@ -97,6 +97,7 @@ export function rememberWorkspace(workspace: Workspace): void {
                 fullHtml: null,
                 attachment: null,
                 citedAttachment: null,
+                citedMessage: null,
                 askedBefore: workspace.askedBefore.map(withoutFragmentText),
             }),
         );
@@ -165,6 +166,7 @@ function workspaceIn(value: unknown): Workspace | null {
         fullHtml: null,
         attachment: null,
         citedAttachment: null,
+        citedMessage: null,
         fragment: null,
         selected,
         question,

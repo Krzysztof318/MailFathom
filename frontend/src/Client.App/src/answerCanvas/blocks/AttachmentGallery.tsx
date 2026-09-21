@@ -98,8 +98,8 @@ function FoundFile({ entry }: { readonly entry: AttachmentEntry }) {
 
     // A source that can be followed is a control and one that cannot is not: drawing the private entry as a button
     // would offer somebody a way into mail this client was never given, which is the rule `EvidenceList.tsx` states
-    // where it draws the same two cases.
-    if (declared === undefined || follow === null) {
+    // where it draws the same two cases — and so would drawing one whose target names a kind written after this build.
+    if ((declared?.target ?? null) === null || follow === null) {
         return <div className={card}>{said}</div>;
     }
 

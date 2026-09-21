@@ -11,7 +11,7 @@ import { EvidenceList } from './EvidenceList';
 
 const agreement: DeclaredSource = {
     id: 'c-1',
-    kind: 'email',
+    target: { kind: 'email', email: '0198f4a1-0000-7000-8000-000000000001' },
     label: 'Master agreement.pdf',
     medium: 'Written',
     unreadable: null,
@@ -100,7 +100,13 @@ describe('EvidenceList', () => {
     });
 
     it('says what kind of source an entry presents', () => {
-        renderList(listing([quoted]), { sources: [{ ...agreement, kind: 'attachment' }] });
+        const carried = {
+            kind: 'attachment',
+            email: '0198f4a1-0000-7000-8000-000000000001',
+            attachmentPosition: 0,
+        } as const;
+
+        renderList(listing([quoted]), { sources: [{ ...agreement, target: carried }] });
 
         expect(screen.getByText('attachment')).toBeDefined();
     });
@@ -134,6 +140,13 @@ describe('EvidenceList', () => {
         renderList(listing([quoted]), { sources: [], follow: vi.fn() });
 
         expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('draws no way into an entry whose source points at a kind this client cannot open', () => {
+        renderList(listing([quoted]), { sources: [{ ...agreement, target: null }], follow: vi.fn() });
+
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(screen.getByText('Master agreement.pdf')).toBeDefined();
     });
 
     it('opens the source an entry presents when there is somewhere to open it', () => {

@@ -60,7 +60,7 @@ describe('answerAfter', () => {
     it('keeps every source the run declared, so a block drawn later can still name what it rests on', () => {
         const declared = {
             id: 'c-1',
-            kind: 'email',
+            target: { kind: 'email', email: '0198f4a1-0000-7000-8000-000000000001' },
             label: 'Master agreement',
             medium: 'Written',
             unreadable: null,

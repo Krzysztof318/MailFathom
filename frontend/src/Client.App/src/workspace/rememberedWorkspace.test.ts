@@ -18,6 +18,7 @@ const kept: Workspace = {
     fullHtml: null,
     attachment: null,
     citedAttachment: null,
+    citedMessage: null,
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',

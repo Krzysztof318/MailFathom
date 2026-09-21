@@ -294,6 +294,30 @@ function OpenMessage({
         }
     }, [workspace.citedAttachment, answer, storedEmailId, revise]);
 
+    // An answer's evidence citation named this message, and the correspondence it belongs to is what the reader asked
+    // for: a citation carries a message and only a description of that message says which conversation it is part of.
+    // So the same two steps the file above takes, for the same reason — and the conversation opens *at* this message
+    // and marked as arrived from a result, because what somebody who followed a fact came for is the paragraph in its
+    // place rather than the newest message in a thread they have never seen.
+    //
+    // A message that belongs to no conversation opens as itself, which is the message already on the screen: the act is
+    // spent either way, since a citation left set is a conversation opened over a message nobody asked about.
+    useEffect(() => {
+        const cited = workspace.citedMessage;
+
+        if (cited === null || answer?.result.outcome !== 'read' || answer.read.storedEmailId !== storedEmailId) {
+            return;
+        }
+
+        const { threadId } = answer.result.value;
+
+        revise(
+            cited === storedEmailId && threadId !== null
+                ? { citedMessage: null, conversation: { threadId, openAt: storedEmailId, fromResult: true } }
+                : { citedMessage: null },
+        );
+    }, [workspace.citedMessage, answer, storedEmailId, revise]);
+
     // A message the deployment says has changed is read again where it is the one on the screen, quietly, so what a
     // reader is part-way through stays in front of them until the new answer replaces it. A signal naming other mail is
     // not this message's business: the list it names re-reads its own rows. A refresh is every message's business, and

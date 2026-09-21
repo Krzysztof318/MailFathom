@@ -11,7 +11,7 @@ import { AttachmentGallery } from './AttachmentGallery';
 
 const carried: DeclaredSource = {
     id: 'c-1',
-    kind: 'attachment',
+    target: { kind: 'attachment', email: '0198f4a1-0000-7000-8000-000000000001', attachmentPosition: 0 },
     label: 'Master agreement — signatures',
     medium: 'Written',
     unreadable: null,
@@ -102,6 +102,13 @@ describe('AttachmentGallery', () => {
 
     it('draws no way into a file whose source this client was never given', () => {
         renderGallery(gallery([signed]), { sources: [], follow: vi.fn() });
+
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(screen.getByText('Master agreement.pdf')).toBeDefined();
+    });
+
+    it('draws no way into a file whose source points at a kind this client cannot open', () => {
+        renderGallery(gallery([signed]), { sources: [{ ...carried, target: null }], follow: vi.fn() });
 
         expect(screen.queryByRole('button')).toBeNull();
         expect(screen.getByText('Master agreement.pdf')).toBeDefined();

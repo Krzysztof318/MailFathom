@@ -18,7 +18,7 @@ import { FactTable } from './FactTable';
 
 const agreement: DeclaredSource = {
     id: 'c-1',
-    kind: 'email',
+    target: { kind: 'email', email: '0198f4a1-0000-7000-8000-000000000001' },
     label: 'Master agreement.pdf',
     medium: 'Written',
     unreadable: null,
