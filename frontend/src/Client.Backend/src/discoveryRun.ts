@@ -19,6 +19,12 @@ import { send, type MailFathomTransport } from './transport';
 // screen renders every block it can draw and says what it could not, because the only other answer to one unfamiliar
 // block would be to discard the whole answer.
 //
+// **The run also says what it is doing and what it is spending.** Its start names the ceilings one question may reach
+// on this deployment and the endpoint that will answer it, each settled lookup says how far the retrieval has got and
+// what has been consumed so far, and the ending says how the run stopped — a person stopping it and a spend ceiling
+// refusing it among them, neither of which is a fault. All of it is counts, instants, and names an operator chose:
+// nothing about the mail travels on any of them.
+//
 // **Nothing here decides what a block looks like.** A block arrives named by its type and nothing more: what each type
 // carries is read by the renderer that draws it, and a type this build has no renderer for is named to the reader
 // rather than dropped. That is the same forward compatibility one revision further down, and it is why an event kind
@@ -70,14 +76,119 @@ export interface AnswerBlock {
 }
 
 /**
- * One thing a run published, as far as drawing an answer is concerned.
+ * What one question may spend on this deployment, which is what every count a run reports is read against.
+ *
+ * Known before the run has spent anything, and stated rather than predicted: a run is a conversation whose length a
+ * model decides, so an estimate would be a guess that teaches people to ignore the true figure beside it.
+ */
+export interface DiscoveryRunCeilings {
+    /** The characters of retrieved mail one run may send.  */
+    readonly retrievedCharacters: number;
+
+    /** The provider calls one run may make. */
+    readonly providerCalls: number;
+
+    /** The tokens, sent and received together, one run may consume. */
+    readonly tokens: number;
+}
+
+/**
+ * What a run has consumed, in the units the ceilings that will stop it are stated in.
+ *
+ * Never money: this client holds no price list, a price is a contract between an operator and a provider, and a figure
+ * in currency would be a claim about somebody's bill. The token count is a floor rather than a bill — a call abandoned
+ * in flight advances it by nothing while the provider may still charge for it.
+ */
+export interface DiscoveryRunSpend {
+    readonly providerCalls: number;
+    readonly tokens: number;
+    readonly retrievedCharacters: number;
+
+    /** How many distinct messages those characters came from, which is the figure a person has an intuition about. */
+    readonly messagesRetrieved: number;
+}
+
+/** How far the run's retrieval plan has got, as one of its lookups settles. */
+export interface DiscoveryRetrievalProgress {
+    readonly lookupsRun: number;
+    readonly lookupsRefused: number;
+    readonly lookupsPlanned: number;
+    readonly passagesFound: number;
+}
+
+/**
+ * How a run ended without finishing.
+ *
+ * Three of the nine are not faults at all and are carried apart for that reason: the person stopped it, or one of the
+ * two spend ceilings refused it. A ceiling reached is the deployment behaving exactly as its operator configured it,
+ * and a screen that rendered one as an error would produce somebody retrying three times something that will not
+ * become cheaper.
+ */
+export type DiscoveryRunEnding =
+    | 'unavailable'
+    | 'temporarilyUnavailable'
+    | 'retrievalRefused'
+    | 'timedOut'
+    | 'failed'
+    | 'stopped'
+    | 'cancelled'
+    | 'periodSpent'
+    | 'runSpent';
+
+// What the service spells each ending as, which is its own member name: this surface configures no naming policy, so a
+// closed value goes out Pascal-cased while every property name around it is camel-cased.
+//
+// An ending this build does not know is read as `failed`, which is what that member already means — the run ended for a
+// reason it does not publish and an operator reads it in the deployment's own logs. Refusing the tail instead would
+// discard an answer over the one event that says it is finished.
+const endings: Readonly<Record<string, DiscoveryRunEnding | undefined>> = {
+    Unavailable: 'unavailable',
+    TemporarilyUnavailable: 'temporarilyUnavailable',
+    RetrievalRefused: 'retrievalRefused',
+    TimedOut: 'timedOut',
+    Failed: 'failed',
+    Stopped: 'stopped',
+    Cancelled: 'cancelled',
+    PeriodSpent: 'periodSpent',
+    RunSpent: 'runSpent',
+};
+
+/**
+ * One thing a run published, as far as drawing an answer and the chrome around it is concerned.
  *
  * `other` is every kind this client does not act on, which is both the ones the contract already carries and the ones
  * it will gain: what a follower needs of an event it ignores is that it happened and where, so the cursor moves past it.
  */
 export type DiscoveryRunEvent =
-    | { readonly kind: 'started'; readonly sequence: number; readonly planSchemaVersion: number }
+    | {
+          readonly kind: 'started';
+          readonly sequence: number;
+          readonly planSchemaVersion: number;
+          readonly ceilings: DiscoveryRunCeilings;
+
+          /** This deployment's own name for the endpoint answering the run, and empty where it answers no questions. */
+          readonly endpointAlias: string;
+
+          /** The model name the operator declared for publication, and empty where they declared none. */
+          readonly publishedModel: string;
+      }
     | { readonly kind: 'block'; readonly sequence: number; readonly block: AnswerBlock }
+    | {
+          readonly kind: 'retrieval';
+          readonly sequence: number;
+          readonly progress: DiscoveryRetrievalProgress;
+          readonly spend: DiscoveryRunSpend;
+      }
+    | { readonly kind: 'completed'; readonly sequence: number; readonly spend: DiscoveryRunSpend }
+    | {
+          readonly kind: 'failed';
+          readonly sequence: number;
+          readonly ending: DiscoveryRunEnding;
+          readonly spend: DiscoveryRunSpend;
+
+          /** When the refused allowance returns, which only a period refusal names. */
+          readonly retryAt: string | null;
+      }
     | { readonly kind: 'other'; readonly sequence: number };
 
 // The whole of one answer: twenty blocks of prose with their citations. Generous against that and small enough that
@@ -90,6 +201,13 @@ const mostEventsPerRead = 1 + 6 + 200 + 20 + 1;
 
 // A type name the service assigned. Bounded because it is spelled onto a screen for a type this build cannot draw.
 const longestBlockType = 128;
+
+// The endpoint alias and the published model name, both of them names an operator chose and both of them spelled onto
+// a screen. Generous against anything anybody would write in a configuration file.
+const longestEndpointName = 128;
+
+// A stop answers `204` with no body at all, so anything arriving on it is already more than the contract carries.
+const longestStopAnswer = 4 * 1024;
 
 /**
  * Reads what one run has published after a cursor, and whether it is still working.
@@ -133,6 +251,48 @@ export function readDiscoveryRunTail(
         const tail = parseTail(response.body);
 
         return tail === null ? failed('unreadable', response.status) : read(tail);
+    });
+}
+
+/**
+ * Stops one run, so it makes no further provider call and abandons the retrieval it is waiting on.
+ *
+ * @param session The address to reach and the finished header value to present.
+ * @param transport How the request goes out.
+ * @param runId The run to stop.
+ * @returns Nothing where the stop was recorded, or why it did not reach the deployment. A run that finished a moment
+ * earlier is stopped successfully, because whoever asked could not have known; a run this user does not hold is
+ * `missing` rather than a failure to retry.
+ * @remarks
+ * Stopping is not ending the reading. A client that only stopped reading would leave the run calling the provider and
+ * drawing mail for nobody, which costs exactly what not stopping costs — so the control is worth having only because
+ * this request reaches the work. What the run had already written stays written, and what it had already spent stays
+ * spent: stopping buys the remainder rather than a refund.
+ */
+export function stopDiscoveryRun(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    runId: string,
+): Promise<ClientResult<void>> {
+    return spanned('DELETE /discovery/runs/{runId}', async () => {
+        const response = await send(transport, {
+            method: 'DELETE',
+            path: routeFor(session, discoveryRunRoute(runId)),
+            headers: headersFor(session),
+            longestAnswer: longestStopAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status === 404) {
+            return failed('missing', response.status);
+        }
+
+        return response.status === 204
+            ? read(undefined)
+            : failed(failureReasonForStatus(response.status), response.status);
     });
 }
 
@@ -186,17 +346,51 @@ function parseEvent(value: unknown): DiscoveryRunEvent | null {
 
     switch (record['event']) {
         case 'started': {
-            const planSchemaVersion = record['planSchemaVersion'];
+            const planSchemaVersion = counted(record['planSchemaVersion']);
+            const ceilings = parseCeilings(record['bounds']);
+            const endpointAlias = named(record['endpointAlias']);
+            const publishedModel = named(record['publishedModel']);
 
-            return typeof planSchemaVersion === 'number' && Number.isSafeInteger(planSchemaVersion)
-                ? { kind: 'started', sequence, planSchemaVersion }
-                : null;
+            return planSchemaVersion === null || ceilings === null || endpointAlias === null || publishedModel === null
+                ? null
+                : { kind: 'started', sequence, planSchemaVersion, ceilings, endpointAlias, publishedModel };
         }
 
         case 'block': {
             const block = parseBlock(record['block']);
 
             return block === null ? null : { kind: 'block', sequence, block };
+        }
+
+        case 'retrieval': {
+            const progress = parseProgress(record['progress']);
+            const spend = parseSpend(record['spend']);
+
+            return progress === null || spend === null ? null : { kind: 'retrieval', sequence, progress, spend };
+        }
+
+        case 'completed': {
+            const spend = parseSpend(record['spend']);
+
+            return spend === null ? null : { kind: 'completed', sequence, spend };
+        }
+
+        case 'failed': {
+            const spend = parseSpend(record['spend']);
+            const retryAt = record['retryAt'];
+
+            if (spend === null || !(retryAt === null || retryAt === undefined || typeof retryAt === 'string')) {
+                return null;
+            }
+
+            // An ending this build has no name for is read as the one that already means *ended for a reason it does
+            // not publish*, so a deployment that gained a tenth way to stop still ends the run on the screen.
+            const failure = record['failure'];
+            if (typeof failure !== 'string') {
+                return null;
+            }
+
+            return { kind: 'failed', sequence, ending: endings[failure] ?? 'failed', spend, retryAt: retryAt ?? null };
         }
 
         default:
@@ -206,6 +400,63 @@ function parseEvent(value: unknown): DiscoveryRunEvent | null {
             // moves past it rather than asking for it again for ever.
             return typeof record['event'] === 'string' ? { kind: 'other', sequence } : null;
     }
+}
+
+function parseCeilings(value: unknown): DiscoveryRunCeilings | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const retrievedCharacters = counted(record['maximumRetrievedCharacters']);
+    const providerCalls = counted(record['maximumProviderCalls']);
+    const tokens = counted(record['maximumTokens']);
+
+    return retrievedCharacters === null || providerCalls === null || tokens === null
+        ? null
+        : { retrievedCharacters, providerCalls, tokens };
+}
+
+function parseSpend(value: unknown): DiscoveryRunSpend | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const providerCalls = counted(record['providerCalls']);
+    const tokens = counted(record['tokens']);
+    const retrievedCharacters = counted(record['retrievedCharacters']);
+    const messagesRetrieved = counted(record['messagesRetrieved']);
+
+    return providerCalls === null || tokens === null || retrievedCharacters === null || messagesRetrieved === null
+        ? null
+        : { providerCalls, tokens, retrievedCharacters, messagesRetrieved };
+}
+
+function parseProgress(value: unknown): DiscoveryRetrievalProgress | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const lookupsRun = counted(record['lookupsRun']);
+    const lookupsRefused = counted(record['lookupsRefused']);
+    const lookupsPlanned = counted(record['lookupsPlanned']);
+    const passagesFound = counted(record['passagesFound']);
+
+    return lookupsRun === null || lookupsRefused === null || lookupsPlanned === null || passagesFound === null
+        ? null
+        : { lookupsRun, lookupsRefused, lookupsPlanned, passagesFound };
+}
+
+/** A count the run reported, or nothing where what arrived is not one a screen could put against a ceiling. */
+function counted(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** A name an operator chose, bounded because it is spelled onto a screen, and empty where they chose none. */
+function named(value: unknown): string | null {
+    return typeof value === 'string' && value.length <= longestEndpointName ? value : null;
 }
 
 function parseBlock(value: unknown): AnswerBlock | null {

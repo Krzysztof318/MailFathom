@@ -46,6 +46,36 @@ export const pl: Catalogue = {
     'answerBlock.unrecognisedBody':
         'Ten klient nie rozpoznaje rodzaju bloku „{named}”. Blok został pominięty — reszta wyniku wyświetliła się normalnie.',
     'answerBlock.unrecognisedRemedy': 'Aktualizacja aplikacji może odblokować ten rodzaj bloku.',
+    'run.working': 'Przeszukuję Twoją pocztę — bloki pojawiają się, gdy są gotowe.',
+    'run.retrieval': 'Przeszukano {lookups} z {planned} zapytań · {passages} fragmentów jak dotąd.',
+    'run.stop': 'Anuluj',
+    'run.stopping': 'Anuluję to uruchomienie — to, co już przyszło, zostaje.',
+    'run.stopNotReached': 'Anulowanie nie dotarło do serwera, więc uruchomienie wciąż trwa. Spróbuj ponownie.',
+    'run.allowanceReturns': 'Pytania będzie można zadawać ponownie od {at}.',
+    'run.answeredBy': 'Odpowiedział {endpoint}',
+    'run.answeredByModel': 'Odpowiedział {endpoint} ({model})',
+    'run.spend':
+        '{calls} z {mostCalls} wywołań · {tokens} z {mostTokens} tokenów · {characters} z {mostCharacters} znaków, z {messages} wiadomości',
+    'run.spendFloor': 'Liczone z tego, co zgłosił dostawca — to dolna granica, a nie rachunek.',
+    'run.ended.completed': 'To uruchomienie zakończyło się.',
+    'run.ended.cancelled':
+        'To uruchomienie zostało anulowane na Twoją prośbę. To, co przyszło, zostaje; to, co wydano, pozostaje wydane.',
+    'run.ended.gone':
+        'Ten serwer nie przechowuje już tego uruchomienia. To, co przyszło, zostaje — ponowne pytanie zaczyna nowe.',
+    'run.ended.periodSpent':
+        'Ten serwer wydał tyle, ile obecnie dopuszcza na odpowiadanie. Nic w Twoim pytaniu tego nie spowodowało.',
+    'run.ended.runSpent':
+        'Uruchomienie osiągnęło limit kosztu jednego pytania i zostało zatrzymane, zanim powstała odpowiedź. Zmienia to tylko węższe pytanie.',
+    'run.ended.timedOut': 'Uruchomienie osiągnęło najdłuższy dopuszczalny czas i zostało zatrzymane w miejscu.',
+    'run.ended.stopped':
+        'Serwer został zatrzymany w trakcie tego uruchomienia, więc nic nie zostało ustalone. Warto zadać pytanie ponownie.',
+    'run.ended.unavailable': 'Ten serwer nie odpowiada na pytania o pocztę.',
+    'run.ended.temporarilyUnavailable':
+        'Ten serwer odpowiada na pytania, ale w tej chwili nie może. Warto zadać to samo pytanie ponownie.',
+    'run.ended.retrievalRefused':
+        'Każde zapytanie zaplanowane przez to uruchomienie miało filtr, którego serwer nie przyjmuje, więc nie było z czego odpowiedzieć.',
+    'run.ended.failed':
+        'To uruchomienie zakończyło się z powodu, którego nie ujawnia. Operator znajdzie przyczynę w logach serwera.',
     'confirm.undoableFor.one': 'Możesz to cofnąć jeszcze przez {count} sekundę.',
     'confirm.undoableFor.few': 'Możesz to cofnąć jeszcze przez {count} sekundy.',
     'confirm.undoableFor.many': 'Możesz to cofnąć jeszcze przez {count} sekund.',

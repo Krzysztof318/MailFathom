@@ -29,6 +29,16 @@ function tailOf(events: readonly unknown[], running = false): string {
     return JSON.stringify({ running, events });
 }
 
+// A run's start as the deployment writes it, which is the one event whose payload this package parses in full.
+const startedEvent = {
+    event: 'started',
+    sequence: 1,
+    planSchemaVersion: 2,
+    bounds: { maximumRetrievedCharacters: 20000, maximumProviderCalls: 8, maximumTokens: 80000 },
+    endpointAlias: 'house',
+    publishedModel: '',
+};
+
 function answering(bodies: readonly string[]): { transport: MailFathomTransport; requests: ClientRequest[] } {
     const requests: ClientRequest[] = [];
 
@@ -74,10 +84,7 @@ function following(transport: MailFathomTransport, changes: SignalledChanges, fo
 describe('useFollowedRun', () => {
     it('reads the run on mount, so a run already composed draws with no hub at all', async () => {
         const { transport } = answering([
-            tailOf([
-                { event: 'started', sequence: 1, planSchemaVersion: 2 },
-                { event: 'block', sequence: 2, block: { type: 'answer' } },
-            ]),
+            tailOf([startedEvent, { event: 'block', sequence: 2, block: { type: 'answer' } }]),
         ]);
 
         const { result } = following(transport, hearing().changes);
@@ -184,6 +191,7 @@ describe('useFollowedRun', () => {
         });
 
         expect(requests).toHaveLength(1);
+        expect(result.current.ending).toBe('gone');
     });
 
     it('says the deployment is out of reach rather than dropping what arrived', async () => {

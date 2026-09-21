@@ -93,10 +93,15 @@ export {
     answerBlockTypes,
     discoveryRunRoute,
     readDiscoveryRunTail,
+    stopDiscoveryRun,
     understoodPlanSchemaVersion,
     type AnswerBlock,
     type AnswerBlockType,
+    type DiscoveryRetrievalProgress,
+    type DiscoveryRunCeilings,
+    type DiscoveryRunEnding,
     type DiscoveryRunEvent,
+    type DiscoveryRunSpend,
 } from './discoveryRun';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
 export {

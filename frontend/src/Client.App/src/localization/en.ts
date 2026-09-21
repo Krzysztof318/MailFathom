@@ -46,6 +46,33 @@ export const en = {
     'answerBlock.unrecognisedBody':
         'This client does not recognise the block type “{named}”. The block was skipped — the rest of the result rendered normally.',
     'answerBlock.unrecognisedRemedy': 'Updating the app may unlock this block type.',
+    'run.working': 'Working through your mail — blocks appear as they are ready.',
+    'run.retrieval': 'Searched {lookups} of {planned} lookups · {passages} passages so far.',
+    'run.stop': 'Cancel run',
+    'run.stopping': 'Cancelling this run — what has already arrived stays.',
+    'run.stopNotReached': 'The cancellation did not reach the server, so the run is still going. Try again.',
+    'run.allowanceReturns': 'Questions can be asked again from {at}.',
+    'run.answeredBy': 'Answered by {endpoint}',
+    'run.answeredByModel': 'Answered by {endpoint} ({model})',
+    'run.spend':
+        '{calls} of {mostCalls} calls · {tokens} of {mostTokens} tokens · {characters} of {mostCharacters} characters, from {messages} messages',
+    'run.spendFloor': 'Counted from what the provider reported, so it is a floor rather than a bill.',
+    'run.ended.completed': 'This run has finished.',
+    'run.ended.cancelled': 'You cancelled this run. What had arrived is kept; what it had spent stays spent.',
+    'run.ended.gone': 'This server no longer holds this run. What arrived is kept — asking again starts a new one.',
+    'run.ended.periodSpent':
+        'This server has spent what it allows answering to cost for now. Nothing about your question caused it.',
+    'run.ended.runSpent':
+        'The run reached what one question may cost here and was stopped before an answer was written. Asking for less is what changes it.',
+    'run.ended.timedOut': 'The run reached the longest a run may take and was stopped where it stood.',
+    'run.ended.stopped':
+        'The server stopped while this run was working, so nothing was established. The question is worth asking again.',
+    'run.ended.unavailable': 'This server does not answer questions about mail.',
+    'run.ended.temporarilyUnavailable':
+        'This server answers questions and currently cannot. The same question is worth asking again.',
+    'run.ended.retrievalRefused':
+        'Every lookup this run planned carried a filter the server refuses, so there was nothing to answer from.',
+    'run.ended.failed': 'This run ended for a reason it does not publish. An operator can read why in the server logs.',
     'confirm.undoableFor.one': 'You can take this back for {count} second afterwards.',
     'confirm.undoableFor.few': 'You can take this back for {count} seconds afterwards.',
     'confirm.undoableFor.many': 'You can take this back for {count} seconds afterwards.',
