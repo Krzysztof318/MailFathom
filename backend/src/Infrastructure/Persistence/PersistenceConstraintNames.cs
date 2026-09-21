@@ -734,6 +734,31 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string DiscoveryRunEventPrimaryKeyConstraintName = "pk_discovery_run_events";
 
+    /// <summary>The key one entry of an Agent conversation is written under.</summary>
+    /// <remarks>
+    /// Stated for the reason the Discover run's is: a conversation's places start at one and never skip, and a
+    /// composite key over the conversation and the place is what makes a second row under one number impossible
+    /// instead of unlikely. It is also the order the main read walks — everything of one conversation after a cursor.
+    /// </remarks>
+    internal const string AgentConversationEntryPrimaryKeyConstraintName = "pk_agent_conversation_entries";
+
+    /// <summary>The index a person's conversation history is read by.</summary>
+    /// <remarks>
+    /// Stated because it carries two jobs rather than one. It orders the history the client draws — one person's
+    /// conversations, most recently active first — and because the person leads it, it is also what the foreign key
+    /// and an erasure of that person reach these rows by, so no second index on the person alone is declared.
+    /// </remarks>
+    internal const string AgentConversationHistoryIndexName = "ix_agent_conversations_user_last_activity";
+
+    /// <summary>The partial index that finds where an offer a conversation made now stands.</summary>
+    /// <remarks>
+    /// Stated because of what rests on it: accepting a proposal is what permits an act with a side effect, so the
+    /// statement recording an answer is conditional on where that offer already stands, and this is what it reads. It
+    /// is partial because the rows answering an offer are a small minority of a conversation's entries, and an index
+    /// over all of them would be rewritten on every block a run composes to serve a query only a press makes.
+    /// </remarks>
+    internal const string AgentConversationAnsweredProposalIndexName = "ix_agent_conversation_entries_answered";
+
     /// <summary>The key one export of a mailbox is written under.</summary>
     internal const string MailboxExportPrimaryKeyConstraintName = "pk_mailbox_exports";
 

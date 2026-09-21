@@ -1,0 +1,308 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Text.Json.Serialization;
+using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Discovery.Presentation.Citations;
+
+namespace MailFathom.Application.Agent.Conversations;
+
+/// <summary>Somebody wrote a message: the person asking, or the agent saying something in its own words.</summary>
+/// <param name="MessageId">The message being written, which the client generated so that a post retried over a dropped connection creates no second one.</param>
+/// <param name="Author">Who wrote it.</param>
+/// <param name="Text">What they wrote.</param>
+/// <param name="Scope">What the question was asked about, and <see langword="null" /> for a message of the agent's own.</param>
+/// <remarks>
+/// <para>
+/// One entry for both authors, because a message is the same record whoever wrote it: a line of text placed in the
+/// conversation's order. What differs is that a person's message says what it was asked about and the agent's says
+/// nothing of the kind — the agent answers under the scope it was given rather than choosing one.
+/// </para>
+/// <para>
+/// <strong>The agent writes one of these for a run that was cut short</strong>, saying so and that what arrived stays.
+/// It is a message rather than a mark on the answer it followed, because it is the agent speaking about the run rather
+/// than part of what the run composed, and the person is expected to say where to pick it up.
+/// </para>
+/// <para>
+/// An answer the agent composes is not written this way: it opens with <see cref="AgentAnswerStarted" /> and says what
+/// it has to say in blocks. That is the settled shape — an answer is a presentation plan rather than prose — and it is
+/// why this entry carries text and no blocks.
+/// </para>
+/// </remarks>
+public sealed record AgentMessageWritten(
+    AgentMessageId MessageId,
+    AgentMessageAuthor Author,
+    PresentationText Text,
+    AgentMessageScope? Scope)
+    : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "message";
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+}
+
+/// <summary>The agent's answer opens, and from here until it ends everything the run composes is written into it.</summary>
+/// <param name="MessageId">The message the answer is composed into.</param>
+/// <remarks>
+/// It carries no text, because at the moment a run starts there is nothing to say yet: the status line, the sources,
+/// the blocks, and the proposals all arrive afterwards and each is its own entry. Opening the message first is what
+/// gives them somewhere to be written, and what lets a client draw the answer's place in the conversation before a
+/// single block of it exists.
+/// </remarks>
+public sealed record AgentAnswerStarted(AgentMessageId MessageId) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "answerStarted";
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override bool OpensTheAnswer => true;
+}
+
+/// <summary>Where the run has got to, in one line meant to be read while it works.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="Status">The line, which replaces whatever the run said last.</param>
+/// <remarks>
+/// <para>
+/// A recorded entry rather than state in the replica composing the answer, which is the whole reason it is here: a
+/// second screen of the same person, a reconnect, and a reload all have to see where the run stands, and only a
+/// recorded line gives them that. A reader shows the most recent one and nothing older.
+/// </para>
+/// <para>
+/// It is the agent's own words and therefore the person's language, and it is mail-derived in practice — *reading the
+/// attachments on the contract thread* names a thread — so it is sensitive exactly as the rest of the record is.
+/// </para>
+/// </remarks>
+public sealed record AgentStatusReported(AgentMessageId MessageId, PresentationText Status) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "status";
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>A source the answer's blocks rest on, declared before anything names it.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="Citation">The source, under the name the blocks refer to it by.</param>
+/// <remarks>
+/// Declared as its own entry for the reason a whole presentation plan declares its citations once: two facts drawn from
+/// one message are visibly the same source, and a reader can list what an answer rested on before it has drawn a block.
+/// It is per answer rather than per conversation, because a name is only ever resolved against the answer that declared
+/// it — two answers reusing one name mean two different sources, and merging them across a conversation would make a
+/// block cite a message it never read.
+/// </remarks>
+public sealed record AgentCitationDeclared(AgentMessageId MessageId, PresentationCitation Citation)
+    : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "citation";
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>A block of the answer is ready, and every source it names has already been declared.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="Block">The block, in the place it holds in the answer's reading order.</param>
+/// <remarks>
+/// Written where the block is composed rather than with the rest at the end, which is what lets a person watch an
+/// answer assemble and what leaves the blocks of a run that was cut short standing instead of losing them. A block that
+/// offers the person something to do is not written this way — that is <see cref="AgentActionProposed" />, which is a
+/// separate entry precisely so that a proposal can be told from a reading without parsing what it says.
+/// </remarks>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Block" /> is <see langword="null" />.</exception>
+/// <exception cref="ArgumentException">Thrown when the block is one a person acts on, which is proposed rather than composed.</exception>
+public sealed record AgentBlockComposed(AgentMessageId MessageId, PresentationBlock Block) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "block";
+
+    /// <summary>Gets the block, in the place it holds in the answer's reading order.</summary>
+    public PresentationBlock Block { get; } = Requirement.Reading(Block, nameof(Block));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>The answer offers the person something to do, which nothing does until they say so.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="Block">The block presenting the offer, which is one the person acts on.</param>
+/// <remarks>
+/// <para>
+/// <strong>A proposal is a block and is addressed by its place.</strong> The catalogue already says which types a
+/// person acts on, so nothing here invents a second shape for an offer; what this entry adds is that the offer is
+/// answerable, and the sequence it was written under is the name the answer to it is recorded against. That is also
+/// what lets the same offer be made twice in one conversation — at two places, with two outcomes — which is exactly
+/// what proposing another time is.
+/// </para>
+/// <para>
+/// It records the offer and never the carrying out of one. What an accepted action then did belongs to whatever
+/// performs it, and reaches this record only as the state the proposal ends in.
+/// </para>
+/// </remarks>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Block" /> is <see langword="null" />.</exception>
+/// <exception cref="ArgumentException">Thrown when the block is one a person only reads, which is composed rather than proposed.</exception>
+public sealed record AgentActionProposed(AgentMessageId MessageId, PresentationBlock Block) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "proposal";
+
+    /// <summary>Gets the block presenting the offer.</summary>
+    public PresentationBlock Block { get; } = Requirement.Actionable(Block, nameof(Block));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>The answer stopped being composed, and this says how.</summary>
+/// <param name="MessageId">The answer that has ended.</param>
+/// <param name="Outcome">How it stopped.</param>
+/// <remarks>
+/// Recorded rather than inferred from nothing further arriving, because a conversation read later has no other way to
+/// tell an answer that finished from one whose replica went away mid-run. Nothing it composed is removed or rolled back
+/// by any of the three outcomes: what arrived stays, and the record says what happened to the rest.
+/// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="Outcome" /> is not a declared member.</exception>
+public sealed record AgentAnswerEnded(AgentMessageId MessageId, AgentAnswerOutcome Outcome) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "answerEnded";
+
+    /// <summary>Gets how the answer stopped being composed.</summary>
+    public AgentAnswerOutcome Outcome { get; } = Requirement.Declared(Outcome, nameof(Outcome));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override bool EndsTheAnswer => true;
+}
+
+/// <summary>A proposal moved out of the state it was in, and this is where it stands now.</summary>
+/// <param name="ProposedAt">The place the offer was written at, which is what names it.</param>
+/// <param name="State">Where it stands now.</param>
+/// <remarks>
+/// <para>
+/// It names no answer, because a person answers a proposal whenever they like — including while a later answer is being
+/// composed, and long after the conversation went quiet. What it is written against is the proposal's own place in the
+/// order, which is the one name that cannot come to mean a different offer.
+/// </para>
+/// <para>
+/// <see cref="AgentProposalState.Pending" /> is refused: it is the state of a proposal nothing has been recorded
+/// against, so writing it would be recording that nothing was recorded.
+/// </para>
+/// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="ProposedAt" /> is not a written place, or when <paramref name="State" /> is not a declared member.</exception>
+/// <exception cref="ArgumentException">Thrown when the state is <see cref="AgentProposalState.Pending" />.</exception>
+public sealed record AgentProposalResolved(long ProposedAt, AgentProposalState State) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "resolution";
+
+    /// <summary>Gets the place the offer being answered was written at.</summary>
+    public long ProposedAt { get; } = Requirement.Written(ProposedAt, nameof(ProposedAt));
+
+    /// <summary>Gets where the proposal stands now, which is never pending.</summary>
+    public AgentProposalState State { get; } = Requirement.Resolved(State, nameof(State));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+}
+
+/// <summary>The checks the entries above share, kept here so each states its rule once.</summary>
+file static class Requirement
+{
+    internal static PresentationBlock Reading(PresentationBlock block, string parameter)
+    {
+        ArgumentNullException.ThrowIfNull(block, parameter);
+
+        if (block.Type.Actionable)
+        {
+            throw new ArgumentException(
+                $"A '{block.Type.Identity}' block offers the person something to do, so it is proposed rather than composed.",
+                parameter);
+        }
+
+        return block;
+    }
+
+    internal static PresentationBlock Actionable(PresentationBlock block, string parameter)
+    {
+        ArgumentNullException.ThrowIfNull(block, parameter);
+
+        if (!block.Type.Actionable)
+        {
+            throw new ArgumentException(
+                $"A '{block.Type.Identity}' block is read rather than acted on, so it is composed rather than proposed.",
+                parameter);
+        }
+
+        return block;
+    }
+
+    internal static AgentAnswerOutcome Declared(AgentAnswerOutcome outcome, string parameter) =>
+        Enum.IsDefined(outcome)
+            ? outcome
+            : throw new ArgumentOutOfRangeException(parameter, outcome, "An answer ends in a declared outcome.");
+
+    internal static long Written(long proposedAt, string parameter) =>
+        proposedAt > 0
+            ? proposedAt
+            : throw new ArgumentOutOfRangeException(
+                parameter,
+                proposedAt,
+                "A proposal is answered at the place it was written, which is counted from one.");
+
+    internal static AgentProposalState Resolved(AgentProposalState state, string parameter)
+    {
+        if (!Enum.IsDefined(state))
+        {
+            throw new ArgumentOutOfRangeException(parameter, state, "A proposal moves to a declared state.");
+        }
+
+        if (state is AgentProposalState.Pending)
+        {
+            throw new ArgumentException(
+                "Pending is the state of a proposal nothing has been recorded against, so it is never recorded.",
+                parameter);
+        }
+
+        return state;
+    }
+}

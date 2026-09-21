@@ -4,6 +4,7 @@
 
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Accounts.Configurations;
+using MailFathom.Infrastructure.Persistence.Agent.Configurations;
 using MailFathom.Infrastructure.Persistence.AiProviders.Configurations;
 using MailFathom.Infrastructure.Persistence.Answering.Configurations;
 using MailFathom.Infrastructure.Persistence.Calendar.Configurations;
@@ -236,6 +237,10 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<DiscoveryRunEventEntity> DiscoveryRunEvents => this.Set<DiscoveryRunEventEntity>();
 
+    internal DbSet<AgentConversationEntity> AgentConversations => this.Set<AgentConversationEntity>();
+
+    internal DbSet<AgentConversationEntryEntity> AgentConversationEntries => this.Set<AgentConversationEntryEntity>();
+
     /// <inheritdoc />
     /// <remarks>
     /// The order below is the order the configurations are applied in, and it is not alphabetical: a configuration that
@@ -330,5 +335,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new PersonalTaskConfiguration());
         modelBuilder.ApplyConfiguration(new DiscoveryRunConfiguration());
         modelBuilder.ApplyConfiguration(new DiscoveryRunEventConfiguration());
+        modelBuilder.ApplyConfiguration(new AgentConversationConfiguration());
+        modelBuilder.ApplyConfiguration(new AgentConversationEntryConfiguration());
     }
 }

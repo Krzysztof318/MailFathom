@@ -61,10 +61,11 @@ public readonly record struct PresentationBlockType
 
     private readonly string? identity;
 
-    private PresentationBlockType(string identity, int version)
+    private PresentationBlockType(string identity, int version, bool actionable = false)
     {
         this.identity = identity;
         this.Version = version;
+        this.Actionable = actionable;
     }
 
     #region Reading — the blocks that present what the correspondence says
@@ -95,10 +96,10 @@ public readonly record struct PresentationBlockType
     #region Acting — the blocks that present something a person may do next
 
     /// <summary>Gets the type of the block presenting text to be sent.</summary>
-    public static PresentationBlockType Draft { get; } = new(DraftIdentity, version: 1);
+    public static PresentationBlockType Draft { get; } = new(DraftIdentity, version: 1, actionable: true);
 
     /// <summary>Gets the type of the block presenting a next step somebody may take.</summary>
-    public static PresentationBlockType SuggestedAction { get; } = new(SuggestedActionIdentity, version: 1);
+    public static PresentationBlockType SuggestedAction { get; } = new(SuggestedActionIdentity, version: 1, actionable: true);
 
     #endregion
 
@@ -122,6 +123,15 @@ public readonly record struct PresentationBlockType
 
     /// <summary>Gets the revision of this block type's own contract, which every block of the type carries.</summary>
     public int Version { get; }
+
+    /// <summary>Gets whether a block of this type offers the reader something to do rather than only something to read.</summary>
+    /// <remarks>
+    /// The catalogue's own answer to which types carry controls, which is the division the two regions above already
+    /// draw and which is stated as a value here so that nothing has to recover it from a list of names. A surface that
+    /// draws the catalogue read-only ignores it; a surface that offers the controls reads it, and so does the Agent's
+    /// record, where a block the person can answer is written as a proposal and everything else as a reading.
+    /// </remarks>
+    public bool Actionable { get; }
 
     /// <summary>Gets the identity the wire uses, which survives a rename of the C# member.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a block type.</exception>
