@@ -1,6 +1,6 @@
 # Calendar events
 
-<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/CalendarEventMapping.cs, backend/src/Infrastructure/Persistence/Calendar/PersistedCalendarEventStore.cs, backend/src/Infrastructure/Persistence/Calendar/Configurations/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs -->
+<!-- describes: backend/src/Domain/Calendar/**, backend/src/Application/Calendar/**, backend/src/Infrastructure/Persistence/Calendar/CalendarEventMapping.cs, backend/src/Infrastructure/Persistence/Calendar/CalendarEventStore.cs, backend/src/Infrastructure/Persistence/Calendar/Configurations/**, backend/src/Infrastructure/Persistence/Entities/CalendarEventEntity.cs -->
 
 MailFathom holds a calendar of its own: events a person put there, and dates their mail named that nobody has agreed
 to yet, in the same PostgreSQL database the mail is in. This page describes what an event is, the difference between
