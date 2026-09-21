@@ -964,8 +964,9 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// This is the one route a caller acting for nobody reaches, so a request naming no user is an ordinary case here
-    /// rather than a refusal, and it is served the deployment's own level.
+    /// The route requires no permission and is what a client reads before it holds a credential for anything else, so
+    /// a request naming no user is an ordinary case here rather than a refusal, and it is served the deployment's own
+    /// level.
     /// </summary>
     [Fact]
     public void StatedTelemetryLevelOf_ARequestNamingNoUser_AnswersNothing()

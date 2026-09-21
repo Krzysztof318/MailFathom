@@ -235,9 +235,9 @@ internal static class ClientApiEndpoints
     /// Out of the roster rather than out of a document read, for the reason every other reader of a record's own value
     /// takes it from there: it is republished by the commit that changed it, so a level an operator just raised is
     /// answered on the next session read without a restart, and a second source would be a second answer. A request
-    /// that names no user is the ordinary case here rather than a refusal — this is the one route a caller granted
-    /// nothing reaches — and it is served the deployment's own level, which is what it was served before any record
-    /// could state one.
+    /// that names no user is an ordinary case here rather than a refusal — this route requires no permission and is
+    /// what a client reads before it holds a credential for anything else — and it is served the deployment's own
+    /// level, which is what it was served before any record could state one.
     /// </remarks>
     internal static ClientTelemetryLevel? StatedTelemetryLevelOf(
         ServedMailUsers servedUsers,
