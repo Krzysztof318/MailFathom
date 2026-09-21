@@ -283,10 +283,24 @@ export type DraftDisposition = 'Composed' | 'Saved' | 'Queued';
 
 const dispositions: readonly DraftDisposition[] = ['Composed', 'Saved', 'Queued'];
 
+/**
+ * One address a draft is addressed to.
+ *
+ * Its two halves arrive the other way round from every other participant in this contract, which is why it is a type of
+ * its own: the address is what a draft is addressed to and is always there, and the name is whatever the correspondence
+ * wrote beside it. Which of the two a screen shows where the correspondence wrote no name is that screen's decision.
+ */
+export interface DraftRecipient {
+    readonly address: string;
+
+    /** The name the correspondence wrote beside the address, and `null` where it wrote none. */
+    readonly displayName: string | null;
+}
+
 /** Text to be sent, where the answer to the question is a message rather than a fact about one. */
 export interface ComposedDraft {
     /** Who it is addressed to, each of them named once. */
-    readonly recipients: readonly BlockParticipant[];
+    readonly recipients: readonly DraftRecipient[];
 
     readonly subject: string;
 
@@ -555,7 +569,7 @@ export function parseComposedDraft(value: unknown): ComposedDraft | null {
         return null;
     }
 
-    const recipients = parsedItems(record['recipients'], mostRecipients, parseRecipient);
+    const recipients = parsedItems(record['recipients'], mostRecipients, parseAddress);
     const subject = parseText(record['subject']);
     const body = parseText(record['body']);
     const disposition = oneOf(record['disposition'], dispositions);
@@ -564,7 +578,11 @@ export function parseComposedDraft(value: unknown): ComposedDraft | null {
         return null;
     }
 
-    const addressed = recipients.map((recipient) => recipient.address);
+    // In the form two addresses compare equal in, which is the upper-cased one the contract's own comparison form is
+    // written in: a repeat differing only in case is one mailbox, and comparing what the header wrote would draw it as
+    // two people. The field carrying that form is not read instead, because requiring it would refuse a draft over a
+    // value no screen shows.
+    const addressed = recipients.map((recipient) => recipient.address.toUpperCase());
 
     return new Set(addressed).size !== addressed.length ? null : { recipients, subject, body, disposition };
 }
@@ -572,11 +590,15 @@ export function parseComposedDraft(value: unknown): ComposedDraft | null {
 /**
  * A next step a run suggested, or `null` where what arrived is not one this client may offer.
  *
- * The one refusal that is about safety rather than shape: an action whose impact says mail leaves the deployment, or
- * that something in the mailbox changes, and which claims it needs no confirming, is not drawn at all. Nothing here can
- * recall a sent message, so a suggestion that arrived saying it may be taken unasked is either a deployment that broke
- * its own rule or something that reached the plan on the way — and a screen that drew it would be one control away from
- * acting on it. The service already refuses the sending half; this refuses both halves, on the side that would do it.
+ * The one refusal that is about safety rather than shape: an action whose impact says mail leaves the deployment and
+ * which claims it needs no confirming is not drawn at all. Nothing here can recall a sent message, so a suggestion that
+ * arrived saying it may be sent unasked is either a deployment that broke its own rule or something that reached the
+ * plan on the way — and a screen that drew it would be one control away from acting on it.
+ *
+ * It refuses exactly what `SuggestedActionBlock` refuses and nothing beyond it. A step that changes something in the
+ * mailbox and states no confirmation is one the service permits — the flag is the producer's answer rather than a
+ * function of the impact — so refusing it here would collapse the whole run tail into `unreadable` over a block the
+ * renderer already draws as needing confirmation, and the cursor would fetch the same tail and fail the same way.
  */
 export function parseSuggestedAction(value: unknown): SuggestedAction | null {
     const record = asRecord(value);
@@ -593,7 +615,7 @@ export function parseSuggestedAction(value: unknown): SuggestedAction | null {
         return null;
     }
 
-    return impact !== 'ReadsOnly' && !requiresConfirmation ? null : { action, reason, impact, requiresConfirmation };
+    return impact === 'SendsMail' && !requiresConfirmation ? null : { action, reason, impact, requiresConfirmation };
 }
 
 function parseTimelineEntry(value: unknown): TimelineEntry | null {
@@ -755,19 +777,12 @@ function parseParticipant(value: unknown): BlockParticipant | null {
 }
 
 /**
- * One recipient of a draft, which is a mail address rather than a name with an address beside it.
+ * One mail address as the contract carries it, or `null` where what arrived is not one.
  *
- * So the two halves arrive the other way round from every other participant in this contract: the address is what the
- * draft is addressed to and is always there, and the display name is whatever the correspondence wrote beside it.
+ * That pairing is what a draft's recipient is, which is why it answers with `DraftRecipient` rather than with a shape of
+ * its own: an address the draft is addressed to, and whatever name the correspondence wrote beside it.
  */
-function parseRecipient(value: unknown): BlockParticipant | null {
-    const address = parseAddress(value);
-
-    return address === null ? null : { displayName: address.displayName ?? address.address, address: address.address };
-}
-
-/** One mail address as the contract carries it, or `null` where what arrived is not one. */
-function parseAddress(value: unknown): { readonly address: string; readonly displayName: string | null } | null {
+function parseAddress(value: unknown): DraftRecipient | null {
     const record = asRecord(value);
     if (record === null) {
         return null;
@@ -778,8 +793,9 @@ function parseAddress(value: unknown): { readonly address: string; readonly disp
         return null;
     }
 
-    // The comparison form the contract carries beside it is read by nothing here: it exists so that two addresses
-    // differing in case compare equal, which is a question this side of the boundary never asks.
+    // The comparison form the contract carries beside it is not read: where this side does ask whether two addresses are
+    // one — a draft addressed to somebody twice — it upper-cases what arrived rather than requiring a field no screen
+    // shows, which `parseComposedDraft` says at the comparison itself.
     const named = record['displayName'];
     if (named === undefined || named === null) {
         return { address, displayName: null };

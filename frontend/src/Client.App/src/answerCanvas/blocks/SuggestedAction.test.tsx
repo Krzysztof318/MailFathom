@@ -91,6 +91,17 @@ describe('SuggestedAction', () => {
         },
     );
 
+    it.each(['SendsMail', 'ChangesMailbox'] as const)(
+        'draws a %s step that claims it needs no confirming as needing it, the impact deciding that much',
+        (impact: SuggestedActionImpact) => {
+            // The parser refuses only the sending half of this, which is what the service refuses; a reversible step
+            // stating no confirmation reaches the screen, and the screen is what refuses to offer it unasked.
+            renderSuggestion(suggested({ impact, requiresConfirmation: false }));
+
+            expect(screen.getByText('needs confirmation')).toBeDefined();
+        },
+    );
+
     it('asks for no confirmation where the step only shows somebody something', () => {
         renderSuggestion(suggested({ impact: 'ReadsOnly', requiresConfirmation: false }));
 

@@ -3,7 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useId, useState } from 'react';
-import type { AnswerBlock, BlockParticipant } from '@mailfathom/client-backend';
+import type { AnswerBlock, DraftRecipient } from '@mailfathom/client-backend';
+import { Icon } from '../../controls/Icon';
 import { useLocalization, type Translate } from '../../localization/useLocalization';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
 import { Citation } from './Citation';
@@ -27,15 +28,16 @@ import { draftDispositions, supportVerdicts } from './blockWording';
 /**
  * Who a draft is addressed to, as one list in the reader's own language.
  *
- * The address is drawn beside the name wherever the two differ, because somebody about to put their name to a message
- * is checking who it goes to rather than who the correspondence calls them — and a name alone is exactly what hides a
- * reply addressed to the wrong one of two people called the same thing. `Intl` joins them, so which separator a language
+ * The address is drawn beside the name wherever the correspondence wrote one, because somebody about to put their name
+ * to a message is checking who it goes to rather than who the correspondence calls them — and a name alone is exactly
+ * what hides a reply addressed to the wrong one of two people called the same thing. Where it wrote none, the address
+ * stands alone, which is this screen's answer to a missing name rather than the contract's. `Intl` joins them, so which separator a language
  * uses and what it puts before the last one are the locale's answers rather than a comma written here.
  */
-function addressedTo(recipients: readonly BlockParticipant[], locale: string, translate: Translate): string {
+function addressedTo(recipients: readonly DraftRecipient[], locale: string, translate: Translate): string {
     const named = recipients.map((recipient) =>
-        recipient.address === null || recipient.address === recipient.displayName
-            ? recipient.displayName
+        recipient.displayName === null
+            ? recipient.address
             : translate('draft.recipient', { name: recipient.displayName, address: recipient.address }),
     );
 
@@ -48,7 +50,12 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
 
     // The edit is this block's own state and nothing outside it reads one, which is why it is held here rather than
     // lifted: it is what somebody is typing, not a copy of anything the deployment holds.
-    const [edited, setEdited] = useState<string | null>(null);
+    //
+    // Two pieces rather than one, because closing the editor and discarding what was typed are two different acts and
+    // only one of them was asked for: *Stop editing* puts the text back as a paragraph, and what it says is still what
+    // the reader wrote. Nothing here throws away an edit, which is what the sentence under the area promises.
+    const [editing, setEditing] = useState(false);
+    const [typed, setTyped] = useState<string | null>(null);
 
     if (block.type !== 'draft') {
         return <UnrecognisedAnswerBlock named={block.named} />;
@@ -56,6 +63,7 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
 
     const { draft, evidence } = block;
     const verdict = supportVerdicts[evidence.support];
+    const body = typed ?? draft.body;
 
     return (
         <AnswerBlockCard label={translate('draft.label')} state="ready">
@@ -65,6 +73,7 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                 </span>
 
                 <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
+                    <Icon className="size-3.25" name={verdict.icon} />
                     {translate(verdict.label)}
                 </span>
             </div>
@@ -82,27 +91,29 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                     <span className="font-semibold">{draft.subject}</span>
                 </p>
 
-                {edited === null ? (
-                    <p className="text-sm leading-relaxed whitespace-pre-line text-text-soft text-pretty">
-                        {draft.body}
-                    </p>
-                ) : (
+                {editing ? (
                     <>
                         <label className="text-2xs tracking-wider text-muted uppercase" htmlFor={written}>
                             {translate('draft.bodyLabel')}
                         </label>
 
+                        {/* Focus goes where it was asked for: the control that opened the area is after it in the
+                            document, so a reader who did not get the caret would have to come back past every citation
+                            the draft carries. */}
                         <textarea
                             className="min-h-32 w-full rounded-md border border-line bg-panel px-2.75 py-2 text-sm leading-relaxed focus-visible:border-accent"
                             id={written}
-                            value={edited}
+                            autoFocus
+                            value={body}
                             onChange={(event) => {
-                                setEdited(event.target.value);
+                                setTyped(event.target.value);
                             }}
                         />
 
                         <p className="text-xs text-faint text-pretty">{translate('draft.editKept')}</p>
                     </>
+                ) : (
+                    <p className="text-sm leading-relaxed whitespace-pre-line text-text-soft text-pretty">{body}</p>
                 )}
 
                 {evidence.citations.length === 0 ? null : (
@@ -118,10 +129,10 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                 className="self-start rounded-md border border-line-strong px-3 py-1.75 text-sm text-text-soft transition hover:bg-hover"
                 type="button"
                 onClick={() => {
-                    setEdited(edited === null ? draft.body : null);
+                    setEditing(!editing);
                 }}
             >
-                {translate(edited === null ? 'draft.edit' : 'draft.stopEditing')}
+                {translate(editing ? 'draft.stopEditing' : 'draft.edit')}
             </button>
         </AnswerBlockCard>
     );

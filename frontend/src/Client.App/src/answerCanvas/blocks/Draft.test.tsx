@@ -55,6 +55,11 @@ function renderDraft(block: AnswerBlock) {
     );
 }
 
+/** Every control the card offers, by the name it is announced under, so a control added later has to be accounted for. */
+function controlsOffered(): readonly (string | null)[] {
+    return screen.getAllByRole('button').map((control) => control.getAttribute('aria-label') ?? control.textContent);
+}
+
 describe('Draft', () => {
     it('shows who it is addressed to, what it is about, and what it says', () => {
         renderDraft(drafted());
@@ -90,7 +95,7 @@ describe('Draft', () => {
             evidence: backed,
             draft: {
                 ...composed,
-                recipients: [{ displayName: 'anna@contoso.example', address: 'anna@contoso.example' }],
+                recipients: [{ displayName: null, address: 'anna@contoso.example' }],
             },
         });
 
@@ -110,11 +115,15 @@ describe('Draft', () => {
     it('offers no way to send it, sending belonging to the surface that governs sending', () => {
         renderDraft(drafted());
 
-        const named = screen
-            .getAllByRole('button')
-            .map((control) => control.getAttribute('aria-label') ?? control.textContent);
+        expect(controlsOffered()).toEqual(['Citation 1: Contract addendum — signatures', 'Edit the text']);
+    });
 
-        expect(named).toEqual(['Citation 1: Contract addendum — signatures', 'Edit the text']);
+    it('offers no way to send it while the text is open either, which is where a Send would be added', () => {
+        renderDraft(drafted());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
+
+        expect(controlsOffered()).toEqual(['Citation 1: Contract addendum — signatures', 'Stop editing']);
     });
 
     it('shows what the draft was written from, so it can be checked before anybody puts their name to it', () => {
@@ -130,6 +139,33 @@ describe('Draft', () => {
 
         const written = screen.getByRole('textbox', { name: 'Draft text' });
         fireEvent.change(written, { target: { value: 'We accept, with a 5% cap.' } });
+
+        expect(screen.getByRole('textbox', { name: 'Draft text' })).toHaveProperty(
+            'value',
+            'We accept, with a 5% cap.',
+        );
+    });
+
+    it('puts the caret in the text it was asked to open, the control that opened it sitting after the area', () => {
+        renderDraft(drafted());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
+
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Draft text' }));
+    });
+
+    it('keeps what was typed when the editor closes, closing it being what was asked for rather than discarding it', () => {
+        renderDraft(drafted());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Draft text' }), {
+            target: { value: 'We accept, with a 5% cap.' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Stop editing' }));
+
+        expect(screen.getByText('We accept, with a 5% cap.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit the text' }));
 
         expect(screen.getByRole('textbox', { name: 'Draft text' })).toHaveProperty(
             'value',

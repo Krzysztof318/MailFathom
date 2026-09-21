@@ -508,6 +508,15 @@ describe('parseConversationStanding', () => {
         expect(parseConversationStanding({ ...standing, agreements: [{ text: 'Agreed', sources: [''] }] })).toBeNull();
     });
 
+    it('refuses more participants than one standing may name', () => {
+        expect(
+            parseConversationStanding({
+                ...standing,
+                participants: Array.from({ length: 31 }, () => ({ displayName: 'Karolina Kowalska', address: null })),
+            }),
+        ).toBeNull();
+    });
+
     it('refuses more statements in one list than the contract composes', () => {
         expect(
             parseConversationStanding({
@@ -541,13 +550,13 @@ describe('parseComposedDraft', () => {
         });
     });
 
-    it('names a recipient the message wrote no name beside by their address', () => {
+    it('carries no name for a recipient the message wrote none beside, rather than the address twice', () => {
         const parsed = parseComposedDraft({
             ...draft,
             recipients: [{ address: 'anna@contoso.example', normalizedAddress: 'ANNA@CONTOSO.EXAMPLE' }],
         });
 
-        expect(parsed?.recipients[0]?.displayName).toBe('anna@contoso.example');
+        expect(parsed?.recipients[0]).toEqual({ displayName: null, address: 'anna@contoso.example' });
     });
 
     it('refuses a draft addressed to nobody, the recipients being part of what a message is', () => {
@@ -556,6 +565,24 @@ describe('parseComposedDraft', () => {
 
     it('refuses a draft naming one recipient twice, which would be drawn as two people', () => {
         expect(parseComposedDraft({ ...draft, recipients: [anna, { ...anna }] })).toBeNull();
+    });
+
+    it('refuses one recipient named twice in two spellings of one address, case deciding nothing here', () => {
+        expect(
+            parseComposedDraft({
+                ...draft,
+                recipients: [anna, { ...anna, address: 'Anna@Contoso.example' }],
+            }),
+        ).toBeNull();
+    });
+
+    it('refuses more recipients than one draft may name', () => {
+        expect(
+            parseComposedDraft({
+                ...draft,
+                recipients: Array.from({ length: 21 }, (_, at) => ({ ...anna, address: `anna-${String(at)}@a.test` })),
+            }),
+        ).toBeNull();
     });
 
     it.each(['subject', 'body'])('refuses a draft carrying no %s', (member) => {
@@ -584,12 +611,17 @@ describe('parseSuggestedAction', () => {
         });
     });
 
-    it.each(['SendsMail', 'ChangesMailbox'])(
-        'refuses a step whose impact is %s and which claims it needs no confirming',
-        (impact) => {
-            expect(parseSuggestedAction({ ...suggestion, impact, requiresConfirmation: false })).toBeNull();
-        },
-    );
+    it('refuses a step that sends mail and claims it needs no confirming, nothing here recalling one', () => {
+        expect(parseSuggestedAction({ ...suggestion, requiresConfirmation: false })).toBeNull();
+    });
+
+    it('reads a reversible step stating no confirmation, which the service permits and the screen still confirms', () => {
+        expect(parseSuggestedAction({ ...suggestion, impact: 'ChangesMailbox', requiresConfirmation: false })).toEqual({
+            ...suggestion,
+            impact: 'ChangesMailbox',
+            requiresConfirmation: false,
+        });
+    });
 
     it('reads a step that only shows somebody something and asks for no confirmation', () => {
         const parsed = parseSuggestedAction({ ...suggestion, impact: 'ReadsOnly', requiresConfirmation: false });

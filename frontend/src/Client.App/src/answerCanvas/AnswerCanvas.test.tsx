@@ -45,6 +45,70 @@ function Drawn({ block }: { readonly block: AnswerBlock }) {
 
 const renderers: AnswerBlockRenderers = { evidenceList: Drawn };
 
+// One block per type this change registered, each paired with a sentence only its own renderer draws. Every renderer
+// takes the same props, so `people: ThreadState` compiles and falls through to the unknown-block sentence at run time —
+// which is what these pairs catch and what a registry keyed by hand otherwise has nothing asserting it.
+const registered: readonly { readonly block: AnswerBlock; readonly draws: string }[] = [
+    {
+        block: {
+            type: 'people',
+            named: 'people',
+            evidence: backed,
+            entries: [
+                {
+                    person: { displayName: 'Anna Kowalska', address: null },
+                    relationship: 'Contoso · waiting for a reply',
+                    lastContactAt: null,
+                    sources: [],
+                },
+            ],
+        },
+        draws: 'Contoso · waiting for a reply',
+    },
+    {
+        block: {
+            type: 'threadState',
+            named: 'threadState',
+            evidence: backed,
+            standing: {
+                participants: [],
+                agreements: [{ text: 'SLA cut from 4 h to 2 h', sources: [] }],
+                openQuestions: [],
+                commitments: [],
+            },
+        },
+        draws: 'SLA cut from 4 h to 2 h',
+    },
+    {
+        block: {
+            type: 'draft',
+            named: 'draft',
+            evidence: backed,
+            draft: {
+                recipients: [{ displayName: null, address: 'anna@contoso.example' }],
+                subject: 'Re: proposed terms for 2027',
+                body: 'We accept shortening the response time.',
+                disposition: 'Composed',
+            },
+        },
+        draws: 'We accept shortening the response time.',
+    },
+    {
+        block: {
+            type: 'suggestedAction',
+            named: 'suggestedAction',
+            evidence: backed,
+            suggestion: {
+                action: 'OpenThread',
+                reason: 'The answer quoted one message of it.',
+                impact: 'ReadsOnly',
+                requiresConfirmation: false,
+            },
+        },
+        draws: 'Read the whole conversation',
+    },
+];
+
 function renderCanvas(blocks: readonly ArrivedAnswerBlock[], canvas: Partial<Parameters<typeof AnswerCanvas>[0]> = {}) {
     return render(
         <LocalizationProvider>
@@ -190,31 +254,11 @@ describe('AnswerCanvas', () => {
     // a real block's data. This one omits it, so what is under test is the build's own registry: a renderer written and
     // never registered, or registered under a neighbouring type's key, is a block drawn as unknown on a screen where
     // nothing else looks wrong.
-    it('draws a block through the build’s own registry rather than through one a caller supplied', () => {
+    it.each(registered)('draws a $block.type block through the build’s own registry', ({ block, draws }) => {
         render(
             <LocalizationProvider>
                 <AnswerCanvas
-                    blocks={[
-                        {
-                            sequence: 1,
-                            block: {
-                                type: 'suggestedAction',
-                                named: 'suggestedAction',
-                                evidence: {
-                                    support: 'Supported',
-                                    citations: ['c-1'],
-                                    freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
-                                    conflictingClaims: [],
-                                },
-                                suggestion: {
-                                    action: 'OpenThread',
-                                    reason: 'The answer quoted one message of it.',
-                                    impact: 'ReadsOnly',
-                                    requiresConfirmation: false,
-                                },
-                            },
-                        },
-                    ]}
+                    blocks={[{ sequence: 1, block }]}
                     planSchemaVersion={2}
                     running={false}
                     sources={new Map()}
@@ -222,7 +266,7 @@ describe('AnswerCanvas', () => {
             </LocalizationProvider>,
         );
 
-        expect(screen.getByText('Read the whole conversation')).toBeDefined();
+        expect(screen.getByText(draws)).toBeDefined();
         expect(screen.queryByText('Unknown block')).toBeNull();
     });
 });

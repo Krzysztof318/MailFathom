@@ -9,6 +9,7 @@ import type {
     ThreadCommitment,
     ThreadStatement,
 } from '@mailfathom/client-backend';
+import { Icon } from '../../controls/Icon';
 import { SenderAvatar } from '../../controls/SenderAvatar';
 import type { MessageKey } from '../../localization/en';
 import { wordInstant } from '../../localization/instants';
@@ -47,7 +48,10 @@ export function ThreadState({ block }: { readonly block: AnswerBlock }) {
         <AnswerBlockCard
             label={translate('threadStanding.label')}
             meta={
-                standing.participants.length === 0
+                // Counted off the same emptiness the card is, rather than off the participants alone: a standing whose
+                // three lists are empty draws its empty state and no children at all, so a count beside it would tell a
+                // reader the block holds two participants while showing them nothing.
+                said === 0 || standing.participants.length === 0
                     ? undefined
                     : translate(participantCounts[new Intl.PluralRules(locale).select(standing.participants.length)], {
                           count: new Intl.NumberFormat(locale).format(standing.participants.length),
@@ -57,6 +61,7 @@ export function ThreadState({ block }: { readonly block: AnswerBlock }) {
             state={said === 0 ? 'empty' : 'ready'}
         >
             <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
+                <Icon className="size-3.25" name={verdict.icon} />
                 {translate(verdict.label)}
             </span>
 
@@ -218,7 +223,7 @@ function Commitment({
 
     return (
         <>
-            {translate(...owing(commitment.text, owedBy, due))}
+            {translate(...owing(commitment.text, owedBy, commitment.dueAt, due))}
 
             {commitment.sources.map((source) => (
                 <span className="ms-1 inline-flex" key={source}>
@@ -229,13 +234,24 @@ function Commitment({
     );
 }
 
-// Which of the four sentences a commitment reads as, decided from what the correspondence actually gave rather than
+// Which of the six sentences a commitment reads as, decided from what the correspondence actually gave rather than
 // assembled from pieces: where a value falls in the sentence is the language's answer and not this screen's.
+//
+// A due date stated unreadably is two of the six rather than none, because dropping it would read as a commitment nobody
+// set a deadline for — the thing the run said it has one is what a reader is owed, even where the date itself did not
+// read. `stated` is what the run sent and `due` is what it was worded as, so the pair says which of the two happened.
 function owing(
     text: string,
     owedBy: string | null,
+    stated: string | null,
     due: string | null,
 ): [MessageKey, Readonly<Record<string, string>>] {
+    if (stated !== null && due === null) {
+        return owedBy === null
+            ? ['threadStanding.commitmentDueUnreadable', { what: text }]
+            : ['threadStanding.commitmentOwedByDueUnreadable', { what: text, name: owedBy }];
+    }
+
     if (owedBy !== null && due !== null) {
         return ['threadStanding.commitmentOwedByDue', { what: text, name: owedBy, when: due }];
     }

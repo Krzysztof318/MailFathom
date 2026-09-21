@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import type { AnswerBlock, PersonEntry } from '@mailfathom/client-backend';
+import { Icon } from '../../controls/Icon';
 import { SenderAvatar } from '../../controls/SenderAvatar';
 import { wordRecentInstant } from '../../localization/instants';
 import { useLocalization } from '../../localization/useLocalization';
@@ -56,6 +57,7 @@ export function People({ block }: { readonly block: AnswerBlock }) {
             state={entries.length === 0 ? 'empty' : 'ready'}
         >
             <span className={`flex w-fit items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
+                <Icon className="size-3.25" name={verdict.icon} />
                 {translate(verdict.label)}
             </span>
 
@@ -104,10 +106,18 @@ function Person({
 
             <div className="ms-auto flex flex-wrap items-center gap-1.5">
                 {/* The instant the service sent is what the element carries, and the reader's own wording is what it
-                    shows: the two are different things and neither replaces the other. */}
+                    shows: the two are different things and neither replaces the other.
+
+                    A contact nothing established and a contact whose date did not read are two sentences, because the
+                    first is the correspondence being silent and the second is a producer that broke the contract —
+                    saying "no contact established" about the second would assert what the run did not say. */}
                 {entry.lastContactAt === null || last === null ? (
                     <span className="text-xs whitespace-nowrap text-faint">
-                        {translate('answer.peopleLastContactNone')}
+                        {translate(
+                            entry.lastContactAt === null
+                                ? 'answer.peopleLastContactNone'
+                                : 'answer.peopleLastContactUnreadable',
+                        )}
                     </span>
                 ) : (
                     <time className="text-xs whitespace-nowrap text-faint" dateTime={entry.lastContactAt}>

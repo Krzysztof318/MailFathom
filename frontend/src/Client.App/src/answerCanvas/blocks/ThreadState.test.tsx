@@ -52,8 +52,8 @@ function stood(over: Partial<ConversationStanding> = {}): AnswerBlock {
     return { type: 'threadState', named: 'threadState', evidence: backed, standing: { ...standing, ...over } };
 }
 
-function renderStanding(block: AnswerBlock) {
-    const declared = new Map([[addendum.id, addendum]]);
+function renderStanding(block: AnswerBlock, sources: readonly DeclaredSource[] = [addendum]) {
+    const declared = new Map(sources.map((source) => [source.id, source]));
 
     return render(
         <LocalizationProvider>
@@ -103,6 +103,31 @@ describe('ThreadState', () => {
         renderStanding(stood({ commitments: [{ ...counterProposal, owedBy: null, dueAt: null }] }));
 
         expect(screen.getByText('Counter-proposal with a 5% cap')).toBeDefined();
+    });
+
+    it('says a due date it could not read was stated rather than dropping it to no date at all', () => {
+        renderStanding(stood({ commitments: [{ ...counterProposal, dueAt: 'sometime next spring' }] }));
+
+        expect(
+            screen.getByText('Karolina Kowalska — Counter-proposal with a 5% cap · due date not readable'),
+        ).toBeDefined();
+    });
+
+    it('numbers a source a statement names and the block does not by its place after the block’s own', () => {
+        renderStanding(stood({ agreements: [{ text: 'SLA cut from 4 h to 2 h', sources: ['c-2'] }] }), [
+            addendum,
+            { ...addendum, id: 'c-2', label: 'CPI calculation 2027' },
+        ]);
+
+        // The block's own citations are numbered first, so a source only a statement rests on follows them rather than
+        // falling before the first one.
+        expect(screen.getByRole('button', { name: 'Citation 2: CPI calculation 2027' })).toBeDefined();
+    });
+
+    it('draws no participant count where the card draws no participants, the two reading off one emptiness', () => {
+        renderStanding(stood({ agreements: [], openQuestions: [], commitments: [] }));
+
+        expect(screen.queryByText('2 participants')).toBeNull();
     });
 
     it.each([

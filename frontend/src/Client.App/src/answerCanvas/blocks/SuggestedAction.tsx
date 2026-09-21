@@ -22,9 +22,10 @@ import { actionImpacts, suggestedActions, supportVerdicts } from './blockWording
 //
 // **Anything that leaves or changes a mailbox is drawn as needing confirmation, whatever the block claims.** The
 // contract lets a producer state that flag itself, and a step that mutates or sends is confirmed regardless — so the
-// screen reads the two together rather than trusting one of them. `parseSuggestedAction` refuses such a block outright
-// on the way in; this is the same rule where it is drawn, so a member added to the impact set later cannot arrive as an
-// unconfirmed step by default.
+// screen reads the two together rather than trusting one of them. This is the only place that rule is applied to a
+// reversible step: `parseSuggestedAction` refuses an unconfirmed *sending* step, which is what the service refuses too,
+// and reads everything else through — so a member added to the impact set later cannot arrive as an unconfirmed step by
+// default, and a run is not lost over a block this card already draws correctly.
 //
 // The sentences are `confirmation/ProposedAction.tsx`'s, because this says the same four things that component says and
 // a second wording of *why*, *what would change*, and *nothing has happened yet* is how one product comes to describe
@@ -77,6 +78,7 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
 
             <p className="flex flex-wrap items-center gap-2">
                 <span className={`flex items-center gap-1 rounded-full px-2.25 py-0.5 text-2xs ${verdict.tint}`}>
+                    <Icon className="size-3.25" name={verdict.icon} />
                     {translate(verdict.label)}
                 </span>
 

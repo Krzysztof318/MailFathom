@@ -115,6 +115,13 @@ describe('People', () => {
         expect(screen.getByText('no contact established')).toBeDefined();
     });
 
+    it('tells a last contact it could not read apart from one nothing established', () => {
+        renderPeople(found([{ ...anna, lastContactAt: 'ostatnio' }]));
+
+        // Saying "no contact established" here would assert about the correspondence what only the date failed to say.
+        expect(screen.getByText('last contact date not readable')).toBeDefined();
+    });
+
     it('draws no row as a control, there being nowhere on this canvas to open a person', () => {
         renderPeople(found([anna]));
 
