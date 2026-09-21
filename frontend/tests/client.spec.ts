@@ -754,10 +754,20 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     await page.keyboard.press('Tab');
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeFocused();
 
-    // Past the question's own two controls, the bar's five places in the order the design project draws them: three
-    // spaces, then the bell, then the overflow that holds everything else — the account among it.
+    // Past the question's own two controls, the questions Discover offers. They are the space's own contents rather
+    // than the frame's, and a keyboard meets them before the navigation for the reason this whole test exists: the
+    // document puts the space first whatever the narrow layout draws at the foot of the window.
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'What am I still owed an answer on?' })).toBeFocused();
+
+    // Then the bar's five places in the order the design project draws them: three spaces, then the bell, then the
+    // overflow that holds everything else — the account among it. Reached from the last question rather than by
+    // tabbing through the two between, which would count the list instead of stating where it ends.
+    await page
+        .getByRole('button', { name: 'Which version of the contract is the latest one anybody sent me?' })
+        .focus();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Discover' })).toBeFocused();
 
