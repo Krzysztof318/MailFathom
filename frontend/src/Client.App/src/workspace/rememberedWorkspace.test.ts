@@ -149,6 +149,21 @@ describe('rememberWorkspace', () => {
 
         expect(rememberedWorkspace().citedAttachment).toBeNull();
     });
+
+    // The other half of the same act: a citation pressed in an answer names the message and the reading pane finishes
+    // it, so a reload landing in the middle of it would open a conversation out of a result it has already dropped.
+    it('keeps no message an answer’s citation named', () => {
+        rememberWorkspace({ ...kept, citedMessage: 'AAMkAD-cited' });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('AAMkAD-cited');
+        expect(rememberedWorkspace().citedMessage).toBeNull();
+    });
+
+    it('opens no cited message for anybody where a store was edited to carry one', () => {
+        window.sessionStorage.setItem(storageKey, JSON.stringify({ ...kept, citedMessage: 'AAMkAD-cited' }));
+
+        expect(rememberedWorkspace().citedMessage).toBeNull();
+    });
 });
 
 describe('rememberedWorkspace', () => {
