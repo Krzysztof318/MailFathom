@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.AI.Retrieval;
 using Microsoft.Extensions.AI;
 
@@ -84,12 +85,25 @@ internal sealed class ScriptedAnsweringChatClient : IChatClient
 
         Name(arguments, "senderAddress", senderAddress);
         Name(arguments, "subjectFragment", subjectFragment);
-        Name(arguments, "receivedOnOrAfter", receivedOnOrAfter?.ToString("O"));
-        Name(arguments, "receivedBefore", receivedBefore?.ToString("O"));
+        Name(arguments, "receivedOnOrAfter", AnchoredWallClock(receivedOnOrAfter));
+        Name(arguments, "receivedBefore", AnchoredWallClock(receivedBefore));
         Name(arguments, "hasAttachments", hasAttachments);
 
         return arguments;
     }
+
+    /// <summary>Writes one received bound the way a model writes it, which is the only way the tool accepts one.</summary>
+    /// <param name="bound">The instant to write, or <see langword="null" /> to name no bound.</param>
+    /// <returns>The wall clock, or <see langword="null" /> where no bound was named.</returns>
+    /// <remarks>
+    /// A bound reaches the tool as a wall clock read back against the anchor the turn stated, so it carries no zone and
+    /// no <c>Z</c>: one written in any other form is refused and reported to the model rather than dropped, which for a
+    /// script that never writes again is a run that retrieves nothing. The <c>T</c> is quoted because this is a format
+    /// string rather than the prose form the tool's own description quotes, and the zone this suite's people read their
+    /// days in is the coordinated one, so the instants a test states are already the wall clocks they anchor to.
+    /// </remarks>
+    private static string? AnchoredWallClock(DateTimeOffset? bound) =>
+        bound?.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     public Task<ChatResponse> GetResponseAsync(
