@@ -31,6 +31,17 @@ public sealed class PresentationBlockTypeTests
         Assert.Equal(identities.Length, identities.Distinct(StringComparer.Ordinal).Count());
     }
 
+    /// <summary>Which types carry controls is what decides whether a block is recorded as a reading or as an offer.</summary>
+    [Fact]
+    public void Actionable_TheCatalogue_NamesTheTwoTypesAReaderActsOn()
+    {
+        // Act
+        var actionable = PresentationBlockType.All.Where(blockType => blockType.Actionable).ToArray();
+
+        // Assert
+        Assert.Equal([PresentationBlockType.Draft, PresentationBlockType.SuggestedAction], actionable);
+    }
+
     /// <summary>A version below one would say a block was written against no revision of its own contract.</summary>
     [Fact]
     public void All_TheCatalogue_GivesEveryTypeAVersion()

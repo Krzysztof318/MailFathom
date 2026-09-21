@@ -1,6 +1,6 @@
 # Stored email schema
 
-<!-- describes: backend/src/Infrastructure/Persistence/**, backend/src/Domain/Emails/**, backend/src/Domain/Delivery/**, backend/src/Domain/Exports/**, backend/src/Application/Emails/Embeddings/** -->
+<!-- describes: backend/src/Infrastructure/Persistence/**, backend/src/Domain/Emails/**, backend/src/Domain/Delivery/**, backend/src/Domain/Exports/**, backend/src/Application/Emails/Embeddings/**, backend/src/Application/Agent/Conversations/** -->
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
@@ -1283,6 +1283,55 @@ past it is refused with `429` rather than admitted. And every row is swept on th
 read, and ten minutes after any run was opened. The sweep runs on a worker on every replica once per retention window
 as one conditional statement, and on the path that opens a run as well — the worker rather than the open alone, because
 storage limitation over mail-derived rows cannot depend on somebody asking another question.
+
+## An Agent conversation and what was said in it
+
+`agent_conversations` holds one row per conversation somebody is having with the Agent, and
+`agent_conversation_entries` holds everything said in it, one row per thing said. The pair is the Discover run's pair
+one step further on, and for the same reason: the same
+[ADR 0035](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md)
+delivery, where an answer is written as it is composed and a client re-reads from the place it already holds. What
+differs is that a conversation outlives the run that answered into it: a Discover run is opened for one question and
+swept minutes later, while a conversation is somebody's history of asking.
+
+An entry is the record and a turn is a reading of it. A question, the opening of an answer, a status line, a citation,
+a composed block, an offer, an answer's ending, and an answer to an offer are eight kinds of entry, and the turns a
+screen draws are folded out of them in order rather than stored. That is what makes the cursor read one query: a client
+holding a place asks for everything past it and gets exactly the entries it has not seen, whichever turn each belongs
+to.
+
+| `agent_conversations` column | What it records |
+|---|---|
+| `Id` | The identifier the conversation is addressed by, and the primary key |
+| `UserId` | Whose conversation it is, which is who may read it. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, and it leads the history index below |
+| `Title` | What the conversation is called, at most 120 characters, and null until something composes one. A conversation exists from its first question, which is before anything has read enough of it to name it |
+| `StartedAt` | When the conversation was opened |
+| `LastActivityAt` | When anything was last written into it. It is what a person's history is ordered by, which is why it trails the user in the index rather than sitting in one of its own |
+| `Sequence` | The place the last entry was written at. It is advanced inside the statement that writes the next one, so the number is the database's rather than one a replica counted — and the row lock that advance takes is what serializes the two writers a conversation genuinely has, a person typing while a run composes |
+| `ComposingMessageId` | Which answer is being composed, and null where none is. It is what refuses a second answer opening while one is open, and what refuses a part of an answer arriving after that answer has ended — both as conditions on this row rather than as a check some replica performs and then acts on |
+
+| `agent_conversation_entries` column | What it records |
+|---|---|
+| `ConversationId`, `Sequence`, together the primary key | Which conversation this belongs to and the place it holds in it, counted from one. The place comes from the column above, so the composite key makes a gap and a repeat both impossible |
+| `Kind` | The entry contract's own published name for this kind of entry, at most 64 characters, for the reason `discovery_run_events` carries one |
+| `Payload` | The entry itself as `json`, written by its own serialization contract. `json` rather than `jsonb` for the reason stated there: an entry is a polymorphic document whose discriminator is read nowhere but first, and `jsonb` reorders the keys of everything it holds |
+| `AnsweredProposalAt` | Which offer this entry answers, as that offer's own place, and null on every other kind. An offer is addressed by where it was made rather than by the turn it belongs to, which is what lets the same offer be made twice and answered differently each time |
+| `ProposalState` | Where that offer now stands, by name, and null on every other kind. It is a column rather than only a field of the payload so the statement recording an answer can read what the last one said without deserializing anything |
+| `WrittenAt` | When the entry was written |
+
+**This is mail content, and it is classified as mail content.** A question is what somebody asked about their own
+correspondence and a composed block quotes it back, so `Payload` inherits every obligation the mail it was drawn from
+carries. Nothing here is logged, nothing here reaches an instrument, and the row cascades twice — an entry from its
+conversation and a conversation from the user record — so erasing a person takes every conversation they had and
+everything said in one.
+
+**Two indexes and four bounds hold it.** `ix_agent_conversations_user_last_activity` over
+`(UserId, LastActivityAt DESC)` is a person's history, which is the only shape that listing takes, and it answers the
+cascade's own lookup as well. `ix_agent_conversation_entries_answered` over `(ConversationId, AnsweredProposalAt)` is
+partial over the rows where that column is not null, because answers to offers are a small minority of what a
+conversation holds and an index over all of them would be rewritten on every block a run composes to serve a query only
+a press makes. The bounds are a conversation's entry count, refused in the same statement that would write past it, the
+title's length, how many entries one read returns, and how many conversations one listing returns.
 
 ## The whole-mailbox rule run an account has outstanding
 

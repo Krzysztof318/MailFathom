@@ -8,6 +8,7 @@ using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar;
 using MailFathom.Application.Calendar.Extraction;
@@ -136,6 +137,7 @@ using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
+using MailFathom.Infrastructure.Persistence.Agent;
 using MailFathom.Infrastructure.Persistence.AiProviders;
 using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.Calendar;
@@ -1134,6 +1136,10 @@ public static class ServiceCollectionExtensions
         // run, and one whose client never comes back reaches nothing that is still held here.
         services.AddSingleton<IDiscoveryRunStore, DiscoveryRunStore>();
         services.AddSingleton<ExecutingDiscoveryRuns>();
+        // A singleton for the same reason and one more: a conversation is durable, so it is written by a run that
+        // outlives every request it was reached over and read by requests that reach any replica, and the store holds
+        // nothing between calls beyond the data source every one of them opens a command on.
+        services.AddSingleton<IAgentConversationStore, AgentConversationStore>();
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one

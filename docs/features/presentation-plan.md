@@ -83,6 +83,11 @@ beside the data below.
 | `draft` | the result is text to be sent | recipients, subject, body, and what has become of it locally |
 | `suggestedAction` | there is a sensible next step | which step, why, what it would change, and whether it must be confirmed |
 
+**Two of the nine offer the reader something to do**, and the catalogue says which: `draft` and `suggestedAction`
+carry controls where a surface draws them with any, while the other seven are read. A Discover run's answer is drawn
+read-only throughout, so nothing there acts on the distinction; the Agent's record does, writing a block the person can
+answer as a proposal it can then record an outcome against, and everything else as a reading.
+
 Three of them are worth a note.
 
 **A fact table's columns come from a catalogue** rather than from the producer, and a column carries no heading. A
