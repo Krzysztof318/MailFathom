@@ -62,7 +62,7 @@ public sealed record AgentConversation
     /// <param name="entries">The entries, from the conversation's beginning, in the order they were written.</param>
     /// <returns>What the entries say when they are read together.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="entries" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when an entry writes into a turn the entries before it never opened, or answers an offer they never made.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry writes into a turn the entries before it never opened, answers an offer they never made, opens a turn they had already opened, or is of a kind this reading does not know.</exception>
     /// <remarks>
     /// <para>
     /// It takes the conversation from its beginning, which a bounded read of one also gives: a turn is opened before

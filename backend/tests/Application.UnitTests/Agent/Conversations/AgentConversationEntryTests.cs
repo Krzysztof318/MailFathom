@@ -63,6 +63,28 @@ public sealed class AgentConversationEntryTests
         Assert.Throws<ArgumentException>(() => new AgentStatusReported(message, default));
     }
 
+    [Fact]
+    public void Constructor_AMessageWrittenByAnAuthorTheSetDoesNotDeclare_IsRefused()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentMessageWritten(message, (AgentMessageAuthor)42, PresentationText.Create("Anything."), null));
+    }
+
+    /// <summary>A source is a reference, so the one value the language always admits is the one nothing can cite.</summary>
+    [Fact]
+    public void Constructor_ACitationOfNothing_IsRefused()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => new AgentCitationDeclared(message, null!));
+    }
+
     /// <summary>Pending is the state of an offer nothing has been recorded against, so recording it records nothing.</summary>
     [Fact]
     public void Constructor_AnOfferMovedToPending_IsRefused()

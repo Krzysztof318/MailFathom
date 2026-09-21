@@ -30,6 +30,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// why this entry carries text and no blocks.
 /// </para>
 /// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="Author" /> is not a declared member.</exception>
 /// <exception cref="ArgumentException">Thrown when <paramref name="Text" /> is the unspecified struct default.</exception>
 public sealed record AgentMessageWritten(
     AgentMessageId MessageId,
@@ -40,6 +41,9 @@ public sealed record AgentMessageWritten(
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "message";
+
+    /// <summary>Gets who wrote it.</summary>
+    public AgentMessageAuthor Author { get; } = Requirement.Authored(Author, nameof(Author));
 
     /// <summary>Gets what was written, which is always something.</summary>
     public PresentationText Text { get; } = Requirement.Spoken(Text, nameof(Text));
@@ -113,11 +117,15 @@ public sealed record AgentStatusReported(AgentMessageId MessageId, PresentationT
 /// it — two answers reusing one name mean two different sources, and merging them across a conversation would make a
 /// block cite a message it never read.
 /// </remarks>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Citation" /> is <see langword="null" />.</exception>
 public sealed record AgentCitationDeclared(AgentMessageId MessageId, PresentationCitation Citation)
     : AgentConversationEntry
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "citation";
+
+    /// <summary>Gets the source, under the name the answer's blocks refer to it by.</summary>
+    public PresentationCitation Citation { get; } = Citation ?? throw new ArgumentNullException(nameof(Citation));
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -283,6 +291,11 @@ file static class Requirement
 
         return block;
     }
+
+    internal static AgentMessageAuthor Authored(AgentMessageAuthor author, string parameter) =>
+        Enum.IsDefined(author)
+            ? author
+            : throw new ArgumentOutOfRangeException(parameter, author, "A turn is written by a declared author.");
 
     internal static PresentationText Spoken(PresentationText text, string parameter) =>
         text.IsSpecified
