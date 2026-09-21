@@ -3452,7 +3452,7 @@ public sealed class MailboxSynchronizerTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(900)
             .Holding(accountId, 900)
-            .Assigning(SyntheticMailUser.Deployment, accountId);
+            .Assigning(SyntheticUser.Deployment, accountId);
         var ceiling = new StoredContentCeiling(claims, 100_000, 1000);
         var arrangement = ArrangeContentRun(
             options,

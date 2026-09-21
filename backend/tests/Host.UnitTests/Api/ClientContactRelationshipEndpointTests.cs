@@ -272,18 +272,18 @@ public sealed class ClientContactRelationshipEndpointTests
         return readTelemetry;
     }
 
-    private static IMailUserLanguages LanguagesAnsweringEnglish()
+    private static IUserLanguages LanguagesAnsweringEnglish()
     {
-        var languages = Substitute.For<IMailUserLanguages>();
+        var languages = Substitute.For<IUserLanguages>();
 
-        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(MailUserLanguage.English);
+        languages.LanguageOf(Arg.Any<UserId>()).Returns(UserLanguage.English);
 
         return languages;
     }
 
     /// <summary>The caller this route is reached by, which holds every grant the answer needs.</summary>
     private static AccessAuthorization Granted() => AccessAuthorizations.ForUserGranted(
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         MailFathomPermission.MailAsk,
         MailFathomPermission.MailRead,
         MailFathomPermission.MailContactsRead);

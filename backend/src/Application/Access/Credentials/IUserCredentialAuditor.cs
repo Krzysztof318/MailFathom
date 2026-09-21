@@ -51,7 +51,7 @@ public interface IUserCredentialAuditor
 public sealed record UserCredentialChange(
     UserCredentialAct Act,
     Guid CredentialId,
-    MailUserId User,
+    UserId User,
     UserCredentialMethod? Method,
     string ActingAdministrator,
     DateTimeOffset OccurredAt);

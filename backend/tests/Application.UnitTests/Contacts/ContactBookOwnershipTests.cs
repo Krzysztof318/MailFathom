@@ -37,10 +37,10 @@ public sealed class ContactBookOwnershipTests
         var store = new InMemoryContactBookStore();
         var theirs = ContactOf("Anna Kowalska", "anna@example.test");
         var ours = ContactOf("Marek Nowak", "marek@example.test");
-        store.Hold(SyntheticMailUser.Deployment, theirs);
-        store.Hold(SyntheticMailUser.Another, ours);
+        store.Hold(SyntheticUser.Deployment, theirs);
+        store.Hold(SyntheticUser.Another, ours);
 
-        var reader = ReaderOf(store, SyntheticMailUser.Another);
+        var reader = ReaderOf(store, SyntheticUser.Another);
 
         // Act
         var page = await reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
@@ -56,9 +56,9 @@ public sealed class ContactBookOwnershipTests
     {
         // Arrange
         var store = new InMemoryContactBookStore();
-        store.Hold(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", "anna@example.test"));
+        store.Hold(SyntheticUser.Deployment, ContactOf("Anna Kowalska", "anna@example.test"));
 
-        var reader = ReaderOf(store, SyntheticMailUser.Another);
+        var reader = ReaderOf(store, SyntheticUser.Another);
 
         // Act
         var found = await reader.FindByAddressAsync(
@@ -80,16 +80,16 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         var collected = CollectedContactOf("Anna Kowalska", "anna@example.test");
         store.Hold(SyntheticMailAccount.Deployment, collected);
 
         // Act
-        var first = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+        var first = await ReaderOf(store, SyntheticUser.Deployment, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
-        var second = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+        var second = await ReaderOf(store, SyntheticUser.Another, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
@@ -110,18 +110,18 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         var collected = CollectedContactOf("anna@example.test", "anna@example.test");
         var written = ContactOf("Anna Kowalska", "anna@example.test");
         store.Hold(SyntheticMailAccount.Deployment, collected);
-        store.Hold(SyntheticMailUser.Deployment, written);
+        store.Hold(SyntheticUser.Deployment, written);
 
         // Act
-        var wroteItDown = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+        var wroteItDown = await ReaderOf(store, SyntheticUser.Deployment, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
-        var didNot = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+        var didNot = await ReaderOf(store, SyntheticUser.Another, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
@@ -142,14 +142,14 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
 
         var collected = CollectedContactOf("Anna Kowalska", "anna@work.test", "anna@home.test");
         var written = ContactOf("Anna Kowalska", "anna@work.test");
         store.Hold(SyntheticMailAccount.Deployment, collected);
-        store.Hold(SyntheticMailUser.Deployment, written);
+        store.Hold(SyntheticUser.Deployment, written);
 
-        var reader = ReaderOf(store, SyntheticMailUser.Deployment, assignments);
+        var reader = ReaderOf(store, SyntheticUser.Deployment, assignments);
 
         // Act
         var byTheHiddenAddress = await reader.FindByAddressAsync(
@@ -177,7 +177,7 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments().Assigning(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             SyntheticMailAccount.Another,
             SyntheticMailAccount.Deployment);
 
@@ -187,7 +187,7 @@ public sealed class ContactBookOwnershipTests
         store.Hold(SyntheticMailAccount.Another, onTheSecond);
 
         // Act
-        var page = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+        var page = await ReaderOf(store, SyntheticUser.Deployment, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
@@ -204,14 +204,14 @@ public sealed class ContactBookOwnershipTests
     {
         // Arrange
         var store = new InMemoryContactBookStore();
-        store.Hold(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", "anna@example.test"));
+        store.Hold(SyntheticUser.Deployment, ContactOf("Anna Kowalska", "anna@example.test"));
 
         var ours = ContactOf("Anna Kowalska", "anna@work.test");
-        store.Hold(SyntheticMailUser.Another, ours);
+        store.Hold(SyntheticUser.Another, ours);
 
         var resolver = new NamedRecipientResolver(
             store,
-            ContactBookOwnerships.For(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another)));
+            ContactBookOwnerships.For(AccessAuthorizations.ForUserGranted(SyntheticUser.Another)));
 
         // Act
         var resolution = await resolver.ResolveAsync(
@@ -232,11 +232,11 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var theirs = ContactOf("Anna Kowalska", "anna@example.test");
-        store.Hold(SyntheticMailUser.Deployment, theirs);
+        store.Hold(SyntheticUser.Deployment, theirs);
 
         var resolver = new NamedRecipientResolver(
             store,
-            ContactBookOwnerships.For(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another)));
+            ContactBookOwnerships.For(AccessAuthorizations.ForUserGranted(SyntheticUser.Another)));
 
         // Act
         var resolution = await resolver.ResolveAsync(
@@ -259,21 +259,21 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var theirs = ContactOf("Anna Kowalska", "anna@example.test");
-        store.Hold(SyntheticMailUser.Deployment, theirs);
+        store.Hold(SyntheticUser.Deployment, theirs);
 
-        var book = BookOf(store, SyntheticMailUser.Another, MailFathomPermission.MailContactsWrite);
+        var book = BookOf(store, SyntheticUser.Another, MailFathomPermission.MailContactsWrite);
 
         // Act
         var result = await book.RecordAsync(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             NewContactOf("Anna Kowalska", "anna@example.test"),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.Written, result.Outcome);
         Assert.NotEqual(theirs.Id, result.Contact?.Id);
-        Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticMailUser.Deployment)));
-        Assert.Equal(result.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailUser.Another)).Id);
+        Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticUser.Deployment)));
+        Assert.Equal(result.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticUser.Another)).Id);
     }
 
     /// <summary>Collection writes into the account's book alone, whichever users happen to be assigned it.</summary>
@@ -289,8 +289,8 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         var book = CollectingBookOf(store);
 
@@ -300,17 +300,17 @@ public sealed class ContactBookOwnershipTests
             NewContactOf("Anna Kowalska", "anna@example.test") with { Origin = ContactOrigin.Collected },
             TestContext.Current.CancellationToken);
 
-        var read = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+        var read = await ReaderOf(store, SyntheticUser.Deployment, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
-        var readByTheOther = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+        var readByTheOther = await ReaderOf(store, SyntheticUser.Another, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.Written, collected.Outcome);
         Assert.Equal(1, store.ContactCount);
         Assert.Equal(collected.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailAccount.Deployment)).Id);
-        Assert.Empty(store.ContactsOf(SyntheticMailUser.Deployment));
-        Assert.Empty(store.ContactsOf(SyntheticMailUser.Another));
+        Assert.Empty(store.ContactsOf(SyntheticUser.Deployment));
+        Assert.Empty(store.ContactsOf(SyntheticUser.Another));
         Assert.Equal(collected.Contact?.Id, Assert.Single(read.Contacts).Id);
         Assert.Equal(collected.Contact?.Id, Assert.Single(readByTheOther.Contacts).Id);
     }
@@ -327,14 +327,14 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
 
         store.Hold(SyntheticMailAccount.Deployment, CollectedContactOf("Anna Kowalska", "anna@example.test"));
 
         // Act
-        var assigned = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+        var assigned = await ReaderOf(store, SyntheticUser.Deployment, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
-        var unassigned = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+        var unassigned = await ReaderOf(store, SyntheticUser.Another, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
@@ -349,19 +349,19 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var theirs = ContactOf("Anna Kowalska", "anna@example.test");
-        store.Hold(SyntheticMailUser.Deployment, theirs);
+        store.Hold(SyntheticUser.Deployment, theirs);
 
-        var book = BookOf(store, SyntheticMailUser.Another, MailFathomPermission.AdminErase);
+        var book = BookOf(store, SyntheticUser.Another, MailFathomPermission.AdminErase);
 
         // Act
         var erasure = await book.EraseAsync(
-            ContactBookScope.OfOwnBookAlone(SyntheticMailUser.Another),
+            ContactBookScope.OfOwnBookAlone(SyntheticUser.Another),
             theirs.Id,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(erasure.WasHeld);
-        Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticMailUser.Deployment)));
+        Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticUser.Deployment)));
     }
 
     /// <summary>Erasing a collected record takes it out of the account's book, which is to say for every user assigned it.</summary>
@@ -375,20 +375,20 @@ public sealed class ContactBookOwnershipTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         var collected = CollectedContactOf("Anna Kowalska", "anna@example.test");
         store.Hold(SyntheticMailAccount.Deployment, collected);
 
-        var book = BookOf(store, SyntheticMailUser.Deployment, MailFathomPermission.AdminErase);
+        var book = BookOf(store, SyntheticUser.Deployment, MailFathomPermission.AdminErase);
 
         // Act
         var erasure = await book.EraseAsync(
-            new ContactBookScopes(assignments).Of(SyntheticMailUser.Deployment),
+            new ContactBookScopes(assignments).Of(SyntheticUser.Deployment),
             collected.Id,
             TestContext.Current.CancellationToken);
-        var theOther = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+        var theOther = await ReaderOf(store, SyntheticUser.Another, assignments)
             .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
@@ -398,7 +398,7 @@ public sealed class ContactBookOwnershipTests
 
     private static ContactBookReader ReaderOf(
         InMemoryContactBookStore store,
-        MailUserId user,
+        UserId user,
         StubMailAccountAssignments? assignments = null)
     {
         var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailContactsRead);
@@ -411,7 +411,7 @@ public sealed class ContactBookOwnershipTests
 
     private static ContactBook BookOf(
         InMemoryContactBookStore store,
-        MailUserId user,
+        UserId user,
         params MailFathomPermission[] grantedPermissions) =>
         BookOf(store, AccessAuthorizations.ForUserGranted(user, grantedPermissions));
 

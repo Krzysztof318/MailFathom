@@ -71,7 +71,7 @@ public interface IUserCredentialStore
     /// <returns>The credentials, oldest first, at most <see cref="UserCredential.MaximumListedPerUser" /> of them, empty when the user holds none or does not exist.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <remarks>Bounded by that ceiling rather than by what an administrator happened to provision, and never read across users. There is no cursor past it, for the reason the ceiling states.</remarks>
-    Task<IReadOnlyList<UserCredential>> ReadForUserAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserCredential>> ReadForUserAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Provisions a new credential for one user.</summary>
     /// <param name="credentialId">The identifier the new credential is to carry.</param>
@@ -86,7 +86,7 @@ public interface IUserCredentialStore
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="method" /> or <paramref name="lookup" /> is the unspecified struct default, <paramref name="credentialId" /> is the empty identifier, or <paramref name="material" /> disagrees with what <paramref name="method" /> stores.</exception>
     Task<UserCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
-        MailUserId user,
+        UserId user,
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
@@ -109,7 +109,7 @@ public interface IUserCredentialStore
     /// moves with it.
     /// </remarks>
     Task<UserCredentialWriteOutcome> ReplaceMaterialAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         UserCredentialMethod method,
         UserCredentialLookup lookup,
@@ -144,7 +144,7 @@ public interface IUserCredentialStore
     /// </para>
     /// </remarks>
     Task<UserCredentialWriteOutcome> RewriteMaterialAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         string verifiedMaterial,
         string material,
@@ -158,7 +158,7 @@ public interface IUserCredentialStore
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
     Task<UserCredentialWriteOutcome> SetEnabledAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         bool enabled,
         CancellationToken cancellationToken);
@@ -171,7 +171,7 @@ public interface IUserCredentialStore
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
     /// <remarks>Deleting frees the lookup for another credential, which is what separates it from disabling one: a disabled credential still holds its name.</remarks>
     Task<UserCredentialWriteOutcome> DeleteAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         CancellationToken cancellationToken);
 }

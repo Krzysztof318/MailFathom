@@ -415,9 +415,9 @@ public sealed class MailFolderParticipationOptionsTests
         // Arrange
         var options = new MailSynchronizationOptions().WithServedUsers(
         [
-            User(SyntheticMailUser.Deployment, CreateAccount(new MailFolderMappingOptions { Alias = "private", RemotePath = "Private" })),
+            User(SyntheticUser.Deployment, CreateAccount(new MailFolderMappingOptions { Alias = "private", RemotePath = "Private" })),
             User(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 CreateAccount("secondary", new MailFolderMappingOptions
                 {
                     Alias = "private",
@@ -439,7 +439,7 @@ public sealed class MailFolderParticipationOptionsTests
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
         new MailSynchronizationOptions().Serving(account);
 
-    private static ServedMailUser User(MailUserId user, MailSynchronizationAccountOptions account) =>
+    private static ServedUser User(UserId user, MailSynchronizationAccountOptions account) =>
         new(user, "the user this deployment serves", [account]);
 
     private static MailSynchronizationAccountOptions CreateAccount(params MailFolderMappingOptions[] folders) =>

@@ -129,7 +129,7 @@ public sealed class MailDraftPromotion
     /// </remarks>
     public async Task<OutgoingEmailRecord> PromoteAsync(
         MailDraftId draftId,
-        MailUserId writtenBy,
+        UserId writtenBy,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailSend);

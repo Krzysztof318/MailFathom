@@ -56,7 +56,7 @@ public sealed class AssignedMailAccountCatalog : ICallerMailAccountCatalog
     public bool SynchronizationEnabled => this.servedAccounts.SynchronizationEnabled;
 
     /// <inheritdoc />
-    public MailUserId User => this.authorization.RequireUser();
+    public UserId User => this.authorization.RequireUser();
 
     /// <inheritdoc />
     /// <remarks>

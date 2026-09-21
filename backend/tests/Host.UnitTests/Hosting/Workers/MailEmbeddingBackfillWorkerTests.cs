@@ -614,7 +614,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         var ledger = Substitute.For<IEmbeddingSpendLedger>();
         ledger.ReadConsumedInputCharactersAsync(
                 Arg.Any<DateTimeOffset>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<CancellationToken>())
             .Returns(new EmbeddingSpendTotals(
                 consumedInputCharacterCount,
@@ -688,7 +688,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
             world.TimeProvider));
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
         IMailAccountAssignments assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         services.AddSingleton(assignments);
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

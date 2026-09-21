@@ -45,9 +45,9 @@ public sealed record UserPasswordAuthenticationResult
     /// <exception cref="ArgumentException">Thrown when the identifier is empty or <paramref name="user" /> names nobody.</exception>
     public static UserPasswordAuthenticationResult Authenticated(
         Guid authenticatedCredentialId,
-        MailUserId user,
+        UserId user,
         IReadOnlyList<MailFathomPermission> permissions,
-        MailUserEndpointAccess endpointAccess)
+        UserEndpointAccess endpointAccess)
     {
         ArgumentNullException.ThrowIfNull(permissions);
 

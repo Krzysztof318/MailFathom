@@ -19,17 +19,17 @@ public sealed class ServedUserLanguagesTests
 {
     /// <summary>What a user's record states is what this deployment writes for them in.</summary>
     [Theory]
-    [InlineData(MailUserLanguage.Polish)]
-    [InlineData(MailUserLanguage.English)]
-    public void LanguageOf_AUserTheRosterHolds_AnswersTheLanguageTheirRecordStates(MailUserLanguage language)
+    [InlineData(UserLanguage.Polish)]
+    [InlineData(UserLanguage.English)]
+    public void LanguageOf_AUserTheRosterHolds_AnswersTheLanguageTheirRecordStates(UserLanguage language)
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", [], language));
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", [], language));
         var languages = new ServedUserLanguages(roster);
 
         // Act
-        var answer = languages.LanguageOf(SyntheticMailUser.Deployment);
+        var answer = languages.LanguageOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Equal(language, answer);
@@ -43,15 +43,15 @@ public sealed class ServedUserLanguagesTests
     public void LanguageOf_AUserTheRosterDoesNotHold_AnswersEnglish()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", [], MailUserLanguage.Polish));
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", [], UserLanguage.Polish));
         var languages = new ServedUserLanguages(roster);
 
         // Act
-        var answer = languages.LanguageOf(SyntheticMailUser.Another);
+        var answer = languages.LanguageOf(SyntheticUser.Another);
 
         // Assert
-        Assert.Equal(MailUserLanguage.English, answer);
+        Assert.Equal(UserLanguage.English, answer);
     }
 
     /// <summary>Nothing derives before the gate has run, and a read that gets there first answers rather than throwing.</summary>
@@ -59,13 +59,13 @@ public sealed class ServedUserLanguagesTests
     public void LanguageOf_ADeploymentWhoseGateHasNotRun_AnswersEnglish()
     {
         // Arrange
-        var languages = new ServedUserLanguages(new ServedMailUsers());
+        var languages = new ServedUserLanguages(new ServedUsers());
 
         // Act
-        var answer = languages.LanguageOf(SyntheticMailUser.Deployment);
+        var answer = languages.LanguageOf(SyntheticUser.Deployment);
 
         // Assert
-        Assert.Equal(MailUserLanguage.English, answer);
+        Assert.Equal(UserLanguage.English, answer);
     }
 
     /// <summary>
@@ -76,18 +76,18 @@ public sealed class ServedUserLanguagesTests
     public void LanguageOf_ARecordRepublishedWithAnotherLanguage_AnswersTheNewOne()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", [], MailUserLanguage.English));
+        var roster = ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", [], UserLanguage.English));
         var languages = new ServedUserLanguages(roster);
 
         // Act
         roster.UserDocumentPublished(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "alex",
-            new UserAccountOptions { Language = nameof(MailUserLanguage.Polish) },
+            new UserAccountOptions { Language = nameof(UserLanguage.Polish) },
             version: 2);
 
         // Assert
-        Assert.Equal(MailUserLanguage.Polish, languages.LanguageOf(SyntheticMailUser.Deployment));
+        Assert.Equal(UserLanguage.Polish, languages.LanguageOf(SyntheticUser.Deployment));
     }
 }

@@ -48,7 +48,7 @@ public sealed class ContactBookOwnership
 
     /// <summary>Gets the user whose own book this caller's writes go into.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under a principal acting for no user.</exception>
-    public MailUserId User => this.authorization.RequireUser();
+    public UserId User => this.authorization.RequireUser();
 
     /// <summary>Gets the books this caller reads: their own first, then the collected book of each account they are assigned.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under a principal acting for no user.</exception>

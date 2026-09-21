@@ -8,7 +8,7 @@ namespace MailFathom.TestSupport;
 
 /// <summary>The mailboxes a test arranges when which mailbox it is does not matter, only that there are two of them.</summary>
 /// <remarks>
-/// The counterpart of <see cref="SyntheticMailUser" />, and stated here for the same reason: two fixed identities so a
+/// The counterpart of <see cref="SyntheticUser" />, and stated here for the same reason: two fixed identities so a
 /// failure names the same value every run, rather than one generated per suite. The mail graph is keyed by the account
 /// alone, so most tests that used to need one user and somebody else now need one mailbox and another one.
 /// </remarks>

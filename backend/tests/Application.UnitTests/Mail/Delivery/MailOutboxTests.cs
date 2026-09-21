@@ -240,7 +240,7 @@ public sealed class MailOutboxTests
 
         var request = OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Rule("archive", "r1", StoredEmailId.Create(Guid.CreateVersion7())),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
 
@@ -792,7 +792,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Schedule(RecurringSendId.Create(Guid.CreateVersion7()), DueAt),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
@@ -803,7 +803,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Rule("auto-reply", "revision-1", StoredEmailId.Create(Guid.CreateVersion7())),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
@@ -823,7 +823,7 @@ public sealed class MailOutboxTests
 
         return OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command(invocationIdentity),
             recipients);
     }

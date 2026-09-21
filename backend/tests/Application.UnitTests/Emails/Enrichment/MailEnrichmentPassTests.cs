@@ -35,7 +35,7 @@ public sealed class MailEnrichmentPassTests
 
     private static readonly DateTimeOffset DerivedAt = new(2026, 9, 6, 8, 30, 0, TimeSpan.Zero);
 
-    private static readonly MailUserId Owner = MailUserId.Create(Guid.CreateVersion7());
+    private static readonly UserId Owner = UserId.Create(Guid.CreateVersion7());
 
     [Fact]
     public async Task RunAsync_MailAwaitingADerivation_WritesOneRecordPerMessage()
@@ -260,7 +260,7 @@ public sealed class MailEnrichmentPassTests
                 task!.Title == "Answer the supplier"
                 && task.DueOn == new DateOnly(2026, 9, 11)
                 && task.Origin == PersonalTaskOrigin.Proposed
-                && task.User == SyntheticMailUser.Deployment
+                && task.User == SyntheticUser.Deployment
                 && task.SourceMessage == email.StoredEmailId),
             Arg.Any<CancellationToken>());
         await taskStore.Received(1).AddAsync(
@@ -373,7 +373,7 @@ public sealed class MailEnrichmentPassTests
             Arg.Any<CancellationToken>());
         await events.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<CalendarEvent>(),
             Arg.Any<CancellationToken>());
     }
@@ -464,7 +464,7 @@ public sealed class MailEnrichmentPassTests
             Arg.Any<CancellationToken>());
         await events.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<CalendarEvent>(),
             Arg.Any<CancellationToken>());
     }
@@ -520,7 +520,7 @@ public sealed class MailEnrichmentPassTests
             proposals ?? ProposalsOver(InactiveExtractor(), Substitute.For<ICalendarEventStore>()),
             LanguagesAnswering(language),
             new MailDerivedTaskProposals(
-                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
+                new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, Account),
                 taskStore ?? Substitute.For<IPersonalTaskStore>(),
                 timeProvider),
             SensitiveContentEgressGuards.Inactive(),

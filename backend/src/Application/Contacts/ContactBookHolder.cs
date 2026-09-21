@@ -42,7 +42,7 @@ public sealed record ContactBookHolder
     /// <summary>The prefix a mail account's collected book's key carries, which is what keeps it out of the users'.</summary>
     public const string AccountKeyPrefix = "account:";
 
-    private ContactBookHolder(ContactOrigin origin, string key, MailUserId? user, MailAccountId? account)
+    private ContactBookHolder(ContactOrigin origin, string key, UserId? user, MailAccountId? account)
     {
         this.Origin = origin;
         this.Key = key;
@@ -57,7 +57,7 @@ public sealed record ContactBookHolder
     public string Key { get; }
 
     /// <summary>Gets the user whose own book this is, or <see langword="null" /> when it is a mail account's.</summary>
-    public MailUserId? User { get; }
+    public UserId? User { get; }
 
     /// <summary>Gets the mail account whose collected book this is, or <see langword="null" /> when it is a user's own.</summary>
     public MailAccountId? Account { get; }
@@ -65,7 +65,7 @@ public sealed record ContactBookHolder
     /// <summary>Names one user's own book, which holds the people they wrote down.</summary>
     /// <param name="user">The user.</param>
     /// <returns>The holder.</returns>
-    public static ContactBookHolder Of(MailUserId user) =>
+    public static ContactBookHolder Of(UserId user) =>
         new(ContactOrigin.Asserted, UserKeyPrefix + user.Value.ToString("D"), user, account: null);
 
     /// <summary>Names one mail account's book, which holds the people its mail says it corresponds with.</summary>

@@ -135,7 +135,7 @@ internal static class AuthoredSendGovernors
         /// the second is a refusal. A read narrowed on this user returns nothing because the accounts are empty, not
         /// because the user is absent.
         /// </remarks>
-        public MailUserId User => SyntheticMailUser.Deployment;
+        public UserId User => SyntheticUser.Deployment;
     }
 
     /// <summary>A deployment whose accounts declare no sending address.</summary>

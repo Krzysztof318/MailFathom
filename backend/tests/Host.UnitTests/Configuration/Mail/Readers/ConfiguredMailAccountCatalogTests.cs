@@ -19,11 +19,11 @@ namespace MailFathom.Host.UnitTests.Configuration.Mail.Readers;
 /// </remarks>
 public sealed class ConfiguredMailAccountCatalogTests
 {
-    private static readonly MailUserId Alex =
-        MailUserId.Create(new Guid("1a7f6b1c-2d3e-4f50-8a91-b2c3d4e5f601"));
+    private static readonly UserId Alex =
+        UserId.Create(new Guid("1a7f6b1c-2d3e-4f50-8a91-b2c3d4e5f601"));
 
-    private static readonly MailUserId Morgan =
-        MailUserId.Create(new Guid("2b8f7c2d-3e4f-4a61-9b02-c3d4e5f6a712"));
+    private static readonly UserId Morgan =
+        UserId.Create(new Guid("2b8f7c2d-3e4f-4a61-9b02-c3d4e5f6a712"));
 
     /// <summary>Every mailbox a served user's record declares is published, under the identifier it carries.</summary>
     /// <remarks>
@@ -37,7 +37,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         var settings = Synchronizing();
         var catalog = new ConfiguredMailAccountCatalog(
             settings,
-            ResolvedServedMailUsers.Serving(
+            ResolvedServedUsers.Serving(
                 Declaring(Alex, "alex", Mailbox("alex-work", "Alex at work")),
                 Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))));
 
@@ -60,7 +60,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         var settings = Synchronizing();
         var catalog = new ConfiguredMailAccountCatalog(
             settings,
-            ResolvedServedMailUsers.Serving(
+            ResolvedServedUsers.Serving(
                 Declaring(Morgan, "morgan", Mailbox("zeta", "Morgan at zeta"), Mailbox("beta", "Morgan at beta")),
                 Declaring(Alex, "alex", Mailbox("alpha", "Alex at alpha"))));
 
@@ -79,8 +79,8 @@ public sealed class ConfiguredMailAccountCatalogTests
         var settings = Synchronizing();
         var catalog = new ConfiguredMailAccountCatalog(
             settings,
-            ResolvedServedMailUsers.Serving(
-                new ServedMailUser(Alex, "alex", MailAccounts: []),
+            ResolvedServedUsers.Serving(
+                new ServedUser(Alex, "alex", MailAccounts: []),
                 Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))));
 
         // Act
@@ -98,8 +98,8 @@ public sealed class ConfiguredMailAccountCatalogTests
         var settings = Synchronizing();
         var catalog = new ConfiguredMailAccountCatalog(
             settings,
-            ResolvedServedMailUsers.Serving(
-                new ServedMailUser(
+            ResolvedServedUsers.Serving(
+                new ServedUser(
                     Alex,
                     "alex",
                     [Mailbox("alex-adopted", "Alex, adopted")])));
@@ -111,8 +111,8 @@ public sealed class ConfiguredMailAccountCatalogTests
         Assert.Equal(["alex-adopted"], served.Select(account => account.Id.Value));
     }
 
-    private static ServedMailUser Declaring(
-        MailUserId user,
+    private static ServedUser Declaring(
+        UserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
         new(user, displayName, mailAccounts);

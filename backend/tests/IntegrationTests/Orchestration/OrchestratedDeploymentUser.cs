@@ -21,12 +21,12 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// struct, so nothing about a bare field would establish that a thread observing the write observes the whole of it.
 /// </para>
 /// </remarks>
-internal sealed class OrchestratedDeploymentUser : IDeploymentMailUserSource
+internal sealed class OrchestratedDeploymentUser : IDeploymentUserSource
 {
     private readonly Lock mutex = new();
 
     /// <summary>The user read out of the database, or nothing while the harness has not started.</summary>
-    private MailUserId? resolvedUser;
+    private UserId? resolvedUser;
 
     /// <summary>Gets the one holder this suite reads, because the suite holds one database and it holds one user.</summary>
     /// <remarks>
@@ -39,7 +39,7 @@ internal sealed class OrchestratedDeploymentUser : IDeploymentMailUserSource
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the harness has not yet read the user the database holds.</exception>
-    public MailUserId User
+    public UserId User
     {
         get
         {
@@ -55,7 +55,7 @@ internal sealed class OrchestratedDeploymentUser : IDeploymentMailUserSource
     /// <summary>States the user the harness read out of the database, which is the one user it holds.</summary>
     /// <param name="user">The user every account and every contact of this deployment belongs to.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    internal void Resolved(MailUserId user)
+    internal void Resolved(UserId user)
     {
         if (!user.IsSpecified)
         {

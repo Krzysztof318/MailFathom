@@ -57,7 +57,7 @@ internal sealed class UserRecordAdministration(
     IUserSettingsDocumentWriter store,
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
-    ServedMailUsers servedUsers,
+    ServedUsers servedUsers,
     IStoredFileStore files,
     ConfigurationChangeAnnouncements announcements)
 {
@@ -77,7 +77,7 @@ internal sealed class UserRecordAdministration(
     /// <exception cref="UserSettingsUnreadableException">Thrown when the deployment holds the record and it could not be handed on.</exception>
     /// <exception cref="FormatException">Thrown when the row is JSON but not an object of settings.</exception>
     /// <exception cref="JsonException">Thrown when the row is not JSON, or is nested past what a document may be.</exception>
-    internal Task<UserRecordReading?> ReadRecordAsync(MailUserId user, CancellationToken cancellationToken)
+    internal Task<UserRecordReading?> ReadRecordAsync(UserId user, CancellationToken cancellationToken)
     {
         RequireNamed(user);
         authorization.RequirePermission(MailFathomPermission.AdminRead);
@@ -107,7 +107,7 @@ internal sealed class UserRecordAdministration(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="documentJson" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     internal Task<UserRecordWriteOutcome?> ApplyRecordAsync(
-        MailUserId user,
+        UserId user,
         string documentJson,
         long expectedVersion,
         CancellationToken cancellationToken)
@@ -168,7 +168,7 @@ internal sealed class UserRecordAdministration(
     /// </para>
     /// </remarks>
     internal async Task<UserEndpointAccessWrite?> SetEndpointAccessAsync(
-        MailUserId user,
+        UserId user,
         bool? mcpEndpoint,
         bool? clientEndpoint,
         CancellationToken cancellationToken)
@@ -181,7 +181,7 @@ internal sealed class UserRecordAdministration(
             return null;
         }
 
-        MailUserEndpointAccess standing;
+        UserEndpointAccess standing;
 
         try
         {
@@ -200,7 +200,7 @@ internal sealed class UserRecordAdministration(
                 default);
         }
 
-        var requested = new MailUserEndpointAccess(
+        var requested = new UserEndpointAccess(
             mcpEndpoint ?? standing.McpEndpoint,
             clientEndpoint ?? standing.ClientEndpoint);
 
@@ -263,7 +263,7 @@ internal sealed class UserRecordAdministration(
     /// republish the roster across every replica for a change that changed nothing.
     /// </para>
     /// </remarks>
-    internal async Task<bool> ChangeOwnTimeZoneAsync(MailUserTimeZone zone, CancellationToken cancellationToken)
+    internal async Task<bool> ChangeOwnTimeZoneAsync(UserTimeZone zone, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(zone);
 
@@ -385,7 +385,7 @@ internal sealed class UserRecordAdministration(
     }
 
     /// <summary>Reads one user's record, redacted.</summary>
-    private async Task<UserRecordReading?> ReadAsync(MailUserId user, CancellationToken cancellationToken) =>
+    private async Task<UserRecordReading?> ReadAsync(UserId user, CancellationToken cancellationToken) =>
         await documents.ReadAsync(user, cancellationToken) is { } record
             ? new UserRecordReading(
                 user,
@@ -401,7 +401,7 @@ internal sealed class UserRecordAdministration(
     /// beneath it exactly as it was rather than persisting the marker over somebody's credential.
     /// </remarks>
     private async Task<UserRecordWriteOutcome?> SaveAsync(
-        MailUserId user,
+        UserId user,
         string documentJson,
         long expectedVersion,
         UserRecordAuthority authority,
@@ -483,7 +483,7 @@ internal sealed class UserRecordAdministration(
     /// replaced is refused before a candidate is composed and bound rather than after.
     /// </remarks>
     private async Task<OpenedRecord?> OpenAsync(
-        MailUserId user,
+        UserId user,
         long expectedVersion,
         CancellationToken cancellationToken)
     {
@@ -511,7 +511,7 @@ internal sealed class UserRecordAdministration(
     /// deployment rather than for the user whose record carries the reference.
     /// </remarks>
     private async Task<UserRecordWriteOutcome?> JudgeAndCommitAsync(
-        MailUserId user,
+        UserId user,
         UserSettingsDocument inForce,
         string candidateJson,
         UserRecordAuthority authority,
@@ -665,7 +665,7 @@ internal sealed class UserRecordAdministration(
     /// </para>
     /// </remarks>
     internal static IReadOnlyList<string> FindSecretsTheUserMayNotName(
-        MailUserId user,
+        UserId user,
         string standingJson,
         string candidateJson)
     {
@@ -685,7 +685,7 @@ internal sealed class UserRecordAdministration(
     }
 
     /// <summary>Reports whether a reference names material an operator provisioned for this user and nobody else.</summary>
-    private static bool NamesMaterialProvisionedFor(MailUserId user, string configuredValue) =>
+    private static bool NamesMaterialProvisionedFor(UserId user, string configuredValue) =>
         SecretReference.TryParse(configuredValue, out var reference, out _)
         && LastSegmentOf(reference.Target)
             .StartsWith(CredentialPrefixFor(user), StringComparison.OrdinalIgnoreCase);
@@ -722,7 +722,7 @@ internal sealed class UserRecordAdministration(
     }
 
     /// <summary>Names what every credential provisioned for one user is called, whichever scheme delivers it.</summary>
-    private static string CredentialPrefixFor(MailUserId user) => $"user-{user.Value:D}-";
+    private static string CredentialPrefixFor(UserId user) => $"user-{user.Value:D}-";
 
     /// <summary>Reads the part of a reference's target that names the material rather than where it is kept.</summary>
     private static string LastSegmentOf(string target) => target[(target.LastIndexOfAny(['/', '\\']) + 1)..];
@@ -745,7 +745,7 @@ internal sealed class UserRecordAdministration(
     /// <remarks>The same word the startup gate uses for a user read from their own document, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
     private const string RecordPath = "document";
 
-    private static void RequireNamed(MailUserId user)
+    private static void RequireNamed(UserId user)
     {
         if (!user.IsSpecified)
         {

@@ -24,7 +24,7 @@ public sealed class UserCredentialAdministrationTests
 
     private const string WrittenPublicKey = "-----BEGIN PUBLIC KEY-----readable-----END PUBLIC KEY-----";
 
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId User = UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000001");
 
@@ -78,7 +78,7 @@ public sealed class UserCredentialAdministrationTests
         // Assert
         await harness.Credentials.DidNotReceive().CreateAsync(
             Arg.Any<Guid>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<UserId>(),
             Arg.Any<UserCredentialMethod>(),
             Arg.Any<UserCredentialLookup>(),
             Arg.Is<string>(stored => stored != null && stored.Contains(AcceptablePassword, StringComparison.Ordinal)),
@@ -695,7 +695,7 @@ public sealed class UserCredentialAdministrationTests
 
         harness.Credentials.CreateAsync(
                 Arg.Do<Guid>(id => minted = id),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
@@ -809,14 +809,14 @@ public sealed class UserCredentialAdministrationTests
             this.AnswerCreateWith(UserCredentialWriteOutcome.Written);
             this.AnswerReplaceWith(UserCredentialWriteOutcome.Written);
             this.Credentials.SetEnabledAsync(
-                    Arg.Any<MailUserId>(),
+                    Arg.Any<UserId>(),
                     Arg.Any<Guid>(),
                     Arg.Any<bool>(),
                     Arg.Any<CancellationToken>())
                 .Returns(UserCredentialWriteOutcome.Written);
-            this.Credentials.DeleteAsync(Arg.Any<MailUserId>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            this.Credentials.DeleteAsync(Arg.Any<UserId>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                 .Returns(UserCredentialWriteOutcome.Written);
-            this.Credentials.ReadForUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            this.Credentials.ReadForUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
                 .Returns([]);
 
             this.PasswordHasher = new RecordingPasswordHasher();
@@ -846,7 +846,7 @@ public sealed class UserCredentialAdministrationTests
 
         internal void AnswerCreateWith(UserCredentialWriteOutcome outcome) => this.Credentials.CreateAsync(
                 Arg.Any<Guid>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),
                 Arg.Any<string>(),
@@ -855,7 +855,7 @@ public sealed class UserCredentialAdministrationTests
             .Returns(outcome);
 
         internal void AnswerReplaceWith(UserCredentialWriteOutcome outcome) => this.Credentials.ReplaceMaterialAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<Guid>(),
                 Arg.Any<UserCredentialMethod>(),
                 Arg.Any<UserCredentialLookup>(),

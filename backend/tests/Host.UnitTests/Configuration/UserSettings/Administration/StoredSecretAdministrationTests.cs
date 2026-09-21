@@ -22,7 +22,7 @@ public sealed class StoredSecretAdministrationTests
     public async Task StoreAsync_AnExistingUserAndConfiguredRing_CommitsAndReturnsTheStoreReference()
     {
         // Arrange
-        var user = SyntheticMailUser.Deployment;
+        var user = SyntheticUser.Deployment;
         var storedReference = DatabaseSecretReference.Create(
             new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
         var users = Substitute.For<IUserSettingsDocumentReader>();
@@ -63,7 +63,7 @@ public sealed class StoredSecretAdministrationTests
 
         // Act
         var result = await service.StoreAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             name,
             material,
             TestContext.Current.CancellationToken);
@@ -86,7 +86,7 @@ public sealed class StoredSecretAdministrationTests
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => service.StoreAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 name,
                 material,
                 TestContext.Current.CancellationToken));
@@ -112,7 +112,7 @@ public sealed class StoredSecretAdministrationTests
 
         // Act
         var result = await service.StoreAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             name,
             material,
             TestContext.Current.CancellationToken);

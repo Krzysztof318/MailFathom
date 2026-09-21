@@ -77,7 +77,7 @@ public interface ISensitiveContentPostures
     /// under at least what its own account asked for, and a scanner another of the user's accounts switched on only
     /// ever redacts more.
     /// </remarks>
-    SensitiveContentPosture AcrossAccountsOf(MailUserId user);
+    SensitiveContentPosture AcrossAccountsOf(UserId user);
 
     /// <summary>Reports whether one scanner runs over any mail on this deployment.</summary>
     /// <param name="scanner">The scanner to ask about.</param>

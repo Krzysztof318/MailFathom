@@ -214,7 +214,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
                 ReadGrant(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2),
                 reader.GetFieldValue<byte[]>(3),
                 reader.GetFieldValue<DateTimeOffset>(4),
-                new MailUserEndpointAccess(reader.GetBoolean(5), reader.GetBoolean(6)));
+                new UserEndpointAccess(reader.GetBoolean(5), reader.GetBoolean(6)));
         }
         catch (NpgsqlException failure)
         {
@@ -324,7 +324,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
     private static async Task<bool> StillAdmitsAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        MailUserId user,
+        UserId user,
         Guid? credentialId,
         CancellationToken cancellationToken)
     {
@@ -348,7 +348,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
     }
 
     /// <summary>Reads which user and which credential a renewable session names, or reports that it is not renewable.</summary>
-    private static async Task<(MailUserId User, Guid? CredentialId)?> ReadRenewableAsync(
+    private static async Task<(UserId User, Guid? CredentialId)?> ReadRenewableAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         string identifier,
@@ -364,7 +364,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         return await reader.ReadAsync(cancellationToken)
-            ? (MailUserId.Create(reader.GetGuid(0)), reader.IsDBNull(1) ? null : reader.GetGuid(1))
+            ? (UserId.Create(reader.GetGuid(0)), reader.IsDBNull(1) ? null : reader.GetGuid(1))
             : null;
     }
 
@@ -406,7 +406,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
         }
 
         return new ClientSessionGrant(
-            MailUserId.Create(reader.GetGuid(userIdOrdinal)),
+            UserId.Create(reader.GetGuid(userIdOrdinal)),
             reader.IsDBNull(credentialIdOrdinal) ? null : reader.GetGuid(credentialIdOrdinal),
             [.. MailFathomPermission.All.Where(granted.Contains)]);
     }

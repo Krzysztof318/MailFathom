@@ -116,7 +116,7 @@ internal static class MailAccountEndpoints
             return Refusal("A created mail account carries its declaration.");
         }
 
-        return await administration.CreateAsync(MailUserId.Create(request.UserId), account, cancellationToken) is { } created
+        return await administration.CreateAsync(UserId.Create(request.UserId), account, cancellationToken) is { } created
             ? TypedResults.Ok(MailAccountWriteResponse.For(created.Outcome, created.AccountId))
             : NotFound("This deployment holds no such user.");
     }
@@ -217,7 +217,7 @@ internal static class MailAccountEndpoints
             return Refusal("An assignment names the user by the identifier this deployment recorded them under.");
         }
 
-        return await administration.AssignAsync(accountId, MailUserId.Create(request.UserId), cancellationToken) is { } outcome
+        return await administration.AssignAsync(accountId, UserId.Create(request.UserId), cancellationToken) is { } outcome
             ? TypedResults.Ok(MailAccountWriteResponse.For(outcome))
             : NotFound("This deployment holds no such mail account or no such user.");
     }
@@ -242,7 +242,7 @@ internal static class MailAccountEndpoints
             return Refusal("An ended assignment names the user by the identifier this deployment recorded them under.");
         }
 
-        var unassignment = await administration.UnassignAsync(accountId, MailUserId.Create(request.UserId), cancellationToken);
+        var unassignment = await administration.UnassignAsync(accountId, UserId.Create(request.UserId), cancellationToken);
 
         return TypedResults.Ok(new MailAccountUnassignmentResponse(unassignment.Unassigned, unassignment.AccountErased));
     }

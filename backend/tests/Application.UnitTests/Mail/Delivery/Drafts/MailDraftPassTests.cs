@@ -214,7 +214,7 @@ public sealed class MailDraftPassTests
         var send = outgoingEmails.Publish(
             OutgoingEmailRequest.Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Draft(draft.Id),
                 [.. draft.Recipients.Select(recipient => recipient.Recipient)]),
             mimeByteLength: 64);
@@ -253,7 +253,7 @@ public sealed class MailDraftPassTests
     private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body, MailDraftId? revises = null) =>
         harness.Book.SaveAsync(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             new ComposedMailDraft(
                 [Recipient()],

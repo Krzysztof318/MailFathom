@@ -134,7 +134,7 @@ internal static class ClientDiscoveryRunEndpoints
     internal static async Task<Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult>> Start(
         [FromBody] ClientDiscoveryRunRequest? request,
         [FromServices] MailboxScopeResolver scopeResolver,
-        [FromServices] MailUserClock userClock,
+        [FromServices] UserClock userClock,
         [FromServices] IAuthorizedPrincipalSource principals,
         [FromServices] IDiscoveryRunStore runs,
         [FromServices] TimeProvider timeProvider,
@@ -312,7 +312,7 @@ internal static class ClientDiscoveryRunEndpoints
     private static MailQuestion QuestionOf(
         ClientDiscoveryRunRequest? request,
         MailboxScopeResolver scopeResolver,
-        MailUserClock userClock)
+        UserClock userClock)
     {
         var text = MailQuestionText.Create(request?.Question);
 

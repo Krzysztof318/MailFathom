@@ -63,7 +63,7 @@ public sealed class MailboxQuestionReader
     private readonly TimeProvider timeProvider;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
-    private readonly MailUserClock userClock;
+    private readonly UserClock userClock;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
@@ -87,7 +87,7 @@ public sealed class MailboxQuestionReader
         TimeProvider timeProvider,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
-        MailUserClock userClock)
+        UserClock userClock)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);

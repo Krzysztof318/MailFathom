@@ -19,8 +19,8 @@ public sealed class StoredSecretBindingTests
 {
     private const string ActiveKeyId = "2026-08";
 
-    private static readonly MailUserId User = MailUserId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
-    private static readonly MailUserId OtherUser = MailUserId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
+    private static readonly UserId User = UserId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
+    private static readonly UserId OtherUser = UserId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
     private static readonly DatabaseSecretReference Reference =
         DatabaseSecretReference.Create(new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
     private static readonly SecretName Name = SecretNamed("primary-password");

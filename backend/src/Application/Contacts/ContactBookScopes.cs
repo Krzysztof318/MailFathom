@@ -39,6 +39,6 @@ public sealed class ContactBookScopes
     /// <param name="user">The user.</param>
     /// <returns>The scope.</returns>
     /// <remarks>A user the deployment holds no record for is assigned nothing, so the scope is their own book — empty until somebody writes in it — rather than a refusal.</remarks>
-    public ContactBookScope Of(MailUserId user) =>
+    public ContactBookScope Of(UserId user) =>
         ContactBookScope.Of(user, this.assignments.AccountsAssignedTo(user));
 }

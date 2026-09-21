@@ -23,7 +23,7 @@ namespace MailFathom.Application.UnitTests.Tasks;
 /// </summary>
 public sealed class TodayLayoutTests
 {
-    private static readonly MailUserId Person = SyntheticMailUser.Deployment;
+    private static readonly UserId Person = SyntheticUser.Deployment;
 
     private static readonly DateTimeOffset DayStart = new(2026, 9, 21, 8, 0, 0, TimeSpan.Zero);
 

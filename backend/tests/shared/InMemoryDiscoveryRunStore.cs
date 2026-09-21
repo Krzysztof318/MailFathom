@@ -48,7 +48,7 @@ internal sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore
     /// <inheritdoc />
     public Task<bool> TryOpenAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -103,7 +103,7 @@ internal sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore
     /// <inheritdoc />
     public Task<DiscoveryRunReading?> ReadAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         long afterSequence,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -128,7 +128,7 @@ internal sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore
     /// <inheritdoc />
     public Task<bool> TryRequestStopAsync(
         DiscoveryRunId id,
-        MailUserId user,
+        UserId user,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -170,7 +170,7 @@ internal sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore
         return forgotten.Count(this.runs.Remove);
     }
 
-    private sealed record HeldRun(MailUserId User, DateTimeOffset StartedAt, DateTimeOffset LastUsedAt)
+    private sealed record HeldRun(UserId User, DateTimeOffset StartedAt, DateTimeOffset LastUsedAt)
     {
         public List<DiscoveryRunEvent> Events { get; } = [];
 

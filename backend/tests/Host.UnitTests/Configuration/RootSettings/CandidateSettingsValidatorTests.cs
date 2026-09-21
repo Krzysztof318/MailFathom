@@ -291,17 +291,17 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
-        new(catalogs, new ServedMailUsers());
+        new(catalogs, new ServedUsers());
 
     /// <summary>A settled roster of one user recording one mailbox under the identifier a test names.</summary>
-    private static ServedMailUsers RosterRecording(string accountId)
+    private static ServedUsers RosterRecording(string accountId)
     {
-        var roster = new ServedMailUsers();
+        var roster = new ServedUsers();
 
         roster.Resolved(
         [
-            new ServedMailUser(
-                SyntheticMailUser.Deployment,
+            new ServedUser(
+                SyntheticUser.Deployment,
                 "alex",
                 [new MailSynchronizationAccountOptions { AccountId = accountId }]),
         ]);

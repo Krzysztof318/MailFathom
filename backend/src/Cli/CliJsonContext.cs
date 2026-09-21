@@ -99,7 +99,7 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(ConfigurationDocumentRequest))]
 [JsonSerializable(typeof(ConfigurationAdoptionRequest))]
 [JsonSerializable(typeof(ConfigurationWriteAnswer))]
-[JsonSerializable(typeof(MailUserList))]
+[JsonSerializable(typeof(UserList))]
 [JsonSerializable(typeof(UserProvisioningRequest))]
 [JsonSerializable(typeof(UserRelabelRequest))]
 [JsonSerializable(typeof(UserEndpointAccessRequest))]

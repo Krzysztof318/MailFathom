@@ -43,7 +43,7 @@ public sealed class ClientSignalEndpointsTests
 
         // Act
         var result = await ClientSignalEndpoints.MintTicket(
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             tickets,
             NullLoggerFactory.Instance,
             TestContext.Current.CancellationToken);
@@ -53,7 +53,7 @@ public sealed class ClientSignalEndpointsTests
         Assert.NotNull(answered.Value);
         Assert.Equal(Instant + ClientSignalTickets.Lifetime, answered.Value.ExpiresAt);
         Assert.Equal(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             await tickets.RedeemAsync(answered.Value.Ticket, TestContext.Current.CancellationToken));
     }
 
@@ -63,11 +63,11 @@ public sealed class ClientSignalEndpointsTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
-        var authorization = AuthorizationFor(SyntheticMailUser.Deployment);
+        var authorization = AuthorizationFor(SyntheticUser.Deployment);
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         }
 
         // Act
@@ -96,7 +96,7 @@ public sealed class ClientSignalEndpointsTests
 
         // Act
         var result = await ClientSignalEndpoints.MintTicket(
-            AuthorizationFor(SyntheticMailUser.Deployment),
+            AuthorizationFor(SyntheticUser.Deployment),
             tickets,
             NullLoggerFactory.Instance,
             TestContext.Current.CancellationToken);
@@ -129,7 +129,7 @@ public sealed class ClientSignalEndpointsTests
         Assert.False(options.Transports.HasFlag(HttpTransportType.LongPolling));
     }
 
-    private static AccessAuthorization AuthorizationFor(MailUserId user)
+    private static AccessAuthorization AuthorizationFor(UserId user)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(

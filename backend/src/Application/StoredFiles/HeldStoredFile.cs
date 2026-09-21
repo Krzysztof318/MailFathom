@@ -9,4 +9,4 @@ namespace MailFathom.Application.StoredFiles;
 /// <summary>One stored file and the user it belongs to, which is what the sweep decides about.</summary>
 /// <param name="File">The file.</param>
 /// <param name="Owner">The user whose record would link to it.</param>
-public sealed record HeldStoredFile(StoredFileId File, MailUserId Owner);
+public sealed record HeldStoredFile(StoredFileId File, UserId Owner);

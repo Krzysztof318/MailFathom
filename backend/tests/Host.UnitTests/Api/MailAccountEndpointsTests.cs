@@ -43,7 +43,7 @@ public sealed class MailAccountEndpointsTests
         // Act
         var result = await MailAccountEndpoints.CreateAsync(
             deployment.MailAccounts,
-            new MailAccountCreationRequest(SyntheticMailUser.Deployment.Value, account),
+            new MailAccountCreationRequest(SyntheticUser.Deployment.Value, account),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -75,7 +75,7 @@ public sealed class MailAccountEndpointsTests
         // Act
         var result = await MailAccountEndpoints.CreateAsync(
             deployment.MailAccounts,
-            new MailAccountCreationRequest(SyntheticMailUser.Another.Value, Declaration),
+            new MailAccountCreationRequest(SyntheticUser.Another.Value, Declaration),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -88,12 +88,12 @@ public sealed class MailAccountEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1);
 
         // Act
         var result = await MailAccountEndpoints.CreateAsync(
             deployment.MailAccounts,
-            new MailAccountCreationRequest(SyntheticMailUser.Deployment.Value, Declaration),
+            new MailAccountCreationRequest(SyntheticUser.Deployment.Value, Declaration),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -125,7 +125,7 @@ public sealed class MailAccountEndpointsTests
         // Arrange
         var unreadable = UnreadableAccount();
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1, unreadable);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1, unreadable);
 
         // Act
         var result = await MailAccountEndpoints.ReadAsync(
@@ -144,7 +144,7 @@ public sealed class MailAccountEndpointsTests
         // Arrange
         var unreadable = UnreadableAccount();
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1, unreadable);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1, unreadable);
 
         // Act
         var result = await MailAccountEndpoints.ReadAllAsync(deployment.MailAccounts, TestContext.Current.CancellationToken);
@@ -229,13 +229,13 @@ public sealed class MailAccountEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
+        deployment.Holding(SyntheticUser.Deployment, "{}", version: 1);
 
         // Act
         var result = await MailAccountEndpoints.AssignAsync(
             Guid.NewGuid(),
             deployment.MailAccounts,
-            new MailAccountAssignmentRequest(SyntheticMailUser.Deployment.Value),
+            new MailAccountAssignmentRequest(SyntheticUser.Deployment.Value),
             TestContext.Current.CancellationToken);
 
         // Assert

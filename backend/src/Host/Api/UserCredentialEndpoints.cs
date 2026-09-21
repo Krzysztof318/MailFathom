@@ -196,7 +196,7 @@ internal static class UserCredentialEndpoints
 
     /// <summary>Provisions the username and password one user signs in with, refusing each half by the rule it broke.</summary>
     private static async Task<Results<Ok<UserCredentialProvisionedResponse>, ProblemHttpResult>> ProvisionPasswordAsync(
-        MailUserId user,
+        UserId user,
         Guid userId,
         UserCredentialProvisioningRequest request,
         IReadOnlyList<MailFathomPermission>? permissions,
@@ -226,7 +226,7 @@ internal static class UserCredentialEndpoints
 
     /// <summary>Maps one authorization server's subject onto the user it stands for.</summary>
     private static async Task<Results<Ok<UserCredentialProvisionedResponse>, ProblemHttpResult>> ProvisionOAuthSubjectAsync(
-        MailUserId user,
+        UserId user,
         Guid userId,
         UserCredentialProvisioningRequest request,
         IReadOnlyList<MailFathomPermission>? permissions,
@@ -358,7 +358,7 @@ internal static class UserCredentialEndpoints
 
     /// <summary>Replaces one credential's password, refusing each half by the rule it broke.</summary>
     private static async Task<Results<Ok<UserCredentialRotatedResponse>, ProblemHttpResult>> RotatePasswordAsync(
-        MailUserId user,
+        UserId user,
         Guid userId,
         Guid credentialId,
         UserCredentialMaterialRequest request,
@@ -558,7 +558,7 @@ internal static class UserCredentialEndpoints
                 + "identifiers they actually hold."),
         };
 
-    private static bool TryReadUser(Guid userId, out MailUserId user)
+    private static bool TryReadUser(Guid userId, out UserId user)
     {
         if (userId == Guid.Empty)
         {
@@ -567,7 +567,7 @@ internal static class UserCredentialEndpoints
             return false;
         }
 
-        user = MailUserId.Create(userId);
+        user = UserId.Create(userId);
 
         return true;
     }

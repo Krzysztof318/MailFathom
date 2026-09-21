@@ -851,7 +851,7 @@ public sealed class MailOutboxDeliveryTests
         private static OutgoingEmailRequest RequestFor(IReadOnlyList<string> recipientAddresses) =>
             OutgoingEmailRequest.Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 [.. recipientAddresses.Select(address =>
                 {

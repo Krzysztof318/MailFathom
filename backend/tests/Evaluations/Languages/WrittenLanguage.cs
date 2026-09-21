@@ -83,11 +83,11 @@ internal static partial class WrittenLanguage
     /// here and nowhere else: a mailbox's language and a person's name the same two languages and answer different
     /// questions, and this is the one place an evaluation holds a written text against either of them.
     /// </remarks>
-    public static string? Shortfall(string? text, MailUserLanguage expected) => Shortfall(
+    public static string? Shortfall(string? text, UserLanguage expected) => Shortfall(
         text,
         expected switch
         {
-            MailUserLanguage.Polish => MailAccountLanguage.Polish,
+            UserLanguage.Polish => MailAccountLanguage.Polish,
             _ => MailAccountLanguage.English,
         });
 

@@ -303,7 +303,7 @@ public sealed class MailFolderEditorTests
             this.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
             var authorization = AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 granted.Length > 0 ? granted : [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
 
             this.Editor = new MailFolderEditor(

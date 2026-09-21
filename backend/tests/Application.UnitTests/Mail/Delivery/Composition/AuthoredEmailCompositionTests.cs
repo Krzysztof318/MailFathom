@@ -23,7 +23,7 @@ public sealed class AuthoredEmailCompositionTests
     {
         // Arrange
         var email = new ComposedOutgoingEmail(
-            OutgoingEmailRequest.Create(MailAccountId.Create("primary"), SyntheticMailUser.Deployment, Requester(), [Recipient()]),
+            OutgoingEmailRequest.Create(MailAccountId.Create("primary"), SyntheticUser.Deployment, Requester(), [Recipient()]),
             InternetMessageId.Mint("example.test"),
             new byte[] { 1, 2, 3 });
 

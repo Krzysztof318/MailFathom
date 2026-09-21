@@ -43,7 +43,7 @@ public interface IStoredSecretStore
     Task<DatabaseSecretReference> StoreAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailUserId user,
+        UserId user,
         SecretName name,
         ResolvedSecret material,
         CancellationToken cancellationToken);
@@ -53,7 +53,7 @@ public interface IStoredSecretStore
     Task<bool> RemoveAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken);
 
     /// <summary>Reads a bounded inventory of stored secrets still sealed under one key.</summary>

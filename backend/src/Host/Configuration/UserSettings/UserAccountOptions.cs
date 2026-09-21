@@ -47,7 +47,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <summary>Every language this build writes in, as one phrase a refusal ends with.</summary>
     /// <remarks>Composed from the members rather than written out, so a third language added to the enumeration reaches both refusals below without either being edited.</remarks>
     private static readonly string PublishedLanguages =
-        string.Join(" or ", Enum.GetValues<MailUserLanguage>().Select(language => $"'{language}'"));
+        string.Join(" or ", Enum.GetValues<UserLanguage>().Select(language => $"'{language}'"));
 
     /// <summary>Every level a client may be asked to record at, as one phrase a refusal ends with.</summary>
     /// <remarks>Composed from the members for the reason <see cref="PublishedLanguages" /> is, and naming them as the deployment's own key takes them, because the two settings answer the same question and an operator moving one to a record must not have to guess at a second spelling.</remarks>
@@ -94,7 +94,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// Absent is an ordinary state rather than an unfinished one, which is where this differs from the language beside
     /// it. A language has no absence because text composed for somebody comes out in some language whether or not
     /// anybody chose it; a zone has one reachable answer that is the same on every replica —
-    /// <see cref="MailUserTimeZone.Coordinated" /> — so a record that states nothing is read in UTC rather than in
+    /// <see cref="UserTimeZone.Coordinated" /> — so a record that states nothing is read in UTC rather than in
     /// whichever zone the host happens to run in, and a record held from before this property existed keeps working.
     /// </para>
     /// <para>
@@ -158,26 +158,26 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <remarks>
     /// Read only where the record has already been judged, which leaves exactly one way for this to answer
     /// <see langword="null" />: a record held from before the property existed, whose reader takes
-    /// <see cref="MailUserLanguage.English" /> for it. The comparison is against the member names and is
+    /// <see cref="UserLanguage.English" /> for it. The comparison is against the member names and is
     /// case-insensitive, so a record written by hand is read the way it was typed, and a number is not a language
     /// however well it would have parsed.
     /// </remarks>
-    internal MailUserLanguage? ReadingLanguage => this.Language is { } written
-        ? Enum.GetValues<MailUserLanguage>()
+    internal UserLanguage? ReadingLanguage => this.Language is { } written
+        ? Enum.GetValues<UserLanguage>()
             .Where(language => string.Equals(language.ToString(), written, StringComparison.OrdinalIgnoreCase))
-            .Select(language => (MailUserLanguage?)language)
+            .Select(language => (UserLanguage?)language)
             .FirstOrDefault()
         : null;
 
     /// <summary>Gets the zone this record states, or <see langword="null" /> where it states none.</summary>
     /// <remarks>
-    /// Nothing rather than <see cref="MailUserTimeZone.Coordinated" />, for the reason <see cref="ReadingLanguage" />
+    /// Nothing rather than <see cref="UserTimeZone.Coordinated" />, for the reason <see cref="ReadingLanguage" />
     /// answers nothing: a record stating no zone and a record stating the coordinated one are different facts, and
     /// collapsing them here would leave nothing able to tell a person who chose UTC from a person nobody has asked yet.
     /// The reader that wants one value for both falls back itself.
     /// </remarks>
-    internal MailUserTimeZone? ReadingTimeZone =>
-        MailUserTimeZone.TryRead(this.TimeZone, out var zone) ? zone : null;
+    internal UserTimeZone? ReadingTimeZone =>
+        UserTimeZone.TryRead(this.TimeZone, out var zone) ? zone : null;
 
     /// <summary>Gets the level this record asks this person's client to record at, or <see langword="null" /> where it states none.</summary>
     /// <remarks>
@@ -260,7 +260,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// by the binder both directions share. Every record committed before this property existed states no language,
     /// and it binds strictly, so no administrator could have added one in advance — refusing those at the next start
     /// would refuse the start itself, for every user, through the surface they would have rewritten the record from. A
-    /// held record stating nothing therefore reads as <see cref="MailUserLanguage.English" />, which is the answer
+    /// held record stating nothing therefore reads as <see cref="UserLanguage.English" />, which is the answer
     /// every unresolved read already gives, and states a language the first time anybody writes it.
     /// </para>
     /// <para>
@@ -289,7 +289,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     private IEnumerable<ValidationResult> FindUnknownTimeZoneError()
     {
-        if (!string.IsNullOrWhiteSpace(this.TimeZone) && !MailUserTimeZone.TryRead(this.TimeZone, out _))
+        if (!string.IsNullOrWhiteSpace(this.TimeZone) && !UserTimeZone.TryRead(this.TimeZone, out _))
         {
             yield return new ValidationResult(
                 $"{nameof(this.TimeZone)} states '{this.TimeZone}', which is not a time zone this deployment knows. State an IANA identifier such as 'Europe/Warsaw', at most {ZonedInstant.MaximumZoneIdLength} characters, or state none and be read in UTC.",

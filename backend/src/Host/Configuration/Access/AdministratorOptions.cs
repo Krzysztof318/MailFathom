@@ -21,7 +21,7 @@ namespace MailFathom.Host.Configuration.Access;
 /// </para>
 /// <para>
 /// An administrator exists in configuration and nowhere else. There is no database record, no provisioning route, and no
-/// personal-data lifecycle behind one: the surface answers for the deployment rather than for a mail user, and whoever
+/// personal-data lifecycle behind one: the surface answers for the deployment rather than for a user, and whoever
 /// can change this section already holds the deployment.
 /// </para>
 /// <para>

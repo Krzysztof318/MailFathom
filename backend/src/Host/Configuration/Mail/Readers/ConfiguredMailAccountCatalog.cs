@@ -25,7 +25,7 @@ namespace MailFathom.Host.Configuration.Mail.Readers;
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
     MailSynchronizationOptions settings,
-    ServedMailUsers servedUsers) : IDeploymentMailAccountCatalog, IMailAccountAssignments
+    ServedUsers servedUsers) : IDeploymentMailAccountCatalog, IMailAccountAssignments
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;
@@ -69,7 +69,7 @@ internal sealed class ConfiguredMailAccountCatalog(
     /// what a caller acting for a user the roster never established reads is decided by the resolution, which turns an
     /// empty answer into a scope admitting no folder.
     /// </remarks>
-    public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) =>
+    public IReadOnlyList<MailAccountId> AccountsAssignedTo(UserId user) =>
     [
         .. servedUsers.Users
             .Where(served => served.User == user)
@@ -85,7 +85,7 @@ internal sealed class ConfiguredMailAccountCatalog(
     /// The order is the ordinal order of the users' identifiers, so a fan-out over a shared mailbox reaches them in
     /// one order whichever record the roster happened to compose first.
     /// </remarks>
-    public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) =>
+    public IReadOnlyList<UserId> UsersAssignedTo(MailAccountId account) =>
     [
         .. servedUsers.Users
             .Where(served => served.MailAccounts.Any(declared =>

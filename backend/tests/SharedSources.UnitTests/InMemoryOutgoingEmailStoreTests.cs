@@ -283,7 +283,7 @@ public sealed class InMemoryOutgoingEmailStoreTests
     }
 
     private static OutgoingEmailRequest Request(OutgoingEmailRequester requester, ZonedInstant? dueAt = null) =>
-        OutgoingEmailRequest.Create(Account, SyntheticMailUser.Deployment, requester, [Recipient("anna@example.test")], dueAt);
+        OutgoingEmailRequest.Create(Account, SyntheticUser.Deployment, requester, [Recipient("anna@example.test")], dueAt);
 
     private static Task<OpenedOutgoingEmail> OpenAsync(
         InMemoryOutgoingEmailStore store,

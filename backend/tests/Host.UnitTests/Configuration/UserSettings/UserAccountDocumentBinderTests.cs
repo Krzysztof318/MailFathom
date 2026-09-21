@@ -179,7 +179,7 @@ public sealed class UserAccountDocumentBinderTests
 
         // Assert
         Assert.True(binding.IsBound);
-        Assert.Equal(MailUserLanguage.Polish, binding.User!.ReadingLanguage);
+        Assert.Equal(UserLanguage.Polish, binding.User!.ReadingLanguage);
     }
 
     /// <summary>
@@ -337,9 +337,9 @@ public sealed class UserAccountDocumentBinderTests
 
     /// <summary>The name is written by hand in a record too, so it is read the way it was typed.</summary>
     [Theory]
-    [InlineData("polish", MailUserLanguage.Polish)]
-    [InlineData("ENGLISH", MailUserLanguage.English)]
-    public void Bind_ARecordLanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, MailUserLanguage expected)
+    [InlineData("polish", UserLanguage.Polish)]
+    [InlineData("ENGLISH", UserLanguage.English)]
+    public void Bind_ARecordLanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, UserLanguage expected)
     {
         // Arrange
         var binder = CreateBinder();

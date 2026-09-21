@@ -29,9 +29,9 @@ public sealed class MailAccountAdministrationTests
     /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
     private const string EmptyRecord = "{}";
 
-    private static readonly MailUserId Alex = SyntheticMailUser.Deployment;
+    private static readonly UserId Alex = SyntheticUser.Deployment;
 
-    private static readonly MailUserId Sam = SyntheticMailUser.Another;
+    private static readonly UserId Sam = SyntheticUser.Another;
 
     [Fact]
     public async Task CreateAsync_ADeclarationTheUsersMailboxesAccept_CreatesTheAccountAndAssignsItToThem()
@@ -1032,5 +1032,5 @@ public sealed class MailAccountAdministrationTests
           """;
 
     /// <summary>A reference to material this deployment provisioned for one user, which the name it carries is what says.</summary>
-    private static string ProvisionedFor(MailUserId user, string name) => $"file:/run/secrets/user-{user.Value:D}-{name}";
+    private static string ProvisionedFor(UserId user, string name) => $"file:/run/secrets/user-{user.Value:D}-{name}";
 }

@@ -185,7 +185,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId? user,
+        UserId? user,
         MailAccountId? account,
         CancellationToken cancellationToken)
     {

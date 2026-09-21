@@ -34,5 +34,5 @@ internal enum HostStartupGate
 
     /// <summary>Every user this deployment serves has a record, and each of them is resolved to the source their mail accounts are read from.</summary>
     /// <remarks>Expected on every deployment, because every mail account belongs to one of those users and every caller a mail-reading surface admits is composed for one of them.</remarks>
-    ServedMailUsers = 4,
+    ServedUsers = 4,
 }

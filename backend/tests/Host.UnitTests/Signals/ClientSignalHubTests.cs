@@ -27,7 +27,7 @@ public sealed class ClientSignalHubTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         var groups = Substitute.For<IGroupManager>();
         var context = ConnectionPresenting(minted!.Value);
 
@@ -43,7 +43,7 @@ public sealed class ClientSignalHubTests
         // Assert
         await groups.Received(1).AddToGroupAsync(
             "connection",
-            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
+            ClientSignalHub.GroupOf(SyntheticUser.Deployment),
             Arg.Any<CancellationToken>());
         context.DidNotReceive().Abort();
     }
@@ -83,7 +83,7 @@ public sealed class ClientSignalHubTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
-        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        var minted = await tickets.MintAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
         var groups = Substitute.For<IGroupManager>();
         var replayed = ConnectionPresenting(minted!.Value);
 
@@ -146,15 +146,15 @@ public sealed class ClientSignalHubTests
     [Fact]
     public void GroupOf_TwoUsers_NamesADistinctGroupForEachOfThem() =>
         Assert.NotEqual(
-            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
-            ClientSignalHub.GroupOf(SyntheticMailUser.Another));
+            ClientSignalHub.GroupOf(SyntheticUser.Deployment),
+            ClientSignalHub.GroupOf(SyntheticUser.Another));
 
     /// <summary>A group name is composed from the user's own identifier, which no caller writes.</summary>
     [Fact]
     public void GroupOf_AUser_ComposesTheNameFromTheUsersIdentifier() =>
         Assert.Contains(
-            SyntheticMailUser.Deployment.Value.ToString(),
-            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
+            SyntheticUser.Deployment.Value.ToString(),
+            ClientSignalHub.GroupOf(SyntheticUser.Deployment),
             StringComparison.Ordinal);
 
     private static HubCallerContext ConnectionPresenting(string ticket)

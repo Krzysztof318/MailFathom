@@ -22,7 +22,7 @@ public sealed class StubMailAccountAssignmentsTests
         var assignments = new StubMailAccountAssignments();
 
         // Act, Assert
-        Assert.Empty(assignments.AccountsAssignedTo(SyntheticMailUser.Deployment));
+        Assert.Empty(assignments.AccountsAssignedTo(SyntheticUser.Deployment));
         Assert.Empty(assignments.UsersAssignedTo(SyntheticMailAccount.Deployment));
     }
 
@@ -31,10 +31,10 @@ public sealed class StubMailAccountAssignmentsTests
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
 
         // Act
-        var assigned = assignments.AccountsAssignedTo(SyntheticMailUser.Deployment);
+        var assigned = assignments.AccountsAssignedTo(SyntheticUser.Deployment);
 
         // Assert
         Assert.Equal([SyntheticMailAccount.Deployment, SyntheticMailAccount.Another], assigned);
@@ -46,15 +46,15 @@ public sealed class StubMailAccountAssignmentsTests
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment);
 
         // Act
         var readers = assignments.UsersAssignedTo(SyntheticMailAccount.Deployment);
 
         // Assert
-        Assert.Equal([SyntheticMailUser.Deployment, SyntheticMailUser.Another], readers);
-        Assert.Equal([SyntheticMailAccount.Deployment], assignments.AccountsAssignedTo(SyntheticMailUser.Another));
+        Assert.Equal([SyntheticUser.Deployment, SyntheticUser.Another], readers);
+        Assert.Equal([SyntheticMailAccount.Deployment], assignments.AccountsAssignedTo(SyntheticUser.Another));
     }
 
     /// <summary>A user assigned one mailbox reaches no other, which is what every narrowing test rests on.</summary>
@@ -63,11 +63,11 @@ public sealed class StubMailAccountAssignmentsTests
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another);
 
         // Act
-        var assigned = assignments.AccountsAssignedTo(SyntheticMailUser.Deployment);
+        var assigned = assignments.AccountsAssignedTo(SyntheticUser.Deployment);
 
         // Assert
         Assert.DoesNotContain(SyntheticMailAccount.Another, assigned);

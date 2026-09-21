@@ -19,7 +19,7 @@ internal static class RosterAnnouncementListener
     /// <param name="backplane">The endpoint the announcing replica publishes over.</param>
     /// <param name="roster">The announcing replica's roster.</param>
     /// <returns>One entry per announcement heard, <see langword="true" /> where the roster publication was free when it arrived.</returns>
-    internal static async Task<IReadOnlyList<bool>> ListenAsync(InMemoryBackplane backplane, ServedMailUsers roster)
+    internal static async Task<IReadOnlyList<bool>> ListenAsync(InMemoryBackplane backplane, ServedUsers roster)
     {
         var heard = new List<bool>();
 
@@ -31,7 +31,7 @@ internal static class RosterAnnouncementListener
         return heard;
     }
 
-    private static bool IsFree(ServedMailUsers roster)
+    private static bool IsFree(ServedUsers roster)
     {
         // A publication still held leaves this wait pending, and it takes the publication once the write releases it;
         // the test has failed by then, so nothing waits on it afterwards.

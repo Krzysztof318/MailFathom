@@ -42,7 +42,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// </remarks>
 public sealed record UserCredential(
     Guid Id,
-    MailUserId User,
+    UserId User,
     UserCredentialMethod Method,
     UserCredentialLookup Lookup,
     IReadOnlyList<MailFathomPermission> Permissions,

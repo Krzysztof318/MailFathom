@@ -322,7 +322,7 @@ internal sealed class ClientSessionTokens
 
     /// <summary>Reads what a held session admits back into what every surface downstream of authentication expects.</summary>
     /// <remarks>The absent credential becomes the empty identifier again, which is what the claim on such a request has always carried and what an operator reading one is already told matches no credential.</remarks>
-    private static AdmittedUserCredential AdmittedBy(ClientSessionGrant grant, MailUserEndpointAccess endpointAccess) => new(
+    private static AdmittedUserCredential AdmittedBy(ClientSessionGrant grant, UserEndpointAccess endpointAccess) => new(
         grant.CredentialId ?? Guid.Empty,
         grant.User,
         grant.Permissions,

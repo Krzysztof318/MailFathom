@@ -266,7 +266,7 @@ public sealed class LocalMailFolderEditor
     /// <returns>Whether an erasure found the queue full, so no pass was queued for it.</returns>
     private async Task<bool> AnnounceAsync(
         MailAccountId account,
-        MailUserId changedBy,
+        UserId changedBy,
         LocalMailFolderDecision decision,
         CancellationToken cancellationToken)
     {

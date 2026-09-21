@@ -61,12 +61,12 @@ public sealed class ComposedPipelineOrderTests
     private const string Issuer = "https://sso.example.test";
 
     /// <summary>The user <see cref="McpKey" /> was provisioned for.</summary>
-    private static readonly MailUserId Workstation =
-        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static readonly UserId Workstation =
+        UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>The user <see cref="SecondMcpKey" /> was provisioned for, told apart from the one above so the two spend separate allowances.</summary>
-    private static readonly MailUserId Laptop =
-        MailUserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+    private static readonly UserId Laptop =
+        UserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
 
     private const string AuthorizationServerName = "workforce";
 

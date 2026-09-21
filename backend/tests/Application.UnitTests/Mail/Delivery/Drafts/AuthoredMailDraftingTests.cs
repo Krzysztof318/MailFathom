@@ -99,7 +99,7 @@ public sealed class AuthoredMailDraftingTests
         var drafting = DraftingOver(
             harness,
             authorization: AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 MailFathomPermission.MailDraftsWrite));
 
         // Act

@@ -15,4 +15,4 @@ internal sealed record MailAccountReading(
     Guid Id,
     string Declaration,
     long Version,
-    IReadOnlyList<MailUserId> Users);
+    IReadOnlyList<UserId> Users);

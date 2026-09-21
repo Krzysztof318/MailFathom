@@ -66,7 +66,7 @@ public sealed class CalendarFileImport
     private readonly AccessAuthorization authorization;
     private readonly ICalendarFileReader reader;
     private readonly ICalendarEventStore store;
-    private readonly IMailUserTimeZones zones;
+    private readonly IUserTimeZones zones;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
 
@@ -82,7 +82,7 @@ public sealed class CalendarFileImport
         AccessAuthorization authorization,
         ICalendarFileReader reader,
         ICalendarEventStore store,
-        IMailUserTimeZones zones,
+        IUserTimeZones zones,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider)
     {
@@ -227,7 +227,7 @@ public sealed class CalendarFileImport
     /// attempt that lost a race converge instead of replaying rows the winner has already committed.
     /// </remarks>
     private async Task<(CalendarImportSummary Summary, IReadOnlyList<CalendarEvent> Events)> ResolveAsync(
-        MailUserId owner,
+        UserId owner,
         IReadOnlyList<CalendarFileEntry> offered,
         IReadOnlyList<CalendarImportSkipReason> skippedByReading,
         CancellationToken cancellationToken)

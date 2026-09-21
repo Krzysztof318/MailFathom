@@ -18,7 +18,7 @@ public sealed class RecurringSendRequestTests
     private static readonly MailAccountId Account =
         MailAccountId.Create("work");
 
-    private static readonly MailUserId Author = SyntheticMailUser.Deployment;
+    private static readonly UserId Author = SyntheticUser.Deployment;
 
     /// <summary>A declaration keeps what it was made with, and the schedule as written bar the space around it.</summary>
     [Fact]

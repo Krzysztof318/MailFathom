@@ -38,8 +38,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
     Justification = "The dependency injection container materializes this service.")]
 internal sealed class OwnDisplayName(
     AccessAuthorization authorization,
-    IMailUserDirectory directory,
-    IMailUserProvisioning provisioning)
+    IUserDirectory directory,
+    IUserProvisioning provisioning)
 {
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -106,10 +106,10 @@ internal sealed class OwnDisplayName(
 
         var name = displayName.Trim();
 
-        return name.Length > MailUserRecord.MaximumDisplayNameLength
+        return name.Length > UserRecord.MaximumDisplayNameLength
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"The name is {name.Length} characters, past the {MailUserRecord.MaximumDisplayNameLength} this deployment stores. Shorten it.")
+                $"The name is {name.Length} characters, past the {UserRecord.MaximumDisplayNameLength} this deployment stores. Shorten it.")
             : null;
     }
 

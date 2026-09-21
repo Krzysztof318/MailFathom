@@ -49,7 +49,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     public Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
         MailAccountId account,
-        MailUserId writtenBy,
+        UserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -121,7 +121,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
-        MailUserId user,
+        UserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken) =>

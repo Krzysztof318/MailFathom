@@ -481,7 +481,7 @@ public sealed class MailSynchronizationCoordinatorTests
             FakeTimeProvider clock)
         {
             this.services = services;
-            this.ServedUsers = services.GetRequiredService<ServedMailUsers>();
+            this.ServedUsers = services.GetRequiredService<ServedUsers>();
             this.Settings = settings;
             this.Clock = clock;
             this.Coordinator = new MailSynchronizationCoordinator(
@@ -498,7 +498,7 @@ public sealed class MailSynchronizationCoordinatorTests
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 
         /// <summary>Gets the roster a record commit publishes into, which is where the accounts a run supervises come from.</summary>
-        internal ServedMailUsers ServedUsers { get; }
+        internal ServedUsers ServedUsers { get; }
 
         internal FakeTimeProvider Clock { get; }
 
@@ -516,7 +516,7 @@ public sealed class MailSynchronizationCoordinatorTests
         internal void RecordMailboxes(params MailSynchronizationAccountOptions[] mailAccounts)
         {
             this.ServedUsers.UserDocumentPublished(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 "user",
                 new UserAccountOptions { MailAccounts = [.. mailAccounts] },
                 ++this.recordedDocumentVersion);

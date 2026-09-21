@@ -41,7 +41,7 @@ internal static class TransportCallerUser
     /// <param name="user">The user the credential belongs to.</param>
     /// <returns>The claim.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, which is a credential that resolved nothing rather than one acting for the deployment.</exception>
-    internal static Claim ClaimFor(MailUserId user) => user.IsSpecified
+    internal static Claim ClaimFor(UserId user) => user.IsSpecified
         ? new Claim(UserClaimType, user.Value.ToString("D", null))
         : throw new ArgumentException("A credential that names a user names a specified one.", nameof(user));
 
@@ -55,14 +55,14 @@ internal static class TransportCallerUser
     /// unreadable value can only be a principal something else assembled, and answering "no user" leaves the surface
     /// to decide instead of admitting a caller for whoever the value happened to parse as.
     /// </remarks>
-    internal static MailUserId? CarriedBy(ClaimsPrincipal principal)
+    internal static UserId? CarriedBy(ClaimsPrincipal principal)
     {
         ArgumentNullException.ThrowIfNull(principal);
 
         return principal.FindFirstValue(UserClaimType) is { } written
             && Guid.TryParse(written, out var user)
             && user != Guid.Empty
-                ? MailUserId.Create(user)
+                ? UserId.Create(user)
                 : null;
     }
 }

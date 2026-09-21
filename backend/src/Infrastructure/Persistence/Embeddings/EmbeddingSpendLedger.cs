@@ -45,7 +45,7 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
     /// </remarks>
     public async Task<EmbeddingSpendTotals> ReadConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         var userId = user.Value;
@@ -80,7 +80,7 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
     public async Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long inputCharacterCount,
         CancellationToken cancellationToken)
     {

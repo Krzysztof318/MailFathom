@@ -177,7 +177,7 @@ internal static class ClientApiEndpoints
         // refusing, which is a GET route acquiring one.
         api.MapGet(SessionRoute, (
                 IAuthorizedPrincipalSource principals,
-                [FromServices] ServedMailUsers servedUsers) =>
+                [FromServices] ServedUsers servedUsers) =>
             {
                 var principal = principals.Current;
 
@@ -240,7 +240,7 @@ internal static class ClientApiEndpoints
     /// level, which is what it was served before any record could state one.
     /// </remarks>
     internal static ClientTelemetryLevel? StatedTelemetryLevelOf(
-        ServedMailUsers servedUsers,
+        ServedUsers servedUsers,
         AuthorizedPrincipal? principal) => principal?.User is { } user
         ? servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.ClientTelemetryLevel
         : null;

@@ -36,7 +36,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
 
     private readonly ConfigurationChangeAnnouncements announcements;
-    private readonly ServedMailUsersConvergence users;
+    private readonly ServedUsersConvergence users;
     private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConfigurationConvergenceWorker> logger;
@@ -50,7 +50,7 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public ConfigurationConvergenceWorker(
         ConfigurationChangeAnnouncements announcements,
-        ServedMailUsersConvergence users,
+        ServedUsersConvergence users,
         Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
         ILogger<ConfigurationConvergenceWorker> logger)

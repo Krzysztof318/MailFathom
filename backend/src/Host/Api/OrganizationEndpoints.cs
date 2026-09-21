@@ -246,7 +246,7 @@ internal static class OrganizationEndpoints
         var target = leavesEveryOrganization ? null : request?.OrganizationId;
 
         var result = await organizations.SetUserOrganizationAsync(
-            MailUserId.Create(userId),
+            UserId.Create(userId),
             target,
             cancellationToken);
 

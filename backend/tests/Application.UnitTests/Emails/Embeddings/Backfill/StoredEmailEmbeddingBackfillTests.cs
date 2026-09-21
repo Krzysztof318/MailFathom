@@ -370,7 +370,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         const long UserCeiling = 1_000;
 
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailUser.Another, UserCeiling);
+        ledger.Seed(PeriodStart, SyntheticUser.Another, UserCeiling);
         var ownership = new StubMailOwnership();
         var world = CreateWorld(
             spendBudget: EmbeddingSpendBudget.Create(
@@ -440,8 +440,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
         InMemoryEmbeddingSpendLedger? spendLedger = null)
     {
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another);
 
         var embeddingStore = new InMemoryEmailEmbeddingStore();
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);

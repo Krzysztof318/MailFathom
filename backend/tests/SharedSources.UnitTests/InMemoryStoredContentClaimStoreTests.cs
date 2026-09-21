@@ -20,7 +20,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
         var claims = new InMemoryStoredContentClaimStore()
             .HoldingInTotal(100)
             .Holding(SyntheticMailAccount.Deployment, 40)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
 
         // Act
         var record = await claims.ClaimAsync(
@@ -63,7 +63,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
             .Holding(SyntheticMailAccount.Deployment, 450)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
 
         // Act
         var record = await claims.ClaimAsync(
@@ -104,8 +104,8 @@ public sealed class InMemoryStoredContentClaimStoreTests
         var claims = new InMemoryStoredContentClaimStore()
             .Holding(SyntheticMailAccount.Deployment, 50)
             .Holding(SyntheticMailAccount.Another, 450)
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment, SyntheticMailAccount.Another);
 
         // Act
         var record = await claims.ClaimAsync(
@@ -147,8 +147,8 @@ public sealed class InMemoryStoredContentClaimStoreTests
     {
         // Arrange
         var claims = new InMemoryStoredContentClaimStore()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another);
         var ceilings = new StoredContentCeilings(DeploymentBytes: 100_000, UserBytes: 500);
         await claims.ClaimAsync(
             SyntheticMailAccount.Another, 450, ceilings, Lifetime, TestContext.Current.CancellationToken);

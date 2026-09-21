@@ -42,7 +42,7 @@ internal sealed class AdministratorCredentialOptions
     /// <summary>Gets or sets a user's username and password, which this endpoint refuses.</summary>
     /// <remarks>
     /// Bound only so it can be refused in words rather than as an unknown key. The administrative surface answers for
-    /// the deployment rather than for a person's mail, and this method authenticates one mail user — a credential
+    /// the deployment rather than for a person's mail, and this method authenticates one user — a credential
     /// admitted here would carry a user the surface has nowhere to put and no use for.
     /// </remarks>
     public BasicAuthenticationOptions? Basic { get; set; }

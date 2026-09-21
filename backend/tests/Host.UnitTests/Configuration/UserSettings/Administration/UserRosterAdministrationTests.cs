@@ -36,9 +36,9 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
         harness.Holding(
-            new MailUserRecord(SyntheticMailUser.Deployment, "alex"),
-            new MailUserRecord(SyntheticMailUser.Another, "morgan"));
-        harness.Serving(SyntheticMailUser.Deployment);
+            new UserRecord(SyntheticUser.Deployment, "alex"),
+            new UserRecord(SyntheticUser.Another, "morgan"));
+        harness.Serving(SyntheticUser.Deployment);
 
         // Act
         var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
@@ -64,7 +64,7 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         await harness.Directory.Received(1).ReadUsersAsync(
-            ServedMailUsers.MaximumUsers + 1,
+            ServedUsers.MaximumUsers + 1,
             Arg.Any<CancellationToken>());
     }
 
@@ -118,7 +118,7 @@ public sealed class UserRosterAdministrationTests
         await harness.Documents.Received(1).CommitAsync(
             outcome.User,
             """{"Language":"English"}""",
-            MailUserEndpointAccess.Everywhere,
+            UserEndpointAccess.Everywhere,
             1,
             Arg.Any<CancellationToken>());
         Assert.Contains(harness.ServedUsers.Users, user => user.User == outcome.User);
@@ -148,7 +148,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
@@ -164,12 +164,12 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticMailUser.Deployment);
-        harness.Erasing(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
+        harness.Erasing(SyntheticUser.Deployment);
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
-        await harness.Roster.EraseAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+        await harness.Roster.EraseAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([true], heard);
@@ -184,7 +184,7 @@ public sealed class UserRosterAdministrationTests
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
-        await harness.Roster.EraseAsync(SyntheticMailUser.Another, TestContext.Current.CancellationToken);
+        await harness.Roster.EraseAsync(SyntheticUser.Another, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(heard);
@@ -196,7 +196,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("  alex  ", TestContext.Current.CancellationToken);
@@ -215,7 +215,7 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Provisioning
-            .ProvisionAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -239,9 +239,9 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Documents
             .CommitAsync(
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<string>(),
-                Arg.Any<MailUserEndpointAccess>(),
+                Arg.Any<UserEndpointAccess>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns((long?)null);
@@ -281,13 +281,13 @@ public sealed class UserRosterAdministrationTests
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync(
-            new string('a', MailUserRecord.MaximumDisplayNameLength + 1),
+            new string('a', UserRecord.MaximumDisplayNameLength + 1),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.IsProvisioned);
         Assert.Contains(
-            MailUserRecord.MaximumDisplayNameLength.ToString(CultureInfo.InvariantCulture),
+            UserRecord.MaximumDisplayNameLength.ToString(CultureInfo.InvariantCulture),
             outcome.RefusalMessage!,
             StringComparison.Ordinal);
     }
@@ -303,7 +303,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(
             MailFathomPermission.AdminConfigurationWrite,
             clientEndpoint: new ClientEndpointOptions { Enabled = true });
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
@@ -338,7 +338,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
@@ -354,9 +354,9 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(
         [
-            .. Enumerable.Range(0, ServedMailUsers.MaximumUsers)
-                .Select(position => new MailUserRecord(
-                    MailUserId.Create(Guid.NewGuid()),
+            .. Enumerable.Range(0, ServedUsers.MaximumUsers)
+                .Select(position => new UserRecord(
+                    UserId.Create(Guid.NewGuid()),
                     $"user-{position}")),
         ]);
 
@@ -388,12 +388,12 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticMailUser.Deployment);
-        harness.Erasing(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
+        harness.Erasing(SyntheticUser.Deployment);
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -407,16 +407,16 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticMailUser.Deployment);
-        harness.Erasing(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
+        harness.Erasing(SyntheticUser.Deployment);
         await harness.ServedUsers.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
 
-        Task<UserErasureOutcome> erasing;
+        Task<UserRosterErasureOutcome> erasing;
         try
         {
             // Act
             erasing = harness.Roster.EraseAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 TestContext.Current.CancellationToken);
 
             // Assert
@@ -444,15 +444,15 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
         var ownAccount = new Guid("41d7b2e0-9c35-4a68-8f12-3b6d5e7a9c04");
         var sharedAccount = new Guid("52e8c3f1-0d46-4b79-9023-4c7e6f8b0d15");
-        harness.Serving(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
         harness.MailAccountRecords.HoldUser(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "{}",
             1,
             new MailAccountRecord(ownAccount, "own@roster.test", "own", "{}", 1),
             new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
         harness.MailAccountRecords.HoldUser(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             "{}",
             1,
             new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
@@ -460,19 +460,19 @@ public sealed class UserRosterAdministrationTests
         var servedWhileErasing = true;
         IReadOnlyList<Guid> statedAsQuiesced = [];
         harness.Erasure
-            .EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 servedWhileErasing = harness.ServedUsers.Users.Any(
-                    candidate => candidate.User == SyntheticMailUser.Deployment);
+                    candidate => candidate.User == SyntheticUser.Deployment);
                 statedAsQuiesced = call.Arg<IReadOnlyList<Guid>>()!;
 
-                return new MailUserErasureOutcome(true, null);
+                return new UserErasureOutcome(true, null);
             });
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -494,14 +494,14 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticMailUser.Deployment);
-        harness.Erasing(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
+        harness.Erasing(SyntheticUser.Deployment);
         harness.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -509,7 +509,7 @@ public sealed class UserRosterAdministrationTests
         Assert.False(outcome.IsQuiesced);
         Assert.Equal(harness.Quiescing.Refusal, outcome.RefusalMessage);
         await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
-        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticMailUser.Deployment);
+        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticUser.Deployment);
         Assert.Empty(heard);
     }
 
@@ -523,16 +523,16 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
-        harness.Serving(SyntheticMailUser.Deployment);
+        harness.Serving(SyntheticUser.Deployment);
         var appearedUnheld = Guid.Parse("7d3a9c15-4e28-4b61-9f07-2c8b6d0e5a34");
         harness.Erasure
-            .EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasureOutcome(false, appearedUnheld));
+            .EraseAsync(SyntheticUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserErasureOutcome(false, appearedUnheld));
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -541,7 +541,7 @@ public sealed class UserRosterAdministrationTests
         Assert.Contains(appearedUnheld.ToString("D"), outcome.RefusalMessage!, StringComparison.Ordinal);
 
         // Nothing was erased, so the person goes on being served and no replica is told otherwise.
-        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticMailUser.Deployment);
+        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticUser.Deployment);
         Assert.Empty(heard);
     }
 
@@ -553,7 +553,7 @@ public sealed class UserRosterAdministrationTests
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -582,7 +582,7 @@ public sealed class UserRosterAdministrationTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Roster.EraseAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken));
+            () => harness.Roster.EraseAsync(SyntheticUser.Deployment, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A label is what an administrator selects a user by, and nothing is keyed by it, so replacing one is an ordinary write.</summary>
@@ -591,18 +591,18 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alexandra"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(outcome.IsRelabelled);
         await harness.Provisioning.Received(1)
-            .RelabelAsync(SyntheticMailUser.Deployment, "alex", Arg.Any<CancellationToken>());
+            .RelabelAsync(SyntheticUser.Deployment, "alex", Arg.Any<CancellationToken>());
     }
 
     /// <summary>The label is trimmed the way a declared one is, so a roster is never told apart by trailing space.</summary>
@@ -611,17 +611,17 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alexandra"));
 
         // Act
         await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "  alex  ",
             TestContext.Current.CancellationToken);
 
         // Assert
         await harness.Provisioning.Received(1)
-            .RelabelAsync(SyntheticMailUser.Deployment, "alex", Arg.Any<CancellationToken>());
+            .RelabelAsync(SyntheticUser.Deployment, "alex", Arg.Any<CancellationToken>());
     }
 
     /// <summary>Two users carrying one label would leave an administrator nothing to select on, which the column's index refuses.</summary>
@@ -631,12 +631,12 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(
-            new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"),
-            new MailUserRecord(SyntheticMailUser.Another, "alex"));
+            new UserRecord(SyntheticUser.Deployment, "alexandra"),
+            new UserRecord(SyntheticUser.Another, "alex"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
@@ -657,14 +657,14 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alexandra"));
         harness.Provisioning
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
@@ -684,11 +684,11 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             "sam",
             TestContext.Current.CancellationToken);
 
@@ -711,7 +711,7 @@ public sealed class UserRosterAdministrationTests
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             label,
             TestContext.Current.CancellationToken);
 
@@ -746,7 +746,7 @@ public sealed class UserRosterAdministrationTests
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => harness.Roster.RelabelAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 "alex",
                 TestContext.Current.CancellationToken));
     }
@@ -757,16 +757,16 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex")
+        harness.Holding(new UserRecord(SyntheticUser.Deployment, "alex")
         {
-            EndpointAccess = new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            EndpointAccess = new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
         });
 
         // Act
         var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), Assert.Single(roster).EndpointAccess);
+        Assert.Equal(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), Assert.Single(roster).EndpointAccess);
     }
 
     /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
@@ -779,27 +779,27 @@ public sealed class UserRosterAdministrationTests
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
             principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
 
-            this.Directory = Substitute.For<IMailUserDirectory>();
+            this.Directory = Substitute.For<IUserDirectory>();
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
 
-            this.Provisioning = Substitute.For<IMailUserProvisioning>();
+            this.Provisioning = Substitute.For<IUserProvisioning>();
             this.Provisioning
-                .ProvisionAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .ProvisionAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
             this.Provisioning
-                .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
 
-            this.Erasure = Substitute.For<IMailUserErasure>();
-            this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new MailUserErasureOutcome(false, null));
+            this.Erasure = Substitute.For<IUserErasure>();
+            this.Erasure.EraseAsync(Arg.Any<UserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+                .Returns(new UserErasureOutcome(false, null));
 
             this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
             this.Documents
                 .CommitAsync(
-                    Arg.Any<MailUserId>(),
+                    Arg.Any<UserId>(),
                     Arg.Any<string>(),
-                    Arg.Any<MailUserEndpointAccess>(),
+                    Arg.Any<UserEndpointAccess>(),
                     Arg.Any<long>(),
                     Arg.Any<CancellationToken>())
                 .Returns((long?)2);
@@ -808,7 +808,7 @@ public sealed class UserRosterAdministrationTests
             this.ServedUsers.Resolved(
             [
                 new(
-                    MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
+                    UserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
                     "nobody-these-tests-name",
                     []),
             ]);
@@ -838,11 +838,11 @@ public sealed class UserRosterAdministrationTests
         /// <summary>Gets the backplane a roster change is announced over, which nobody hears until a test listens.</summary>
         internal InMemoryBackplane Backplane { get; } = new();
 
-        internal IMailUserDirectory Directory { get; }
+        internal IUserDirectory Directory { get; }
 
-        internal IMailUserProvisioning Provisioning { get; }
+        internal IUserProvisioning Provisioning { get; }
 
-        internal IMailUserErasure Erasure { get; }
+        internal IUserErasure Erasure { get; }
 
         internal IUserSettingsDocumentWriter Documents { get; }
 
@@ -852,18 +852,18 @@ public sealed class UserRosterAdministrationTests
         /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
         internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
 
-        internal ServedMailUsers ServedUsers { get; } = new();
+        internal ServedUsers ServedUsers { get; } = new();
 
-        internal void Holding(params MailUserRecord[] held) =>
+        internal void Holding(params UserRecord[] held) =>
             this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
 
-        internal void Serving(MailUserId user) =>
+        internal void Serving(UserId user) =>
             this.ServedUsers.Resolved([new(user, "served", [])]);
 
-        internal void Serving(params ServedMailUser[] users) => this.ServedUsers.Resolved(users);
+        internal void Serving(params ServedUser[] users) => this.ServedUsers.Resolved(users);
 
-        internal void Erasing(MailUserId user) =>
+        internal void Erasing(UserId user) =>
             this.Erasure.EraseAsync(user, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new MailUserErasureOutcome(true, null));
+                .Returns(new UserErasureOutcome(true, null));
     }
 }

@@ -23,7 +23,7 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// a message answering nothing has no such language to take. What is left is the person composing it, who is the only
 /// party a blank composer knows about — the mailbox it would be sent from is a choice they have not made yet, and on a
 /// deployment holding several of theirs it would be a guess. It is an argument here rather than something the writer
-/// reads off the sources, for the reason <see cref="Access.IMailUserLanguages" /> gives — who a derivation is for
+/// reads off the sources, for the reason <see cref="Access.IUserLanguages" /> gives — who a derivation is for
 /// stays out of the text sent to a provider.
 /// </para>
 /// </remarks>
@@ -31,4 +31,4 @@ public sealed record ReplyDraftBrief(
     ReplyDraftSources Sources,
     string? Selection,
     string? Instruction,
-    MailUserLanguage Language);
+    UserLanguage Language);

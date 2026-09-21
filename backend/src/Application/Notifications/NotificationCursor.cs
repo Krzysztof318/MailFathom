@@ -50,7 +50,7 @@ public readonly record struct NotificationCursor
     /// <summary>Reduces a user to the short stable text a cursor carries to prove whose walk it belongs to.</summary>
     /// <param name="user">The user the page was read for.</param>
     /// <returns>The fingerprint.</returns>
-    public static string FingerprintOf(MailUserId user) =>
+    public static string FingerprintOf(UserId user) =>
         PageFilterFingerprint.Of(user.Value.ToString("N", CultureInfo.InvariantCulture));
 
     /// <summary>Creates the cursor that continues a walk after one position in the centre.</summary>

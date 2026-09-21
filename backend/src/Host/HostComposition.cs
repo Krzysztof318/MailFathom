@@ -271,16 +271,16 @@ internal static class HostComposition
         // Whose mail an admitted caller is acting on. A singleton because it is a property of the deployment rather than
         // of a request: a startup gate settles it once, and the two registrations are the same object so nothing can
         // read a user the gate has not established.
-        builder.Services.AddSingleton<ServedMailUsers>();
-        builder.Services.AddSingleton<IDeploymentMailUserSource>(provider =>
-            provider.GetRequiredService<ServedMailUsers>());
+        builder.Services.AddSingleton<ServedUsers>();
+        builder.Services.AddSingleton<IDeploymentUserSource>(provider =>
+            provider.GetRequiredService<ServedUsers>());
         // A singleton over that same roster, for the same reason: which language somebody reads is a fact about them
         // rather than about the request being served, and a use case composing text for them must reach it without a
         // query.
-        builder.Services.AddSingleton<IMailUserLanguages, ServedUserLanguages>();
+        builder.Services.AddSingleton<IUserLanguages, ServedUserLanguages>();
         // And which zone their own days are read in, over the same roster and for the same reason: an agent about to
         // state its anchor must not put a query in front of the call it is about to make.
-        builder.Services.AddSingleton<IMailUserTimeZones, ServedUserTimeZones>();
+        builder.Services.AddSingleton<IUserTimeZones, ServedUserTimeZones>();
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
@@ -395,7 +395,7 @@ internal static class HostComposition
             provider.GetServices<ISensitiveContentScanner>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SensitiveContentScanConcurrency>(),
-            provider.GetRequiredService<ServedMailUsers>()));
+            provider.GetRequiredService<ServedUsers>()));
     }
 
     /// <summary>Registers spam classification, and reports whether a scanner was declared behind it.</summary>
@@ -451,7 +451,7 @@ internal static class HostComposition
         //
         // What a rule claims about a mailbox is left unjudged here, because every mailbox is a user's own record and no
         // reading of the files could tell a scope naming one that exists from a scope naming one that does not.
-        // ServedMailUsersStartupGate reports such a claim once it holds the roster; a reload and a configuration write
+        // ServedUsersStartupGate reports such a claim once it holds the roster; a reload and a configuration write
         // refuse it.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
 
@@ -529,7 +529,7 @@ internal static class HostComposition
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<DataEncryptionOptions>>>()));
         builder.Services.AddSingleton(provider => new MailSynchronizationSettingsSnapshot(
             provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
-            provider.GetRequiredService<ServedMailUsers>()));
+            provider.GetRequiredService<ServedUsers>()));
         builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<MailSynchronizationSettingsSnapshot>());
         builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
         builder.Services.AddSingleton<ISettingsSnapshot<DataEncryptionOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
@@ -558,7 +558,7 @@ internal static class HostComposition
         // accounts and the assignments into it are one reading of one roster.
         builder.Services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedMailUsers>()));
+            provider.GetRequiredService<ServedUsers>()));
         builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
             provider.GetRequiredService<ConfiguredMailAccountCatalog>());
         builder.Services.AddScoped<IMailAccountAssignments>(provider =>
@@ -805,7 +805,7 @@ internal static class HostComposition
         [
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
-            HostStartupGate.ServedMailUsers,
+            HostStartupGate.ServedUsers,
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -1271,7 +1271,7 @@ internal static class HostComposition
         // Behind the schema gate, because the user records live in a table that migration creates, and ahead of
         // everything that serves a request, because a caller is admitted to act for a user and there is nothing to
         // admit one for until this has run.
-        builder.Services.AddHostedService<ServedMailUsersStartupGate>();
+        builder.Services.AddHostedService<ServedUsersStartupGate>();
 
         // Behind the gate above, because what it keeps current is the roster that gate settled, and what it reads is
         // settings and records rather than mail, so nothing behind it waits on it. The persisted layer's reloader is
@@ -1279,10 +1279,10 @@ internal static class HostComposition
         // handed as the resolution rather than as the service, because that reloader reads through the connection pool
         // and every hosted service is constructed before any is started — asking for it here would build the pool
         // before startup composed the connection string it needs.
-        builder.Services.AddSingleton<ServedMailUsersConvergence>();
+        builder.Services.AddSingleton<ServedUsersConvergence>();
         builder.Services.AddHostedService(provider => new ConfigurationConvergenceWorker(
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
-            provider.GetRequiredService<ServedMailUsersConvergence>(),
+            provider.GetRequiredService<ServedUsersConvergence>(),
             provider.GetService<RootSettingsReloader>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<ConfigurationConvergenceWorker>>()));

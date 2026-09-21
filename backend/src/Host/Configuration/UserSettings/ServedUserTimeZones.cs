@@ -17,16 +17,16 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// </para>
 /// <para>
 /// A deployment before its gate has run, and a user it does not serve, are one answer rather than two —
-/// <see cref="MailUserTimeZone.Coordinated" />, which is what <see cref="IMailUserTimeZones" /> states and why.
+/// <see cref="UserTimeZone.Coordinated" />, which is what <see cref="IUserTimeZones" /> states and why.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
-internal sealed class ServedUserTimeZones(ServedMailUsers servedUsers) : IMailUserTimeZones
+internal sealed class ServedUserTimeZones(ServedUsers servedUsers) : IUserTimeZones
 {
     /// <inheritdoc />
-    public MailUserTimeZone ZoneOf(MailUserId user) => this.StatedZoneOf(user) ?? MailUserTimeZone.Coordinated;
+    public UserTimeZone ZoneOf(UserId user) => this.StatedZoneOf(user) ?? UserTimeZone.Coordinated;
 
     /// <inheritdoc />
-    public MailUserTimeZone? StatedZoneOf(MailUserId user) =>
+    public UserTimeZone? StatedZoneOf(UserId user) =>
         servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.TimeZone;
 }

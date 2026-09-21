@@ -38,7 +38,7 @@ public interface ICalendarEventStore
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The event, or <see langword="null" /> when that calendar holds no such event.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
-    Task<CalendarEvent?> ReadAsync(MailUserId owner, CalendarEventId eventId, CancellationToken cancellationToken);
+    Task<CalendarEvent?> ReadAsync(UserId owner, CalendarEventId eventId, CancellationToken cancellationToken);
 
     /// <summary>Reads the events of somebody's calendar that fall in one window, earliest first.</summary>
     /// <param name="owner">The person whose calendar is read.</param>
@@ -52,7 +52,7 @@ public interface ICalendarEventStore
     /// same on every read of one window rather than whichever order the database answered in.
     /// </remarks>
     Task<IReadOnlyList<CalendarEvent>> ReadRangeAsync(
-        MailUserId owner,
+        UserId owner,
         CalendarEventQuery query,
         CancellationToken cancellationToken);
 
@@ -71,7 +71,7 @@ public interface ICalendarEventStore
     /// once both read nothing here.
     /// </remarks>
     Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
-        MailUserId owner,
+        UserId owner,
         IReadOnlyCollection<ImportedCalendarEventUid> candidates,
         CancellationToken cancellationToken);
 
@@ -90,7 +90,7 @@ public interface ICalendarEventStore
     /// </remarks>
     Task AddAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken);
 
@@ -110,7 +110,7 @@ public interface ICalendarEventStore
     /// </remarks>
     Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken);
 
@@ -129,7 +129,7 @@ public interface ICalendarEventStore
     /// </remarks>
     Task<bool> DeleteAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEventId eventId,
         CancellationToken cancellationToken);
 }

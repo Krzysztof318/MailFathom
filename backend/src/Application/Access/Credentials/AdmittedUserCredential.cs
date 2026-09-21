@@ -26,9 +26,9 @@ namespace MailFathom.Application.Access.Credentials;
 /// </remarks>
 public sealed record AdmittedUserCredential(
     Guid CredentialId,
-    MailUserId User,
+    UserId User,
     IReadOnlyList<MailFathomPermission> Permissions,
-    MailUserEndpointAccess EndpointAccess)
+    UserEndpointAccess EndpointAccess)
 {
     /// <summary>Describes the credential one resolution admitted, refusing an answer that names nothing.</summary>
     /// <param name="credential">The credential the store resolved.</param>

@@ -27,14 +27,14 @@ public sealed class OrganizationEndpointsTests
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
         harness.Organizations.SetUserOrganizationAsync(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OrganizationId,
                 Arg.Any<CancellationToken>())
             .Returns(new OrganizationWriteResult(OrganizationWriteOutcome.UsernameTaken, CollidingUsername: "jan"));
 
         // Act
         var result = await OrganizationEndpoints.SetUserOrganizationAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserOrganizationRequest(OrganizationId, None: null),
             harness.Administration,
             TestContext.Current.CancellationToken);
@@ -60,7 +60,7 @@ public sealed class OrganizationEndpointsTests
 
         // Act
         var result = await OrganizationEndpoints.SetUserOrganizationAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             request,
             harness.Administration,
             TestContext.Current.CancellationToken);
@@ -76,12 +76,12 @@ public sealed class OrganizationEndpointsTests
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
-        harness.Organizations.SetUserOrganizationAsync(Arg.Any<MailUserId>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        harness.Organizations.SetUserOrganizationAsync(Arg.Any<UserId>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.Written));
 
         // Act
         var result = await OrganizationEndpoints.SetUserOrganizationAsync(
-            SyntheticMailUser.Deployment.Value,
+            SyntheticUser.Deployment.Value,
             new UserOrganizationRequest(null, None: true),
             harness.Administration,
             TestContext.Current.CancellationToken);
@@ -90,7 +90,7 @@ public sealed class OrganizationEndpointsTests
         Assert.IsType<NoContent>(result.Result);
 
         await harness.Organizations.Received(1).SetUserOrganizationAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             null,
             Arg.Any<CancellationToken>());
     }

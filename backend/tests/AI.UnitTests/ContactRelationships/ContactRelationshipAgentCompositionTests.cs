@@ -46,10 +46,10 @@ public sealed class ContactRelationshipAgentCompositionTests
     /// than something only the pure instruction tests would have noticed.
     /// </summary>
     [Theory]
-    [InlineData(MailUserLanguage.English)]
-    [InlineData(MailUserLanguage.Polish)]
+    [InlineData(UserLanguage.English)]
+    [InlineData(UserLanguage.Polish)]
     public async Task Compose_TheRelationshipAgent_CarriesItsOwnInstructionInsideTheEnvelope(
-        MailUserLanguage language)
+        UserLanguage language)
     {
         // Arrange
         using var chatClient = ScriptedChatClient.Answering(Answer);
@@ -85,7 +85,7 @@ public sealed class ContactRelationshipAgentCompositionTests
 
     private static ChatClientAgent AgentOver(
         ScriptedChatClient chatClient,
-        MailUserLanguage language = MailUserLanguage.English) =>
+        UserLanguage language = UserLanguage.English) =>
         ContactRelationshipAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),

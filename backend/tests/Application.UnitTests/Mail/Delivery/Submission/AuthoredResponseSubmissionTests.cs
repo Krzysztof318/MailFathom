@@ -496,7 +496,7 @@ public sealed class AuthoredResponseSubmissionTests
         composer
             .Compose(
                 Arg.Any<MailAccountId>(),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())

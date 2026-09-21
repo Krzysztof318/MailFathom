@@ -196,7 +196,7 @@ public sealed class ReplyDraftAgentTests
     private static ReplyDraftBrief Brief(
         string text = "It is 4 200 zloty.",
         IReadOnlyList<string>? styleSamples = null,
-        MailUserLanguage language = MailUserLanguage.English)
+        UserLanguage language = UserLanguage.English)
     {
         EmailAddress.TryCreate("Karolina", "karolina@example.test", out var karolina);
 

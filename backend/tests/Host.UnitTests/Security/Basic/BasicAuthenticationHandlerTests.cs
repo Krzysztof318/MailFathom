@@ -43,8 +43,8 @@ public sealed class BasicAuthenticationHandlerTests
 
     /// <summary>The user the provisioned credential names, deliberately not the one a deployment is configured with.</summary>
     /// <remarks>A principal that carried the deployment's user instead would be indistinguishable from one carrying none, which is the widening the success branch exists to prevent.</remarks>
-    private static readonly MailUserId CredentialUser =
-        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    private static readonly UserId CredentialUser =
+        UserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     /// <summary>
     /// The deployment this endpoint is served in is the administrator's to decide, and a Compose or loopback
@@ -120,7 +120,7 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness { Surface = TransportSurface.Client };
-        harness.HoldsTheUsersCredential(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+        harness.HoldsTheUsersCredential(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
         var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
@@ -140,7 +140,7 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness { Surface = TransportSurface.Mcp };
-        harness.HoldsTheUsersCredential(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+        harness.HoldsTheUsersCredential(new UserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
         var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
@@ -378,7 +378,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         /// <summary>Holds one enabled credential for <see cref="CredentialUser" />, whose password the hasher recognizes.</summary>
         /// <param name="endpointAccess">The user's endpoint switches as the store reads them beside the credential, or both on.</param>
-        internal void HoldsTheUsersCredential(MailUserEndpointAccess? endpointAccess = null) =>
+        internal void HoldsTheUsersCredential(UserEndpointAccess? endpointAccess = null) =>
             this.Credentials.FindPasswordAsync(
                     Arg.Is<UserCredentialLogin>(login => login.Value == "user"),
                     Arg.Any<CancellationToken>())
@@ -389,7 +389,7 @@ public sealed class BasicAuthenticationHandlerTests
                     Grant,
                     Enabled: true,
                     StoredHash,
-                    endpointAccess ?? MailUserEndpointAccess.Everywhere));
+                    endpointAccess ?? UserEndpointAccess.Everywhere));
 
         private UserPasswordAuthenticator Authenticator { get; }
 

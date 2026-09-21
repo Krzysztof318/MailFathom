@@ -601,7 +601,7 @@ public sealed class RootSettingsWriterTests
                 row,
                 row,
                 new CandidateConfigurationComposer(configuration, layer),
-                new CandidateSettingsValidator([], new ServedMailUsers()),
+                new CandidateSettingsValidator([], new ServedUsers()),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
                 new ConfigurationChangeAnnouncements(
                     () => Task.FromResult(this.Backplane.Connect()),

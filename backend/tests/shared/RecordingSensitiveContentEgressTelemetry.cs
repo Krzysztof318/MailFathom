@@ -59,7 +59,7 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId? user,
+        UserId? user,
         MailAccountId? account,
         CancellationToken cancellationToken)
     {
@@ -85,7 +85,7 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <param name="cancellationToken">The token the consumer opened the operation with, which a test reads to tell a shutdown apart.</param>
     internal sealed class GuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId? user,
+        UserId? user,
         MailAccountId? account,
         CancellationToken cancellationToken) : ISensitiveContentGuardScope
     {
@@ -93,7 +93,7 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
         public SensitiveContentEgressPoint EgressPoint => egressPoint;
 
         /// <summary>Gets the user whose whole mail the operation was publishing, where it was one.</summary>
-        public MailUserId? User => user;
+        public UserId? User => user;
 
         /// <summary>Gets the mailbox the operation was publishing, where it was one.</summary>
         public MailAccountId? Account => account;

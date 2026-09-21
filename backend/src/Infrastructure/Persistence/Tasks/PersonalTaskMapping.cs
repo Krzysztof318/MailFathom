@@ -23,7 +23,7 @@ internal static class PersonalTaskMapping
 
         return PersonalTask.Restore(
             PersonalTaskId.Create(entity.Id),
-            MailUserId.Create(entity.UserId),
+            UserId.Create(entity.UserId),
             entity.Title,
             entity.DueOn,
             ToAnnouncement(entity),

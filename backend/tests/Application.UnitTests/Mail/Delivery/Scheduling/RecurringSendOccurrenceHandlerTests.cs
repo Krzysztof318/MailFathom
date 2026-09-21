@@ -276,7 +276,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
             {
                 Id = RecurringSendId.Create(Guid.CreateVersion7()),
                 AccountId = Account,
-                User = SyntheticMailUser.Deployment,
+                User = SyntheticUser.Deployment,
                 Requester = OutgoingEmailRequester.Command("declare-1"),
                 Recipients = [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)],
                 Schedule = schedule,
@@ -301,7 +301,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
             composer
                 .RecomposeAsOccurrence(
                     Arg.Any<MailAccountId>(),
-                    SyntheticMailUser.Deployment,
+                    SyntheticUser.Deployment,
                     Arg.Any<OutgoingEmailRequester>(),
                     Arg.Any<IReadOnlyList<OutgoingRecipient>>(),
                     Arg.Any<ReadOnlyMemory<byte>>(),
@@ -309,7 +309,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
                 .Returns(call => AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
                     OutgoingEmailRequest.Create(
                         call.ArgAt<MailAccountId>(0),
-                        call.ArgAt<MailUserId?>(1),
+                        call.ArgAt<UserId?>(1),
                         call.ArgAt<OutgoingEmailRequester>(2),
                         call.ArgAt<IReadOnlyList<OutgoingRecipient>>(3)),
                     InternetMessageId.Mint("example.test"),

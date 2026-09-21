@@ -223,7 +223,7 @@ public sealed class UserOutboxTests
             Substitute.For<IPersistenceSession>(),
             OutgoingEmailRequest.Create(
                 account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{account.Value:N}"),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]),
             OutgoingEmailPrincipal.Of("test-caller"),

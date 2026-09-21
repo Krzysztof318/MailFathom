@@ -77,7 +77,7 @@ public sealed class MailReplyDrafting
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
-    private readonly IMailUserLanguages languages;
+    private readonly IUserLanguages languages;
     private readonly bool derivesStyleFromSentMail;
 
     /// <summary>Initializes the drafting.</summary>
@@ -95,7 +95,7 @@ public sealed class MailReplyDrafting
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
-        IMailUserLanguages languages,
+        IUserLanguages languages,
         bool derivesStyleFromSentMail)
     {
         ArgumentNullException.ThrowIfNull(sourceReader);

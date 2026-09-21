@@ -35,7 +35,7 @@ public interface IAuthoredEmailComposer
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a recipient names a role this system does not declare, which is a boundary that mapped its input wrongly rather than an author who wrote something wrong.</exception>
     AuthoredEmailComposition Compose(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities);
@@ -70,7 +70,7 @@ public interface IAuthoredEmailComposer
     /// </remarks>
     AuthoredEmailComposition RecomposeAsOccurrence(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> draftMime,

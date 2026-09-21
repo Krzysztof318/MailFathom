@@ -43,7 +43,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Notification>> ReadPageAsync(
-        MailUserId user,
+        UserId user,
         NotificationCursor? after,
         int limit,
         CancellationToken cancellationToken)
@@ -65,12 +65,12 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     }
 
     /// <inheritdoc />
-    public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken) =>
+    public Task<int> CountUnreadAsync(UserId user, CancellationToken cancellationToken) =>
         Task.FromResult(this.recorded.Count(candidate => candidate.User == user && !candidate.IsRead));
 
     /// <inheritdoc />
     public Task<NotificationReadOutcome> SetReadAsync(
-        MailUserId user,
+        UserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken)
@@ -103,7 +103,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     }
 
     /// <inheritdoc />
-    public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken)
+    public Task<int> MarkAllReadAsync(UserId user, CancellationToken cancellationToken)
     {
         var marked = 0;
 
@@ -121,7 +121,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
 
     /// <inheritdoc />
     public Task<int> EraseAsync(
-        MailUserId user,
+        UserId user,
         IReadOnlyCollection<NotificationId> notifications,
         CancellationToken cancellationToken)
     {
@@ -149,7 +149,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
 
     /// <inheritdoc />
     public Task<int> EraseOccurredBeforeAsync(
-        MailUserId user,
+        UserId user,
         DateTimeOffset occurredBefore,
         int limit,
         CancellationToken cancellationToken)

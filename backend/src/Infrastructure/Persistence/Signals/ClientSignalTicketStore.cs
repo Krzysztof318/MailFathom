@@ -84,7 +84,7 @@ internal sealed class ClientSignalTicketStore(NpgsqlDataSource dataSource) : ICl
     /// <inheritdoc />
     public async Task<bool> TryMintAsync(
         string identifier,
-        MailUserId user,
+        UserId user,
         ReadOnlyMemory<byte> secretDigest,
         DateTimeOffset expiresAt,
         int mostOutstanding,
@@ -132,7 +132,7 @@ internal sealed class ClientSignalTicketStore(NpgsqlDataSource dataSource) : ICl
             }
 
             return new RedeemedClientSignalTicket(
-                MailUserId.Create(reader.GetGuid(0)),
+                UserId.Create(reader.GetGuid(0)),
                 reader.GetFieldValue<byte[]>(1),
                 reader.GetFieldValue<DateTimeOffset>(2));
         }

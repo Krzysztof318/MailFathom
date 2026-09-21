@@ -50,11 +50,11 @@ public sealed class HeldBackRecordEndpointsTests
         var harness = new EndpointHarness();
 
         harness.HeldBack.Replace(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             [
                 new HeldBackRecord(
                     HeldBackRecordKind.User,
-                    SyntheticMailUser.Deployment.Value,
+                    SyntheticUser.Deployment.Value,
                     "alex",
                     RejectedVersion: 4,
                     ["Correct the record."]),
@@ -76,7 +76,7 @@ public sealed class HeldBackRecordEndpointsTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment.Value, Assert.Single(answer.Value!.Users).Id);
+        Assert.Equal(SyntheticUser.Deployment.Value, Assert.Single(answer.Value!.Users).Id);
         Assert.Equal(4, Assert.Single(answer.Value.Users).RejectedVersion);
         Assert.Equal(MailAccountId, Assert.Single(answer.Value.MailAccounts).Id);
         Assert.Equal(OrganizationId, Assert.Single(answer.Value.Organizations).Id);

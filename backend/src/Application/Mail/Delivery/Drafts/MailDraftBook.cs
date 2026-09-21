@@ -115,7 +115,7 @@ public sealed class MailDraftBook
     /// </remarks>
     public async Task<MailDraftRecord> SaveAsync(
         MailAccountId account,
-        MailUserId writtenBy,
+        UserId writtenBy,
         OutgoingEmailRequester author,
         ComposedMailDraft composed,
         MailDraftId? revises,
@@ -228,7 +228,7 @@ public sealed class MailDraftBook
     /// </remarks>
     public async Task<IReadOnlyList<AuthoredEmailAttachment>> ReadStagedAttachmentsAsync(
         MailAccountId account,
-        MailUserId writtenBy,
+        UserId writtenBy,
         MailDraftId? revises,
         CancellationToken cancellationToken)
     {
@@ -276,7 +276,7 @@ public sealed class MailDraftBook
     /// </remarks>
     public async Task<MailDraftFilingResult> DiscardAsync(
         MailDraftId draftId,
-        MailUserId writtenBy,
+        UserId writtenBy,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
@@ -313,7 +313,7 @@ public sealed class MailDraftBook
     /// </remarks>
     private async Task RequireRevisableAsync(
         MailAccountId accountId,
-        MailUserId writtenBy,
+        UserId writtenBy,
         MailDraftId draftId,
         CancellationToken cancellationToken)
     {

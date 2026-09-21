@@ -41,7 +41,7 @@ public sealed record OutgoingEmailRequest
 
     private OutgoingEmailRequest(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt)
@@ -67,7 +67,7 @@ public sealed record OutgoingEmailRequest
     /// mailbox retrying the same requester's submission are two submissions. A rule and a recurring occasion name
     /// nobody, because neither is an act a person took.
     /// </remarks>
-    public MailUserId? Author { get; }
+    public UserId? Author { get; }
 
     /// <summary>Gets the authored act that asked, which is what makes the same request twice one delivery.</summary>
     public OutgoingEmailRequester Requester { get; }
@@ -95,7 +95,7 @@ public sealed record OutgoingEmailRequest
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="MaximumRecipientCount" /> entries, or names one mailbox more than once.</exception>
     public static OutgoingEmailRequest Create(
         MailAccountId account,
-        MailUserId? author,
+        UserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt = null)

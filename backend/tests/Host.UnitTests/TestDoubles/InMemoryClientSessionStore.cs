@@ -31,7 +31,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
     internal bool NoLongerAdmits { get; set; }
 
     /// <summary>Gets or sets the endpoint switches of the user behind every session, as a read finds them on the user row.</summary>
-    internal MailUserEndpointAccess EndpointAccess { get; set; } = MailUserEndpointAccess.Everywhere;
+    internal UserEndpointAccess EndpointAccess { get; set; } = UserEndpointAccess.Everywhere;
 
     /// <summary>Gets or sets what every operation raises instead of answering, so a test can state an unreachable store.</summary>
     internal Exception? Unreachable { get; set; }

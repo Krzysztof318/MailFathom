@@ -10,12 +10,12 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>Publishes each validated mail section together with the user roster in force at the same instant.</summary>
 internal sealed class MailSynchronizationSettingsSnapshot(
     ISettingsSnapshot<MailSynchronizationOptions> boundSettings,
-    ServedMailUsers servedUsers) : ISettingsSnapshot<MailSynchronizationOptions>
+    ServedUsers servedUsers) : ISettingsSnapshot<MailSynchronizationOptions>
 {
     private readonly Lock mutex = new();
 
     private MailSynchronizationOptions? boundSnapshot;
-    private IReadOnlyList<ServedMailUser>? userSnapshot;
+    private IReadOnlyList<ServedUser>? userSnapshot;
     private MailSynchronizationOptions? publishedSnapshot;
 
     /// <inheritdoc />

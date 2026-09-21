@@ -114,7 +114,7 @@ internal readonly record struct TransportSurface
     /// authenticated principal is a <c>403</c>, which would tell a caller that what they presented is good somewhere.
     /// The administrative surface resolves no user and admits none through this.
     /// </remarks>
-    internal bool Admits(MailUserEndpointAccess access) =>
+    internal bool Admits(UserEndpointAccess access) =>
         this == Mcp ? access.McpEndpoint : this == Client && access.ClientEndpoint;
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>

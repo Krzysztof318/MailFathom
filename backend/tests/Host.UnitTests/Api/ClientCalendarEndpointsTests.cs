@@ -34,7 +34,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </remarks>
 public sealed class ClientCalendarEndpointsTests
 {
-    private static readonly MailUserId Person = SyntheticMailUser.Deployment;
+    private static readonly UserId Person = SyntheticUser.Deployment;
     private static readonly DateTimeOffset Now = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Monday = new(2026, 9, 21, 8, 0, 0, TimeSpan.Zero);
 
@@ -199,7 +199,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Arrange
         this.store
-            .ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
+            .ReadAsync(Arg.Any<UserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
             .Returns((CalendarEvent?)null);
 
         // Act
@@ -288,7 +288,7 @@ public sealed class ClientCalendarEndpointsTests
     {
         // Arrange
         this.store
-            .ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
+            .ReadAsync(Arg.Any<UserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
             .Returns((CalendarEvent?)null);
 
         // Act
@@ -367,7 +367,7 @@ public sealed class ClientCalendarEndpointsTests
         this.store
             .DeleteAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<CalendarEventId>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
@@ -389,7 +389,7 @@ public sealed class ClientCalendarEndpointsTests
         this.store
             .DeleteAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<CalendarEventId>(),
                 Arg.Any<CancellationToken>())
             .Returns(false);
@@ -493,12 +493,12 @@ public sealed class ClientCalendarEndpointsTests
     private void Holds(CalendarEvent calendarEvent)
     {
         this.store
-            .ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
+            .ReadAsync(Arg.Any<UserId>(), Arg.Any<CalendarEventId>(), Arg.Any<CancellationToken>())
             .Returns(calendarEvent);
         this.store
             .ReplaceAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<CalendarEvent>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
@@ -506,7 +506,7 @@ public sealed class ClientCalendarEndpointsTests
 
     private void AnswersWindowWith(params CalendarEvent[] events) =>
         this.store
-            .ReadRangeAsync(Arg.Any<MailUserId>(), Arg.Any<CalendarEventQuery>(), Arg.Any<CancellationToken>())
+            .ReadRangeAsync(Arg.Any<UserId>(), Arg.Any<CalendarEventQuery>(), Arg.Any<CancellationToken>())
             .Returns(events);
 
     /// <summary>Reads the window the route composed, which is what each narrowing is asserted against.</summary>

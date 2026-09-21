@@ -326,7 +326,7 @@ public sealed class ClientReplyDraftingEndpointTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
-        catalog.User.Returns(SyntheticMailUser.Deployment);
+        catalog.User.Returns(SyntheticUser.Deployment);
 
         var scopeResolver = new MailboxScopeResolver(
             catalog,
@@ -340,15 +340,15 @@ public sealed class ClientReplyDraftingEndpointTests
             scopeResolver,
             SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
-            LanguagesAnswering(MailUserLanguage.English),
+            LanguagesAnswering(UserLanguage.English),
             derivesStyleFromSentMail: true);
     }
 
     /// <summary>Answers one language for whoever is asked about, which the endpoint never states itself.</summary>
-    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    private static IUserLanguages LanguagesAnswering(UserLanguage language)
     {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.LanguageOf(Arg.Any<MailUserId>()).Returns(language);
+        var languages = Substitute.For<IUserLanguages>();
+        languages.LanguageOf(Arg.Any<UserId>()).Returns(language);
 
         return languages;
     }

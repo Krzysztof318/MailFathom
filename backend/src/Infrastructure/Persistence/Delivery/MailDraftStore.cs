@@ -49,7 +49,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     public async Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
         MailAccountId account,
-        MailUserId writtenBy,
+        UserId writtenBy,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         string subject,
@@ -199,7 +199,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// than filtered afterwards: what a person means by their drafts is what they can still edit.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
-        MailUserId user,
+        UserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken)

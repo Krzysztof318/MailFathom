@@ -20,9 +20,9 @@ public sealed class ContactRelationshipInstructionsTests
 
     /// <summary>A card is read by the person who opened the contact, so it is written in the language they read.</summary>
     [Theory]
-    [InlineData(MailUserLanguage.English)]
-    [InlineData(MailUserLanguage.Polish)]
-    public void TextFor_EachLanguage_NamesItAsTheOneEveryValueIsWrittenIn(MailUserLanguage language) =>
+    [InlineData(UserLanguage.English)]
+    [InlineData(UserLanguage.Polish)]
+    public void TextFor_EachLanguage_NamesItAsTheOneEveryValueIsWrittenIn(UserLanguage language) =>
         AssertSays($"Write every value in {language}.", language);
 
     /// <summary>The one bound the turn cannot enforce is what a model may infer from it, so the instruction states it.</summary>
@@ -50,7 +50,7 @@ public sealed class ContactRelationshipInstructionsTests
     [Fact]
     public void TextFor_ALanguageThisDeploymentDoesNotWriteIn_IsRefused() =>
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => ContactRelationshipInstructions.TextFor((MailUserLanguage)97));
+            () => ContactRelationshipInstructions.TextFor((UserLanguage)97));
 
     /// <summary>One numbering across both lists, so a document is cited by a number no conversation already holds.</summary>
     [Fact]
@@ -104,7 +104,7 @@ public sealed class ContactRelationshipInstructionsTests
         Assert.Throws<ArgumentNullException>(() => ContactRelationshipInstructions.ComposeRelationshipTurn(null!));
 
     /// <summary>Reads the instruction as one run of words, so a sentence the text happens to wrap is still one sentence.</summary>
-    private static void AssertSays(string sentence, MailUserLanguage language = MailUserLanguage.English) =>
+    private static void AssertSays(string sentence, UserLanguage language = UserLanguage.English) =>
         Assert.Contains(
             sentence,
             string.Join(

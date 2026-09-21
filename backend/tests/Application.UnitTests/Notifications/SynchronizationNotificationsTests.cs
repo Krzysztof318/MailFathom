@@ -26,7 +26,7 @@ public sealed class SynchronizationNotificationsTests
 
     /// <summary>A condition about a mailbox is a condition about whoever is assigned it, so both mailboxes have a reader.</summary>
     private static readonly StubMailAccountAssignments Assignments = new StubMailAccountAssignments()
-        .Assigning(SyntheticMailUser.Deployment, Account, SecondAccount);
+        .Assigning(SyntheticUser.Deployment, Account, SecondAccount);
 
     /// <summary>A run that commits forty messages is one arrival to somebody who was away, not forty.</summary>
     [Fact]
@@ -261,7 +261,7 @@ public sealed class SynchronizationNotificationsTests
         var outsized = MailAccountId.Create(new string('w', 400));
         var notifications = new SynchronizationNotifications(
             new NotificationRaiser(store, ClientSignalPublishers.ReachingNobody),
-            new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, outsized),
+            new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, outsized),
             new FakeTimeProvider(RunInstant));
 
         // Act
@@ -294,7 +294,7 @@ public sealed class SynchronizationNotificationsTests
         // Assert
         var signal = Assert.Single(channel.Published);
         Assert.Equal(ClientSignalKind.NotificationRaised, signal.Kind);
-        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
+        Assert.Equal(SyntheticUser.Deployment, signal.User);
         Assert.Equal(NotificationKind.Mail, signal.NotificationKind);
         Assert.Equal(1, signal.Count);
         Assert.Equal(Assert.Single(store.Recorded).Body, signal.SecondLine);

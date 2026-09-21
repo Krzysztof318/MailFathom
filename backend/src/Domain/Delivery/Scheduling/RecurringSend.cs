@@ -58,7 +58,7 @@ public sealed record RecurringSend
     /// own. It stands beside the account rather than inside it, the account's generated identifier naming one
     /// mailbox across the deployment and saying nothing about who wrote through it.
     /// </remarks>
-    public required MailUserId User { get; init; }
+    public required UserId User { get; init; }
 
     /// <summary>Gets the authored act that asked for the declaration, which every occurrence's identity is composed from.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

@@ -44,7 +44,7 @@ internal static class ConfiguredMailAccounts
     /// <returns>The configuration, carrying the roster the startup gate would have published.</returns>
     internal static MailSynchronizationOptions Holding(MailSynchronizationAccountOptions account) =>
         new MailSynchronizationOptions { Enabled = true }
-            .WithServedUsers([new ServedMailUser(SyntheticMailUser.Deployment, "user", [account])]);
+            .WithServedUsers([new ServedUser(SyntheticUser.Deployment, "user", [account])]);
 
     /// <summary>Builds the catalog of accounts a deployment serves, as the composition root builds it.</summary>
     /// <param name="options">The snapshot the roster was published onto.</param>
@@ -55,7 +55,7 @@ internal static class ConfiguredMailAccounts
 
         return new ConfiguredMailAccountCatalog(
             options,
-            ResolvedServedMailUsers.Serving([.. options.ServedUsers ?? []]));
+            ResolvedServedUsers.Serving([.. options.ServedUsers ?? []]));
     }
 
     /// <summary>Builds a complete reading account, which is what a delivery rule is added to and judged over.</summary>

@@ -20,4 +20,4 @@ public sealed record HeldClientSession(
     ClientSessionGrant Grant,
     ReadOnlyMemory<byte> SecretDigest,
     DateTimeOffset ExpiresAt,
-    MailUserEndpointAccess EndpointAccess);
+    UserEndpointAccess EndpointAccess);

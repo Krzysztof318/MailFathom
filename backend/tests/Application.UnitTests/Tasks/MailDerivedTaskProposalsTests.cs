@@ -34,7 +34,7 @@ public sealed class MailDerivedTaskProposalsTests
     {
         // Arrange
         var store = Substitute.For<IPersonalTaskStore>();
-        var proposals = Compose(store, assignedTo: [SyntheticMailUser.Deployment]);
+        var proposals = Compose(store, assignedTo: [SyntheticUser.Deployment]);
 
         // Act
         var written = await proposals.ProposeAsync(
@@ -47,7 +47,7 @@ public sealed class MailDerivedTaskProposalsTests
         Assert.Equal(1, written);
         await store.Received(1).AddAsync(
             Arg.Is<PersonalTask>(task =>
-                task!.User == SyntheticMailUser.Deployment
+                task!.User == SyntheticUser.Deployment
                 && task.Title == "Answer the supplier"
                 && task.DueOn == new DateOnly(2026, 9, 21)
                 && task.Origin == PersonalTaskOrigin.Proposed
@@ -64,7 +64,7 @@ public sealed class MailDerivedTaskProposalsTests
         var store = Substitute.For<IPersonalTaskStore>();
         var proposals = Compose(
             store,
-            assignedTo: [SyntheticMailUser.Deployment, SyntheticMailUser.Another]);
+            assignedTo: [SyntheticUser.Deployment, SyntheticUser.Another]);
 
         // Act
         var written = await proposals.ProposeAsync(
@@ -76,10 +76,10 @@ public sealed class MailDerivedTaskProposalsTests
         // Assert
         Assert.Equal(2, written);
         await store.Received(1).AddAsync(
-            Arg.Is<PersonalTask>(task => task!.User == SyntheticMailUser.Deployment),
+            Arg.Is<PersonalTask>(task => task!.User == SyntheticUser.Deployment),
             Arg.Any<CancellationToken>());
         await store.Received(1).AddAsync(
-            Arg.Is<PersonalTask>(task => task!.User == SyntheticMailUser.Another),
+            Arg.Is<PersonalTask>(task => task!.User == SyntheticUser.Another),
             Arg.Any<CancellationToken>());
     }
 
@@ -109,7 +109,7 @@ public sealed class MailDerivedTaskProposalsTests
     {
         // Arrange
         var store = Substitute.For<IPersonalTaskStore>();
-        var proposals = Compose(store, assignedTo: [SyntheticMailUser.Deployment]);
+        var proposals = Compose(store, assignedTo: [SyntheticUser.Deployment]);
 
         // Act
         var written = await proposals.ProposeAsync(
@@ -139,7 +139,7 @@ public sealed class MailDerivedTaskProposalsTests
                 return Task.CompletedTask;
             });
 
-        var proposals = Compose(store, assignedTo: [SyntheticMailUser.Deployment]);
+        var proposals = Compose(store, assignedTo: [SyntheticUser.Deployment]);
 
         // Act
         await proposals.ProposeAsync(
@@ -176,7 +176,7 @@ public sealed class MailDerivedTaskProposalsTests
                 return Task.CompletedTask;
             });
 
-        var proposals = Compose(store, assignedTo: [SyntheticMailUser.Deployment]);
+        var proposals = Compose(store, assignedTo: [SyntheticUser.Deployment]);
 
         // Act
         await proposals.ProposeAsync(
@@ -195,7 +195,7 @@ public sealed class MailDerivedTaskProposalsTests
 
     private static MailDerivedTaskProposals Compose(
         IPersonalTaskStore store,
-        IReadOnlyList<MailUserId> assignedTo)
+        IReadOnlyList<UserId> assignedTo)
     {
         var assignments = new StubMailAccountAssignments();
 

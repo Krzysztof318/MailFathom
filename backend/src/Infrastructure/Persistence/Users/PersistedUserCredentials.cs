@@ -136,17 +136,17 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
             ? null
             : new ResolvedUserCredential(
                 stored.Id,
-                MailUserId.Create(stored.UserId),
+                UserId.Create(stored.UserId),
                 method,
                 GrantOf(stored.Permissions),
                 stored.Enabled,
                 stored.Material,
-                new MailUserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled));
+                new UserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled));
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<UserCredential>> ReadForUserAsync(
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         var storedUserId = RequireUser(user);
@@ -217,7 +217,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
-        MailUserId user,
+        UserId user,
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
@@ -299,7 +299,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// </para>
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> ReplaceMaterialAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         UserCredentialMethod method,
         UserCredentialLookup lookup,
@@ -346,7 +346,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// rehash rather than putting the superseded material back.
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> RewriteMaterialAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         string verifiedMaterial,
         string material,
@@ -395,7 +395,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// </para>
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> SetEnabledAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         bool enabled,
         CancellationToken cancellationToken)
@@ -451,7 +451,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
 
     /// <inheritdoc />
     public async Task<UserCredentialWriteOutcome> DeleteAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         CancellationToken cancellationToken)
     {
@@ -555,7 +555,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         ? lookup.Value
         : throw new ArgumentException("A credential is resolved by a stated lookup.", nameof(lookup));
 
-    private static Guid RequireUser(MailUserId user) => user.IsSpecified
+    private static Guid RequireUser(UserId user) => user.IsSpecified
         ? user.Value
         : throw new ArgumentException("A credential belongs to a named user.", nameof(user));
 

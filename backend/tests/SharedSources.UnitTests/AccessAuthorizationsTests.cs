@@ -82,7 +82,7 @@ public sealed class AccessAuthorizationsTests
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, authorization.RequireUser());
+        Assert.Equal(SyntheticUser.Deployment, authorization.RequireUser());
     }
 
     /// <summary>The user a test names is the user the use case is told about, which is what an isolation test asserts against.</summary>
@@ -91,11 +91,11 @@ public sealed class AccessAuthorizationsTests
     {
         // Act
         var authorization = AccessAuthorizations.ForUserGranted(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             MailFathomPermission.MailRead);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, authorization.RequireUser());
+        Assert.Equal(SyntheticUser.Another, authorization.RequireUser());
     }
 
     /// <summary>

@@ -53,7 +53,7 @@ public sealed record MailDraftRecord
     /// own. It stands beside the account rather than inside it, the account's generated identifier naming one
     /// mailbox across the deployment and saying nothing about who wrote through it.
     /// </remarks>
-    public required MailUserId User { get; init; }
+    public required UserId User { get; init; }
 
     /// <summary>Gets the authored act that wrote the draft down.</summary>
     /// <remarks>

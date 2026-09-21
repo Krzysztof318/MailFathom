@@ -242,7 +242,7 @@ public sealed class ContactBook
     /// order the way the records were created without a caller being able to choose one.
     /// </remarks>
     public Task<ContactWriteResult> RecordAsync(
-        MailUserId user,
+        UserId user,
         NewContact newContact,
         CancellationToken cancellationToken)
     {

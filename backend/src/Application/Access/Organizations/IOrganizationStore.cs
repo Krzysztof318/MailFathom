@@ -71,7 +71,7 @@ public interface IOrganizationStore
     /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.UnknownUser" />, <see cref="OrganizationWriteOutcome.UnknownOrganization" />, or <see cref="OrganizationWriteOutcome.UsernameTaken" /> carrying the colliding username where it could be read.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     Task<OrganizationWriteResult> SetUserOrganizationAsync(
-        MailUserId user,
+        UserId user,
         Guid? organizationId,
         CancellationToken cancellationToken);
 }

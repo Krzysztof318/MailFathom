@@ -20,9 +20,9 @@ namespace MailFathom.Application.UnitTests.Notifications;
 /// </summary>
 public sealed class OwnNotificationsTests
 {
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
-    private static readonly MailUserId SomebodyElse = MailUserId.Create(
+    private static readonly UserId SomebodyElse = UserId.Create(
         new Guid("6d0b6a1c-6f5e-4a7e-9a1a-8d2a3f4b5c60"));
 
     private static readonly DateTimeOffset FirstInstant = new(2026, 9, 1, 9, 0, 0, TimeSpan.Zero);
@@ -355,7 +355,7 @@ public sealed class OwnNotificationsTests
 
     private static async Task<Notification> RecordAsync(
         InMemoryNotificationStore store,
-        MailUserId user,
+        UserId user,
         int occurredAtOffsetMinutes,
         string deduplicationKey)
     {
@@ -386,7 +386,7 @@ public sealed class OwnNotificationsTests
             Task.FromResult(true);
 
         public Task<IReadOnlyList<Notification>> ReadPageAsync(
-            MailUserId user,
+            UserId user,
             NotificationCursor? after,
             int limit,
             CancellationToken cancellationToken)
@@ -396,27 +396,27 @@ public sealed class OwnNotificationsTests
             return Task.FromResult<IReadOnlyList<Notification>>([]);
         }
 
-        public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken) =>
+        public Task<int> CountUnreadAsync(UserId user, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<NotificationReadOutcome> SetReadAsync(
-            MailUserId user,
+            UserId user,
             NotificationId notification,
             bool isRead,
             CancellationToken cancellationToken) =>
             Task.FromResult(NotificationReadOutcome.Applied);
 
-        public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken) =>
+        public Task<int> MarkAllReadAsync(UserId user, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<int> EraseAsync(
-            MailUserId user,
+            UserId user,
             IReadOnlyCollection<NotificationId> notifications,
             CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<int> EraseOccurredBeforeAsync(
-            MailUserId user,
+            UserId user,
             DateTimeOffset occurredBefore,
             int limit,
             CancellationToken cancellationToken) =>

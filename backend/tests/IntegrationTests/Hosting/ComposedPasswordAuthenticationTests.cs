@@ -73,8 +73,8 @@ public sealed class ComposedPasswordAuthenticationTests
 
     private static readonly Guid CredentialId = new("55555555-5555-5555-5555-555555555555");
 
-    private static readonly MailUserId User =
-        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static readonly UserId User =
+        UserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>A password authenticates through the assembled pipeline and the route answers, which is what says the method is wired rather than merely registered.</summary>
     [Fact]
@@ -280,7 +280,7 @@ public sealed class ComposedPasswordAuthenticationTests
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     Enabled: true,
                     StoredHash,
-                    MailUserEndpointAccess.Everywhere)
+                    UserEndpointAccess.Everywhere)
                 : null);
 
         return credentials;

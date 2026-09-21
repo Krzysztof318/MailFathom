@@ -335,7 +335,7 @@ public sealed class MailEmbeddingWorkerTests
         var spendLedger = Substitute.For<IEmbeddingSpendLedger>();
         spendLedger.ReadConsumedInputCharactersAsync(
                 Arg.Any<DateTimeOffset>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<UserId>(),
                 Arg.Any<CancellationToken>())
             .Returns(new EmbeddingSpendTotals(
                 consumedInputCharacterCount,
@@ -356,7 +356,7 @@ public sealed class MailEmbeddingWorkerTests
             new InMemoryProviderPaceMarker(timeProvider),
             timeProvider));
         IMailAccountAssignments assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+            .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment);
         services.AddSingleton(assignments);
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

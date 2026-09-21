@@ -31,10 +31,10 @@ public sealed class CalendarEventMappingTests
             importedUid: ImportedCalendarEventUid.Create("entry@example.test"));
 
         // Act
-        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+        var row = CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment.Value, row.UserId);
+        Assert.Equal(SyntheticUser.Deployment.Value, row.UserId);
         Assert.Equal(held.Id.Value, row.Id);
         Assert.Equal("Design review", row.Title);
         Assert.Equal(Start, row.StartsAt);
@@ -54,7 +54,7 @@ public sealed class CalendarEventMappingTests
         var held = EventOf(end: null, origin: CalendarEventOrigin.Proposed);
 
         // Act
-        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+        var row = CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held);
 
         // Assert
         Assert.Null(row.EndsAt);
@@ -71,7 +71,7 @@ public sealed class CalendarEventMappingTests
         var held = EventOf(end: Start.AddHours(1), origin: CalendarEventOrigin.Asserted, importedUid: importedUid);
 
         // Act
-        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
+        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held));
 
         // Assert
         Assert.Equal(importedUid, read.ImportedUid);
@@ -89,7 +89,7 @@ public sealed class CalendarEventMappingTests
             sourceMessage: StoredEmailId.Create(Guid.CreateVersion7()));
 
         // Act
-        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
+        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held));
 
         // Assert
         Assert.Equal(held.Id, read.Id);
@@ -116,7 +116,7 @@ public sealed class CalendarEventMappingTests
             reminders: [Reminder.Create(15), Reminder.Create(60)]);
 
         // Act
-        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+        var row = CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held);
 
         // Assert
         Assert.Equal([60, 15], row.Reminders.Select(reminder => reminder.MinutesBefore));
@@ -136,7 +136,7 @@ public sealed class CalendarEventMappingTests
             reminders: [Reminder.Create(0)]);
 
         // Act
-        var row = CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held);
+        var row = CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held);
 
         // Assert
         Assert.True(row.IsAllDay);
@@ -156,7 +156,7 @@ public sealed class CalendarEventMappingTests
             reminders: [Reminder.Create(15), Reminder.Create(1440)]);
 
         // Act
-        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticMailUser.Deployment, held));
+        var read = CalendarEventMapping.ToDomain(CalendarEventMapping.ToEntity(SyntheticUser.Deployment, held));
 
         // Assert
         Assert.True(read.IsAllDay);
@@ -174,7 +174,7 @@ public sealed class CalendarEventMappingTests
         var row = new CalendarEventEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = SyntheticMailUser.Deployment.Value,
+            UserId = SyntheticUser.Deployment.Value,
             Title = "Design review",
             StartsAt = Start,
             EndsAt = Start.AddHours(-1),

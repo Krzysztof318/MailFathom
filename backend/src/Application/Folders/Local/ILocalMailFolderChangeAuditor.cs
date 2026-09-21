@@ -33,7 +33,7 @@ public interface ILocalMailFolderChangeAuditor
 /// <param name="OccurredAt">When the change committed.</param>
 public sealed record LocalMailFolderChange(
     MailAccountId Account,
-    MailUserId ChangedBy,
+    UserId ChangedBy,
     LocalMailFolderId Folder,
     MailFolderChangeKind Kind,
     int ErasedFolderCount,

@@ -55,7 +55,7 @@ public sealed class OwnPortraitTests
 
         // Assert
         Assert.Null(read);
-        await files.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().ReadAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A file nothing here could have written is a file this use case has nothing to say about, so it answers as an absent picture rather than serving octets of an unknown kind.</summary>
@@ -76,15 +76,15 @@ public sealed class OwnPortraitTests
         // Arrange
         var files = FilesHolding(Png);
         var links = LinksTo(Linked);
-        var portraits = ReachedBy(files, links, SyntheticMailUser.Another, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await portraits.ReadAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        await links.Received(1).FindPortraitAsync(SyntheticMailUser.Another, Arg.Any<CancellationToken>());
-        await files.Received(1).ReadAsync(SyntheticMailUser.Another, Linked, Arg.Any<CancellationToken>());
-        await files.DidNotReceive().ReadAsync(SyntheticMailUser.Deployment, Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await links.Received(1).FindPortraitAsync(SyntheticUser.Another, Arg.Any<CancellationToken>());
+        await files.Received(1).ReadAsync(SyntheticUser.Another, Linked, Arg.Any<CancellationToken>());
+        await files.DidNotReceive().ReadAsync(SyntheticUser.Deployment, Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -135,9 +135,9 @@ public sealed class OwnPortraitTests
         Assert.True(replaced);
         Received.InOrder(() =>
         {
-            _ = files.WriteAsync(SyntheticMailUser.Deployment, "image/png", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+            _ = files.WriteAsync(SyntheticUser.Deployment, "image/png", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
             _ = links.RelinkOwnPortraitAsync(Written, Arg.Any<CancellationToken>());
-            _ = files.RemoveAsync(SyntheticMailUser.Deployment, Linked, Arg.Any<CancellationToken>());
+            _ = files.RemoveAsync(SyntheticUser.Deployment, Linked, Arg.Any<CancellationToken>());
         });
     }
 
@@ -157,7 +157,7 @@ public sealed class OwnPortraitTests
 
         // Assert
         Assert.True(replaced);
-        await files.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A link that failed leaves the new file unlinked for the sweep, and must never have taken the old one with it.</summary>
@@ -177,7 +177,7 @@ public sealed class OwnPortraitTests
             () => portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken));
 
         // Assert
-        await files.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The record behind an authenticated caller can be gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
@@ -186,7 +186,7 @@ public sealed class OwnPortraitTests
     {
         // Arrange
         var files = Substitute.For<IStoredFileStore>();
-        files.WriteAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        files.WriteAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns((StoredFileId?)null);
 
         var links = Substitute.For<IUserRecordFileLinks>();
@@ -229,7 +229,7 @@ public sealed class OwnPortraitTests
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken));
 
-        await files.DidNotReceive().WriteAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().WriteAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -243,7 +243,7 @@ public sealed class OwnPortraitTests
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => portraits.ReplaceAsync(null!, TestContext.Current.CancellationToken));
 
-        await files.DidNotReceive().WriteAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().WriteAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public sealed class OwnPortraitTests
         links.RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>())
             .Returns(new PortraitRelinking(UserHeld: true, Replaced: Linked));
 
-        var portraits = ReachedBy(files, links, SyntheticMailUser.Another, MailFathomPermission.MailRead);
+        var portraits = ReachedBy(files, links, SyntheticUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await portraits.RemoveAsync(TestContext.Current.CancellationToken);
@@ -264,9 +264,9 @@ public sealed class OwnPortraitTests
         Received.InOrder(() =>
         {
             _ = links.RelinkOwnPortraitAsync(null, Arg.Any<CancellationToken>());
-            _ = files.RemoveAsync(SyntheticMailUser.Another, Linked, Arg.Any<CancellationToken>());
+            _ = files.RemoveAsync(SyntheticUser.Another, Linked, Arg.Any<CancellationToken>());
         });
-        await files.DidNotReceive().RemoveAsync(SyntheticMailUser.Deployment, Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(SyntheticUser.Deployment, Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -282,13 +282,13 @@ public sealed class OwnPortraitTests
             () => portraits.RemoveAsync(TestContext.Current.CancellationToken));
 
         await links.DidNotReceive().RelinkOwnPortraitAsync(Arg.Any<StoredFileId?>(), Arg.Any<CancellationToken>());
-        await files.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
+        await files.DidNotReceive().RemoveAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>());
     }
 
     private static IStoredFileStore FilesHolding(byte[] content)
     {
         var files = Substitute.For<IStoredFileStore>();
-        files.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>())
+        files.ReadAsync(Arg.Any<UserId>(), Arg.Any<StoredFileId>(), Arg.Any<CancellationToken>())
             .Returns(new ReadOnlyMemory<byte>(content));
 
         return files;
@@ -297,7 +297,7 @@ public sealed class OwnPortraitTests
     private static IStoredFileStore FilesWriting(StoredFileId written)
     {
         var files = Substitute.For<IStoredFileStore>();
-        files.WriteAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        files.WriteAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(written);
 
         return files;
@@ -306,7 +306,7 @@ public sealed class OwnPortraitTests
     private static IUserRecordFileLinks LinksTo(StoredFileId? portrait)
     {
         var links = Substitute.For<IUserRecordFileLinks>();
-        links.FindPortraitAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(portrait);
+        links.FindPortraitAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns(portrait);
 
         return links;
     }
@@ -315,12 +315,12 @@ public sealed class OwnPortraitTests
         IStoredFileStore files,
         IUserRecordFileLinks links,
         params MailFathomPermission[] granted) =>
-        ReachedBy(files, links, SyntheticMailUser.Deployment, granted);
+        ReachedBy(files, links, SyntheticUser.Deployment, granted);
 
     private static OwnPortrait ReachedBy(
         IStoredFileStore files,
         IUserRecordFileLinks links,
-        MailUserId user,
+        UserId user,
         params MailFathomPermission[] granted) =>
         new(AccessAuthorizations.ForUserGranted(user, granted), files, links);
 }

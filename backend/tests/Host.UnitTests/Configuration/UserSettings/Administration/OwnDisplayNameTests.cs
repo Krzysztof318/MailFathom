@@ -89,7 +89,7 @@ public sealed class OwnDisplayNameTests
 
         // Assert
         await harness.Directory.Received(1)
-            .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
+            .ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>());
         await harness.Directory.DidNotReceive().ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
@@ -117,7 +117,7 @@ public sealed class OwnDisplayNameTests
         // Assert
         Assert.Equal("Ada King", change.Recorded);
         await harness.Provisioning.Received(1)
-            .RelabelAsync(SyntheticMailUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
+            .RelabelAsync(SyntheticUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
     }
 
     /// <summary>The answer carries what was stored rather than what was sent, so a client redrawing it shows the name this deployment holds.</summary>
@@ -134,7 +134,7 @@ public sealed class OwnDisplayNameTests
         // Assert
         Assert.Equal("Ada King", change.Recorded);
         await harness.Provisioning.Received(1)
-            .RelabelAsync(SyntheticMailUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
+            .RelabelAsync(SyntheticUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class OwnDisplayNameTests
         Assert.NotNull(change.RefusalMessage);
         Assert.Null(change.Recorded);
         await harness.Provisioning.DidNotReceive()
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The column stores 128 characters, so a longer name is refused naming the bound rather than truncated into the row.</summary>
@@ -164,16 +164,16 @@ public sealed class OwnDisplayNameTests
 
         // Act
         var change = await harness.Names.ChangeAsync(
-            new string('a', MailUserRecord.MaximumDisplayNameLength + 1),
+            new string('a', UserRecord.MaximumDisplayNameLength + 1),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Contains(
-            MailUserRecord.MaximumDisplayNameLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            UserRecord.MaximumDisplayNameLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
             change.RefusalMessage!,
             StringComparison.Ordinal);
         await harness.Provisioning.DidNotReceive()
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The name is unique across the deployment, and the statement itself is what refuses one already taken.</summary>
@@ -184,7 +184,7 @@ public sealed class OwnDisplayNameTests
         var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
         harness.Recording("Ada Lovelace");
         harness.Provisioning
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -209,7 +209,7 @@ public sealed class OwnDisplayNameTests
         Assert.False(change.UserHeld);
         Assert.Null(change.RefusalMessage);
         await harness.Provisioning.DidNotReceive()
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The record's own grant rather than the read every signed-in person holds, because this writes the row an administrator maintains.</summary>
@@ -229,32 +229,32 @@ public sealed class OwnDisplayNameTests
     {
         internal NameHarness(params MailFathomPermission[] granted)
         {
-            this.Directory = Substitute.For<IMailUserDirectory>();
+            this.Directory = Substitute.For<IUserDirectory>();
             this.Directory
-                .ReadUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
-                .Returns((MailUserRecord?)null);
+                .ReadUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+                .Returns((UserRecord?)null);
 
-            this.Provisioning = Substitute.For<IMailUserProvisioning>();
+            this.Provisioning = Substitute.For<IUserProvisioning>();
             this.Provisioning
-                .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .RelabelAsync(Arg.Any<UserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
 
             this.Names = new OwnDisplayName(
-                AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
+                AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment, granted),
                 this.Directory,
                 this.Provisioning);
         }
 
         internal OwnDisplayName Names { get; }
 
-        internal IMailUserDirectory Directory { get; }
+        internal IUserDirectory Directory { get; }
 
-        internal IMailUserProvisioning Provisioning { get; }
+        internal IUserProvisioning Provisioning { get; }
 
         /// <summary>States the name the envelope of the person these tests act for carries.</summary>
         internal void Recording(string displayName) =>
             this.Directory
-                .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
-                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName));
+                .ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+                .Returns(new UserRecord(SyntheticUser.Deployment, displayName));
     }
 }

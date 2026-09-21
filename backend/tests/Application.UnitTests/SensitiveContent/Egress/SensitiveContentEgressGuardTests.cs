@@ -57,7 +57,7 @@ public sealed class SensitiveContentEgressGuardTests
         string scanned;
         string unscanned;
 
-        using (guard.ActingFor(SyntheticMailUser.Deployment))
+        using (guard.ActingFor(SyntheticUser.Deployment))
         {
             scanned = await guard.GuardAsync(
                 SensitiveContentEgressPoint.ChatPrompt,
@@ -65,7 +65,7 @@ public sealed class SensitiveContentEgressGuardTests
                 TestContext.Current.CancellationToken);
         }
 
-        using (guard.ActingFor(SyntheticMailUser.Another))
+        using (guard.ActingFor(SyntheticUser.Another))
         {
             unscanned = await guard.GuardAsync(
                 SensitiveContentEgressPoint.ChatPrompt,
@@ -137,9 +137,9 @@ public sealed class SensitiveContentEgressGuardTests
             this.timeProvider);
 
         // Act
-        using var outer = guard.ActingFor(SyntheticMailUser.Deployment);
+        using var outer = guard.ActingFor(SyntheticUser.Deployment);
 
-        using (guard.ActingFor(SyntheticMailUser.Another))
+        using (guard.ActingFor(SyntheticUser.Another))
         {
             Assert.False(guard.IsActive);
         }

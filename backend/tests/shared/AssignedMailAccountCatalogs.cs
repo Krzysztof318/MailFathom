@@ -19,10 +19,10 @@ internal static class AssignedMailAccountCatalogs
 {
     /// <summary>Builds the catalog over accounts the deployment's own user is assigned, and nobody else.</summary>
     /// <param name="authorization">The authorization the use case under test is reached with, which names the user acted for.</param>
-    /// <param name="servedAccounts">The accounts this deployment serves, all of them assigned to <see cref="SyntheticMailUser.Deployment" />.</param>
+    /// <param name="servedAccounts">The accounts this deployment serves, all of them assigned to <see cref="SyntheticUser.Deployment" />.</param>
     /// <returns>The catalog, answering with every account named when the caller is that user and with none when they are not.</returns>
     /// <remarks>
-    /// The assignment names <see cref="SyntheticMailUser.Deployment" /> rather than whoever the authorization acts for,
+    /// The assignment names <see cref="SyntheticUser.Deployment" /> rather than whoever the authorization acts for,
     /// which is what keeps the caller axis a thing a test can vary: a helper assigning every mailbox to whoever asked
     /// would answer the same for every caller, and every test claiming one user cannot reach another's mailbox would
     /// pass while proving nothing. A test naming two users, or assigning one mailbox to both, states the relation
@@ -37,7 +37,7 @@ internal static class AssignedMailAccountCatalogs
         return For(
             authorization,
             new StubMailAccountAssignments().Assigning(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 [.. servedAccounts.Select(account => account.Id)]),
             servedAccounts);
     }

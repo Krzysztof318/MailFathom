@@ -29,7 +29,7 @@ public sealed class EmailThreadContexts
 {
     private readonly IEmailThreadReader threadReader;
     private readonly MailboxScope readableScope;
-    private readonly MailUserId actingUser;
+    private readonly UserId actingUser;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Dictionary<EmailThreadId, AssembledThread> assembled = [];
 

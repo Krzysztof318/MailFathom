@@ -734,7 +734,7 @@ public sealed class OutgoingMailFilingPassTests
 
             var request = OutgoingEmailRequest.Create(
                 Account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
 

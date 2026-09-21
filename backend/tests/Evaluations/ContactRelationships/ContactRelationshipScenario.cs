@@ -33,7 +33,7 @@ internal static class ContactRelationshipScenario
         ArgumentNullException.ThrowIfNull(scenario);
 
         var correspondence = scenario.Correspondence;
-        var language = scenario.Language ?? MailUserLanguage.English;
+        var language = scenario.Language ?? UserLanguage.English;
         var instruction = ContactRelationshipInstructions.TextFor(language);
 
         var turn = new GuardedRelationshipTurn(

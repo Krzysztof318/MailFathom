@@ -430,9 +430,9 @@ internal static class UserRecordEndpoints
         : null;
 
     /// <summary>Reads the user a route named, refusing the empty identifier the type will not carry.</summary>
-    private static bool TryReadUser(Guid userId, out MailUserId user)
+    private static bool TryReadUser(Guid userId, out UserId user)
     {
-        user = userId == Guid.Empty ? default : MailUserId.Create(userId);
+        user = userId == Guid.Empty ? default : UserId.Create(userId);
 
         return user.IsSpecified;
     }

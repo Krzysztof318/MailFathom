@@ -165,7 +165,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneUsersMail ? SyntheticMailUser.Deployment : null, principal.User);
+        Assert.Equal(servesOneUsersMail ? SyntheticUser.Deployment : null, principal.User);
     }
 
     /// <summary>
@@ -189,7 +189,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneUsersMail ? SyntheticMailUser.Deployment : null, principal.User);
+        Assert.Equal(servesOneUsersMail ? SyntheticUser.Deployment : null, principal.User);
     }
 
     /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>
@@ -223,7 +223,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead)));
-        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticUser.Deployment, "/mcp/attachments/an-object/0");
 
         // Act
         source.Assume(capability);
@@ -261,8 +261,8 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             clientEndpoint.Authentication.Add(new UserFacingAuthenticationOptions());
         }
 
-        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
-        deploymentUser.User.Returns(SyntheticMailUser.Deployment);
+        var deploymentUser = Substitute.For<IDeploymentUserSource>();
+        deploymentUser.User.Returns(SyntheticUser.Deployment);
 
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
@@ -280,7 +280,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(
-            RequestBy(AuthenticatedUserHolding(SyntheticMailUser.Another, MailFathomPermission.MailRead), path),
+            RequestBy(AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.MailRead), path),
             mcpConfiguresACredential: true,
             adminConfiguresACredential: true,
             clientConfiguresACredential: true);
@@ -291,7 +291,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(SyntheticMailUser.Another, principal.User);
+        Assert.Equal(SyntheticUser.Another, principal.User);
     }
 
     /// <summary>The administrative surface has nowhere to put a user, so a claim carrying one is dropped rather than admitted with it.</summary>
@@ -301,7 +301,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Arrange
         var source = SourceOver(
             RequestBy(
-                AuthenticatedUserHolding(SyntheticMailUser.Another, MailFathomPermission.AdminRead),
+                AuthenticatedUserHolding(SyntheticUser.Another, MailFathomPermission.AdminRead),
                 AdminEndpointOptions.RoutePrefix + "/session"),
             mcpConfiguresACredential: true,
             adminConfiguresACredential: true,
@@ -334,7 +334,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             ApiKeyAuthentication.RoleClaimType));
 
     /// <summary>Composes the principal the password scheme produces, which names the user the credential belongs to beside its grant.</summary>
-    private static ClaimsPrincipal AuthenticatedUserHolding(MailUserId user, params MailFathomPermission[] granted) =>
+    private static ClaimsPrincipal AuthenticatedUserHolding(UserId user, params MailFathomPermission[] granted) =>
         new(new ClaimsIdentity(
             [
                 new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, ConfiguredKeyName),

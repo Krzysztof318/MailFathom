@@ -34,11 +34,11 @@ public sealed class TransportRateLimitingTests
 {
     private const string AdminRoute = AdminEndpointOptions.RoutePrefix + "/session";
 
-    private static readonly MailUserId Colleague = MailUserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
+    private static readonly UserId Colleague = UserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
 
-    private static readonly MailUserId OtherUser = MailUserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
+    private static readonly UserId OtherUser = UserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
 
-    private static readonly MailUserId ThirdUser = MailUserId.Create(Guid.Parse("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d"));
+    private static readonly UserId ThirdUser = UserId.Create(Guid.Parse("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d"));
 
     [Fact]
     public void ProcessConcurrencyOptions_CarriesTheConfiguredConcurrency()
@@ -866,7 +866,7 @@ public sealed class TransportRateLimitingTests
     private static DefaultHttpContext McpRequest(
         string? authenticatedClientName = null,
         string? certificateProfileName = null,
-        MailUserId? user = null) =>
+        UserId? user = null) =>
         RequestTo(McpEndpointRoute.Path, authenticatedClientName, certificateProfileName, user);
 
     private static DefaultHttpContext AdminRequest(string? authenticatedClientName = null) =>
@@ -876,7 +876,7 @@ public sealed class TransportRateLimitingTests
         string path,
         string? authenticatedClientName = null,
         string? certificateProfileName = null,
-        MailUserId? user = null)
+        UserId? user = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Path = path;

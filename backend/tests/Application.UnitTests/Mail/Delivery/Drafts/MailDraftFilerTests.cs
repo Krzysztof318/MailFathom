@@ -269,7 +269,7 @@ public sealed class MailDraftFilerTests
         var draft = await harness.Drafts.OpenAsync(
             session,
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [Recipient()],
             "a draft",

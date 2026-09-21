@@ -15,7 +15,7 @@ namespace MailFathom.Domain.UnitTests.Tasks;
 /// </summary>
 public sealed class PersonalTaskReminderTests
 {
-    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
+    private static readonly UserId User = UserId.Create(Guid.NewGuid());
 
     private static readonly PersonalTaskId Identifier = PersonalTaskId.Create(Guid.NewGuid());
 

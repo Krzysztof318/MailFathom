@@ -41,7 +41,7 @@ public sealed class ContactEndpointsTests
     private static readonly Guid Identity = new("11111111-2222-3333-4444-555555555555");
 
     /// <summary>The user whose books the routes here are asked about, as the query names one.</summary>
-    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
+    private static readonly Guid User = SyntheticUser.Deployment.Value;
 
     /// <summary>The account whose collected book the erasure route is asked about.</summary>
     private static readonly string Account = SyntheticMailAccount.Deployment.Value;
@@ -519,7 +519,7 @@ public sealed class ContactEndpointsTests
 
         // Act
         var result = await ContactEndpoints.RecordAsync(
-            SyntheticMailUser.Another.Value,
+            SyntheticUser.Another.Value,
             new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
             this.Roster(),
@@ -540,7 +540,7 @@ public sealed class ContactEndpointsTests
     public async Task TheActingRoutes_AUserThisDeploymentHoldsNoRecordFor_RefuseWithoutReachingTheBook()
     {
         // Arrange
-        var stranger = SyntheticMailUser.Another.Value;
+        var stranger = SyntheticUser.Another.Value;
         this.Holds(Asserted("Anna Kowalska", "anna@example.test"));
 
         // Act
@@ -737,13 +737,13 @@ public sealed class ContactEndpointsTests
     }
 
     /// <summary>Holds a record for the one user these routes are asked about, and for nobody else.</summary>
-    private IMailUserDirectory Roster()
+    private IUserDirectory Roster()
     {
-        var users = Substitute.For<IMailUserDirectory>();
+        var users = Substitute.For<IUserDirectory>();
 
-        users.ReadUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((MailUserRecord?)null);
-        users.ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
-            .Returns(new MailUserRecord(SyntheticMailUser.Deployment, "The deployment's user"));
+        users.ReadUserAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>()).Returns((UserRecord?)null);
+        users.ReadUserAsync(SyntheticUser.Deployment, Arg.Any<CancellationToken>())
+            .Returns(new UserRecord(SyntheticUser.Deployment, "The deployment's user"));
 
         return users;
     }

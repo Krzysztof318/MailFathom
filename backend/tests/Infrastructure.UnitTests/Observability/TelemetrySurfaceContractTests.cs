@@ -588,7 +588,7 @@ public sealed class TelemetrySurfaceContractTests
         {
             using var guarded = Egress.BeginGuardedOperation(
                 egressPoint,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 account: null,
                 CancellationToken.None);
             guarded.TextGuarded();

@@ -531,7 +531,7 @@ public sealed class StoredEmailResponseAuthoringTests
         var authoring = AuthoringOver(
             Rendering(),
             authorization: AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 MailFathomPermission.MailRead));
 
         // Act

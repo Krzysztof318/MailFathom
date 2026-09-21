@@ -12,7 +12,7 @@ namespace MailFathom.Domain.UnitTests.Tasks;
 /// <summary>Covers what a task may be built from, and the two things only a stored row may say about one.</summary>
 public sealed class PersonalTaskTests
 {
-    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
+    private static readonly UserId User = UserId.Create(Guid.NewGuid());
 
     private static readonly PersonalTaskId Identifier = PersonalTaskId.Create(Guid.NewGuid());
 

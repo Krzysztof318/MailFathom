@@ -45,7 +45,7 @@ internal sealed record ContactRelationshipCase(
     string Name,
     string Address,
     Func<ContactRelationship, ContactCorrespondence, string?> Expectation,
-    MailUserLanguage? Language = null)
+    UserLanguage? Language = null)
 {
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<ContactRelationshipCase> All { get; } =
@@ -141,7 +141,7 @@ internal sealed record ContactRelationshipCase(
         // and every line of the card has to be written in that person's language whatever the subjects were written in.
 
         // An invoice chased and paid, an order confirmed, and a new price list: three kinds of matter with one supplier.
-        new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.Polish),
+        new("Polish.SeveralMatters", "piotr.wawrzyniak@kamionka.test", NamesItsCases, UserLanguage.Polish),
 
         // A catalogue, then a quotation asked for, promised, and chased by the owner in the same conversation.
         new(
@@ -151,16 +151,16 @@ internal sealed record ContactRelationshipCase(
                 thread.Subject?.Contains("krzeseł", StringComparison.OrdinalIgnoreCase) is true))
                 ? null
                 : "neither a next action nor an open item rests on the conversation asking for the chair quotation.",
-            MailUserLanguage.Polish),
+            UserLanguage.Polish),
 
         // A hotel confirmed and an itinerary made final, which leave nothing to do.
-        new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, MailUserLanguage.Polish),
+        new("Polish.FinalisedItinerary", "katarzyna.lewandowska@podrozeplus.test", NoNextAction, UserLanguage.Polish),
 
         // An English correspondence read for somebody who reads Polish: nine conversations, carded in Polish.
-        new("Mixed.EnglishCorrespondenceForAPolishReader", "wiebke.jankowski@harbourline.test", NamesItsCases, MailUserLanguage.Polish),
+        new("Mixed.EnglishCorrespondenceForAPolishReader", "wiebke.jankowski@harbourline.test", NamesItsCases, UserLanguage.Polish),
 
         // A Polish correspondence read for somebody who reads English: three kinds of matter, carded in English.
-        new("Mixed.PolishCorrespondenceForAnEnglishReader", "piotr.wawrzyniak@kamionka.test", NamesItsCases, MailUserLanguage.English),
+        new("Mixed.PolishCorrespondenceForAnEnglishReader", "piotr.wawrzyniak@kamionka.test", NamesItsCases, UserLanguage.English),
     ];
 
     /// <summary>Gets every conversation the mailbox holds: the corpus's first, then the written ones, the hostile ones, and the Polish ones.</summary>

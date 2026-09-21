@@ -38,12 +38,12 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
     private static readonly DateTimeOffset SharedPeriodStart = new(2026, 5, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The user this class charges, stated so nothing else in the suite writes the rows it reads.</summary>
-    private static readonly MailUserId ChargedUser =
-        MailUserId.Create(new Guid("3f0d5a5e-6f2a-4a29-9a05-2d0f1c7a8b31"));
+    private static readonly UserId ChargedUser =
+        UserId.Create(new Guid("3f0d5a5e-6f2a-4a29-9a05-2d0f1c7a8b31"));
 
     /// <summary>A second user on the same deployment, which is what makes the per-user column decidable.</summary>
-    private static readonly MailUserId OtherUser =
-        MailUserId.Create(new Guid("6c1b7f42-5d8e-49b3-8f11-7a2e4c9d0e55"));
+    private static readonly UserId OtherUser =
+        UserId.Create(new Guid("6c1b7f42-5d8e-49b3-8f11-7a2e4c9d0e55"));
 
     private const long FirstSpend = 1_100;
 
@@ -125,7 +125,7 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
     private static async Task<PersistenceCommitResult> ChargeAsync(
         IServiceProvider scope,
         DateTimeOffset periodStart,
-        MailUserId user,
+        UserId user,
         long inputCharacterCount,
         CancellationToken cancellationToken)
     {
@@ -153,7 +153,7 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
     private static Task<EmbeddingSpendTotals> TotalsAsync(
         OrchestratedMailFathomServices services,
         DateTimeOffset periodStart,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmbeddingSpendLedger>()
                 .ReadConsumedInputCharactersAsync(periodStart, user, token),

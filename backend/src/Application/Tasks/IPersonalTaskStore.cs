@@ -40,7 +40,7 @@ public interface IPersonalTaskStore
     /// this user is the caller's question rather than the store's: this reads the user it is given and nothing else.
     /// </remarks>
     Task<IReadOnlyList<PersonalTask>> ReadAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskOrigin? origin,
         PersonalTaskCursor? after,
         int limit,
@@ -56,7 +56,7 @@ public interface IPersonalTaskStore
     /// here, so a task another person holds is not found rather than found and refused. That is what keeps this from
     /// reporting whose tasks exist beside the caller's own.
     /// </remarks>
-    Task<PersonalTask?> FindAsync(MailUserId user, PersonalTaskId task, CancellationToken cancellationToken);
+    Task<PersonalTask?> FindAsync(UserId user, PersonalTaskId task, CancellationToken cancellationToken);
 
     /// <summary>Writes what a person edited about one of their tasks.</summary>
     /// <param name="revision">The task as it is to stand, which is what <see cref="PersonalTask.Revise" /> produced.</param>
@@ -80,7 +80,7 @@ public interface IPersonalTaskStore
     /// under and whatever already points at it — a reminder, a citation — still points at it afterwards.
     /// </remarks>
     Task<PersonalTaskChangeOutcome> AcceptAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         CancellationToken cancellationToken);
 
@@ -96,7 +96,7 @@ public interface IPersonalTaskStore
     /// exist at all.
     /// </remarks>
     Task<PersonalTaskChangeOutcome> SetCompletionAsync(
-        MailUserId user,
+        UserId user,
         PersonalTaskId task,
         bool isCompleted,
         CancellationToken cancellationToken);
@@ -112,5 +112,5 @@ public interface IPersonalTaskStore
     /// erased is the act the caller wanted rather than an error, so the answer says what happened and never what was
     /// asked for.
     /// </remarks>
-    Task<bool> EraseAsync(MailUserId user, PersonalTaskId task, CancellationToken cancellationToken);
+    Task<bool> EraseAsync(UserId user, PersonalTaskId task, CancellationToken cancellationToken);
 }

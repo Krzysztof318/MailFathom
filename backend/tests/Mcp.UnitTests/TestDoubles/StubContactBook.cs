@@ -47,7 +47,7 @@ internal sealed class StubContactBook
     /// </remarks>
     private readonly AccessAuthorization authorization = new(
         new StubAuthorizedPrincipalSource(AuthorizedPrincipal.CallerActingFor(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             "stub-caller",
             MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
 
@@ -77,7 +77,7 @@ internal sealed class StubContactBook
     public IContactStore Store { get; } = Substitute.For<IContactStore>();
 
     /// <summary>Gets the books this caller reads, which is what a tool test asserts a read was scoped to.</summary>
-    public ContactBookScope Scope => ContactBookScope.Of(SyntheticMailUser.Deployment, [AssignedAccount]);
+    public ContactBookScope Scope => ContactBookScope.Of(SyntheticUser.Deployment, [AssignedAccount]);
 
     /// <summary>Gets the use case the read tools call.</summary>
     public ContactBookReader Reader =>

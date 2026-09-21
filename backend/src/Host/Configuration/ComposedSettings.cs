@@ -108,7 +108,7 @@ internal static class ComposedSettings
 
         return
         [
-            .. Refusal<ServedMailUsers>(
+            .. Refusal<ServedUsers>(
                 WithdrawnUserCollectionSection,
                 configuration.GetSection(WithdrawnUserCollectionSection).GetChildren().Any()
                     ?
@@ -116,7 +116,7 @@ internal static class ComposedSettings
                         $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl account add', credentials included, then remove the section from your configuration.",
                     ]
                     : []),
-            .. Refusal<ServedMailUsers>(
+            .. Refusal<ServedUsers>(
                 WithdrawnDeploymentMailAccountsSection,
                 configuration.GetSection(WithdrawnDeploymentMailAccountsSection).Exists()
                     ?

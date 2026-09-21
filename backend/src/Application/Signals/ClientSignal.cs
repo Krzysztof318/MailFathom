@@ -50,7 +50,7 @@ public sealed class ClientSignal
 
     private ClientSignal(
         ClientSignalKind kind,
-        MailUserId? user,
+        UserId? user,
         MailAccountId? account,
         MailFolderAlias? folder,
         int count,
@@ -86,7 +86,7 @@ public sealed class ClientSignal
     /// see: resolving that list here would fix it at the moment the signal was composed, so the delivery channel
     /// resolves it at the moment it delivers.
     /// </remarks>
-    public MailUserId? User { get; }
+    public UserId? User { get; }
 
     /// <summary>Gets the account the change is in, where the kind names one.</summary>
     public MailAccountId? Account { get; }
@@ -307,7 +307,7 @@ public sealed class ClientSignal
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
     /// refuses, because the backplane this crosses may be a service the deployment does not run.
     /// </remarks>
-    public static ClientSignal DiscoveryRunAdvanced(MailUserId user, DiscoveryRunId run, long sequence)
+    public static ClientSignal DiscoveryRunAdvanced(UserId user, DiscoveryRunId run, long sequence)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sequence);
 
@@ -395,7 +395,7 @@ public sealed class ClientSignal
 /// <param name="Run">The Discover run it names, where the kind names one.</param>
 /// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look, and folding two of one person's runs into one would leave a client told to re-read a run at a sequence the other one reached.</remarks>
 internal readonly record struct ClientSignalScope(
-    MailUserId? User,
+    UserId? User,
     ClientSignalKind Kind,
     MailAccountId? Account,
     MailFolderAlias? Folder,

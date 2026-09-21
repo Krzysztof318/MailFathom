@@ -15,9 +15,9 @@ public sealed class TransportRateLimitPartitionsTests
 
     private const string AdminSurface = "Admin";
 
-    private static readonly MailUserId Colleague = MailUserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
+    private static readonly UserId Colleague = UserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
 
-    private static readonly MailUserId OtherUser = MailUserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
+    private static readonly UserId OtherUser = UserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
 
     [Fact]
     public void KeyFor_WithAnAuthenticatedName_CountsTheClientUnderIt()
@@ -73,7 +73,7 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_AUserNamingNobody_IsNoIdentity()
     {
         // Act
-        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, default(MailUserId), null, null);
+        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, default(UserId), null, null);
 
         // Assert
         Assert.EndsWith(TransportRateLimitPartitions.AnonymousIdentity, partitionKey, StringComparison.Ordinal);

@@ -14,14 +14,14 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </remarks>
 internal sealed record UserProvisioningOutcome
 {
-    private UserProvisioningOutcome(MailUserId user, string? refusalMessage)
+    private UserProvisioningOutcome(UserId user, string? refusalMessage)
     {
         this.User = user;
         this.RefusalMessage = refusalMessage;
     }
 
     /// <summary>Gets the identifier the user was minted under, which is meaningful only when one was.</summary>
-    public MailUserId User { get; }
+    public UserId User { get; }
 
     /// <summary>Gets the sentence naming why no user was recorded, or <see langword="null" /> when one was.</summary>
     public string? RefusalMessage { get; }
@@ -33,7 +33,7 @@ internal sealed record UserProvisioningOutcome
     /// <param name="user">The identifier they were minted under.</param>
     /// <returns>The provisioned result.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    public static UserProvisioningOutcome Provisioned(MailUserId user)
+    public static UserProvisioningOutcome Provisioned(UserId user)
     {
         if (!user.IsSpecified)
         {

@@ -22,11 +22,11 @@ public sealed class ServedUserTimeZonesTests
     public void ZoneOf_AUserTheRosterHolds_AnswersTheZoneTheirRecordStates()
     {
         // Arrange
-        Assert.True(MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(Serving(warsaw)));
+        Assert.True(UserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(Serving(warsaw)));
 
         // Act
-        var answer = zones.ZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.ZoneOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Equal(warsaw, answer);
@@ -37,14 +37,14 @@ public sealed class ServedUserTimeZonesTests
     public void ZoneOf_AUserWhoseRecordStatesNoZone_AnswersTheCoordinatedZone()
     {
         // Arrange
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", [])));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", [])));
 
         // Act
-        var answer = zones.ZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.ZoneOf(SyntheticUser.Deployment);
 
         // Assert
-        Assert.Equal(MailUserTimeZone.Coordinated, answer);
+        Assert.Equal(UserTimeZone.Coordinated, answer);
     }
 
     /// <summary>A user this deployment does not serve is work racing an erasure, so it is answered rather than refused.</summary>
@@ -52,14 +52,14 @@ public sealed class ServedUserTimeZonesTests
     public void ZoneOf_AUserTheRosterDoesNotHold_AnswersTheCoordinatedZone()
     {
         // Arrange
-        Assert.True(MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(Serving(warsaw)));
+        Assert.True(UserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(Serving(warsaw)));
 
         // Act
-        var answer = zones.ZoneOf(SyntheticMailUser.Another);
+        var answer = zones.ZoneOf(SyntheticUser.Another);
 
         // Assert
-        Assert.Equal(MailUserTimeZone.Coordinated, answer);
+        Assert.Equal(UserTimeZone.Coordinated, answer);
     }
 
     /// <summary>Nothing resolves a period before the gate has run, and a read that gets there first answers rather than throwing.</summary>
@@ -67,13 +67,13 @@ public sealed class ServedUserTimeZonesTests
     public void ZoneOf_ADeploymentWhoseGateHasNotRun_AnswersTheCoordinatedZone()
     {
         // Arrange
-        var zones = new ServedUserTimeZones(new ServedMailUsers());
+        var zones = new ServedUserTimeZones(new ServedUsers());
 
         // Act
-        var answer = zones.ZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.ZoneOf(SyntheticUser.Deployment);
 
         // Assert
-        Assert.Equal(MailUserTimeZone.Coordinated, answer);
+        Assert.Equal(UserTimeZone.Coordinated, answer);
     }
 
     /// <summary>The stated zone is the same value, so one reader is not answering a question the other would answer differently.</summary>
@@ -81,11 +81,11 @@ public sealed class ServedUserTimeZonesTests
     public void StatedZoneOf_AUserWhoseRecordStatesAZone_AnswersThatZone()
     {
         // Arrange
-        Assert.True(MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(Serving(warsaw)));
+        Assert.True(UserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(Serving(warsaw)));
 
         // Act
-        var answer = zones.StatedZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.StatedZoneOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Equal(warsaw, answer);
@@ -100,13 +100,13 @@ public sealed class ServedUserTimeZonesTests
     {
         // Arrange
         var zones = new ServedUserTimeZones(
-            ResolvedServedMailUsers.Serving(Serving(MailUserTimeZone.Coordinated)));
+            ResolvedServedUsers.Serving(Serving(UserTimeZone.Coordinated)));
 
         // Act
-        var answer = zones.StatedZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.StatedZoneOf(SyntheticUser.Deployment);
 
         // Assert
-        Assert.Equal(MailUserTimeZone.Coordinated, answer);
+        Assert.Equal(UserTimeZone.Coordinated, answer);
     }
 
     /// <summary>A record stating no zone answers nothing here, which is what lets a client offer the zone this person's machine reports.</summary>
@@ -114,11 +114,11 @@ public sealed class ServedUserTimeZonesTests
     public void StatedZoneOf_AUserWhoseRecordStatesNoZone_AnswersNothing()
     {
         // Arrange
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", [])));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(
+            new ServedUser(SyntheticUser.Deployment, "alex", [])));
 
         // Act
-        var answer = zones.StatedZoneOf(SyntheticMailUser.Deployment);
+        var answer = zones.StatedZoneOf(SyntheticUser.Deployment);
 
         // Assert
         Assert.Null(answer);
@@ -129,16 +129,16 @@ public sealed class ServedUserTimeZonesTests
     public void StatedZoneOf_AUserTheRosterDoesNotHold_AnswersNothing()
     {
         // Arrange
-        Assert.True(MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
-        var zones = new ServedUserTimeZones(ResolvedServedMailUsers.Serving(Serving(warsaw)));
+        Assert.True(UserTimeZone.TryRead("Europe/Warsaw", out var warsaw));
+        var zones = new ServedUserTimeZones(ResolvedServedUsers.Serving(Serving(warsaw)));
 
         // Act
-        var answer = zones.StatedZoneOf(SyntheticMailUser.Another);
+        var answer = zones.StatedZoneOf(SyntheticUser.Another);
 
         // Assert
         Assert.Null(answer);
     }
 
-    private static ServedMailUser Serving(MailUserTimeZone zone) =>
-        new(SyntheticMailUser.Deployment, "alex", []) { TimeZone = zone };
+    private static ServedUser Serving(UserTimeZone zone) =>
+        new(SyntheticUser.Deployment, "alex", []) { TimeZone = zone };
 }

@@ -34,7 +34,7 @@ internal static class ReplyDraftAgentComposition
     internal static ChatClientAgent Compose(
         IChatClient chatClient,
         ChatGenerationPlan plan,
-        MailUserLanguage language,
+        UserLanguage language,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {

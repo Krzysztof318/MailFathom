@@ -25,14 +25,14 @@ internal sealed class OwnPortraitLinks(
 {
     /// <inheritdoc />
     public async Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken) =>
         await this.FindPortraitAsync(user, cancellationToken) is { } portrait
             ? new HashSet<StoredFileId> { portrait }
             : new HashSet<StoredFileId>();
 
     /// <inheritdoc />
-    public async Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken) =>
+    public async Task<StoredFileId?> FindPortraitAsync(UserId user, CancellationToken cancellationToken) =>
         await documents.ReadAsync(user, cancellationToken) is { } record ? PortraitOf(record.Json) : null;
 
     /// <inheritdoc />

@@ -139,8 +139,8 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Act
         var answered = await ClientDiscoveryRunEndpoints.Start(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
-            ResolverFor(SyntheticMailUser.Deployment),
-            MailUserClocks.Reading(Now),
+            ResolverFor(SyntheticUser.Deployment),
+            UserClocks.Reading(Now),
             principals,
             store,
             new FakeTimeProvider(Now),
@@ -163,7 +163,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         {
             await store.TryOpenAsync(
                 DiscoveryRunId.New(),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 Now,
                 TestContext.Current.CancellationToken);
         }
@@ -188,7 +188,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Another);
+        var id = await WrittenRunAsync(store, SyntheticUser.Another);
 
         // Act
         var answered = await ReadAsync(id.Value, store);
@@ -208,7 +208,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+        var id = await WrittenRunAsync(store, SyntheticUser.Deployment);
 
         // Act
         var answered = await ReadAsync(id.Value, store);
@@ -226,7 +226,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+        var id = await WrittenRunAsync(store, SyntheticUser.Deployment);
 
         // Act
         var answered = await ReadAsync(id.Value, store, since: 1);
@@ -244,7 +244,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
         await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
 
         // Act
@@ -266,7 +266,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+        var id = await WrittenRunAsync(store, SyntheticUser.Deployment);
 
         // Act
         var answered = await ReadAsync(id.Value, store, since);
@@ -289,7 +289,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+        var id = await WrittenRunAsync(store, SyntheticUser.Deployment);
 
         // Act
         var body = await ReadBodyAsync(id.Value, store);
@@ -312,7 +312,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
         await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
         await store.AppendAsync(
             id,
@@ -339,7 +339,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
         await store.AppendAsync(id, new DiscoveryRunStarted(), Now, TestContext.Current.CancellationToken);
         await store.AppendAsync(
             id,
@@ -375,11 +375,11 @@ public sealed class ClientDiscoveryRunEndpointTests
         var store = new InMemoryDiscoveryRunStore();
         var executing = new ExecutingDiscoveryRuns();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
         using var journal = new DiscoveryRunJournal(
             id,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             store,
             ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(Now));
@@ -401,7 +401,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Deployment, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Deployment, Now, TestContext.Current.CancellationToken);
 
         // Act
         var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
@@ -417,7 +417,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
-        var id = await WrittenRunAsync(store, SyntheticMailUser.Deployment);
+        var id = await WrittenRunAsync(store, SyntheticUser.Deployment);
 
         // Act
         var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
@@ -434,7 +434,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Arrange
         var store = new InMemoryDiscoveryRunStore();
         var id = DiscoveryRunId.New();
-        await store.TryOpenAsync(id, SyntheticMailUser.Another, Now, TestContext.Current.CancellationToken);
+        await store.TryOpenAsync(id, SyntheticUser.Another, Now, TestContext.Current.CancellationToken);
 
         // Act
         var answered = await StopAsync(id.Value, store, new ExecutingDiscoveryRuns());
@@ -456,7 +456,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         ExecutingDiscoveryRuns executing) =>
         ClientDiscoveryRunEndpoints.Stop(
             runId,
-            ResolverFor(SyntheticMailUser.Deployment),
+            ResolverFor(SyntheticUser.Deployment),
             store,
             executing,
             new FakeTimeProvider(Now),
@@ -467,9 +467,9 @@ public sealed class ClientDiscoveryRunEndpointTests
         InMemoryDiscoveryRunStore store) =>
         ClientDiscoveryRunEndpoints.Start(
             request,
-            ResolverFor(SyntheticMailUser.Deployment),
-            MailUserClocks.Reading(Now),
-            AdmittedCaller(SyntheticMailUser.Deployment),
+            ResolverFor(SyntheticUser.Deployment),
+            UserClocks.Reading(Now),
+            AdmittedCaller(SyntheticUser.Deployment),
             store,
             new FakeTimeProvider(Now),
             Launcher(),
@@ -482,7 +482,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         ClientDiscoveryRunEndpoints.Read(
             runId,
             since,
-            ResolverFor(SyntheticMailUser.Deployment),
+            ResolverFor(SyntheticUser.Deployment),
             store,
             new FakeTimeProvider(Now),
             TestContext.Current.CancellationToken);
@@ -507,7 +507,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         return Encoding.UTF8.GetString(body.ToArray());
     }
 
-    private static async Task<DiscoveryRunId> WrittenRunAsync(InMemoryDiscoveryRunStore store, MailUserId user)
+    private static async Task<DiscoveryRunId> WrittenRunAsync(InMemoryDiscoveryRunStore store, UserId user)
     {
         var id = DiscoveryRunId.New();
         await store.TryOpenAsync(id, user, Now, TestContext.Current.CancellationToken);
@@ -521,7 +521,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         return id;
     }
 
-    private static IAuthorizedPrincipalSource AdmittedCaller(MailUserId user)
+    private static IAuthorizedPrincipalSource AdmittedCaller(UserId user)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(
@@ -530,7 +530,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         return principals;
     }
 
-    private static MailboxScopeResolver ResolverFor(MailUserId user) =>
+    private static MailboxScopeResolver ResolverFor(UserId user) =>
         new(
             AssignedMailAccountCatalogs.For(
                 AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),

@@ -40,7 +40,7 @@ public interface INotificationStore
     /// the caller's question rather than the store's: this reads the user it is given and nothing else.
     /// </remarks>
     Task<IReadOnlyList<Notification>> ReadPageAsync(
-        MailUserId user,
+        UserId user,
         NotificationCursor? after,
         int limit,
         CancellationToken cancellationToken);
@@ -53,7 +53,7 @@ public interface INotificationStore
     /// It is a count rather than the length of a page, because the one thing a client asks for most often is the badge
     /// beside the bell and reading a page to derive it would serve a screen's worth of rows to produce one number.
     /// </remarks>
-    Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<int> CountUnreadAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Puts one of a user's notifications into a stated read state.</summary>
     /// <param name="user">The user whose notification is changed, which is what scopes the write.</param>
@@ -67,7 +67,7 @@ public interface INotificationStore
     /// does not exist at all.
     /// </remarks>
     Task<NotificationReadOutcome> SetReadAsync(
-        MailUserId user,
+        UserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken);
@@ -81,7 +81,7 @@ public interface INotificationStore
     /// which the deduplication rule already holds to one per standing condition, and a bound would leave a person
     /// pressing the control repeatedly to reach an empty centre.
     /// </remarks>
-    Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<int> MarkAllReadAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Erases the named notifications, of those the given user holds.</summary>
     /// <param name="user">The user whose notifications are erased, which is what scopes the write.</param>
@@ -96,7 +96,7 @@ public interface INotificationStore
     /// gone the act the caller wanted rather than an error — the count is what happened, never what was asked for.
     /// </remarks>
     Task<int> EraseAsync(
-        MailUserId user,
+        UserId user,
         IReadOnlyCollection<NotificationId> notifications,
         CancellationToken cancellationToken);
 
@@ -112,7 +112,7 @@ public interface INotificationStore
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     Task<int> EraseOccurredBeforeAsync(
-        MailUserId user,
+        UserId user,
         DateTimeOffset occurredBefore,
         int limit,
         CancellationToken cancellationToken);

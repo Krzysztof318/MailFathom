@@ -99,7 +99,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <remarks>A user this deployment holds no record for is answered with an empty listing rather than a refusal, because "which credentials does this user hold" has the same answer either way and telling the two apart would report which user identifiers exist.</remarks>
     public Task<IReadOnlyList<UserCredential>> ReadCredentialsAsync(
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
@@ -117,7 +117,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="username" /> is the unspecified struct default, the password breaks <see cref="UserPasswordPolicy" />, or the grant names something a user-facing credential cannot hold.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public Task<UserCredentialProvisioning> ProvisionPasswordAsync(
-        MailUserId user,
+        UserId user,
         UserCredentialUsername username,
         ReadOnlyMemory<char> password,
         IReadOnlyList<MailFathomPermission>? permissions,
@@ -147,7 +147,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     /// <remarks>The key is drawn here rather than accepted from the request, so nothing outside this deployment decides how much entropy a credential carries, and it is reported back because this is the one moment it exists.</remarks>
     public Task<UserCredentialProvisioning> ProvisionApiKeyAsync(
-        MailUserId user,
+        UserId user,
         IReadOnlyList<MailFathomPermission>? permissions,
         CancellationToken cancellationToken)
     {
@@ -175,7 +175,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, the written key is not one this deployment accepts, or the grant names something a user-facing credential cannot hold.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public Task<UserCredentialProvisioning> ProvisionPublicKeyAsync(
-        MailUserId user,
+        UserId user,
         string? writtenPublicKey,
         IReadOnlyList<MailFathomPermission>? permissions,
         CancellationToken cancellationToken)
@@ -206,7 +206,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     /// <remarks>What this grants is not what the token may do where the endpoint reads a grant from a token's own scopes; there it is the ceiling the scopes narrow. The user comes from here either way, because a token cannot carry one.</remarks>
     public Task<UserCredentialProvisioning> ProvisionOAuthSubjectAsync(
-        MailUserId user,
+        UserId user,
         string? issuer,
         string? subject,
         IReadOnlyList<MailFathomPermission>? permissions,
@@ -245,7 +245,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     /// <remarks>The username is stated rather than read back first, because the write names the lookup a credential carries from now on and a password rotation is the one case where that is the value it already had; a mistyped one answers that no such credential exists rather than renaming somebody's sign-in.</remarks>
     public async Task<UserCredentialRotation> RotatePasswordAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         UserCredentialUsername username,
         ReadOnlyMemory<char> password,
@@ -290,7 +290,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     /// <remarks>The lookup moves with the key, because it is the key's own digest — which is what makes rotating one a single write rather than a second credential the operator then has to remember to delete.</remarks>
     public async Task<UserCredentialRotation> RotateApiKeyAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         CancellationToken cancellationToken)
     {
@@ -329,7 +329,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, <paramref name="credentialId" /> is the empty identifier, or the written key is not one this deployment accepts.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public async Task<UserCredentialRotation> ReplacePublicKeyAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         string? writtenPublicKey,
         CancellationToken cancellationToken)
@@ -367,7 +367,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     /// <remarks>Disabling is the reversible half of revoking: the credential stops working immediately and its lookup stays claimed, so nothing else can be provisioned under the name somebody is still using.</remarks>
     public async Task<UserCredentialWriteOutcome> SetEnabledAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         bool enabled,
         CancellationToken cancellationToken)
@@ -395,7 +395,7 @@ public sealed class UserCredentialAdministration
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public async Task<UserCredentialWriteOutcome> DeleteAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         CancellationToken cancellationToken)
     {
@@ -451,7 +451,7 @@ public sealed class UserCredentialAdministration
     /// itself.
     /// </remarks>
     private async Task<UserCredentialProvisioning> ProvisionAsync(
-        MailUserId user,
+        UserId user,
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         string? material,
@@ -489,7 +489,7 @@ public sealed class UserCredentialAdministration
     /// and a move committing beside that write is exactly what a prediction made before it would miss.
     /// </remarks>
     private async Task<OrganizationShortName> ReadOrganizationScopeAsync(
-        MailUserId user,
+        UserId user,
         Guid credentialId,
         CancellationToken cancellationToken)
     {
@@ -564,7 +564,7 @@ public sealed class UserCredentialAdministration
         UserCredentialWriteOutcome outcome,
         UserCredentialAct act,
         Guid credentialId,
-        MailUserId user,
+        UserId user,
         UserCredentialMethod? method,
         CancellationToken cancellationToken) =>
         outcome == UserCredentialWriteOutcome.Written

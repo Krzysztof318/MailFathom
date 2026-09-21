@@ -149,7 +149,7 @@ public sealed class ClientDraftEndpointTests
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -176,7 +176,7 @@ public sealed class ClientDraftEndpointTests
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
+        var theirs = await OpenAsync(drafts, SyntheticUser.Another);
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -200,7 +200,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -222,7 +222,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -245,7 +245,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -266,7 +266,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -289,7 +289,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
+        var theirs = await OpenAsync(drafts, SyntheticUser.Another);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -311,7 +311,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.UnstageAttachmentAsync(
@@ -331,7 +331,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
+        var theirs = await OpenAsync(drafts, SyntheticUser.Another);
 
         var staged = await drafts.StageAttachmentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -359,7 +359,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         var staged = await attachments.StageAsync(
@@ -443,7 +443,7 @@ public sealed class ClientDraftEndpointTests
     }
 
     /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
-    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
+    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, UserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
             Work,

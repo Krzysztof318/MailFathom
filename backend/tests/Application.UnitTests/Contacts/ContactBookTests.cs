@@ -21,7 +21,7 @@ public sealed class ContactBookTests
 {
     private static readonly DateTimeOffset Now = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+    private static readonly UserId User = SyntheticUser.Deployment;
 
     private static readonly MailAccountId Account = SyntheticMailAccount.Deployment;
 

@@ -11,7 +11,7 @@ namespace MailFathom.Domain.Access;
 /// <remarks>
 /// <para>
 /// A username is not an identity and names no person: it is the handle a caller writes into an HTTP Basic credential,
-/// and what it resolves to is one credential row belonging to one <see cref="MailUserId" />. Two credentials may
+/// and what it resolves to is one credential row belonging to one <see cref="UserId" />. Two credentials may
 /// belong to one user and be rotated apart; no two may carry one username, which is what makes the lookup a single
 /// indexed read rather than a scan that could match twice.
 /// </para>

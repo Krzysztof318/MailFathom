@@ -31,7 +31,7 @@ internal sealed class StoredSecretAdministration(
     /// <param name="cancellationToken">Cancels the user read, sealing, or commit.</param>
     /// <returns>The outcome and the reference when material was stored.</returns>
     internal async Task<StoredSecretProvisioning> StoreAsync(
-        MailUserId user,
+        UserId user,
         SecretName name,
         ResolvedSecret material,
         CancellationToken cancellationToken)

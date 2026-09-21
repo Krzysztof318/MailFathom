@@ -37,8 +37,8 @@ public sealed class MailDraftDirectoryTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var mine = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "mine");
-        await OpenAsync(drafts, SyntheticMailUser.Another, Work, "somebody else's");
+        var mine = await OpenAsync(drafts, SyntheticUser.Deployment, Work, "mine");
+        await OpenAsync(drafts, SyntheticUser.Another, Work, "somebody else's");
 
         var directory = DirectoryOver(drafts);
 
@@ -55,8 +55,8 @@ public sealed class MailDraftDirectoryTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var atWork = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "at work");
-        await OpenAsync(drafts, SyntheticMailUser.Deployment, Personal, "at home");
+        var atWork = await OpenAsync(drafts, SyntheticUser.Deployment, Work, "at work");
+        await OpenAsync(drafts, SyntheticUser.Deployment, Personal, "at home");
 
         var directory = DirectoryOver(drafts);
 
@@ -108,7 +108,7 @@ public sealed class MailDraftDirectoryTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another, Work, "somebody else's");
+        var theirs = await OpenAsync(drafts, SyntheticUser.Another, Work, "somebody else's");
 
         var directory = DirectoryOver(drafts);
 
@@ -131,7 +131,7 @@ public sealed class MailDraftDirectoryTests
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "a draft");
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment, Work, "a draft");
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -157,7 +157,7 @@ public sealed class MailDraftDirectoryTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "a draft");
+        var draft = await OpenAsync(drafts, SyntheticUser.Deployment, Work, "a draft");
 
         var directory = DirectoryOver(drafts);
 
@@ -191,7 +191,7 @@ public sealed class MailDraftDirectoryTests
     /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore drafts,
-        MailUserId user,
+        UserId user,
         MailAccountId accountId,
         string subject) =>
         drafts.OpenAsync(

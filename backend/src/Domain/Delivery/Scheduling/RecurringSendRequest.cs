@@ -25,7 +25,7 @@ public sealed record RecurringSendRequest
 {
     private RecurringSendRequest(
         MailAccountId account,
-        MailUserId author,
+        UserId author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         string schedule)
@@ -46,7 +46,7 @@ public sealed record RecurringSendRequest
     /// them declaring the same requester identity hold two declarations, only its author reads or stops one, and
     /// erasing that person stops theirs while the mailbox goes on serving everybody else.
     /// </remarks>
-    public MailUserId Author { get; }
+    public UserId Author { get; }
 
     /// <summary>Gets the authored act asking, which is what makes the same declaration twice one declaration.</summary>
     public OutgoingEmailRequester Requester { get; }
@@ -68,7 +68,7 @@ public sealed record RecurringSendRequest
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="OutgoingEmailRequest.MaximumRecipientCount" /> entries, or names one mailbox more than once, or when <paramref name="schedule" /> is blank, carries a control character, or is longer than <see cref="RecurringSend.MaximumScheduleLength" />.</exception>
     public static RecurringSendRequest Create(
         MailAccountId account,
-        MailUserId author,
+        UserId author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         string schedule)

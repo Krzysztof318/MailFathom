@@ -265,8 +265,8 @@ public sealed class ClientOutboxEndpointTests
     {
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, Work)
-            .Assigning(SyntheticMailUser.Another, Unassigned);
+            .Assigning(SyntheticUser.Deployment, Work)
+            .Assigning(SyntheticUser.Another, Unassigned);
 
         return new UserOutbox(
             AssignedMailAccountCatalogs.For(
@@ -290,7 +290,7 @@ public sealed class ClientOutboxEndpointTests
             Substitute.For<IPersistenceSession>(),
             OutgoingEmailRequest.Create(
                 account,
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 OutgoingEmailRequester.Command($"mfctl-{account.Value}"),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]),
             OutgoingEmailPrincipal.Of("test-caller"),

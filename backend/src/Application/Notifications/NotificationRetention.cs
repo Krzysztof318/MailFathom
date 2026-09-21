@@ -64,7 +64,7 @@ public sealed class NotificationRetention
     /// <param name="user">The user whose notifications are aged.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>How many notifications were erased.</returns>
-    public Task<int> EraseExpiredAsync(MailUserId user, CancellationToken cancellationToken) =>
+    public Task<int> EraseExpiredAsync(UserId user, CancellationToken cancellationToken) =>
         this.store.EraseOccurredBeforeAsync(
             user,
             this.timeProvider.GetUtcNow() - Window,

@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Tasks;
 /// <summary>Covers the row a task is written as, and the task a row is read back into.</summary>
 public sealed class PersonalTaskMappingTests
 {
-    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
+    private static readonly UserId User = UserId.Create(Guid.NewGuid());
 
     private static readonly DateOnly DueOn = new(2026, 9, 27);
 

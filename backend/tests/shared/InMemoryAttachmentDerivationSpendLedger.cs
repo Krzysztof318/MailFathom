@@ -18,10 +18,10 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDerivationSpendLedger
 {
-    private readonly Dictionary<(DateTimeOffset PeriodStart, AttachmentDerivationStep Step, MailUserId User), long> consumed = [];
+    private readonly Dictionary<(DateTimeOffset PeriodStart, AttachmentDerivationStep Step, UserId User), long> consumed = [];
 
     /// <summary>Gets what each period, step, and user has been charged so far.</summary>
-    public IReadOnlyDictionary<(DateTimeOffset PeriodStart, AttachmentDerivationStep Step, MailUserId User), long> Consumed =>
+    public IReadOnlyDictionary<(DateTimeOffset PeriodStart, AttachmentDerivationStep Step, UserId User), long> Consumed =>
         this.consumed;
 
     /// <summary>Charges a period before the test begins, which is how a test starts against a partly spent ceiling.</summary>
@@ -32,7 +32,7 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
     public void Seed(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        UserId user,
         long unitCount) =>
         this.consumed[(periodStart, derivationStep, user)] =
             this.consumed.GetValueOrDefault((periodStart, derivationStep, user)) + unitCount;
@@ -48,7 +48,7 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
     public Task<AttachmentDerivationTotals> ReadConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -74,7 +74,7 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long unitCount,
         CancellationToken cancellationToken)
     {

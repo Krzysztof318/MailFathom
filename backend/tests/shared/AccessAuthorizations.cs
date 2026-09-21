@@ -26,14 +26,14 @@ internal static class AccessAuthorizations
     /// acting for nobody arranges <see cref="ForAdministratorGranted" /> by name.
     /// </remarks>
     internal static AccessAuthorization ForCallerGranted(params MailFathomPermission[] grantedPermissions) =>
-        ForUserGranted(SyntheticMailUser.Deployment, grantedPermissions);
+        ForUserGranted(SyntheticUser.Deployment, grantedPermissions);
 
     /// <summary>Builds the authorization of an admitted caller acting for one named user.</summary>
     /// <param name="user">The user whose mail the caller was admitted to act on.</param>
     /// <param name="grantedPermissions">What the entry that admitted the caller resolved to.</param>
     /// <returns>The authorization a use case reached by that caller consults.</returns>
     internal static AccessAuthorization ForUserGranted(
-        MailUserId user,
+        UserId user,
         params MailFathomPermission[] grantedPermissions) =>
         ForPrincipal(AuthorizedPrincipal.CallerActingFor(user, "test-caller", grantedPermissions));
 

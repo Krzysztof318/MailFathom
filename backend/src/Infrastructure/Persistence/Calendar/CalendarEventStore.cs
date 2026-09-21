@@ -31,7 +31,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
 {
     /// <inheritdoc />
     public async Task<CalendarEvent?> ReadAsync(
-        MailUserId owner,
+        UserId owner,
         CalendarEventId eventId,
         CancellationToken cancellationToken)
     {
@@ -52,7 +52,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<CalendarEvent>> ReadRangeAsync(
-        MailUserId owner,
+        UserId owner,
         CalendarEventQuery query,
         CancellationToken cancellationToken)
     {
@@ -91,7 +91,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
 
     /// <inheritdoc />
     public async Task<IReadOnlySet<ImportedCalendarEventUid>> ReadImportedUidsAsync(
-        MailUserId owner,
+        UserId owner,
         IReadOnlyCollection<ImportedCalendarEventUid> candidates,
         CancellationToken cancellationToken)
     {
@@ -123,7 +123,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
     /// <inheritdoc />
     public async Task AddAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken)
     {
@@ -139,7 +139,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
     /// <inheritdoc />
     public async Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken)
     {
@@ -219,7 +219,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(
         IPersistenceSession session,
-        MailUserId owner,
+        UserId owner,
         CalendarEventId eventId,
         CancellationToken cancellationToken)
     {
@@ -237,7 +237,7 @@ internal sealed class CalendarEventStore(MailFathomDbContext context) : ICalenda
         return removed > 0;
     }
 
-    private static void RequireNamed(MailUserId owner)
+    private static void RequireNamed(UserId owner)
     {
         if (!owner.IsSpecified)
         {

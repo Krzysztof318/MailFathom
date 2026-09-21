@@ -75,7 +75,7 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     /// A test that says nothing about assignments is bounded by the deployment's ceiling alone, which is the same
     /// answer a deployment gives for a mailbox nobody has been assigned.
     /// </remarks>
-    public InMemoryStoredContentClaimStore Assigning(MailUserId user, params MailAccountId[] accounts)
+    public InMemoryStoredContentClaimStore Assigning(UserId user, params MailAccountId[] accounts)
     {
         this.assignments.Assigning(user, accounts);
 

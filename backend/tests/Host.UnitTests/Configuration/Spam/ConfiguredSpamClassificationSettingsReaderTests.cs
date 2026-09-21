@@ -127,7 +127,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         var reader = new ConfiguredSpamClassificationSettingsReader(
             options,
             RosterOf(DocumentUser(
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 new MailAccountSpamClassificationOptions { Enabled = true },
                 "primary",
                 AccountMapping("inbox", "Inbox"))));
@@ -189,7 +189,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 ScannedFolders = ["inbox"],
             }),
             RosterOf(DocumentUser(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 new MailAccountSpamClassificationOptions
                 {
                     Enabled = true,
@@ -217,7 +217,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions { Enabled = true }),
             RosterOf(DocumentUser(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 new MailAccountSpamClassificationOptions { Enabled = false },
                 "second-account",
                 AccountMapping("inbox", "Inbox"))));
@@ -240,7 +240,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 ClassificationWait = TimeSpan.FromHours(3),
             }),
             RosterOf(DocumentUser(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 new MailAccountSpamClassificationOptions { Enabled = true },
                 "second-account",
                 AccountMapping("inbox", "Inbox"))));
@@ -261,13 +261,13 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
             RosterOf(
                 DocumentUser(
-                    SyntheticMailUser.Deployment,
+                    SyntheticUser.Deployment,
                     new MailAccountSpamClassificationOptions { Enabled = true, ScannedFolders = ["inbox"] },
                     "first-account",
                     AccountMapping("inbox", "Inbox"),
                     AccountMapping("archive", "Archive")),
                 DocumentUser(
-                    SyntheticMailUser.Another,
+                    SyntheticUser.Another,
                     new MailAccountSpamClassificationOptions { Enabled = false },
                     "second-account",
                     AccountMapping("inbox", "Inbox"))));
@@ -302,8 +302,8 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
             RosterOf(
-                DocumentUser(SyntheticMailUser.Deployment, shared, "shared-account", AccountMapping("inbox", "Inbox")),
-                DocumentUser(SyntheticMailUser.Another, shared, "shared-account", AccountMapping("inbox", "Inbox"))));
+                DocumentUser(SyntheticUser.Deployment, shared, "shared-account", AccountMapping("inbox", "Inbox")),
+                DocumentUser(SyntheticUser.Another, shared, "shared-account", AccountMapping("inbox", "Inbox"))));
 
         // Act
         var settings = reader.SettingsFor(MailAccountId.Create("shared-account"));
@@ -349,7 +349,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         params MailFolderMappingOptions[] folders) =>
         new(
             new TestOptionsMonitor<SpamClassificationOptions>(deployment),
-            RosterOf(DocumentUser(SyntheticMailUser.Deployment, record, "primary", folders)));
+            RosterOf(DocumentUser(SyntheticUser.Deployment, record, "primary", folders)));
 
     private static MailFolderMappingOptions AccountMapping(string alias, string specialUse) => new()
     {
@@ -357,11 +357,11 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         SpecialUse = specialUse,
     };
 
-    private static MailSynchronizationOptions RosterOf(params ServedMailUser[] users) =>
+    private static MailSynchronizationOptions RosterOf(params ServedUser[] users) =>
         new MailSynchronizationOptions().WithServedUsers(users);
 
-    private static ServedMailUser DocumentUser(
-        MailUserId user,
+    private static ServedUser DocumentUser(
+        UserId user,
         MailAccountSpamClassificationOptions classification,
         string accountId,
         params MailFolderMappingOptions[] folders) =>

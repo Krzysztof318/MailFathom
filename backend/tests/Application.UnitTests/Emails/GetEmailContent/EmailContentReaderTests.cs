@@ -775,14 +775,14 @@ public sealed class EmailContentReaderTests
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
         var authorization = AccessAuthorizations.ForUserGranted(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             MailFathomPermission.MailRead);
         var reader = ReaderOver(
             summary,
             RendererReturning(RenderingOf()),
             accountCatalog: AssignedMailAccountCatalogs.For(
                 authorization,
-                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, summary.Account),
+                new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, summary.Account),
                 SyntheticServedAccount.Of(summary.Account)),
             authorization: authorization);
 
@@ -821,13 +821,13 @@ public sealed class EmailContentReaderTests
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, summary.Account)
-            .Assigning(SyntheticMailUser.Another, summary.Account);
+            .Assigning(SyntheticUser.Deployment, summary.Account)
+            .Assigning(SyntheticUser.Another, summary.Account);
 
         // Act
-        var readByOne = await ReadAsAsync(summary, assignments, SyntheticMailUser.Deployment);
-        var readByTheOther = await ReadAsAsync(summary, assignments, SyntheticMailUser.Another);
-        var readByNobody = await ReadAsAsync(summary, assignments, SyntheticMailUser.Third);
+        var readByOne = await ReadAsAsync(summary, assignments, SyntheticUser.Deployment);
+        var readByTheOther = await ReadAsAsync(summary, assignments, SyntheticUser.Another);
+        var readByNobody = await ReadAsAsync(summary, assignments, SyntheticUser.Third);
 
         // Assert
         // One message, one account identifier, read twice: the two callers are served the same mailbox rather than a
@@ -850,7 +850,7 @@ public sealed class EmailContentReaderTests
     private static Task<GetEmailContentResult> ReadAsAsync(
         EmailSummary summary,
         IMailAccountAssignments assignments,
-        MailUserId user)
+        UserId user)
     {
         var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailRead);
 

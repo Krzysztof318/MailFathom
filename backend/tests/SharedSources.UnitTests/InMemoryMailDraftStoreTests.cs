@@ -419,11 +419,11 @@ public sealed class InMemoryMailDraftStoreTests
         await OpenAsync(
             store,
             MailAccountId.Create("work"),
-            SyntheticMailUser.Another);
+            SyntheticUser.Another);
 
         // Act
         var held = await store.ReadForUserAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             account: null,
             maxCount: 10,
             TestContext.Current.CancellationToken);
@@ -445,7 +445,7 @@ public sealed class InMemoryMailDraftStoreTests
 
         // Act
         var held = await store.ReadForUserAsync(
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Account,
             maxCount: 10,
             TestContext.Current.CancellationToken);
@@ -561,11 +561,11 @@ public sealed class InMemoryMailDraftStoreTests
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore store,
         MailAccountId? account = null,
-        MailUserId? author = null) =>
+        UserId? author = null) =>
         store.OpenAsync(
             Session,
             account ?? Account,
-            author ?? SyntheticMailUser.Deployment,
+            author ?? SyntheticUser.Deployment,
             OutgoingEmailRequester.Command("one-act"),
             [],
             "a draft",

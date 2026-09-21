@@ -156,8 +156,8 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
     private static ConfiguredSpamActionSettingsReader ReaderFor(params MailSynchronizationAccountOptions[] accounts) =>
         new(new MailSynchronizationOptions().WithServedUsers(
         [
-            new ServedMailUser(
-                SyntheticMailUser.Deployment,
+            new ServedUser(
+                SyntheticUser.Deployment,
                 "the served user",
                 accounts),
         ]));

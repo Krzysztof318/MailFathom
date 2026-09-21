@@ -19,13 +19,13 @@ public interface IUserRecordFileLinks
     /// <param name="user">The user whose record is read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The linked files, empty when the record links none or this deployment holds no such user.</returns>
-    Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Reads the file one user's record links as their portrait.</summary>
     /// <param name="user">The user whose record is read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The portrait's file, or <see langword="null" /> when the record links none or this deployment holds no such user.</returns>
-    Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<StoredFileId?> FindPortraitAsync(UserId user, CancellationToken cancellationToken);
 
     /// <summary>Links the signed-in user's record to a portrait, or to none.</summary>
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>

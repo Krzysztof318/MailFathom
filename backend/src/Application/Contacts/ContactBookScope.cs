@@ -38,7 +38,7 @@ public sealed record ContactBookScope
     }
 
     /// <summary>Gets the user whose reading this scope describes.</summary>
-    public MailUserId User => this.OwnBook.User!.Value;
+    public UserId User => this.OwnBook.User!.Value;
 
     /// <summary>Gets the user's own book, which every write a caller makes goes into.</summary>
     public ContactBookHolder OwnBook { get; }
@@ -60,7 +60,7 @@ public sealed record ContactBookScope
     /// depend on which reader assembled the list. A user assigned nothing reads their own book alone, which is the same
     /// shape rather than a case of its own.
     /// </remarks>
-    public static ContactBookScope Of(MailUserId user, IReadOnlyList<MailAccountId> assignedAccounts)
+    public static ContactBookScope Of(UserId user, IReadOnlyList<MailAccountId> assignedAccounts)
     {
         ArgumentNullException.ThrowIfNull(assignedAccounts);
 
@@ -85,5 +85,5 @@ public sealed record ContactBookScope
     /// against. Nothing in production narrows to it: every read and every write resolves the whole scope, because
     /// reaching a collected record is what lets it be refused as collected rather than reported absent.
     /// </remarks>
-    public static ContactBookScope OfOwnBookAlone(MailUserId user) => Of(user, []);
+    public static ContactBookScope OfOwnBookAlone(UserId user) => Of(user, []);
 }

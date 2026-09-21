@@ -12,7 +12,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="Json">The record with every secret-bearing value replaced by the redaction marker.</param>
 /// <param name="Version">The version the record was read at, which a change to it is composed over and refused against.</param>
 internal sealed record UserRecordReading(
-    MailUserId User,
+    UserId User,
     string DisplayName,
     string Json,
     long Version);

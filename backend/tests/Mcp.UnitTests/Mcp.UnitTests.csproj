@@ -13,8 +13,8 @@
     <!-- Every use case behind a protected surface takes the authorization, so the principal a test states is composed
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
-    <Compile Include="..\shared\MailUserClocks.cs" Link="MailUserClocks.cs" />
-    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
+    <Compile Include="..\shared\UserClocks.cs" Link="UserClocks.cs" />
+    <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
     <!-- Which contact books a caller reads follows from the mail accounts assigned to their user, so the suites that
          compose a book over a caller arrange that relation the same way. -->
     <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />

@@ -36,7 +36,7 @@ public sealed class AssignedMailAccountCatalogTests
     public void AssignedAccounts_AUserAssignedEveryAccountTheDeploymentServes_ReadsThemAll()
     {
         // Arrange
-        var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment));
+        var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment));
 
         // Act
         var assigned = catalog.AssignedAccounts;
@@ -54,7 +54,7 @@ public sealed class AssignedMailAccountCatalogTests
     public void AssignedAccounts_AUserAssignedNoMailbox_ReadsNothingThisDeploymentServes()
     {
         // Arrange
-        var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another));
+        var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticUser.Another));
 
         // Act
         var assigned = catalog.AssignedAccounts;
@@ -105,16 +105,16 @@ public sealed class AssignedMailAccountCatalogTests
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, ServedAccount.Id)
-            .Assigning(SyntheticMailUser.Another, AnotherUsersAccount.Id);
+            .Assigning(SyntheticUser.Deployment, ServedAccount.Id)
+            .Assigning(SyntheticUser.Another, AnotherUsersAccount.Id);
 
         var deploymentUser = CatalogFor(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment),
             servedAccounts: [ServedAccount, AnotherUsersAccount],
             assignments: assignments);
 
         var anotherUser = CatalogFor(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another),
             servedAccounts: [ServedAccount, AnotherUsersAccount],
             assignments: assignments);
 
@@ -137,15 +137,15 @@ public sealed class AssignedMailAccountCatalogTests
     {
         // Arrange
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, ServedAccount.Id)
-            .Assigning(SyntheticMailUser.Another, ServedAccount.Id);
+            .Assigning(SyntheticUser.Deployment, ServedAccount.Id)
+            .Assigning(SyntheticUser.Another, ServedAccount.Id);
 
         var firstReader = CatalogFor(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment),
             assignments: assignments);
 
         var secondReader = CatalogFor(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another),
             assignments: assignments);
 
         // Act
@@ -165,7 +165,7 @@ public sealed class AssignedMailAccountCatalogTests
     {
         // Arrange
         var catalog = CatalogFor(
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Deployment),
             synchronizationEnabled);
 
         // Act & Assert
@@ -192,7 +192,7 @@ public sealed class AssignedMailAccountCatalogTests
         return new AssignedMailAccountCatalog(
             deploymentAccounts,
             assignments
-                ?? new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, ServedAccount.Id),
+                ?? new StubMailAccountAssignments().Assigning(SyntheticUser.Deployment, ServedAccount.Id),
             authorization);
     }
 }

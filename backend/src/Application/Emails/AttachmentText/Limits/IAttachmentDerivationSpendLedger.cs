@@ -45,7 +45,7 @@ public interface IAttachmentDerivationSpendLedger
     Task<AttachmentDerivationTotals> ReadConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken);
 
     /// <summary>Reads what one period actually consumed on one step, whoever it was counted against.</summary>
@@ -90,7 +90,7 @@ public interface IAttachmentDerivationSpendLedger
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long unitCount,
         CancellationToken cancellationToken);
 }

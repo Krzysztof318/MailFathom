@@ -223,7 +223,7 @@ public sealed class MailThreadStateBrowserTests
         var accounts = servedAccounts ?? [Account];
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.AssignedAccounts.Returns([.. accounts.Select(static accountId => SyntheticServedAccount.Of(accountId))]);
-        catalog.User.Returns(SyntheticMailUser.Deployment);
+        catalog.User.Returns(SyntheticUser.Deployment);
 
         var scopeResolver = new MailboxScopeResolver(
             catalog,

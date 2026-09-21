@@ -54,7 +54,7 @@ internal sealed class PersistedNotificationStore(
     /// is what makes page four hundred cost what page one costs.
     /// </remarks>
     public async Task<IReadOnlyList<Notification>> ReadPageAsync(
-        MailUserId user,
+        UserId user,
         NotificationCursor? after,
         int limit,
         CancellationToken cancellationToken)
@@ -89,7 +89,7 @@ internal sealed class PersistedNotificationStore(
     /// It is answered from the partial unique index the deduplication rule already declares, whose rows are exactly one
     /// user's unread notifications, so the badge a client polls for costs an index-only count rather than a scan.
     /// </remarks>
-    public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken)
+    public Task<int> CountUnreadAsync(UserId user, CancellationToken cancellationToken)
     {
         var userValue = user.Value;
 
@@ -114,7 +114,7 @@ internal sealed class PersistedNotificationStore(
     /// </para>
     /// </remarks>
     public Task<NotificationReadOutcome> SetReadAsync(
-        MailUserId user,
+        UserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken) =>
@@ -127,7 +127,7 @@ internal sealed class PersistedNotificationStore(
     /// A set-based update that composes with nothing a caller is holding, exactly as the erasure below is, and one that
     /// cannot collide with the deduplication rule: every row it touches leaves the partial index rather than joining it.
     /// </remarks>
-    public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken)
+    public Task<int> MarkAllReadAsync(UserId user, CancellationToken cancellationToken)
     {
         var userValue = user.Value;
 
@@ -145,7 +145,7 @@ internal sealed class PersistedNotificationStore(
     /// here is bounded, because what a caller may name at once is the surface's decision rather than the store's.
     /// </remarks>
     public Task<int> EraseAsync(
-        MailUserId user,
+        UserId user,
         IReadOnlyCollection<NotificationId> notifications,
         CancellationToken cancellationToken)
     {
@@ -171,7 +171,7 @@ internal sealed class PersistedNotificationStore(
     /// delete either fails to translate or becomes a subquery whose shape depends on the provider.
     /// </remarks>
     public async Task<int> EraseOccurredBeforeAsync(
-        MailUserId user,
+        UserId user,
         DateTimeOffset occurredBefore,
         int limit,
         CancellationToken cancellationToken)
@@ -201,7 +201,7 @@ internal sealed class PersistedNotificationStore(
 
     private static async Task<NotificationReadOutcome> StageReadStateAsync(
         IPersistenceSession session,
-        MailUserId user,
+        UserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken)

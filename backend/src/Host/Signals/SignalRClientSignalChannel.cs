@@ -84,7 +84,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
     /// two would otherwise deliver to the set as it stood when a run started. A mailbox assigned to nobody reaches
     /// nobody, which is what an empty answer has to mean everywhere the assignment relation is read.
     /// </remarks>
-    private IReadOnlyList<MailUserId> RecipientsOf(ClientSignal signal)
+    private IReadOnlyList<UserId> RecipientsOf(ClientSignal signal)
     {
         if (signal.User is { } named)
         {

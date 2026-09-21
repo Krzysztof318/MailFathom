@@ -18,8 +18,8 @@
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <!-- Every administrative route builds the use case behind it, and every one of those asks who reached it. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
-    <Compile Include="..\shared\MailUserClocks.cs" Link="MailUserClocks.cs" />
-    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
+    <Compile Include="..\shared\UserClocks.cs" Link="UserClocks.cs" />
+    <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
     <Compile Include="..\shared\SyntheticMailAccount.cs" Link="SyntheticMailAccount.cs" />
     <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
     <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />

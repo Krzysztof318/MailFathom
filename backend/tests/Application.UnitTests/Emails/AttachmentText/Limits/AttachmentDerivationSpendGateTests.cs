@@ -32,13 +32,13 @@ public sealed class AttachmentDerivationSpendGateTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another, 4_096);
+        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Another, 4_096);
         var gate = CreateGate(
             ledger,
             Bounded(maxInputOctetsPerPeriod: 1_000_000, maxInputOctetsPerPeriodPerUser: 4_096),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment));
 
         // Act
         var admission = await gate.ReadCurrentPeriodForAccountAsync(
@@ -93,8 +93,8 @@ public sealed class AttachmentDerivationSpendGateTests
             ledger,
             Bounded(maxInputOctetsPerPeriod: 1_000_000, maxInputOctetsPerPeriodPerUser: 1_000_000),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment));
 
         // Act
         await gate.RecordAccountSpendAsync(
@@ -113,10 +113,10 @@ public sealed class AttachmentDerivationSpendGateTests
         Assert.Equal(4_096, deployment);
         Assert.Equal(
             4_096,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Deployment)]);
         Assert.Equal(
             4_096,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticUser.Another)]);
     }
 
     /// <summary>A mailbox nobody is assigned still moves the deployment's figure, which is what an operator watches.</summary>

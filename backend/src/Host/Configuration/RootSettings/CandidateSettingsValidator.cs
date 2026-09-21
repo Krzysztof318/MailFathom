@@ -42,7 +42,7 @@ namespace MailFathom.Host.Configuration.RootSettings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this validator.")]
 internal sealed class CandidateSettingsValidator(
     IEnumerable<ISensitiveContentCatalog> sensitiveContentCatalogs,
-    ServedMailUsers servedUsers)
+    ServedUsers servedUsers)
 {
     /// <summary>Finds what an operator must change before a candidate configuration could be the deployment's.</summary>
     /// <param name="candidate">The composed configuration the candidate document would produce.</param>

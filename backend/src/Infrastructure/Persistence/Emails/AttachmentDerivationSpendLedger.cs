@@ -46,7 +46,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
     public async Task<AttachmentDerivationTotals> ReadConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         var userId = user.Value;
@@ -85,7 +85,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        IReadOnlyCollection<MailUserId> users,
+        IReadOnlyCollection<UserId> users,
         long unitCount,
         CancellationToken cancellationToken)
     {

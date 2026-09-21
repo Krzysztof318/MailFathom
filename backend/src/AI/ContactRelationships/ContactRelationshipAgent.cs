@@ -234,7 +234,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     /// </remarks>
     private async Task<ChatModelAnswer?> AskAsync(
         string turn,
-        MailUserLanguage language,
+        UserLanguage language,
         CancellationToken cancellationToken)
     {
         try
@@ -262,7 +262,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailUserLanguage language,
+        UserLanguage language,
         CancellationToken cancellationToken)
     {
         // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower

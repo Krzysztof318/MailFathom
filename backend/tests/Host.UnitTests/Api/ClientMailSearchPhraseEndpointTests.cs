@@ -62,7 +62,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
         var result = await ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
             request: null,
             this.reader,
-            MailUserClocks.Reading(AskedAt),
+            UserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -116,7 +116,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
         var result = await ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
             new ClientMailSearchPhraseRequest("unread mail about the invoice"),
             reader: null,
-            MailUserClocks.Reading(AskedAt),
+            UserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -174,7 +174,7 @@ public sealed class ClientMailSearchPhraseEndpointTests
 
             // Half past eleven in the evening in Warsaw is still the ninth there and already the tenth in Tokyo, which
             // is the pair of days a person searching for "yesterday" would be answered with the wrong one of.
-            MailUserClocks.Reading(new DateTimeOffset(2026, 9, 9, 21, 30, 0, TimeSpan.Zero), "Europe/Warsaw"),
+            UserClocks.Reading(new DateTimeOffset(2026, 9, 9, 21, 30, 0, TimeSpan.Zero), "Europe/Warsaw"),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -238,6 +238,6 @@ public sealed class ClientMailSearchPhraseEndpointTests
         ClientMailSearchPhraseEndpoint.ReadPhraseAsync(
             new ClientMailSearchPhraseRequest(phrase),
             this.reader,
-            MailUserClocks.Reading(AskedAt),
+            UserClocks.Reading(AskedAt),
             TestContext.Current.CancellationToken);
 }

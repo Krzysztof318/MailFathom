@@ -31,5 +31,5 @@ public interface IUserSettingsDocumentReader
     /// <returns>The user's record, or <see langword="null" /> when this deployment holds no such user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="UserSettingsUnreadableException">Thrown when the deployment holds a record for this user and it could not be handed on — a document past what this build binds, or a database that declined the read. A user nobody provisioned is the <see langword="null" /> above rather than this.</exception>
-    Task<UserSettingsDocument?> ReadAsync(MailUserId user, CancellationToken cancellationToken);
+    Task<UserSettingsDocument?> ReadAsync(UserId user, CancellationToken cancellationToken);
 }

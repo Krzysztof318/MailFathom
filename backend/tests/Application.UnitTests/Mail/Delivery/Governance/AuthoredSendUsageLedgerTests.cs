@@ -219,7 +219,7 @@ public sealed class AuthoredSendUsageLedgerTests
 
     private static OutgoingEmailRequest Send(int number, int recipientCount) => OutgoingEmailRequest.Create(
         Account,
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         OutgoingEmailRequester.Command(string.Create(CultureInfo.InvariantCulture, $"send-{number}")),
         [.. Enumerable
             .Range(0, recipientCount)

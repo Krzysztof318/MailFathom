@@ -111,11 +111,11 @@ public sealed class AuthoredSendGovernorTests
     {
         // Arrange
         var caller = AccessAuthorizations.ForUserGranted(
-            SyntheticMailUser.Another,
+            SyntheticUser.Another,
             MailFathomPermission.MailSend);
 
         var book = new InMemoryContactBookStore();
-        book.Hold(SyntheticMailUser.Another, ContactOf("Anna", "anna@example.test"));
+        book.Hold(SyntheticUser.Another, ContactOf("Anna", "anna@example.test"));
 
         var governor = AuthoredSendGovernors.Governing(
             settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse),
@@ -316,7 +316,7 @@ public sealed class AuthoredSendGovernorTests
     private static OutgoingEmailRequest AskedAs(string requesterIdentity, params string[] addresses) =>
         OutgoingEmailRequest.Create(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             OutgoingEmailRequester.Command(requesterIdentity),
             [.. addresses.Select(address => OutgoingRecipient.Create(Address(address), OutgoingRecipientRole.To))]);
 

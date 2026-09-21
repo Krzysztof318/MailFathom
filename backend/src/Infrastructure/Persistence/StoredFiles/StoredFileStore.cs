@@ -55,7 +55,7 @@ internal sealed class StoredFileStore(
 
     /// <inheritdoc />
     public async Task<StoredFileId?> WriteAsync(
-        MailUserId owner,
+        UserId owner,
         string mediaType,
         ReadOnlyMemory<byte> content,
         CancellationToken cancellationToken)
@@ -118,7 +118,7 @@ internal sealed class StoredFileStore(
     /// still there, for the reason a mail payload is: the deployment still has the bytes.
     /// </remarks>
     public async Task<ReadOnlyMemory<byte>?> ReadAsync(
-        MailUserId owner,
+        UserId owner,
         StoredFileId file,
         CancellationToken cancellationToken)
     {
@@ -154,7 +154,7 @@ internal sealed class StoredFileStore(
     }
 
     /// <inheritdoc />
-    public Task<bool> HoldsAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken)
+    public Task<bool> HoldsAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken)
     {
         RequireNamed(owner, file);
 
@@ -171,7 +171,7 @@ internal sealed class StoredFileStore(
     /// The key is read before the row goes, because afterwards nothing names the object. A move repointing the row
     /// between the read and the removal leaves its object unnamed here, which is an orphan the object sweep removes.
     /// </remarks>
-    public async Task RemoveAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken)
+    public async Task RemoveAsync(UserId owner, StoredFileId file, CancellationToken cancellationToken)
     {
         RequireNamed(owner, file);
 
@@ -208,10 +208,10 @@ internal sealed class StoredFileStore(
             .SqlQueryRaw<UnmentionedFileRow>(UnmentionedFiles, writtenBefore, maxFiles)
             .ToListAsync(cancellationToken);
 
-        return [.. rows.Select(row => new HeldStoredFile(StoredFileId.Create(row.File), MailUserId.Create(row.Owner)))];
+        return [.. rows.Select(row => new HeldStoredFile(StoredFileId.Create(row.File), UserId.Create(row.Owner)))];
     }
 
-    private static void RequireNamed(MailUserId owner)
+    private static void RequireNamed(UserId owner)
     {
         if (!owner.IsSpecified)
         {
@@ -219,7 +219,7 @@ internal sealed class StoredFileStore(
         }
     }
 
-    private static void RequireNamed(MailUserId owner, StoredFileId file)
+    private static void RequireNamed(UserId owner, StoredFileId file)
     {
         RequireNamed(owner);
 

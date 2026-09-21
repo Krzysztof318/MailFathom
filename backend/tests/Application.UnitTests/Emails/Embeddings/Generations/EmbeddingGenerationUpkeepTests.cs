@@ -289,7 +289,7 @@ public sealed class EmbeddingGenerationUpkeepTests
                     new EmbeddingSpendGate(
                         new InMemoryEmbeddingSpendLedger(),
                         new StubMailAccountAssignments().Assigning(
-                            SyntheticMailUser.Deployment,
+                            SyntheticUser.Deployment,
                             SyntheticMailAccount.Deployment),
                         EmbeddingSpendBudget.Unbounded,
                         new FakeTimeProvider()),

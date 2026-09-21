@@ -152,7 +152,7 @@ public sealed class MailFlagChangeRecorderTests
         var recorder = RecorderOver(
             records,
             TargetIn(Inbox),
-            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailFlagsWrite));
+            AccessAuthorizations.ForUserGranted(SyntheticUser.Another, MailFathomPermission.MailFlagsWrite));
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act

@@ -34,12 +34,12 @@ namespace MailFathom.Application.Access.Credentials;
 /// </remarks>
 public sealed record ResolvedUserCredential(
     Guid Id,
-    MailUserId User,
+    UserId User,
     UserCredentialMethod Method,
     IReadOnlyList<MailFathomPermission> Permissions,
     bool Enabled,
     string? Material,
-    MailUserEndpointAccess EndpointAccess)
+    UserEndpointAccess EndpointAccess)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(ResolvedUserCredential)} {{ {this.Id} }}";

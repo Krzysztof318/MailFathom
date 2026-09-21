@@ -124,8 +124,8 @@ public sealed class EmbeddingSpendGateTests
             BoundedPerUser(10_000, 1_000),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another));
         await gate.RecordAccountSpendAsync(
             Substitute.For<IPersistenceSession>(),
             SyntheticMailAccount.Deployment,
@@ -166,7 +166,7 @@ public sealed class EmbeddingSpendGateTests
             BoundedPerUser(1_000, 1_000),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment));
         await gate.RecordAccountSpendAsync(
             Substitute.For<IPersistenceSession>(),
             SyntheticMailAccount.Deployment,
@@ -193,8 +193,8 @@ public sealed class EmbeddingSpendGateTests
             BoundedPerUser(1_000, 900),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another));
         await gate.RecordAccountSpendAsync(
             Substitute.For<IPersistenceSession>(),
             SyntheticMailAccount.Another,
@@ -222,8 +222,8 @@ public sealed class EmbeddingSpendGateTests
             BoundedPerUser(10_000, 10_000),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Another));
         var periodStart = new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
         // Act
@@ -239,8 +239,8 @@ public sealed class EmbeddingSpendGateTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(300, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticMailUser.Deployment)]);
-        Assert.Equal(700, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticMailUser.Another)]);
+        Assert.Equal(300, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticUser.Deployment)]);
+        Assert.Equal(700, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticUser.Another)]);
         Assert.Equal(1_000, ledger.ConsumedByPeriod[periodStart]);
     }
 
@@ -253,14 +253,14 @@ public sealed class EmbeddingSpendGateTests
     {
         // Arrange
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticUser.Another, inputCharacterCount: 500);
         var gate = CreateGate(
             ledger,
             BoundedPerUser(10_000, 500),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment));
 
         // Act
         var admission = await gate.ReadCurrentPeriodForAccountAsync(
@@ -312,8 +312,8 @@ public sealed class EmbeddingSpendGateTests
             BoundedPerUser(10_000, 10_000),
             new FakeTimeProvider(Midday),
             new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+                .Assigning(SyntheticUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticUser.Another, SyntheticMailAccount.Deployment));
 
         // Act
         await gate.RecordAccountSpendAsync(
@@ -323,8 +323,8 @@ public sealed class EmbeddingSpendGateTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Deployment)]);
-        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Another)]);
+        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticUser.Deployment)]);
+        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticUser.Another)]);
         Assert.Equal(900, ledger.ConsumedByPeriod[PeriodStart]);
     }
 

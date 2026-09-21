@@ -26,8 +26,8 @@ public sealed class DeclaredMailAccountsTests
         // Act
         var accounts = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions().WithServedUsers(
         [
-            User(SyntheticMailUser.Deployment, Account("primary")),
-            User(SyntheticMailUser.Another, Account("work")),
+            User(SyntheticUser.Deployment, Account("primary")),
+            User(SyntheticUser.Another, Account("work")),
         ]));
 
         // Assert
@@ -141,7 +141,7 @@ public sealed class DeclaredMailAccountsTests
         // Act
         var fromUser = DeclaredMailAccounts.ReadFrom([account, Account("   ")]);
         var fromRoster = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions().WithServedUsers(
-            [User(SyntheticMailUser.Deployment, account, Account("   "))]));
+            [User(SyntheticUser.Deployment, account, Account("   "))]));
 
         // Assert
         Assert.Equal(Describe(fromRoster), Describe(fromUser));
@@ -166,8 +166,8 @@ public sealed class DeclaredMailAccountsTests
 
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };
 
-    private static ServedMailUser User(
-        MailUserId user,
+    private static ServedUser User(
+        UserId user,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
         new(user, $"user-{user.Value:D}", mailAccounts);
 

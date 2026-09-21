@@ -297,7 +297,7 @@ public sealed class LocalMailFolderEditorTests
                 this.Signals,
                 this.Jobs,
                 AccessAuthorizations.ForUserGranted(
-                    SyntheticMailUser.Deployment,
+                    SyntheticUser.Deployment,
                     granted.Length > 0 ? granted : [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]),
                 this.Clock);
         }

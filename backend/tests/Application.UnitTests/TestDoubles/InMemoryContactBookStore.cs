@@ -46,10 +46,10 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     internal int BatchedLookupCount { get; private set; }
 
     /// <summary>Puts a contact into the deployment user's own book without going through a write, for arranging what was already held.</summary>
-    internal void Hold(Contact contact) => this.Hold(SyntheticMailUser.Deployment, contact);
+    internal void Hold(Contact contact) => this.Hold(SyntheticUser.Deployment, contact);
 
     /// <summary>Puts a contact into one user's own book without going through a write.</summary>
-    internal void Hold(MailUserId user, Contact contact) => this.Hold(ContactBookHolder.Of(user), contact);
+    internal void Hold(UserId user, Contact contact) => this.Hold(ContactBookHolder.Of(user), contact);
 
     /// <summary>Puts a contact into one mail account's collected book without going through a write.</summary>
     internal void Hold(MailAccountId account, Contact contact) => this.Hold(ContactBookHolder.Of(account), contact);
@@ -59,7 +59,7 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         this.heldById[contact.Id] = new HeldContact(holder, contact);
 
     /// <summary>Gets every contact one user's own book holds, for a test asserting that a book is one person's.</summary>
-    internal IReadOnlyCollection<Contact> ContactsOf(MailUserId user) => [.. this.BookOf(ContactBookHolder.Of(user))];
+    internal IReadOnlyCollection<Contact> ContactsOf(UserId user) => [.. this.BookOf(ContactBookHolder.Of(user))];
 
     /// <summary>Gets every contact one account's collected book holds, for a test asserting that a book is one mailbox's.</summary>
     internal IReadOnlyCollection<Contact> ContactsOf(MailAccountId account) =>

@@ -25,8 +25,8 @@ namespace MailFathom.Application.UnitTests.Calendar.Import;
 /// </summary>
 public sealed class CalendarFileImportTests
 {
-    private static readonly MailUserId Person = SyntheticMailUser.Deployment;
-    private static readonly MailUserId SomebodyElse = SyntheticMailUser.Another;
+    private static readonly UserId Person = SyntheticUser.Deployment;
+    private static readonly UserId SomebodyElse = SyntheticUser.Another;
     private static readonly DateTimeOffset Now = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Monday = new(2026, 9, 21, 8, 0, 0, TimeSpan.Zero);
 
@@ -34,7 +34,7 @@ public sealed class CalendarFileImportTests
     private readonly FakeTimeProvider clock = new(Now);
     private readonly ICalendarFileReader reader = Substitute.For<ICalendarFileReader>();
     private readonly Queue<PersistenceCommitResult> commits = new();
-    private MailUserTimeZone zone = MailUserTimeZone.Coordinated;
+    private UserTimeZone zone = UserTimeZone.Coordinated;
 
     [Fact]
     public async Task SummariseAsync_AFileWithEntriesInIt_ReportsWhatItWouldCreateAndWritesNothing()
@@ -199,7 +199,7 @@ public sealed class CalendarFileImportTests
     public async Task SummariseAsync_APersonWhoseRecordStatesAZone_ReadsTheFileInTheirOwnZoneRatherThanTheCoordinatedOne()
     {
         // Arrange
-        this.zone = MailUserTimeZone.TryRead("Europe/Warsaw", out var warsaw) ? warsaw : throw new InvalidOperationException();
+        this.zone = UserTimeZone.TryRead("Europe/Warsaw", out var warsaw) ? warsaw : throw new InvalidOperationException();
         this.Reads();
 
         // Act
@@ -301,8 +301,8 @@ public sealed class CalendarFileImportTests
             .Returns(_ => new StagedSession(
                 this.commits.Count == 0 ? PersistenceCommitResult.Committed : this.commits.Dequeue()));
 
-        var zones = Substitute.For<IMailUserTimeZones>();
-        zones.ZoneOf(Arg.Any<MailUserId>()).Returns(_ => this.zone);
+        var zones = Substitute.For<IUserTimeZones>();
+        zones.ZoneOf(Arg.Any<UserId>()).Returns(_ => this.zone);
 
         return new CalendarFileImport(
             AccessAuthorizations.ForUserGranted(Person, granted),

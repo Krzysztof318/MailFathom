@@ -15,7 +15,7 @@ public sealed class OutgoingEmailRequestTests
     private static readonly MailAccountId Account =
         MailAccountId.Create("work");
 
-    private static readonly MailUserId Author = SyntheticMailUser.Deployment;
+    private static readonly UserId Author = SyntheticUser.Deployment;
 
     private static readonly OutgoingEmailRequester Requester =
         OutgoingEmailRequester.Command("mfctl-4f2a");

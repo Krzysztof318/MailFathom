@@ -83,7 +83,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             await executing.AppendAsync(run, Completed(), Instant, cancellationToken);
 
             // Act
-            var read = await reading.ReadAsync(run, MailUserId.Create(user), afterSequence: 0, Instant, cancellationToken);
+            var read = await reading.ReadAsync(run, UserId.Create(user), afterSequence: 0, Instant, cancellationToken);
 
             // Assert
             Assert.NotNull(read);
@@ -134,9 +134,9 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             await store.AppendAsync(run, Completed(), Instant, cancellationToken);
 
             // Act
-            var tail = await store.ReadAsync(run, MailUserId.Create(user), afterSequence: 2, Instant, cancellationToken);
-            var unreached = await store.ReadAsync(run, MailUserId.Create(user), afterSequence: 99, Instant, cancellationToken);
-            var somebodyElses = await store.ReadAsync(run, MailUserId.Create(Guid.NewGuid()), afterSequence: 0, Instant, cancellationToken);
+            var tail = await store.ReadAsync(run, UserId.Create(user), afterSequence: 2, Instant, cancellationToken);
+            var unreached = await store.ReadAsync(run, UserId.Create(user), afterSequence: 99, Instant, cancellationToken);
+            var somebodyElses = await store.ReadAsync(run, UserId.Create(Guid.NewGuid()), afterSequence: 0, Instant, cancellationToken);
 
             // Assert
             Assert.Equal([3L], tail?.Events.Select(written => written.Sequence));
@@ -175,7 +175,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             await executing.AppendAsync(run, new DiscoveryRunStarted(), Instant, cancellationToken);
 
             // Act
-            var recorded = await stopping.TryRequestStopAsync(run, MailUserId.Create(user), Instant, cancellationToken);
+            var recorded = await stopping.TryRequestStopAsync(run, UserId.Create(user), Instant, cancellationToken);
             var refused = await executing.AppendAsync(run, Progressed(1), Instant, cancellationToken);
             var ended = await executing.AppendAsync(
                 run,
@@ -187,7 +187,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             Assert.True(recorded);
             Assert.Null(refused);
             Assert.Equal(2L, ended);
-            Assert.False(await stopping.TryRequestStopAsync(run, MailUserId.Create(Guid.NewGuid()), Instant, cancellationToken));
+            Assert.False(await stopping.TryRequestStopAsync(run, UserId.Create(Guid.NewGuid()), Instant, cancellationToken));
         }
         finally
         {
@@ -228,7 +228,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
                 cancellationToken);
 
             // Assert
-            var read = await oneReplica.ReadAsync(run, MailUserId.Create(user), afterSequence: 0, Instant, cancellationToken);
+            var read = await oneReplica.ReadAsync(run, UserId.Create(user), afterSequence: 0, Instant, cancellationToken);
             var written = read?.Events.Select(@event => @event.Sequence).ToArray() ?? [];
             Assert.Equal(attempts.Results.OfType<long>().Order(), written);
             Assert.Equal(Enumerable.Range(1, written.Length).Select(sequence => (long)sequence), written);
@@ -268,9 +268,9 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             }
 
             // Act
-            var admittedNinth = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
+            var admittedNinth = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), UserId.Create(user), Instant, cancellationToken);
             await oneReplica.AppendAsync(opened[0], Completed(), Instant, cancellationToken);
-            var admittedAfterOneEnded = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, cancellationToken);
+            var admittedAfterOneEnded = await anotherReplica.TryOpenAsync(DiscoveryRunId.New(), UserId.Create(user), Instant, cancellationToken);
 
             // Assert
             Assert.False(admittedNinth);
@@ -315,7 +315,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
                 "Opening a Discover run from several replicas at once",
                 ContendingReplicas,
                 (ordinal, token) => (ordinal % 2 == 0 ? oneReplica : anotherReplica)
-                    .TryOpenAsync(DiscoveryRunId.New(), MailUserId.Create(user), Instant, token),
+                    .TryOpenAsync(DiscoveryRunId.New(), UserId.Create(user), Instant, token),
                 cancellationToken);
 
             // Assert
@@ -359,13 +359,13 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
             await store.RemoveForgottenAsync(Instant + DiscoveryRunBounds.RetentionAfterLastUse, cancellationToken);
 
             // Assert
-            Assert.Null(await store.ReadAsync(forgotten, MailUserId.Create(user), afterSequence: 0, Instant, cancellationToken));
+            Assert.Null(await store.ReadAsync(forgotten, UserId.Create(user), afterSequence: 0, Instant, cancellationToken));
             Assert.Equal(0, await CountEventsOfAsync(host, forgotten, cancellationToken));
-            Assert.NotNull(await store.ReadAsync(erased, MailUserId.Create(user), afterSequence: 0, Instant, cancellationToken));
+            Assert.NotNull(await store.ReadAsync(erased, UserId.Create(user), afterSequence: 0, Instant, cancellationToken));
 
             await OrchestratedForeignUser.EraseAsync(host, user);
 
-            Assert.Null(await store.ReadAsync(erased, MailUserId.Create(user), afterSequence: 0, Instant, cancellationToken));
+            Assert.Null(await store.ReadAsync(erased, UserId.Create(user), afterSequence: 0, Instant, cancellationToken));
             Assert.Equal(0, await CountEventsOfAsync(host, erased, cancellationToken));
         }
         finally
@@ -383,7 +383,7 @@ public sealed class OrchestratedDiscoveryRunTests(MailFathomOrchestrationFixture
     {
         var id = DiscoveryRunId.New();
 
-        Assert.True(await store.TryOpenAsync(id, MailUserId.Create(user), Instant, cancellationToken));
+        Assert.True(await store.TryOpenAsync(id, UserId.Create(user), Instant, cancellationToken));
 
         return id;
     }

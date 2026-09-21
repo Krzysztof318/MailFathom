@@ -173,11 +173,11 @@ public sealed class OrchestratedStoredFileStoreTests(MailFathomOrchestrationFixt
         }
     }
 
-    private static MailUserId Named(Guid user) => MailUserId.Create(user);
+    private static UserId Named(Guid user) => UserId.Create(user);
 
     private static Task<StoredFileId?> WriteAsync(
         OrchestratedMailFathomServices services,
-        MailUserId owner,
+        UserId owner,
         CancellationToken cancellationToken) =>
         services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredFileStore>().WriteAsync(owner, "image/png", Picture, token),
@@ -185,7 +185,7 @@ public sealed class OrchestratedStoredFileStoreTests(MailFathomOrchestrationFixt
 
     private static Task<ReadOnlyMemory<byte>?> ReadAsync(
         OrchestratedMailFathomServices services,
-        MailUserId owner,
+        UserId owner,
         StoredFileId file,
         CancellationToken cancellationToken) =>
         services.InScopeAsync(

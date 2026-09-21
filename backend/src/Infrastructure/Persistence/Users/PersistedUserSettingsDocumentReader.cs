@@ -121,7 +121,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
                 while (await reader.ReadAsync(cancellationToken))
                 {
                     versions.Add(new UserSettingsDocumentVersion(
-                        MailUserId.Create(reader.GetGuid(0)),
+                        UserId.Create(reader.GetGuid(0)),
                         reader.GetInt64(1)));
                 }
 
@@ -139,7 +139,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
     /// <summary>Reads the accounts assigned to one user over the connection their record was read on.</summary>
     private async Task<IReadOnlyList<MailAccountRecord>> ReadAssignedAccountsAsync(
         NpgsqlConnection connection,
-        MailUserId user,
+        UserId user,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(SelectAssignedAccounts, connection);
@@ -196,7 +196,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
     }
 
     /// <inheritdoc />
-    public async Task<UserSettingsDocument?> ReadAsync(MailUserId user, CancellationToken cancellationToken)
+    public async Task<UserSettingsDocument?> ReadAsync(UserId user, CancellationToken cancellationToken)
     {
         if (!user.IsSpecified)
         {

@@ -46,7 +46,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
 
         // Assert
         Assert.True(result.Succeeded);
-        Assert.Equal(SyntheticMailUser.Deployment, TransportCallerUser.CarriedBy(result.Principal!));
+        Assert.Equal(SyntheticUser.Deployment, TransportCallerUser.CarriedBy(result.Principal!));
     }
 
     /// <summary>The grant travels on the session, so a request served this way may do what the credential it came from may do.</summary>
@@ -94,7 +94,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         var store = new InMemoryClientSessionStore();
         var sessions = new ClientSessionTokens(store, new FakeTimeProvider(Instant));
         var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
-        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+        store.EndpointAccess = new UserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -170,9 +170,9 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
 
     private static AdmittedUserCredential Admitted() => new(
         CredentialId,
-        SyntheticMailUser.Deployment,
+        SyntheticUser.Deployment,
         [MailFathomPermission.MailRead, MailFathomPermission.MailAsk],
-        MailUserEndpointAccess.Everywhere);
+        UserEndpointAccess.Everywhere);
 
     private static async Task<AuthenticateResult> AuthenticateAsync(ClientSessionTokens sessions, string headerValue)
     {

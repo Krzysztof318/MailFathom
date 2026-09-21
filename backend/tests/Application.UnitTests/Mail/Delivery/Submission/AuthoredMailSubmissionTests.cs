@@ -89,7 +89,7 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         composer.Received(1).Compose(
             Account,
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             request.Requester,
             Arg.Any<AuthoredEmail>(),
             Arg.Any<MailDeliveryCapabilities>());
@@ -137,7 +137,7 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         composer.Received(1).Compose(
             Arg.Any<MailAccountId>(),
-            SyntheticMailUser.Deployment,
+            SyntheticUser.Deployment,
             Arg.Any<OutgoingEmailRequester>(),
             Arg.Any<AuthoredEmail>(),
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
@@ -189,7 +189,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>An account nobody serves and text naming no account at all are one answer, and neither writes anything down.</summary>
@@ -208,7 +208,7 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, refusal.ErrorCode);
         Assert.Empty(store.OpenRequests);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>
@@ -231,8 +231,8 @@ public sealed class AuthoredMailSubmissionTests
             out var composer,
             out var signal,
             assignments: new StubMailAccountAssignments()
-                .Assigning(SyntheticMailUser.Deployment, Account)
-                .Assigning(SyntheticMailUser.Another, theOther),
+                .Assigning(SyntheticUser.Deployment, Account)
+                .Assigning(SyntheticUser.Another, theOther),
             servedAccounts: [SyntheticServedAccount.Of(Account), SyntheticServedAccount.Of(theOther)]);
         var fromTheOther = RequestTo("anna@example.test") with { Account = MailAccountSelector.For(theOther) };
 
@@ -245,7 +245,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailAccountSelector.For(theOther), refusal.RequestedAccount);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
 
         // The control: the mailbox this author is assigned still sends, so the refusal above is the assignment rather
         // than an arrangement in which nothing could have been queued at all.
@@ -270,7 +270,7 @@ public sealed class AuthoredMailSubmissionTests
             out var composer,
             out var signal,
             authorization: AccessAuthorizations.ForUserGranted(
-                SyntheticMailUser.Another,
+                SyntheticUser.Another,
                 MailFathomPermission.MailSend));
 
         // Act
@@ -285,7 +285,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailAccountSelector.For(Account), refusal.RequestedAccount);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>
@@ -319,7 +319,7 @@ public sealed class AuthoredMailSubmissionTests
             OutgoingEmailRequest.MaximumRecipientCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             refusal.Message,
             StringComparison.Ordinal);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>One recipient that resolves to nobody refuses the whole message, and the refusal names nobody it counted.</summary>
@@ -347,7 +347,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.DoesNotContain("anna@example.test", refusal.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Nobody At All", refusal.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(store.OpenRequests);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>A name several people carry addresses nobody, and what the caller is told is how many rather than which.</summary>
@@ -392,7 +392,7 @@ public sealed class AuthoredMailSubmissionTests
         composer
             .Compose(
                 Arg.Any<MailAccountId>(),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -417,7 +417,7 @@ public sealed class AuthoredMailSubmissionTests
         composer
             .Compose(
                 Arg.Any<MailAccountId>(),
-                SyntheticMailUser.Deployment,
+                SyntheticUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -611,7 +611,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailFathomErrorCode.AuthoredMailScheduleRefused, refusal.ErrorCode);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default!, SyntheticMailUser.Deployment, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default!, SyntheticUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>The refusal states the rule and never repeats the time, the address, or anything else the caller sent.</summary>
