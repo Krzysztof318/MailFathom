@@ -154,6 +154,19 @@ internal static class ComposedSettings
         var answering = configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
             ?? new MailAnsweringOptions();
 
+        // The two provider sections are the ones no startup retrieval walks: an embedding key and a chat key are
+        // resolved when the capability is first used, deliberately, because an optional capability must not take a
+        // deployment that searches perfectly well offline at startup. What a name, a lifetime, and the block shape need
+        // is the configuration and nothing else, so they are judged here instead of travelling with the resolution —
+        // which is what left a duplicated name inside Chat refused by every reload and accepted by every start.
+        List<string> embeddingErrors = [.. embeddings?.ImageDescription.FindDeclarationErrors() ?? []];
+        embeddingErrors.AddRange(
+            SecretConfigurationValidator.FindSecretDeclarationErrors(EmbeddingOptions.SectionName, embeddings));
+
+        List<string> chatErrors = [.. ChatDeclarationRules.FindDeclarationErrors(chat, embeddings, answering)];
+        chatErrors.AddRange(
+            SecretConfigurationValidator.FindSecretDeclarationErrors(ChatModelOptions.SectionName, chat));
+
         return
         [
             // Ahead of the chat rules because the ceiling it carries is what the filter's candidate count is judged
@@ -163,16 +176,12 @@ internal static class ComposedSettings
             // The one rule of the embedding section read here rather than under ValidateOnStart with the rest of it:
             // composition reads the grid ceiling to decide which image describer it registers, so a rule running after
             // the container was built would let the mistake it was written for die on an argument guard instead.
-            .. Refusal<EmbeddingOptions>(
-                EmbeddingOptions.SectionName,
-                embeddings?.ImageDescription.FindDeclarationErrors() ?? []),
+            .. Refusal<EmbeddingOptions>(EmbeddingOptions.SectionName, embeddingErrors),
 
             // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names
             // one AI endpoint across the whole deployment because a credential, a resilience circuit, and a log line are
             // all keyed by it, and the filter's candidate count against what a lookup actually hands over.
-            .. Refusal<ChatModelOptions>(
-                ChatModelOptions.SectionName,
-                ChatDeclarationRules.FindDeclarationErrors(chat, embeddings, answering)),
+            .. Refusal<ChatModelOptions>(ChatModelOptions.SectionName, chatErrors),
         ];
     }
 

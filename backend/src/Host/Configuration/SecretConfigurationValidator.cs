@@ -697,9 +697,7 @@ internal sealed partial class SecretConfigurationValidator
         CancellationToken cancellationToken)
     {
         var discovered = ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath);
-        var errors = new List<string>(discovered.RawSecretPropertyPaths.Select(DescribeRawSecretProperty));
-
-        errors.AddRange(discovered.FindDeclarationErrors().Select(DescribeDeclarationError));
+        var errors = new List<string>(DescribeDeclarationErrors(discovered));
 
         var now = this.timeProvider.GetUtcNow();
 
@@ -736,6 +734,33 @@ internal sealed partial class SecretConfigurationValidator
 
         return errors;
     }
+
+    /// <summary>Finds every secret declaration a section carries that an operator must fix, without resolving one.</summary>
+    /// <param name="rootConfigurationPath">The configuration path of the bound root, which prefixes every reported path.</param>
+    /// <param name="boundOptions">The bound options root, or <see langword="null" /> when the deployment wrote no section.</param>
+    /// <returns>One message per faulty declaration and per plain string setting that names a secret, empty when every declaration is usable.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rootConfigurationPath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <remarks>
+    /// The half of a section's secret rules that needs nothing retrieved, which is what lets a start apply them to a
+    /// section whose references are deliberately proven later. A name, a lifetime, and the block shape are decidable
+    /// from the configuration alone, so leaving them to whichever path happens to resolve is what left a duplicated
+    /// name refused on reload and accepted at startup.
+    /// </remarks>
+    internal static IReadOnlyList<string> FindSecretDeclarationErrors(string rootConfigurationPath, object? boundOptions)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootConfigurationPath);
+
+        return boundOptions is null
+            ? []
+            : DescribeDeclarationErrors(
+                ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath));
+    }
+
+    private static IReadOnlyList<string> DescribeDeclarationErrors(DiscoveredSecretSettings discovered) =>
+    [
+        .. discovered.RawSecretPropertyPaths.Select(DescribeRawSecretProperty),
+        .. discovered.FindDeclarationErrors().Select(DescribeDeclarationError),
+    ];
 
     private static bool ContainsDatabaseSecretReference(object boundOptions, string rootConfigurationPath) =>
         ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath)

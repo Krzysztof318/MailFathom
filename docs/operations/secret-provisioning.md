@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Infrastructure/Secrets/** -->
 
-Every secret-bearing setting holds a *reference* to material rather than the material itself. A deployment provisions the material behind `systemd-credential:`, `file:`, and `env:`; MailFathom stores runtime-created material behind `database:`. The host resolves configured references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
+Every secret-bearing setting holds a *reference* to material rather than the material itself. A deployment provisions the material behind `systemd-credential:`, `file:`, and `env:`; MailFathom stores runtime-created material behind `database:`. The host resolves configured references before any worker starts, apart from the two AI provider sections [Startup behavior](#startup-behavior) names. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
 
 That guarantee is a property of how a deployment is configured, not of MailFathom. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.
 
@@ -341,6 +341,8 @@ DataEncryption:Keys:1:Material:Name — every secret needs a name, which is the 
 A mailbox's own credential is proven at the same moment and reported the same way, under the record it is declared in
 rather than under a configuration path — `document:MailAccounts:0:Secrets:Password`, with the user named beside it —
 because there is no key an operator could go and edit.
+
+**What a declaration *says* is judged at startup in every section; whether its reference is *resolved* there is not.** `Chat` and `Embeddings` are the two whose material is retrieved when the capability is first used rather than while the host starts, and that is deliberate: an AI endpoint is an optional capability, so a key that has stopped resolving is reported by the first question instead of taking a deployment that searches perfectly well offline. The name, the lifetime, and the block shape need nothing retrieved, so a duplicate, a missing name, an unacceptable one, and a malformed lifetime fail startup in those two sections exactly as in every other. `Chat` reloads, and a reloaded declaration has its references proven before it is adopted; `Embeddings` does not reload, so a restart is what re-reads it.
 
 A target that never answers is one line of that report rather than the end of it, which is what the deadline above buys: the reference after an unreachable mount is still resolved and still reported.
 
