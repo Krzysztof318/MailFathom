@@ -343,9 +343,13 @@ export interface DiscoveryRunAsk {
  * question and its scope are answerable, so what comes back is an identifier rather than an answer: everything the run
  * publishes is read at {@link readDiscoveryRunTail}.
  * @remarks
- * A refusal of the question itself arrives as `400` and therefore as `unreadable` rather than as something to retry —
- * the service states what a caller has to change and echoes none of what they sent, a question being the most
- * revealing value this surface carries.
+ * Every status but `202` is read by {@link failureReasonForStatus}, so a refusal of the question itself — which the
+ * service answers `400` — reaches a screen as `unavailable`, beside a deployment that could not be reached at all. That
+ * is the same reading every other route here takes of a `400`, and it is deliberate rather than a gap: what the service
+ * says a caller has to change is stated in a body this client does not surface, a question being the most revealing
+ * value this surface carries, so there is nothing a distinct reason could tell somebody that *asking again* does not.
+ * `unreadable` is the accepted run this client could not name — a `202` whose body carries no identifier a later read
+ * could use — and it is reached from nowhere else.
  */
 export function startDiscoveryRun(
     session: ClientSession,

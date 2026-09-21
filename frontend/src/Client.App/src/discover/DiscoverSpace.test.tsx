@@ -209,7 +209,7 @@ describe('DiscoverSpace', () => {
         askASuggestion();
 
         await waitFor(() => {
-            expect(screen.getByText(/This question did not reach the server/)).toBeDefined();
+            expect(screen.getByText(/did not start a run for this question/)).toBeDefined();
         });
     });
 

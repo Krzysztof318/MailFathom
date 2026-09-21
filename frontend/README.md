@@ -407,14 +407,14 @@ more.
 
 The client is **Discover**, **Mail**, **Cases**, **Agent**, **Tasks**, **Calendar**, and **People**, and they are one
 application rather than seven: `src/App.tsx` is the frame that holds them, and it is what a person carries their
-question, their scope, and their selection across. **Mail**, **Tasks**, **Calendar**, and **People** are built —
-`src/routing/spaces.ts` names the four in `implementedSpaces` — and the other three are present, named as placeholders,
-and say in a sentence that there is nothing behind them yet. They are drawn rather than hidden because the design
-project is what the client is measured against and it shows all seven; a rail with four destinations would be a
+question, their scope, and their selection across. **Discover**, **Mail**, **Tasks**, **Calendar**, and **People** are
+built — `src/routing/spaces.ts` names the five in `implementedSpaces` — and the other two are present, named as
+placeholders, and say in a sentence that there is nothing behind them yet. They are drawn rather than hidden because the
+design project is what the client is measured against and it shows all seven; a rail with five destinations would be a
 different product from the one that was designed. A built space is also the only kind that is reached under a grant:
 **People** is offered to a credential that may read the address book, **Calendar** and **Tasks** to one that may read
-mail — which is the grant the calendar and task routes themselves are published under — and a placeholder is reached by
-anybody, which is why a screen is not. **Tasks** asks a second question of its own rather than being reached under a
+mail — which is the grant the calendar and task routes themselves are published under — **Discover** to one that may ask
+questions of it, and a placeholder is reached by anybody, which is why a screen is not. **Tasks** asks a second question of its own rather than being reached under a
 second grant: arranging the day is a provider call, so the screen asks whether the credential may ask at all and
 whether this deployment arranges one, and draws that control only where both answer yes.
 The frame is one tree laid out by the width it is given, and nothing in it reads which head or which platform it is

@@ -35,9 +35,9 @@ export const pl: Catalogue = {
         'Sesja skończyła się, zanim pytanie zostało wysłane. Zaloguj się i zapytaj ponownie.',
     'discover.notAsked.unauthorized': 'To konto nie może zadawać pytań o pocztę.',
     'discover.notAsked.unavailable':
-        'To pytanie nie dotarło do serwera. Nic nie zostało przeczytane, więc można zapytać ponownie.',
+        'Wdrożenie nie rozpoczęło uruchomienia dla tego pytania — może być niedostępne albo mogło odmówić tego, o co pytasz. Tak czy inaczej nic nie zostało przeczytane, więc można zapytać ponownie.',
     'discover.notAsked.unreadable':
-        'Serwer nie przyjął tego pytania i nie podał, co zmienić — to usterka warta zgłoszenia.',
+        'Wdrożenie przyjęło to pytanie, ale odpowiedziało uruchomieniem, którego ten klient nie potrafi odczytać. Warto zgłosić to jako usterkę.',
     'answerCanvas.blocks': 'Bloki odpowiedzi',
     'answerCanvas.stillComing': 'Dalsza część odpowiedzi',
     'answerCanvas.nothing': 'To uruchomienie nie dało nic do pokazania.',

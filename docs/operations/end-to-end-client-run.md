@@ -68,7 +68,7 @@ cannot divert an ordinary `aspire run` onto it.
 
 **The client endpoint's per-user budget is raised for this run, and the limiter stays on.** The default allows one user
 a burst of 120 requests restored at 120 a minute, queueing none beyond it — a bound written for a person reading their
-mail. What drives this endpoint is a browser suite signing in once per case and drawing four spaces as fast as it can,
+mail. What drives this endpoint is a browser suite signing in once per case and drawing five spaces as fast as it can,
 so the suite spends that budget inside its first minute and every request after it is refused; the client reports a
 refusal as *the deployment did not answer*, which reads as a broken screen and is not one. The run therefore states a
 budget no suite can exhaust rather than switching the limiter off, so a request still takes the path it takes in a
@@ -85,10 +85,11 @@ of a filled mailbox takes as long as it takes.
 ## What the specs assert
 
 `frontend/tests/end-to-end/` holds them and `frontend/playwright.end-to-end.config.ts` runs them. They cover the path a
-person takes through each of the client's four built spaces: signing in, the mail list, opening a message, the
+person takes through each of the client's five built spaces: signing in, the mail list, opening a message, the
 conversation it belongs to, a search over the mailbox, and signing out; the calendar in each of its four views and an
 event written, amended and deleted; the task list under its three headings, the day beside it, and a task written,
-marked done and deleted; the address book, somebody opened out of it, and a contact written and deleted. Everything is
+marked done and deleted; the address book, somebody opened out of it, and a contact written and deleted; and Discover as
+far as this run can reach it, which the paragraph below says is the screen rather than an answer. Everything is
 asserted by role and by the words a person reads, as the client's unit and browser suites are. Its fourth suite is the
 exception that proves nothing about this one: the desktop suite reaches its WebView over the WebDriver protocol, which
 has no locator for a role and a name at all.
