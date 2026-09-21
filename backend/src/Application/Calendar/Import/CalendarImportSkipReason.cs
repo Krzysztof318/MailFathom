@@ -55,4 +55,12 @@ public enum CalendarImportSkipReason
     /// situation: one says the import has been done before, the other says the file repeats itself.
     /// </remarks>
     RepeatedInTheFile = 7,
+
+    /// <summary>The entry names an instant this deployment cannot hold, or a duration too long to be one.</summary>
+    /// <remarks>
+    /// A date near the end of the representable range plus any duration leaves it, and a duration can be stated in
+    /// weeks large enough not to be a span at all. Both are arithmetic rather than parsing, so neither is anything the
+    /// reading before them would have refused — and a file somebody else wrote is exactly where such a value arrives.
+    /// </remarks>
+    DateOutOfRange = 8,
 }

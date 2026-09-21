@@ -131,6 +131,27 @@ public sealed class CalendarFileReaderTests
         Assert.Equal(expected, Assert.Single(reading.Skipped));
     }
 
+    /// <summary>
+    /// Arithmetic over dates the file chose is the one place a reading that parsed cleanly can still leave the
+    /// representable range, and an entry that does is a skip this reader reports rather than an exception it raises.
+    /// </summary>
+    [Theory]
+    [InlineData("DTSTART:99991231T230000Z\nDURATION:PT2H")]
+    [InlineData("DTSTART:20260921T080000Z\nDURATION:P99999999W")]
+    public void Read_AnEntryNamingAnInstantThisDeploymentCannotHold_IsSkippedRatherThanRaisedAbout(string dates)
+    {
+        // Arrange
+        var file = File(
+            $"BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:one\nSUMMARY:Planning\n{dates}\nEND:VEVENT\nEND:VCALENDAR");
+
+        // Act
+        var reading = this.reader.Read(file, Unzoned);
+
+        // Assert
+        Assert.Empty(reading.Entries);
+        Assert.Equal(CalendarImportSkipReason.DateOutOfRange, Assert.Single(reading.Skipped));
+    }
+
     [Theory]
     [InlineData("UID:one\nSUMMARY:Planning", CalendarImportSkipReason.NoStart)]
     [InlineData("SUMMARY:Planning\nDTSTART:20260921T080000Z", CalendarImportSkipReason.UnreadableIdentifier)]

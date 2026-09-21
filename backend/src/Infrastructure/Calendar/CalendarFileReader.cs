@@ -156,43 +156,58 @@ internal sealed class CalendarFileReader : ICalendarFileReader
             return null;
         }
 
-        if (!TryResolve(statedStart, zoneForUnzonedTimes, out var start))
+        // Everything below is arithmetic over values the file chose, and arithmetic is where such a value stops being
+        // a parsing question: a start near the end of the representable range leaves it the moment anything is added,
+        // and a duration may be stated in weeks enough not to be a span at all. Neither is a fault in this deployment
+        // and neither is something the reading in front of it could have refused, so both end as this entry's own
+        // skip rather than as a request that failed.
+        try
         {
-            reason = CalendarImportSkipReason.UnknownTimeZone;
-
-            return null;
-        }
-
-        DateTimeOffset? end = null;
-
-        if (source.DtEnd is { } statedEnd)
-        {
-            if (!TryResolve(statedEnd, zoneForUnzonedTimes, out var resolvedEnd))
+            if (!TryResolve(statedStart, zoneForUnzonedTimes, out var start))
             {
                 reason = CalendarImportSkipReason.UnknownTimeZone;
 
                 return null;
             }
 
-            end = resolvedEnd;
-        }
-        else if (source.Duration is { } duration)
-        {
-            // A duration is calendar-aware rather than a fixed span — a day across a daylight-saving transition is not
-            // 24 hours — so it is measured from the entry's own start by the library that read it.
-            end = start + duration.ToTimeSpan(statedStart);
-        }
+            DateTimeOffset? end = null;
 
-        if (end is { } named && named <= start)
+            if (source.DtEnd is { } statedEnd)
+            {
+                if (!TryResolve(statedEnd, zoneForUnzonedTimes, out var resolvedEnd))
+                {
+                    reason = CalendarImportSkipReason.UnknownTimeZone;
+
+                    return null;
+                }
+
+                end = resolvedEnd;
+            }
+            else if (source.Duration is { } duration)
+            {
+                // A duration is calendar-aware rather than a fixed span — a day across a daylight-saving transition is
+                // not 24 hours — so it is measured from the entry's own start by the library that read it.
+                end = start + duration.ToTimeSpan(statedStart);
+            }
+
+            if (end is { } named && named <= start)
+            {
+                reason = CalendarImportSkipReason.EndNotAfterStart;
+
+                return null;
+            }
+
+            reason = default;
+
+            return new CalendarFileEntry(uid, title, start, end, !statedStart.HasTime);
+        }
+        catch (Exception unrepresentable)
+            when (unrepresentable is ArgumentOutOfRangeException or OverflowException)
         {
-            reason = CalendarImportSkipReason.EndNotAfterStart;
+            reason = CalendarImportSkipReason.DateOutOfRange;
 
             return null;
         }
-
-        reason = default;
-
-        return new CalendarFileEntry(uid, title, start, end, !statedStart.HasTime);
     }
 
     /// <summary>Reads the identifier the entry itself stated, rather than the one the library invents for an entry naming none.</summary>

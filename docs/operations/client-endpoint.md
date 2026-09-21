@@ -3220,7 +3220,8 @@ than quietly read in another.
 **An entry this deployment has no event for is skipped and counted rather than failing the file.** The reasons are
 `Recurring` for an entry carrying `RRULE`, `RDATE`, or `RECURRENCE-ID` — a MailFathom event is a single occasion and
 nothing here expands a series — `NoStart`, `UnreadableTitle`, `UnreadableIdentifier` for an entry naming no `UID` or
-one this deployment will not hold, `UnknownTimeZone`, `EndNotAfterStart`, `AlreadyOnTheCalendar`, and
+one this deployment will not hold, `UnknownTimeZone`, `EndNotAfterStart`, `DateOutOfRange` for a start or a duration
+naming an instant no calendar here can hold, `AlreadyOnTheCalendar`, and
 `RepeatedInTheFile`. Each arrives as a count, never as the entries themselves: which eight entries recur is a list of
 somebody's appointments, and that eight of them do is what a person deciding needs.
 

@@ -159,9 +159,9 @@ accepting it is what a confirmation discharges here.
 **An entry this store has no event for is skipped and counted.** A recurring entry is the one worth naming, because it
 is a deliberate refusal rather than a gap: this store models single events, and expanding a rule would write events
 the file does not contain that nothing could later tell apart from events somebody typed. The rest are entries that
-state no start, no usable title, no usable identifier, a zone this deployment does not know, or an end that is not
-after their start. A file full of them is still imported for whatever it does hold, and the report says how much was
-left.
+state no start, no usable title, no usable identifier, a zone this deployment does not know, an end that is not after
+their start, or a start and duration whose sum no calendar here can hold. A file full of them is still imported for
+whatever it does hold, and the report says how much was left.
 
 **The instant is the one the file names.** A value stating UTC already is one; a value naming a `TZID` is resolved in
 that zone; a value naming neither is a floating time, which RFC 5545 defines as the local time of whoever reads it. An
