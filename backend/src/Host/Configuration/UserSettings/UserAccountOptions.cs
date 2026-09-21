@@ -10,6 +10,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Scheduling;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Observability.ClientTelemetry;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
@@ -23,8 +24,9 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// </para>
 /// <para>
 /// What belongs in it is whatever is that person's own rather than the deployment's or a mailbox's. Today that is the
-/// language this deployment writes for them in, the stored file they are drawn by, and which of the two mail-serving
-/// endpoints they are served on; the mail rules and the trusted senders join them as each moves out of the deployment's
+/// language this deployment writes for them in, the zone their own days are read in, the level their own client is
+/// asked to record at, the stored file they are drawn by, and which of the two mail-serving endpoints they are served
+/// on; the mail rules and the trusted senders join them as each moves out of the deployment's
 /// section, and each arrives as a property here rather than as a second document. What never belongs in it is a value
 /// the deployment set: there is no user configuration layer, so nothing here shadows a deployment setting, and a
 /// property that would need to is a deployment setting somebody put in the wrong document. What also never belongs in
@@ -46,6 +48,11 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <remarks>Composed from the members rather than written out, so a third language added to the enumeration reaches both refusals below without either being edited.</remarks>
     private static readonly string PublishedLanguages =
         string.Join(" or ", Enum.GetValues<MailUserLanguage>().Select(language => $"'{language}'"));
+
+    /// <summary>Every level a client may be asked to record at, as one phrase a refusal ends with.</summary>
+    /// <remarks>Composed from the members for the reason <see cref="PublishedLanguages" /> is, and naming them as the deployment's own key takes them, because the two settings answer the same question and an operator moving one to a record must not have to guess at a second spelling.</remarks>
+    private static readonly string PublishedTelemetryLevels =
+        string.Join(", ", Enum.GetValues<ClientTelemetryLevel>().Select(level => $"'{level}'"));
 
     /// <summary>Gets or sets the language this deployment writes for this person in, named as it is spelled in English.</summary>
     /// <remarks>
@@ -98,6 +105,32 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     public string? TimeZone { get; set; }
 
+    /// <summary>Gets or sets the least severe record this person's own client is asked to write, named as the deployment's own setting names it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The deployment states a floor for every client it serves, and this is one person's own in front of it. What it
+    /// is for is the case the deployment-wide setting is the wrong size for: an operator helping one person with a
+    /// defect raises that person to <c>Debug</c> and pays the collector for one client's stream, rather than
+    /// restarting the process to put every client of the deployment onto it and remembering to put them back.
+    /// </para>
+    /// <para>
+    /// Absent is the ordinary state, as it is for the zone beside it: a record stating nothing is served the
+    /// deployment's level, so every record held from before this property existed reads exactly as it did and no
+    /// operator acts on an upgrade.
+    /// </para>
+    /// <para>
+    /// It raises and lowers what a client records rather than deciding whether it records at all. Both answers to that
+    /// are somebody else's: a deployment naming no collector asks for nothing whatever any record says, and a person
+    /// who declined on their own switch is recorded on by nothing whatever level they are served.
+    /// </para>
+    /// <para>
+    /// Carried as the written name rather than as the resolved level, for the reason <see cref="Language" /> is: the
+    /// refusal below names the key and every value it takes, where a typed property would have answered the same
+    /// mistake with the configuration binder's own sentence.
+    /// </para>
+    /// </remarks>
+    public string? ClientTelemetryLevel { get; set; }
+
     /// <summary>Gets or sets the mail accounts this user is assigned, which may be none.</summary>
     /// <remarks>
     /// Zero is an ordinary state rather than an unfinished one: a user is provisioned before their first mailbox is
@@ -146,6 +179,21 @@ internal sealed class UserAccountOptions : IValidatableObject
     internal MailUserTimeZone? ReadingTimeZone =>
         MailUserTimeZone.TryRead(this.TimeZone, out var zone) ? zone : null;
 
+    /// <summary>Gets the level this record asks this person's client to record at, or <see langword="null" /> where it states none.</summary>
+    /// <remarks>
+    /// Nothing rather than the deployment's level, for the reason <see cref="ReadingTimeZone" /> answers nothing: what
+    /// resolves the two into one answer is the session route, and collapsing them here would leave nothing able to
+    /// tell a record that asked for the deployment's level from a record that asked for nothing. The comparison is
+    /// against the member names and is case-insensitive, so a record written by hand is read the way it was typed, and
+    /// a number is not a level however well it would have parsed.
+    /// </remarks>
+    internal ClientTelemetryLevel? ReadingClientTelemetryLevel => this.ClientTelemetryLevel is { } written
+        ? Enum.GetValues<ClientTelemetryLevel>()
+            .Where(level => string.Equals(level.ToString(), written, StringComparison.OrdinalIgnoreCase))
+            .Select(level => (ClientTelemetryLevel?)level)
+            .FirstOrDefault()
+        : null;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
 
@@ -163,6 +211,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     internal IEnumerable<ValidationResult> FindRefusals() =>
         this.FindUnwritableLanguageError()
             .Concat(this.FindUnknownTimeZoneError())
+            .Concat(this.FindUnrecordableClientTelemetryLevelError())
             .Concat(UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts)));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
@@ -245,6 +294,24 @@ internal sealed class UserAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"{nameof(this.TimeZone)} states '{this.TimeZone}', which is not a time zone this deployment knows. State an IANA identifier such as 'Europe/Warsaw', at most {ZonedInstant.MaximumZoneIdLength} characters, or state none and be read in UTC.",
                 [nameof(this.TimeZone)]);
+        }
+    }
+
+    /// <summary>Reports a level no client could be asked to record at.</summary>
+    /// <returns>One result where <see cref="ClientTelemetryLevel" /> names no member, empty where it names one or nothing at all.</returns>
+    /// <remarks>
+    /// A refusal rather than a fall back to the deployment's level, for the reason
+    /// <see cref="FindUnknownTimeZoneError" /> refuses a zone: a record naming <c>verbose</c> has asked for something
+    /// and would otherwise go on being served the deployment's level with nobody told that the raise never landed —
+    /// which is precisely the case this key exists for, where an operator is waiting on one person's records.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindUnrecordableClientTelemetryLevelError()
+    {
+        if (!string.IsNullOrWhiteSpace(this.ClientTelemetryLevel) && this.ReadingClientTelemetryLevel is null)
+        {
+            yield return new ValidationResult(
+                $"{nameof(this.ClientTelemetryLevel)} states '{this.ClientTelemetryLevel}', which is not a level a client can be asked to record at. It takes {PublishedTelemetryLevels}, or none to be asked for whatever this deployment asks every client for.",
+                [nameof(this.ClientTelemetryLevel)]);
         }
     }
 

@@ -168,13 +168,14 @@ At most **256** users may be recorded. A roster that long was generated rather t
 ### What a user's own record carries
 
 `mfctl user add` provisions the record naming the language and nothing else, so a user is recorded and served without
-anybody writing a line of it. What it can carry is three keys, and everything else about how their mail is read belongs
+anybody writing a line of it. What it can carry is four keys, and everything else about how their mail is read belongs
 to the mail accounts they are assigned:
 
 | Key | Required | What it is |
 | --- | --- | --- |
 | `Language` | Yes, of a record being written | `English` or `Polish`, read however it was capitalized. The language this deployment writes **for this person** in; [the language this person reads](#the-language-this-person-reads--language) holds the rule and both refusals |
 | `TimeZone` | No | The IANA zone this person's own days are read in, such as `Europe/Warsaw`. [The zone their days are read in](#the-zone-this-persons-days-are-read-in--timezone) holds the rule and its refusal; a record stating none is read in `UTC` |
+| `ClientTelemetryLevel` | No | The lowest severity **this person's own client** is asked to record at, such as `Debug`. [The level their client records at](#the-level-this-persons-client-records-at--clienttelemetrylevel) holds the rule and its refusal; a record stating none is served the deployment's own level |
 | `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
 
 ### The language this person reads — `Language`
@@ -252,6 +253,41 @@ TimeZone states 'Europe/Warszawa', which is not a time zone this deployment know
 **A record stating none is read in `UTC`**, which is the one answer every replica agrees on. That is an ordinary state
 rather than an unfinished one: a record committed before this release states no zone, is served without being refused,
 and reads in `UTC` until somebody states theirs.
+
+### The level this person's client records at — `ClientTelemetryLevel`
+
+`ClientTelemetryLevel` is how much this person's own client is asked to record about itself, in front of the level the
+deployment asks every client for. [The session route](client-endpoint.md#the-session-route) publishes the resolved
+answer as `telemetry`, and the client refuses a record below it before it is written.
+
+It takes the values [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) takes — `Trace`,
+`Debug`, `Info`, `Warn`, `Error`, `Fatal` — read however they were capitalized:
+
+```json
+{
+  "ClientTelemetryLevel": "Debug"
+}
+```
+
+**It exists for the person reporting a defect.** `Debug` is the level
+[a defect report is worth](telemetry.md#what-the-client-publishes-about-itself), and raising the deployment's own key to
+it restarts the process and pays the collector for every client of the deployment until somebody puts it back. One
+`mfctl user edit` on that person's record raises their client alone, takes effect on their next session read without a
+restart, and changes nothing about what anybody else is served. Removing the key puts them back on the deployment's
+level.
+
+One refusal, stated rather than quietly read as the deployment's level, because a raise that silently did not land is
+the case an operator is waiting on these records for:
+
+```
+ClientTelemetryLevel states 'verbose', which is not a level a client can be asked to record at. It takes 'Trace',
+'Debug', 'Info', 'Warn', 'Error', 'Fatal', or none to be asked for whatever this deployment asks every client for.
+```
+
+**A record stating none is served the deployment's level**, which is what every record committed before this release
+states and why no operator action follows an upgrade. Two things outrank the key in the other direction and neither is
+a level: a deployment that named no collector publishes `off` whatever any record says, and somebody who declined
+telemetry on their own device records nothing whatever they were raised to.
 
 ### A configuration still declaring users
 

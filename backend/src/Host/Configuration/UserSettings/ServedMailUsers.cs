@@ -240,6 +240,7 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
                     record.ReadingLanguage ?? MailUserLanguage.English)
                 {
                     TimeZone = record.ReadingTimeZone,
+                    ClientTelemetryLevel = record.ReadingClientTelemetryLevel,
                 };
 
                 this.resolvedUsers = users.Any(candidate => candidate.User == user)

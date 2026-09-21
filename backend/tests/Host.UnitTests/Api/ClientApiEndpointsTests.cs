@@ -14,6 +14,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -913,6 +914,96 @@ public sealed class ClientApiEndpointsTests
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }
+
+    /// <summary>
+    /// The level a person is served is their own record's where it states one, which is what lets an operator raise the
+    /// one person reporting a defect without restarting the deployment and without touching anybody else.
+    /// </summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_AUserWhoseRecordStatesALevel_AnswersThatLevel()
+    {
+        // Arrange
+        var roster = ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
+
+        // Act
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Deployment));
+
+        // Assert
+        Assert.Equal(ClientTelemetryLevel.Debug, stated);
+    }
+
+    /// <summary>Raising one person changes nothing about what anybody else is served, which is the whole reason the level moved onto a record.</summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_AnotherUserOfTheSameDeployment_AnswersNothing()
+    {
+        // Arrange
+        var roster = ResolvedServedMailUsers.Serving(
+            RaisedTo(ClientTelemetryLevel.Debug),
+            new ServedMailUser(SyntheticMailUser.Another, "sam", []));
+
+        // Act
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Another));
+
+        // Assert
+        Assert.Null(stated);
+    }
+
+    /// <summary>A record stating no level asked for nothing, so the route falls to whatever the deployment asks every client for.</summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_AUserWhoseRecordStatesNoLevel_AnswersNothing()
+    {
+        // Arrange
+        var roster = ResolvedServedMailUsers.Serving(
+            new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
+
+        // Act
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(roster, ActingFor(SyntheticMailUser.Deployment));
+
+        // Assert
+        Assert.Null(stated);
+    }
+
+    /// <summary>
+    /// The route requires no permission and is what a client reads before it holds a credential for anything else, so
+    /// a request naming no user is an ordinary case here rather than a refusal, and it is served the deployment's own
+    /// level.
+    /// </summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_ARequestNamingNoUser_AnswersNothing()
+    {
+        // Arrange
+        var roster = ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug));
+
+        // Act
+        var stated = ClientApiEndpoints.StatedTelemetryLevelOf(
+            roster,
+            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]));
+
+        // Assert
+        Assert.Null(stated);
+    }
+
+    /// <summary>A request that established no principal reads its grant as empty, and its level as the deployment's.</summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_ARequestThatEstablishedNoPrincipal_AnswersNothing() =>
+        Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
+            ResolvedServedMailUsers.Serving(RaisedTo(ClientTelemetryLevel.Debug)),
+            principal: null));
+
+    /// <summary>A session read reaching the route before the gate settled the roster answers rather than throwing, the deployment's level being a complete answer.</summary>
+    [Fact]
+    public void StatedTelemetryLevelOf_ADeploymentWhoseGateHasNotRun_AnswersNothing() =>
+        Assert.Null(ClientApiEndpoints.StatedTelemetryLevelOf(
+            new ServedMailUsers(),
+            ActingFor(SyntheticMailUser.Deployment)));
+
+    /// <summary>Builds the roster entry of a person an operator raised, which is the one shape the reading above is about.</summary>
+    private static ServedMailUser RaisedTo(ClientTelemetryLevel level) =>
+        new(SyntheticMailUser.Deployment, "alex", []) { ClientTelemetryLevel = level };
+
+    /// <summary>Admits a caller for one person's mail, which is what a signed-in client's token establishes.</summary>
+    private static AuthorizedPrincipal ActingFor(MailUserId user) =>
+        AuthorizedPrincipal.CallerActingFor(user, "reader", [MailFathomPermission.MailRead]);
 
     /// <summary>Composes the mailbox reading a refused request never reaches, from substitutes that answer nothing.</summary>
     private static MailAccountFreshnessReader UnreachedFreshnessReader(AccessAuthorization granted) =>

@@ -147,4 +147,57 @@ public sealed class ClientSessionResponseTests
             Enum.GetValues<ClientTelemetryLevel>()
                 .Select(level => ClientSessionResponse.For(principal: null, forwardsTelemetry: false, level).Telemetry)
                 .Distinct());
+
+    /// <summary>
+    /// The case the per-user level exists for: an operator raises the one person reporting a defect and pays the
+    /// collector for their stream alone, so this person is answered their record's level while the deployment goes on
+    /// asking every other client for its own.
+    /// </summary>
+    [Fact]
+    public void For_ARecordStatingALevelOfItsOwn_ReportsItRatherThanTheDeploymentsLevel()
+    {
+        // Act
+        var session = ClientSessionResponse.For(
+            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+            forwardsTelemetry: true,
+            ClientTelemetryLevel.Info,
+            ClientTelemetryLevel.Debug);
+
+        // Assert
+        Assert.Equal("debug", session.Telemetry);
+    }
+
+    /// <summary>
+    /// Every record committed before the key existed states no level, so the deployment's own answer is what it always
+    /// was and no operator acts on an upgrade.
+    /// </summary>
+    [Fact]
+    public void For_ARecordStatingNoLevel_ReportsTheDeploymentsLevel()
+    {
+        // Act
+        var session = ClientSessionResponse.For(
+            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+            forwardsTelemetry: true,
+            ClientTelemetryLevel.Warn,
+            statedTelemetryLevel: null);
+
+        // Assert
+        Assert.Equal("warn", session.Telemetry);
+    }
+
+    /// <summary>
+    /// A record cannot raise a client onto a collector this deployment never named. What <c>off</c> answers is that
+    /// there is nowhere for a record to go, which no level on anybody's record is about.
+    /// </summary>
+    [Fact]
+    public void For_ARecordStatingALevelWhereTheDeploymentForwardsNothing_ReportsOff() =>
+        Assert.Equal(
+            ["off"],
+            Enum.GetValues<ClientTelemetryLevel>()
+                .Select(level => ClientSessionResponse.For(
+                    AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+                    forwardsTelemetry: false,
+                    ClientTelemetryLevel.Info,
+                    level).Telemetry)
+                .Distinct());
 }

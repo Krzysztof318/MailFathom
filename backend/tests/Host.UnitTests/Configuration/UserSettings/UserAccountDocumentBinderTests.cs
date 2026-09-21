@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -257,6 +258,62 @@ public sealed class UserAccountDocumentBinderTests
         Assert.Contains("Europe/Warsaw", refusal, StringComparison.Ordinal);
     }
 
+    /// <summary>The record states the level this person's own client is asked to record at, read however it was capitalized.</summary>
+    [Theory]
+    [InlineData("Debug")]
+    [InlineData("debug")]
+    [InlineData("DEBUG")]
+    public void Bind_ARecordNamingAClientTelemetryLevel_BindsThatLevelOntoTheRecord(string written)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language": "English", "ClientTelemetryLevel": "{{written}}"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal(ClientTelemetryLevel.Debug, binding.User!.ReadingClientTelemetryLevel);
+    }
+
+    /// <summary>A record stating no level asked for nothing, which is an ordinary state rather than an unfinished one.</summary>
+    [Fact]
+    public void Bind_ARecordBeingWrittenNamingNoClientTelemetryLevel_BindsStatingNoLevel() =>
+        AssertStatesNoClientTelemetryLevel(UserRecordArrival.BeingWritten);
+
+    /// <summary>Every record committed before the key existed states no level, and is read exactly as a new one is.</summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingNoClientTelemetryLevel_BindsStatingNoLevel() =>
+        AssertStatesNoClientTelemetryLevel(UserRecordArrival.AlreadyHeld);
+
+    /// <summary>
+    /// A level nothing publishes would otherwise leave this person served the deployment's level with nobody told the
+    /// raise never landed, which is precisely the case an operator is waiting on records for.
+    /// </summary>
+    [Theory]
+    [InlineData("verbose")]
+    [InlineData("2")]
+    [InlineData("off")]
+    public void Bind_ARecordNamingAClientTelemetryLevelNoClientCanRecordAt_IsRefusedNamingTheValuesItTakes(string written)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language": "English", "ClientTelemetryLevel": "{{written}}"}""",
+            UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("ClientTelemetryLevel", refusal, StringComparison.Ordinal);
+        Assert.Contains("is not a level a client can be asked to record at", refusal, StringComparison.Ordinal);
+        Assert.Contains("'Debug'", refusal, StringComparison.Ordinal);
+    }
+
     /// <summary>The bound is the stored zone identifier's own, so a value past it is refused rather than truncated.</summary>
     [Fact]
     public void Bind_ARecordNamingATimeZoneLongerThanOneMayBe_IsRefused()
@@ -319,6 +376,19 @@ public sealed class UserAccountDocumentBinderTests
         // Assert
         Assert.True(binding.IsBound);
         Assert.Null(binding.User!.ReadingTimeZone);
+    }
+
+    private static void AssertStatesNoClientTelemetryLevel(UserRecordArrival arrival)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language": "English"}""", arrival);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Null(binding.User!.ReadingClientTelemetryLevel);
     }
 
     private static void AssertRefusesTheUnwritableLanguage(UserRecordArrival arrival)

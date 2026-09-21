@@ -1529,11 +1529,19 @@ as the report takes. `debug` is the level to ask for then — it adds the sign-i
 the acts, the sends and the withdrawals, the preference writes, the notification answer, the failed requests, and the
 two refusals the deployment issued itself, and leaves out the two per-request and per-move streams that `trace` adds.
 
+**Ask for it on the one person reporting the defect, not on the deployment.** Their own record carries a
+[`ClientTelemetryLevel`](configuration-sources.md#the-level-this-persons-client-records-at--clienttelemetrylevel),
+which the session route serves them in place of the deployment's, so one `mfctl user edit` raises that client and no
+other — no restart, and nothing exported at `debug` by the clients of everybody who is not reporting anything. Clearing
+the key puts them back on whatever the deployment asks for. Raising `ClientEndpoint:TelemetryLevel` instead restarts
+the process and pays the collector for every client of the deployment until somebody remembers to put it back, which is
+the reason the key on the record exists.
+
 **A record made before the deployment answers is held at `info` too.** The client has no level until the session route
 has answered, and the alternative to standing on the default there is picking between recording a `TRACE` stream into a
 bounded buffer for every client that never signs in and recording nothing over exactly the cold starts and failed
 sign-ins the buffer exists to keep. The switch is stronger than the level in the other direction: somebody who declined
-is `off`, whatever the deployment asked for.
+is `off`, whatever the deployment asked for and whatever their own record raised them to.
 
 **`render_failed` carries two attributes beside `mailfathom.client.event`, and both are bounded.**
 `mailfathom.client.region` names

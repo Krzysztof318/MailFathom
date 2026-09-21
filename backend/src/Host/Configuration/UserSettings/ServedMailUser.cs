@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Observability.ClientTelemetry;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
@@ -34,4 +35,13 @@ internal sealed record ServedMailUser(
     /// and the roster is the last place holding both facts.
     /// </remarks>
     public MailUserTimeZone? TimeZone { get; init; }
+
+    /// <summary>Gets the level this person's own record asks their client to record at, or <see langword="null" /> where it states none.</summary>
+    /// <remarks>
+    /// Nothing rather than the deployment's level, for the reason <see cref="TimeZone" /> stays nothing: the roster
+    /// carries what the record stated, and the session route is the one place the two are resolved into the single
+    /// answer a client is served. Reading it here as the deployment's would put that resolution in the roster, where
+    /// nothing could tell a person who asked for the deployment's level from a person nobody has raised.
+    /// </remarks>
+    public ClientTelemetryLevel? ClientTelemetryLevel { get; init; }
 }

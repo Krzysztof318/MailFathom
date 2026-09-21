@@ -217,6 +217,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             bound.ReadingLanguage ?? MailUserLanguage.English)
         {
             TimeZone = bound.ReadingTimeZone,
+            ClientTelemetryLevel = bound.ReadingClientTelemetryLevel,
         };
 
         return (served, document.Version);

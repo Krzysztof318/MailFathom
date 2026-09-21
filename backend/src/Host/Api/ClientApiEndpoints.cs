@@ -5,10 +5,12 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Signals;
 using MailFathom.Versioning;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Api;
@@ -160,16 +162,31 @@ internal static class ClientApiEndpoints
 
         // Read beside it and at the same moment, because the two make one answer: a deployment that forwards nothing
         // asks a client for nothing whatever level it configured, and the level is what a deployment that does forward
-        // asks for.
-        var telemetryLevel = endpoints.ServiceProvider
+        // asks for. It is the default rather than the answer: a person's own record may state a level of its own, and
+        // that one is read per request because a record committed a moment ago must reach this person's next session
+        // read without the process restarting.
+        var deploymentTelemetryLevel = endpoints.ServiceProvider
             .GetRequiredService<IOptions<ClientEndpointOptions>>()
             .Value
             .TelemetryLevel;
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
-        api.MapGet(SessionRoute, (IAuthorizedPrincipalSource principals) =>
-                TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry, telemetryLevel)))
+        // The roster is named as a service rather than left to inference: it is a concrete type, so a deployment or a
+        // test that maps this route without registering it would have the binder read it as a request body instead of
+        // refusing, which is a GET route acquiring one.
+        api.MapGet(SessionRoute, (
+                IAuthorizedPrincipalSource principals,
+                [FromServices] ServedMailUsers servedUsers) =>
+            {
+                var principal = principals.Current;
+
+                return TypedResults.Ok(ClientSessionResponse.For(
+                    principal,
+                    forwardsTelemetry,
+                    deploymentTelemetryLevel,
+                    StatedTelemetryLevelOf(servedUsers, principal)));
+            })
             .RequireNoPermission();
 
         api.MapClientSessionTokens();
@@ -209,13 +226,31 @@ internal static class ClientApiEndpoints
 
         return api;
     }
+
+    /// <summary>Reads the level the acting person's own record asks their client for, where they have one and it states one.</summary>
+    /// <param name="servedUsers">The roster this deployment's user records were published into.</param>
+    /// <param name="principal">What admitted this request, or nothing where the transport established none.</param>
+    /// <returns>The level that person's record states, or <see langword="null" /> where it states none, where the request names no user, or where the roster has not been established.</returns>
+    /// <remarks>
+    /// Out of the roster rather than out of a document read, for the reason every other reader of a record's own value
+    /// takes it from there: it is republished by the commit that changed it, so a level an operator just raised is
+    /// answered on the next session read without a restart, and a second source would be a second answer. A request
+    /// that names no user is an ordinary case here rather than a refusal — this route requires no permission and is
+    /// what a client reads before it holds a credential for anything else — and it is served the deployment's own
+    /// level, which is what it was served before any record could state one.
+    /// </remarks>
+    internal static ClientTelemetryLevel? StatedTelemetryLevelOf(
+        ServedMailUsers servedUsers,
+        AuthorizedPrincipal? principal) => principal?.User is { } user
+        ? servedUsers.TryGetUsers()?.FirstOrDefault(served => served.User == user)?.ClientTelemetryLevel
+        : null;
 }
 
 /// <summary>What the client endpoint reports back about an authenticated caller.</summary>
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what tells a client which contract it is talking to.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
-/// <param name="Telemetry">The least severe log record this deployment asks a client to write, or <c>off</c> where it forwards none at all — the same answer for every caller, because it is a deployment's configuration rather than a grant.</param>
+/// <param name="Telemetry">The least severe log record this deployment asks this caller's client to write, or <c>off</c> where it forwards none at all — configuration rather than a grant, and the deployment's own answer unless this person's record raised or lowered it for them alone.</param>
 /// <remarks>
 /// <para>
 /// It names no credential, which is the one way it differs from what the administrative surface answers. That surface's
@@ -230,10 +265,10 @@ internal static class ClientApiEndpoints
 /// accurate answer to what such a caller may do.
 /// </para>
 /// <para>
-/// Whether telemetry is forwarded stands beside the grant rather than inside it, because it is not one: every caller
-/// gets the same answer, and what decides it is whether the deployment named a collector. It is reported so that a
-/// client can say there is nothing behind its own telemetry switch instead of offering a control that decides nothing
-/// — the alternative being to export a batch and read the <c>404</c>, which is finding out by doing the thing.
+/// Whether telemetry is forwarded stands beside the grant rather than inside it, because it is not one: no permission
+/// decides it, and what does is whether the deployment named a collector. It is reported so that a client can say
+/// there is nothing behind its own telemetry switch instead of offering a control that decides nothing — the
+/// alternative being to export a batch and read the <c>404</c>, which is finding out by doing the thing.
 /// </para>
 /// <para>
 /// It answers the level rather than a yes, and <c>off</c> is where the yes used to be a no. One field carries both
@@ -241,6 +276,12 @@ internal static class ClientApiEndpoints
 /// fields would be a way for a configured level to contradict a deployment that forwards nothing. What a client does
 /// with the level is refuse to write a record below it, so the floor costs nothing on the wire rather than being
 /// filtered off it.
+/// </para>
+/// <para>
+/// The level is the one thing here that is this person's rather than every caller's, which is why the field is read
+/// per request rather than settled where the route is mapped. A deployment-wide floor is the wrong size for the case
+/// it is mainly turned down for — one person reporting a defect — so their own record may state a level of their own,
+/// and this route is where the record's answer and the deployment's are resolved into the single one a client applies.
 /// </para>
 /// </remarks>
 internal sealed record ClientSessionResponse(
@@ -255,16 +296,25 @@ internal sealed record ClientSessionResponse(
     /// <summary>Describes what the credential that reached this route was granted.</summary>
     /// <param name="principal">What the application layer was told admitted this request, or nothing where the transport established none.</param>
     /// <param name="forwardsTelemetry">Whether this deployment serves the telemetry routes, which it does where it named a collector of its own.</param>
-    /// <param name="telemetryLevel">The least severe record this deployment asks a client to write, read where the routes are mapped.</param>
+    /// <param name="deploymentTelemetryLevel">The least severe record this deployment asks every client to write, read where the routes are mapped.</param>
+    /// <param name="statedTelemetryLevel">The level this person's own record asks their client for, or <see langword="null" /> where it states none and where the request is served for nobody in particular.</param>
     /// <returns>The response body.</returns>
+    /// <remarks>
+    /// The record's level wins over the deployment's and neither wins over the collector: a deployment forwarding
+    /// nothing answers <c>off</c> however anybody's record was raised, because what is being answered there is that
+    /// there is nowhere for a record to go rather than how much to write. The person's own switch is the third
+    /// participant and is not resolved here at all — it is kept on their device and applied by the client, which is
+    /// what lets somebody decline on one machine without deciding for the next one.
+    /// </remarks>
     internal static ClientSessionResponse For(
         AuthorizedPrincipal? principal,
         bool forwardsTelemetry,
-        ClientTelemetryLevel telemetryLevel) => new(
+        ClientTelemetryLevel deploymentTelemetryLevel,
+        ClientTelemetryLevel? statedTelemetryLevel = null) => new(
         "MailFathom",
         StampedAssemblyVersion.ReadFrom(typeof(ClientSessionResponse).Assembly).Version,
         GrantOf(principal),
-        forwardsTelemetry ? telemetryLevel.Published() : NoTelemetry);
+        forwardsTelemetry ? (statedTelemetryLevel ?? deploymentTelemetryLevel).Published() : NoTelemetry);
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
     /// <remarks>The published order rather than the grant's own, so two credentials granted the same permissions are reported identically whichever order an operator wrote them in.</remarks>
