@@ -228,17 +228,17 @@ describe('AnswerCanvas', () => {
     });
 
     it('says a plan written against a newer revision was drawn as far as it went', () => {
-        renderCanvas([arrival(1, 'evidenceList')], { planSchemaVersion: 3 });
+        renderCanvas([arrival(1, 'evidenceList')], { planSchemaVersion: 4 });
 
         expect(
             screen.getByText(
-                'This result uses a newer plan schema version (v3) than this app supports (v2). Some new block types may have been skipped.',
+                'This result uses a newer plan schema version (v4) than this app supports (v3). Some new block types may have been skipped.',
             ),
         ).toBeDefined();
         expect(screen.getByText('evidenceList')).toBeDefined();
     });
 
-    it.each([2, 1, null])('says nothing about a plan at revision %s', (planSchemaVersion) => {
+    it.each([3, 2, 1, null])('says nothing about a plan at revision %s', (planSchemaVersion) => {
         renderCanvas([arrival(1, 'evidenceList')], { planSchemaVersion });
 
         expect(screen.queryByText(/newer plan schema version/u)).toBeNull();

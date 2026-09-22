@@ -13,12 +13,12 @@ namespace MailFathom.Application.UnitTests.Discovery.Presentation;
 /// <summary>Covers the closed catalogue of block types, and that the wire and the code agree about it.</summary>
 public sealed class PresentationBlockTypeTests
 {
-    /// <summary>Nine is the catalogue, and a tenth is a decision rather than an addition somebody made in passing.</summary>
+    /// <summary>Eleven is the catalogue, and a twelfth is a decision rather than an addition somebody made in passing.</summary>
     [Fact]
-    public void All_TheCatalogue_HoldsTheNineDeclaredTypes()
+    public void All_TheCatalogue_HoldsTheElevenDeclaredTypes()
     {
         // Act, Assert
-        Assert.Equal(9, PresentationBlockType.All.Count);
+        Assert.Equal(11, PresentationBlockType.All.Count);
     }
 
     [Fact]
@@ -33,13 +33,20 @@ public sealed class PresentationBlockTypeTests
 
     /// <summary>Which types carry controls is what decides whether a block is recorded as a reading or as an offer.</summary>
     [Fact]
-    public void Actionable_TheCatalogue_NamesTheTwoTypesAReaderActsOn()
+    public void Actionable_TheCatalogue_NamesTheFourTypesAReaderActsOn()
     {
         // Act
         var actionable = PresentationBlockType.All.Where(blockType => blockType.Actionable).ToArray();
 
         // Assert
-        Assert.Equal([PresentationBlockType.Draft, PresentationBlockType.SuggestedAction], actionable);
+        Assert.Equal(
+            [
+                PresentationBlockType.Draft,
+                PresentationBlockType.EventProposal,
+                PresentationBlockType.TaskProposal,
+                PresentationBlockType.SuggestedAction,
+            ],
+            actionable);
     }
 
     /// <summary>A version below one would say a block was written against no revision of its own contract.</summary>

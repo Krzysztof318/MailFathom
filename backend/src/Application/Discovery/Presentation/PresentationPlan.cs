@@ -46,12 +46,12 @@ public sealed record PresentationPlan
 {
     /// <summary>The revision of this contract that this build writes and understands.</summary>
     /// <remarks>
-    /// Raised when the shape of the plan itself changes — a member added to the plan, a rule about how blocks compose.
-    /// A change confined to one block type raises that type's version instead, which is why the two numbers exist
-    /// separately. It moves independently of the application's version, and a release that changes neither leaves it
-    /// where it is.
+    /// Raised when the shape of the plan itself changes — a member added to the plan, a rule about how blocks compose,
+    /// a type joining the catalogue the plan is closed over. A change confined to one block type raises that type's
+    /// version instead, which is why the two numbers exist separately. It moves independently of the application's
+    /// version, and a release that changes neither leaves it where it is.
     /// </remarks>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     /// <summary>The greatest number of blocks one plan may hold.</summary>
     /// <remarks>

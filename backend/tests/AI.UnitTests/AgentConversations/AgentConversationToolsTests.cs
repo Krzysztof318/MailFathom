@@ -13,6 +13,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
@@ -72,15 +73,17 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
             });
     }
 
-    /// <summary>A grant that only reads is offered the reading tools and nothing that proposes.</summary>
+    /// <summary>A grant that only reads proposes nothing that leaves the deployment, and proposes onto the person's own calendar and list, which those use cases admit under the same grant.</summary>
     [Fact]
-    public void Create_AGrantThatOnlyReads_OffersNoProposingTool()
+    public void Create_AGrantThatOnlyReads_OffersNoMailProposal()
     {
         // Act
         var names = this.Tools(MailFathomPermission.MailRead).Create().Select(static tool => tool.Name);
 
         // Assert
-        Assert.Equal(["search_mail", "read_thread", "show_thread_state", "read_calendar", "read_tasks"], names);
+        Assert.Equal(
+            ["search_mail", "read_thread", "show_thread_state", "read_calendar", "read_tasks", "propose_event", "propose_task"],
+            names);
     }
 
     /// <summary>A grant that drafts and sends but reads nothing may propose a new message and cannot answer one it could not read.</summary>
@@ -94,20 +97,20 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.Equal(["propose_message"], names);
     }
 
-    /// <summary>A grant that drafts without sending is offered nothing to propose, because accepting it could not be carried out.</summary>
+    /// <summary>A grant that drafts without sending proposes no mail, because accepting it could not be carried out.</summary>
     [Fact]
-    public void Create_AGrantThatCannotSend_OffersNoProposingTool()
+    public void Create_AGrantThatCannotSend_OffersNoMailProposal()
     {
         // Act
         var names = this.Tools(MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite).Create().Select(static tool => tool.Name);
 
         // Assert
-        Assert.DoesNotContain(names, static name => name.StartsWith("propose_", StringComparison.Ordinal));
+        Assert.DoesNotContain(names, static name => name is "propose_message" or "propose_reply");
     }
 
-    /// <summary>A grant that reads, drafts, and sends is offered both proposing tools, answering a message it read among them.</summary>
+    /// <summary>A grant that reads, drafts, and sends is offered every proposing tool, answering a message it read among them.</summary>
     [Fact]
-    public void Create_AGrantThatReadsAndSends_OffersBothProposingTools()
+    public void Create_AGrantThatReadsAndSends_OffersEveryProposingTool()
     {
         // Act
         var names = this.Tools(MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend)
@@ -116,7 +119,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
             .Where(static name => name.StartsWith("propose_", StringComparison.Ordinal));
 
         // Assert
-        Assert.Equal(["propose_message", "propose_reply"], names);
+        Assert.Equal(["propose_event", "propose_task", "propose_message", "propose_reply"], names);
     }
 
     /// <summary>A recipient list the model left out is refused back to it, and nothing is proposed.</summary>
@@ -190,6 +193,154 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         // Assert
         Assert.Empty(this.written.OfType<AgentActionProposed>());
         Assert.False(this.tools.HasProposed);
+    }
+
+    /// <summary>Proposing an event writes the proposal and the exact act accepting it would carry out, and schedules nothing.</summary>
+    [Fact]
+    public async Task ProposeEvent_AValidEvent_WritesTheProposalCarryingExactlyThatAct()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+
+        // Act
+        await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Renewal call",
+                ["start"] = "2026-09-23T09:00:00+02:00",
+                ["end"] = "2026-09-23T10:00:00+02:00",
+                ["allDay"] = false,
+                ["messageId"] = null,
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposal = Assert.Single(this.written.OfType<AgentActionProposed>());
+        var scheduling = Assert.IsType<AgentEventScheduling>(proposal.Act);
+        Assert.Equal(
+            ("Renewal call", new DateTimeOffset(2026, 9, 23, 9, 0, 0, TimeSpan.FromHours(2)), false, (StoredEmailId?)null),
+            (scheduling.Title.Value, scheduling.Start, scheduling.IsAllDay, scheduling.SourceMessage));
+        Assert.True(this.tools.HasProposed);
+    }
+
+    /// <summary>An end that is not after the start is refused back to the model rather than proposed as a span no calendar takes.</summary>
+    [Fact]
+    public async Task ProposeEvent_AnEndBeforeTheStart_IsRefusedAndProposesNothing()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+
+        // Act
+        var answer = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Renewal call",
+                ["start"] = "2026-09-23T09:00:00+02:00",
+                ["end"] = "2026-09-23T08:00:00+02:00",
+                ["allDay"] = false,
+                ["messageId"] = null,
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.StartsWith("Give an end as an ISO 8601 instant", answer?.ToString(), StringComparison.Ordinal);
+        Assert.Empty(this.written.OfType<AgentActionProposed>());
+    }
+
+    /// <summary>A citation is minted from what the run read, so a message the model names out of nowhere becomes no source at all.</summary>
+    [Fact]
+    public async Task ProposeEvent_AMessageTheRunNeverRead_ProposesWithoutCitingIt()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_event", MailFathomPermission.MailRead);
+
+        // Act
+        var answer = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Renewal call",
+                ["start"] = "2026-09-23T09:00:00+02:00",
+                ["end"] = null,
+                ["allDay"] = false,
+                ["messageId"] = Guid.NewGuid().ToString(),
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposal = Assert.Single(this.written.OfType<AgentActionProposed>());
+        Assert.Null(Assert.IsType<AgentEventScheduling>(proposal.Act).SourceMessage);
+        Assert.Empty(proposal.Block.Evidence.Citations);
+        Assert.Contains("cites no source", answer?.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Proposing a task writes the proposal and the exact act accepting it would carry out, and creates nothing.</summary>
+    [Fact]
+    public async Task ProposeTask_AValidTask_WritesTheProposalCarryingExactlyThatAct()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+
+        // Act
+        await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Send the notice-period list",
+                ["dueOn"] = "2026-09-24",
+                ["messageId"] = null,
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposal = Assert.Single(this.written.OfType<AgentActionProposed>());
+        var recording = Assert.IsType<AgentTaskRecording>(proposal.Act);
+        Assert.Equal(
+            ("Send the notice-period list", new DateOnly(2026, 9, 24)),
+            (recording.Title.Value, recording.DueOn));
+        Assert.True(this.tools.HasProposed);
+    }
+
+    /// <summary>A task owed by no particular day is what mail asking for something without a date proposes.</summary>
+    [Fact]
+    public async Task ProposeTask_NoDueDay_ProposesATaskOwedByNoDay()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+
+        // Act
+        await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Send the notice-period list",
+                ["dueOn"] = null,
+                ["messageId"] = null,
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposal = Assert.Single(this.written.OfType<AgentActionProposed>());
+        Assert.Null(Assert.IsType<AgentTaskRecording>(proposal.Act).DueOn);
+    }
+
+    /// <summary>A due day written any other way is refused back to the model rather than read as some other day.</summary>
+    [Fact]
+    public async Task ProposeTask_ADueDayThatIsNotADay_IsRefusedAndProposesNothing()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_task", MailFathomPermission.MailRead);
+
+        // Act
+        var answer = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Send the notice-period list",
+                ["dueOn"] = "24 September",
+                ["messageId"] = null,
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.StartsWith("Give the due day as yyyy-MM-dd", answer?.ToString(), StringComparison.Ordinal);
+        Assert.Empty(this.written.OfType<AgentActionProposed>());
     }
 
     /// <summary>An instant that states no offset is refused back to the model rather than read against this server's own time zone.</summary>

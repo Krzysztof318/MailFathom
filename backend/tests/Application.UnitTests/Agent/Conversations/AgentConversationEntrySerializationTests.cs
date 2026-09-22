@@ -5,6 +5,7 @@
 using System.Text.Json;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Domain.Emails;
 using Xunit;
@@ -121,6 +122,43 @@ public sealed class AgentConversationEntrySerializationTests
         // Assert
         Assert.Equal(composed.GetType(), read.Block.GetType());
         Assert.Equal(composed.Type.Identity, read.Block.Type.Identity);
+    }
+
+    /// <summary>The act is what acceptance carries out, so an act read back as another kind would perform something nobody approved.</summary>
+    [Fact]
+    public void Serialize_EveryKindOfAct_ReadsBackAsTheKindItWasWrittenAs()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+        AgentProposedAct[] acts =
+        [
+            AgentConversationExample.Act(),
+            new AgentResponseSending(
+                StoredEmailId.Create(Guid.NewGuid()),
+                AuthoredResponseAct.Reply,
+                [],
+                PresentationText.Create("Thank you, we accept.")),
+            new AgentEventScheduling(
+                PresentationText.Create("Renewal call"),
+                PresentationPlanExample.ObservedAt,
+                PresentationPlanExample.ObservedAt.AddHours(1),
+                IsAllDay: false,
+                StoredEmailId.Create(Guid.NewGuid())),
+            new AgentTaskRecording(
+                PresentationText.Create("Send the revised schedule"),
+                new DateOnly(2026, 3, 4),
+                SourceMessage: null),
+        ];
+
+        // Act
+        var read = acts
+            .Select(act => Assert.IsType<AgentActionProposed>(
+                RoundTrip(new AgentActionProposed(message, AgentConversationExample.Actionable(), act))).Act)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(acts.Select(act => act.GetType()), read.Select(act => act.GetType()));
+        Assert.Equal(acts[2..], read[2..]);
     }
 
     [Fact]

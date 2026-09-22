@@ -69,9 +69,10 @@ export function discoveryRunRoute(runId: string): string {
  * The revision of the presentation plan this client was written against.
  *
  * A run whose plan states a higher revision is drawn as far as it can be and the reader is told so; a run stating this
- * one or lower carries nothing this client was not built for.
+ * one or lower carries no plan shape this client was not built for. A block type with no renderer here is named to the
+ * reader at either revision, which is how revision 3's event and task proposals reach this build until they are drawn.
  */
-export const understoodPlanSchemaVersion = 2;
+export const understoodPlanSchemaVersion = 3;
 
 /** The block catalogue the plan is closed over, as the service spells each type on the wire. */
 export const answerBlockTypes = [

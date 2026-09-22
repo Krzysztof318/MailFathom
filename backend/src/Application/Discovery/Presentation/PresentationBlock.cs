@@ -11,7 +11,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <summary>One typed part of a presentation plan, carrying its own data and its own sources.</summary>
 /// <remarks>
 /// <para>
-/// The hierarchy is closed by a private protected constructor, so the nine derived types declared beside it are the
+/// The hierarchy is closed by a private protected constructor, so the eleven derived types declared beside it are the
 /// whole of it: nothing outside this assembly can bring a block into being from data. What C# leaves reachable is the
 /// copy constructor every non-sealed record has and which the language requires to be protected — a type derived
 /// through it can only copy a block this assembly already composed, carries that block's catalogue type, and is refused
@@ -39,6 +39,8 @@ namespace MailFathom.Application.Discovery.Presentation;
 [JsonDerivedType(typeof(ThreadStateBlock), PresentationBlockType.ThreadStateIdentity)]
 [JsonDerivedType(typeof(AttachmentGalleryBlock), PresentationBlockType.AttachmentGalleryIdentity)]
 [JsonDerivedType(typeof(DraftBlock), PresentationBlockType.DraftIdentity)]
+[JsonDerivedType(typeof(EventProposalBlock), PresentationBlockType.EventProposalIdentity)]
+[JsonDerivedType(typeof(TaskProposalBlock), PresentationBlockType.TaskProposalIdentity)]
 [JsonDerivedType(typeof(SuggestedActionBlock), PresentationBlockType.SuggestedActionIdentity)]
 public abstract record PresentationBlock
 {
@@ -56,8 +58,8 @@ public abstract record PresentationBlock
     /// same value: <see cref="PresentationBlockType.Identity" /> and the discriminator are one constant per member, so
     /// the two cannot disagree. Declared here rather than overridden per block, because a property named <c>type</c> on
     /// a derived type is the discriminator's own name and the serializer refuses the collision. This is how the value is
-    /// read in code. It is never the unspecified default, because the hierarchy admits only the nine types declared
-    /// beside it and each of them names its own catalogue member.
+    /// read in code. It is never the unspecified default, because the hierarchy admits only the types declared beside
+    /// it and each of them names its own catalogue member.
     /// </remarks>
     [JsonIgnore]
     public PresentationBlockType Type { get; }
@@ -93,7 +95,7 @@ public abstract record PresentationBlock
     /// <remarks>
     /// How the plan checks that every reference resolves to a citation it declares. A block whose entries cite
     /// individually overrides this to include them; a block that cites only as a whole does not, which is why the base
-    /// answers rather than leaving nine implementations to remember the same thing. The value is read in code and is
+    /// answers rather than leaving every implementation to remember the same thing. The value is read in code and is
     /// not part of the wire contract — the citations are already written where they are used.
     /// </remarks>
     [JsonIgnore]

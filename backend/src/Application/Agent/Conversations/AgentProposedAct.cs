@@ -27,6 +27,8 @@ namespace MailFathom.Application.Agent.Conversations;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(AgentMessageSending), AgentMessageSending.Kind)]
 [JsonDerivedType(typeof(AgentResponseSending), AgentResponseSending.Kind)]
+[JsonDerivedType(typeof(AgentEventScheduling), AgentEventScheduling.Kind)]
+[JsonDerivedType(typeof(AgentTaskRecording), AgentTaskRecording.Kind)]
 public abstract record AgentProposedAct
 {
     private protected AgentProposedAct()
@@ -69,4 +71,38 @@ public sealed record AgentResponseSending(
 {
     /// <summary>The value the type discriminator carries.</summary>
     public const string Kind = "sendResponse";
+}
+
+/// <summary>Put a date on the person's own calendar.</summary>
+/// <param name="Title">What the event is called.</param>
+/// <param name="Start">When it begins.</param>
+/// <param name="End">When it ends, or <see langword="null" /> to state no end.</param>
+/// <param name="IsAllDay">Whether it is stated as a day rather than as a clock time.</param>
+/// <param name="SourceMessage">The message it was read out of, or <see langword="null" /> where it names none.</param>
+/// <remarks>It announces nothing: a lead is measured back from the person's own due day, and the offset that day runs in is theirs to state rather than a run's to guess.</remarks>
+public sealed record AgentEventScheduling(
+    PresentationText Title,
+    DateTimeOffset Start,
+    DateTimeOffset? End,
+    bool IsAllDay,
+    StoredEmailId? SourceMessage)
+    : AgentProposedAct
+{
+    /// <summary>The value the type discriminator carries.</summary>
+    public const string Kind = "scheduleEvent";
+}
+
+/// <summary>Write a task onto the person's own list as one they owe.</summary>
+/// <param name="Title">The line the list is drawn with.</param>
+/// <param name="DueOn">The day it is due on, or <see langword="null" /> to owe it by no day.</param>
+/// <param name="SourceMessage">The message it was read out of, or <see langword="null" /> where it names none.</param>
+/// <remarks>It announces nothing, for the reason <see cref="AgentEventScheduling" /> does not.</remarks>
+public sealed record AgentTaskRecording(
+    PresentationText Title,
+    DateOnly? DueOn,
+    StoredEmailId? SourceMessage)
+    : AgentProposedAct
+{
+    /// <summary>The value the type discriminator carries.</summary>
+    public const string Kind = "recordTask";
 }
