@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -44,9 +43,6 @@ namespace MailFathom.AI.AgentConversations;
 /// </remarks>
 internal sealed class AgentConversationAgent : IAgentAnswerComposer
 {
-    /// <summary>Names the composed agent in whatever reads a run.</summary>
-    internal const string AgentName = "mailfathom-agent";
-
     private readonly ChatGenerationPlan plan;
     private readonly MailAnsweringRunBounds runBounds;
     private readonly IMailAnsweringSpendLedger spendLedger;
@@ -180,26 +176,8 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             .. brief.History.Select((turn, index) => new ChatMessage(
                 turn.Author is AgentMessageAuthor.Person ? ChatRole.User : ChatRole.Assistant,
                 history[index])),
-            new ChatMessage(ChatRole.User, ComposeTurn(brief, scope, question)),
+            new ChatMessage(ChatRole.User, AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, scope.AccountIds, brief.Question.Scope, question)),
         ];
-    }
-
-    /// <summary>Composes the question's turn: the instant it was asked at, what the person is looking at, and the question.</summary>
-    /// <remarks>
-    /// The anchor and the accounts ride on the turn rather than in the instruction, for the reason every agent here puts
-    /// the anchor there: the instruction is this build's own text, the same for every run, and these change per run.
-    /// The accounts are the deployment's own names for them rather than addresses.
-    /// </remarks>
-    private static string ComposeTurn(AgentAnswerBrief brief, MailboxScope scope, string question)
-    {
-        var looking = brief.Question.Scope is { Kind: AgentScopeKind.Thread, Subject: { } thread }
-            ? string.Create(CultureInfo.InvariantCulture, $"The person is looking at the conversation with id {thread}.\n")
-            : string.Empty;
-        var accounts = string.Join(", ", scope.AccountIds.Select(static account => account.Value));
-
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{AgentTimeAnchor.Stated(brief.Question.AskedAt)}\nThe person's accounts: {accounts}.\n{looking}\n{question}");
     }
 
     private async Task<PresentationText> AskAsync(
@@ -228,11 +206,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         await using var budgetedClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
         using var steeredClient = new SteeredChatClient(budgetedClient, journal, this.egressGuard);
 
-        var operation = new AgentOperation(
-            AgentName,
-            AgentConversationInstructions.TextFor(language),
-            tools.Create());
-        var agent = AgentComposition.Compose(steeredClient, model, operation, this.instructionEnvelope, this.loggerFactory);
+        var agent = AgentConversationComposition.Compose(steeredClient, model, language, tools.Create(), this.instructionEnvelope, this.loggerFactory);
         var response = await agent.RunAsync(ChatConversationMapping.ToProviderConversation(messages), session: null, options: null, cancellationToken);
 
         if (Presentable(response.Text) is not { } answer)
