@@ -102,7 +102,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
     }
 
     /// <inheritdoc />
-    public async Task ComposeAsync(AgentAnswerBrief brief, AgentAnswerJournal journal, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PresentationText>> ComposeAsync(AgentAnswerBrief brief, AgentAnswerJournal journal, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(brief);
         ArgumentNullException.ThrowIfNull(journal);
@@ -140,6 +140,8 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         await journal.ComposeAsync(new AnswerBlock(evidence, answer, PresentationConfidence.Moderate), cancellationToken);
 
         AgentConversationEvents.LogAnswered(this.logger, this.plan.Endpoint.Alias, cited.Length);
+
+        return tools.FollowUps;
     }
 
     /// <summary>Turns an answer into the text a block may carry, or refuses it as no answer at all.</summary>
@@ -190,6 +192,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
     {
         // Against this model's own bounds, and before the scan, so a conversation refused by a ceiling costs no scan.
         ChatRequestBounds.RequireForAttempt(messages, model);
+        tools.ForgetFollowUps();
 
         var guarded = await this.GuardAsync(messages, cancellationToken);
 

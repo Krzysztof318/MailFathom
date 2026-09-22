@@ -102,6 +102,25 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>What the composer suggests asking next is what the completed ending carries.</summary>
+    [Fact]
+    public async Task RunAsync_AComposerSuggestingFollowUps_EndsTheAnswerCompletedCarryingThem()
+    {
+        // Arrange
+        IReadOnlyList<PresentationText> followUps = [PresentationText.Create("Draft a reply to Northwind")];
+        this.composer
+            .ComposeAsync(Arg.Any<AgentAnswerBrief>(), Arg.Any<AgentAnswerJournal>(), Arg.Any<CancellationToken>())
+            .Returns(followUps);
+
+        // Act
+        await this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var ended = Assert.IsType<AgentAnswerEnded>(this.written[^1]);
+        Assert.Equal(AgentAnswerOutcome.Completed, ended.Outcome);
+        Assert.Equal(followUps, ended.FollowUps);
+    }
+
     /// <summary>The composer is handed the conversation before the question and not the question itself, which it is handed on its own.</summary>
     [Fact]
     public async Task RunAsync_EarlierTurns_ReachTheComposerWithoutTheQuestion()
@@ -161,6 +180,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
 
                 await journal.ReportAsync(AgentActivity.SearchingMail, CancellationToken.None);
                 journal.Stopping.ThrowIfCancellationRequested();
+
+                return (IReadOnlyList<PresentationText>)[];
             });
 
         // Act
@@ -177,7 +198,7 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
         // Arrange
         this.composer
             .ComposeAsync(Arg.Any<AgentAnswerBrief>(), Arg.Any<AgentAnswerJournal>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException(new InvalidOperationException("Unexpected.")));
+            .Returns(Task.FromException<IReadOnlyList<PresentationText>>(new InvalidOperationException("Unexpected.")));
 
         // Act and assert
         await Assert.ThrowsAsync<InvalidOperationException>(() => this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken));

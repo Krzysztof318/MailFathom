@@ -127,6 +127,84 @@ public sealed class AgentConversationEntryTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new AgentAnswerEnded(message, (AgentAnswerOutcome)42));
     }
 
+    [Fact]
+    public void Constructor_AnEndingThatSuggestsNothing_CarriesNoFollowUps()
+    {
+        // Act
+        var ended = new AgentAnswerEnded(AgentMessageId.New(), AgentAnswerOutcome.Completed, FollowUps: null);
+
+        // Assert
+        Assert.Empty(ended.FollowUps);
+    }
+
+    [Fact]
+    public void Constructor_ACompletedAnswerSuggestingUpToTheBound_CarriesThemInOrder()
+    {
+        // Arrange
+        IReadOnlyList<PresentationText> followUps =
+        [
+            PresentationText.Create("Draft a reply to Anna"),
+            PresentationText.Create("What if the supplier refuses the cap?"),
+            PresentationText.Create(new string('x', AgentConversationBounds.MaximumFollowUpLength)),
+        ];
+
+        // Act
+        var ended = new AgentAnswerEnded(AgentMessageId.New(), AgentAnswerOutcome.Completed, followUps);
+
+        // Assert
+        Assert.Equal(followUps, ended.FollowUps);
+    }
+
+    [Theory]
+    [InlineData(AgentAnswerOutcome.Stopped)]
+    [InlineData(AgentAnswerOutcome.Failed)]
+    public void Constructor_AnAnswerThatDidNotCompleteSuggestingFollowUps_IsRefused(AgentAnswerOutcome outcome)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new AgentAnswerEnded(
+            AgentMessageId.New(),
+            outcome,
+            [PresentationText.Create("Draft a reply")]));
+    }
+
+    [Fact]
+    public void Constructor_MoreFollowUpsThanAnAnswerCarries_IsRefused()
+    {
+        // Arrange
+        IReadOnlyList<PresentationText> followUps =
+        [
+            .. Enumerable.Range(1, AgentConversationBounds.MaximumFollowUps + 1)
+                .Select(index => PresentationText.Create($"Question {index}")),
+        ];
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AgentAnswerEnded(AgentMessageId.New(), AgentAnswerOutcome.Completed, followUps));
+    }
+
+    [Theory]
+    [InlineData("Draft a reply\nand send it")]
+    [InlineData("Draft a reply\tnow")]
+    public void Constructor_AFollowUpOfMoreThanOneLine_IsRefused(string followUp)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new AgentAnswerEnded(
+            AgentMessageId.New(),
+            AgentAnswerOutcome.Completed,
+            [PresentationText.Create(followUp)]));
+    }
+
+    [Fact]
+    public void Constructor_AFollowUpLongerThanALineAllows_IsRefused()
+    {
+        // Arrange
+        var followUp = PresentationText.Create(new string('x', AgentConversationBounds.MaximumFollowUpLength + 1));
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => new AgentAnswerEnded(AgentMessageId.New(), AgentAnswerOutcome.Completed, [followUp]));
+    }
+
     /// <summary>The three the store reads off an entry to decide what it may do to the conversation.</summary>
     [Fact]
     public void ComposedInto_TheEntriesAnAnswerIsMadeOf_NameTheAnswerTheyBelongTo()

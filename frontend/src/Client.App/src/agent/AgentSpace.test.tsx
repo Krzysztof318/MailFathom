@@ -234,6 +234,33 @@ describe('AgentSpace', () => {
         expect(within(thread).queryByRole('status', { name: /Reading the confirmation/ })).toBeNull();
     });
 
+    it('asks what the last answer suggested, as it reads, when the suggestion is pressed', async () => {
+        const { transport, asked } = deploymentAnswering();
+        screenOf(transport);
+
+        await opened('How many bays were confirmed');
+        const suggested = await screen.findByRole('list', { name: 'Proposed next' });
+        fireEvent.click(within(suggested).getByRole('button', { name: 'Ask the agent to: Who confirmed the bays?' }));
+
+        await waitFor(() => {
+            expect(asked.filter((request) => request.method === 'POST')).toHaveLength(1);
+        });
+
+        const [posted] = asked.filter((request) => request.method === 'POST');
+
+        expect(posted?.path).toBe(`${conversations}/${agent.answeredConversationId}/messages`);
+        expect(JSON.parse(posted?.body ?? '{}')).toMatchObject({ text: 'Who confirmed the bays?' });
+    });
+
+    it('suggests nothing under an answer still being composed', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        await opened('What is waiting on me today');
+        await screen.findByText('Looking through today’s mail');
+
+        expect(screen.queryByRole('list', { name: 'Proposed next' })).toBeNull();
+    });
+
     it('says what the agent is doing for as long as the answer is being composed', async () => {
         screenOf(deploymentAnswering().transport);
 

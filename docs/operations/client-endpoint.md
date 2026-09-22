@@ -3477,6 +3477,18 @@ per-run bounds a mail answer does, on the model `Chat:Agent:Model` routes it to;
 ends every answer as failed rather than refusing the question. A replica that stops mid-answer leaves it failed rather
 than resumed.
 
+**An answer that completed may suggest what to ask next.** Its `answerEnded` entry then carries `followUps`, at most
+three lines of at most 120 characters each, in the order the agent suggested them:
+
+```json
+{"sequence":9,"entry":{"entry":"answerEnded","messageId":"0199a2c4-6a7b-7c8d-9e0f-1a2b3c4d5e6f","outcome":"Completed","followUps":["Who confirmed the bays?","Draft a reply asking to hold them another week"]}}
+```
+
+The agent composes them on the same run, under the same bounds and the same ceiling, as the answer they follow, and an
+answer that suggested nothing carries an empty list — as does every stopped or failed one, and an ending written before
+the member existed carries none at all. Each is text and never an act: a client that offers one posts it as an ordinary
+question into the same conversation, exactly as though it had been typed, and nothing else happens when it is pressed.
+
 **Steering adds to a running answer; stopping ends it.** They are different routes because they are different acts:
 
 ```http

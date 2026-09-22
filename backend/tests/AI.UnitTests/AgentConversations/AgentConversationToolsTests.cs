@@ -86,7 +86,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
         // Assert
         Assert.Equal(
-            ["search_mail", "read_thread", "show_thread_state", "read_calendar", "read_tasks", "propose_event", "propose_task"],
+            ["suggest_follow_ups", "search_mail", "read_thread", "show_thread_state", "read_calendar", "read_tasks", "propose_event", "propose_task"],
             names);
     }
 
@@ -98,7 +98,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         var names = this.Tools(MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend).Create().Select(static tool => tool.Name);
 
         // Assert
-        Assert.Equal(["propose_message"], names);
+        Assert.Equal(["suggest_follow_ups", "propose_message"], names);
     }
 
     /// <summary>A grant that drafts without sending proposes no mail, because accepting it could not be carried out.</summary>
@@ -124,6 +124,52 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
         // Assert
         Assert.Equal(["propose_event", "propose_task", "propose_message", "propose_reply"], names);
+    }
+
+    /// <summary>What the model suggests asking next is held for the answer's ending and written nowhere on its own.</summary>
+    [Fact]
+    public async Task SuggestFollowUps_QuestionsWithinTheBounds_AreHeldForTheEndingAndWriteNothing()
+    {
+        // Arrange
+        var tool = this.ToolNamed("suggest_follow_ups", MailFathomPermission.MailRead);
+
+        // Act
+        await tool.InvokeAsync(Suggesting("Draft a reply to Ada", "Show me the sources"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["Draft a reply to Ada", "Show me the sources"], this.tools.FollowUps.Select(static followUp => followUp.Value));
+        Assert.Empty(this.written);
+    }
+
+    /// <summary>More suggestions than an answer carries are refused back to the model, and what it suggested before stands.</summary>
+    [Fact]
+    public async Task SuggestFollowUps_MoreThanAnAnswerCarries_IsRefusedAndKeepsWhatWasHeld()
+    {
+        // Arrange
+        var tool = this.ToolNamed("suggest_follow_ups", MailFathomPermission.MailRead);
+        await tool.InvokeAsync(Suggesting("Draft a reply to Ada"), TestContext.Current.CancellationToken);
+
+        // Act
+        var answer = await tool.InvokeAsync(Suggesting("One", "Two", "Three", "Four"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains("one to 3 questions", answer?.ToString(), StringComparison.Ordinal);
+        Assert.Equal(["Draft a reply to Ada"], this.tools.FollowUps.Select(static followUp => followUp.Value));
+    }
+
+    /// <summary>A model that is replaced after suggesting leaves nothing for the answer the next one composes.</summary>
+    [Fact]
+    public async Task ForgetFollowUps_AfterAModelSuggested_LeavesNoneHeld()
+    {
+        // Arrange
+        var tool = this.ToolNamed("suggest_follow_ups", MailFathomPermission.MailRead);
+        await tool.InvokeAsync(Suggesting("Draft a reply to Ada"), TestContext.Current.CancellationToken);
+
+        // Act
+        this.tools.ForgetFollowUps();
+
+        // Assert
+        Assert.Empty(this.tools.FollowUps);
     }
 
     /// <summary>A recipient list the model left out is refused back to it, and nothing is proposed.</summary>
@@ -404,6 +450,9 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
         return this.signals.DisposeAsync();
     }
+
+    private static AIFunctionArguments Suggesting(params string[] questions) =>
+        new(new Dictionary<string, object?> { ["questions"] = questions });
 
     private AIFunction ToolNamed(string name, params MailFathomPermission[] granted)
     {

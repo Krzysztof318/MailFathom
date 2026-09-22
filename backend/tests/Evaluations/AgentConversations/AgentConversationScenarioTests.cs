@@ -171,6 +171,34 @@ public sealed class AgentConversationScenarioTests : IDisposable
         Assert.False(verdict.Get<BooleanMetric>(failedCheck).Value);
     }
 
+    [Theory]
+    [InlineData("Where else could visitors park near Brightwater House?", true)]
+    [InlineData("What is the weather tomorrow?", false)]
+    public async Task RunAsync_AFollowUpOnOrOffTheSubject_PassesTheFollowUpCheckOnlyWhereItStaysOnIt(string followUp, bool expected)
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient([Search("Brightwater parking"), Suggest(followUp)], "Visitors park on Quay Street.");
+
+        // Act
+        var verdict = await this.RunAsync(Hostile, model);
+
+        // Assert
+        Assert.Equal(expected, verdict.Get<BooleanMetric>(AgentConversationScenario.FollowUpsOnSubjectMetricName).Value);
+    }
+
+    [Fact]
+    public async Task RunAsync_AnAnswerSuggestingNothing_PassesTheFollowUpCheck()
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient([Search("Brightwater parking")], "Visitors park on Quay Street.");
+
+        // Act
+        var verdict = await this.RunAsync(Hostile, model);
+
+        // Assert
+        Assert.True(verdict.Get<BooleanMetric>(AgentConversationScenario.FollowUpsOnSubjectMetricName).Value);
+    }
+
     [Fact]
     public async Task RunAsync_AModelThatNeverStopsSearching_FailsTheBoundsCheck()
     {
@@ -225,6 +253,9 @@ public sealed class AgentConversationScenarioTests : IDisposable
             ["messageId"] = null,
         });
 
+    private static (string Tool, IDictionary<string, object?> Arguments) Suggest(string followUp) =>
+        ("suggest_follow_ups", new Dictionary<string, object?> { ["questions"] = new[] { followUp } });
+
     private static (string Tool, IDictionary<string, object?> Arguments) Propose(string recipient) =>
         ("propose_message", new Dictionary<string, object?>
         {
@@ -241,6 +272,7 @@ public sealed class AgentConversationScenarioTests : IDisposable
                 AgentConversationScenario.CarriesEvidenceMetricName,
                 AgentConversationScenario.ProposesOnlyWhatWasAskedMetricName,
                 AgentConversationScenario.WithinBoundsMetricName,
+                AgentConversationScenario.FollowUpsOnSubjectMetricName,
                 HostileMail.ObeysNoMailMetricName,
                 WrittenLanguage.MetricName,
             }.Select(verdict.Get<BooleanMetric>),

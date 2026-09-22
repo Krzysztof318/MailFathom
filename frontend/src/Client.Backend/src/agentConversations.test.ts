@@ -231,6 +231,57 @@ describe('readAgentConversation', () => {
         expect(answered).toMatchObject({ value: { events: [{ kind: 'answerEnded', outcome: 'failed' }] } });
     });
 
+    it('reads what an ending suggests asking next, and an ending written without any as suggesting none', async () => {
+        const answered = await readAgentConversation(
+            session,
+            answering({
+                status: 200,
+                body: pageOf([
+                    entryOf(1, {
+                        entry: 'answerEnded',
+                        messageId: question,
+                        outcome: 'Completed',
+                        followUps: ['Draft a reply to Anna', 'What if she refuses the cap?'],
+                    }),
+                    entryOf(2, { entry: 'answerEnded', messageId: question, outcome: 'Completed' }),
+                ]),
+            }),
+            conversation,
+            0,
+        );
+
+        expect(answered).toMatchObject({
+            value: {
+                events: [
+                    { kind: 'answerEnded', followUps: ['Draft a reply to Anna', 'What if she refuses the cap?'] },
+                    { kind: 'answerEnded', followUps: [] },
+                ],
+            },
+        });
+    });
+
+    it.each([
+        ['more than three', ['One', 'Two', 'Three', 'Four']],
+        ['one past a line', ['x'.repeat(121)]],
+        ['one of two lines', ['Draft a reply\nand send it']],
+        ['one that says nothing', ['  ']],
+        ['one that is not text', [42]],
+    ])('refuses an ending suggesting %s, which the service never writes', async (_, followUps) => {
+        const answered = await readAgentConversation(
+            session,
+            answering({
+                status: 200,
+                body: pageOf([
+                    entryOf(1, { entry: 'answerEnded', messageId: question, outcome: 'Completed', followUps }),
+                ]),
+            }),
+            conversation,
+            0,
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
     it('moves past an entry kind this build does not read rather than refusing the conversation', async () => {
         const answered = await readAgentConversation(
             session,

@@ -55,6 +55,9 @@ export type ThreadTurn =
 
           /** How it ended, and `null` while it is still being composed. */
           readonly ending: AgentAnswerOutcome | null;
+
+          /** What the agent suggests asking next, which only an ending carries. */
+          readonly followUps: readonly string[];
       };
 
 /** One answer of the thread. */
@@ -116,6 +119,7 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
                     sources: new Map(),
                     status: null,
                     ending: null,
+                    followUps: [],
                 });
 
                 break;
@@ -151,7 +155,7 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
 
             case 'answerEnded':
                 lastEnding = entry.outcome;
-                revise(entry.run, (answer) => ({ ...answer, ending: entry.outcome }));
+                revise(entry.run, (answer) => ({ ...answer, ending: entry.outcome, followUps: entry.followUps }));
 
                 break;
 
@@ -162,6 +166,17 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
     }
 
     return turns;
+}
+
+/**
+ * What to offer asking next: what the thread's last turn suggested, where that turn is an answer that ended. A question
+ * or a note written after it means the conversation has moved on, and an answer still being composed has suggested
+ * nothing yet.
+ */
+export function proposedNext(turns: readonly ThreadTurn[]): readonly string[] {
+    const last = turns.at(-1);
+
+    return last?.kind === 'answer' && last.ending !== null ? last.followUps : [];
 }
 
 /** The answer still being composed, which is the last one where it has not ended, and `null` where none is. */

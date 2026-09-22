@@ -35,6 +35,8 @@ namespace MailFathom.AI.AgentConversations;
 /// acts: it writes a proposal into the conversation and tells the model so, and only the person accepting that proposal
 /// carries it out — through <see cref="AgentProposalAcceptance" />, with exactly the act written here. There is no tool
 /// that sends, saves, schedules, or completes anything, so no instruction and no retrieved message can make a run do so.
+/// The one tool outside both halves notes what the person might ask next, which the answer's ending carries as text:
+/// pressing a suggestion posts it as a question, so it reaches nothing a question could not.
 /// </para>
 /// <para>
 /// <strong>Each tool reaches only what the person's own grant reaches.</strong> Every read goes through the use case the
@@ -99,6 +101,10 @@ internal sealed class AgentConversationTools
     /// <summary>Gets whether a proposal is on record from this run, which no later model may be asked to answer beside.</summary>
     internal bool HasProposed { get; private set; }
 
+    /// <summary>Gets the questions the model last suggested asking next, which the answer's ending carries.</summary>
+    /// <remarks>Held rather than written, because they belong to the answer that completes and a model that suggests and then fails has suggested nothing for the one that follows it.</remarks>
+    internal IReadOnlyList<PresentationText> FollowUps { get; private set; } = [];
+
     /// <summary>Creates the tools the person's grant allows.</summary>
     /// <returns>
     /// The reading tools where the grant reads mail, beside the two that propose onto the person's own calendar and task
@@ -107,7 +113,10 @@ internal sealed class AgentConversationTools
     /// </returns>
     internal IReadOnlyList<AITool> Create()
     {
-        List<AITool> tools = [];
+        List<AITool> tools =
+        [
+            AIFunctionFactory.Create(this.SuggestFollowUps, "suggest_follow_ups", $"Suggests up to {AgentConversationBounds.MaximumFollowUps} short questions the person could ask you next, shown under your answer. Pressing one only asks it; nothing is done."),
+        ];
 
         if (this.readers.Authorization.Permits(MailFathomPermission.MailRead))
         {
@@ -133,6 +142,9 @@ internal sealed class AgentConversationTools
         return tools;
     }
 
+    /// <summary>Forgets what an earlier model suggested, so the answer carries only what the model that composed it suggested.</summary>
+    internal void ForgetFollowUps() => this.FollowUps = [];
+
     /// <summary>Declares every message the search showed the model as a source, which is what an answer resting on a search cites.</summary>
     /// <param name="cancellationToken">Cancels the writes.</param>
     /// <returns>A task that completes once every source is declared.</returns>
@@ -142,6 +154,20 @@ internal sealed class AgentConversationTools
         {
             await this.CiteAsync(passage.StoredEmailId, passage.Subject, cancellationToken);
         }
+    }
+
+    [Description("Suggests what the person could ask next.")]
+    private string SuggestFollowUps(
+        [Description("Each question as the person would ask it of you, one short line each.")] string[] questions)
+    {
+        if (AgentFollowUps.Read(questions) is not { } suggested)
+        {
+            return $"Give one to {AgentConversationBounds.MaximumFollowUps} questions, each one line of at most {AgentConversationBounds.MaximumFollowUpLength} characters.";
+        }
+
+        this.FollowUps = suggested;
+
+        return "Noted. They are shown under your answer once it is complete, and nothing is asked until the person presses one.";
     }
 
     [Description("Reads one email conversation.")]

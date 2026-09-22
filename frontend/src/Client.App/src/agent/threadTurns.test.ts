@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AgentConversationEntry, AnswerBlock } from '@mailfathom/client-backend';
-import { answerInFlight, threadOf } from './threadTurns';
+import { answerInFlight, proposedNext, threadOf } from './threadTurns';
 
 // The fold never reads inside a block, so the one a newer service would write stands in for any of them.
 const block: AnswerBlock = { named: 'somethingNew', type: null };
@@ -28,7 +28,7 @@ describe('threadOf', () => {
             { kind: 'status', sequence: 3, run: 'q-1', status: 'Reading' },
             { kind: 'status', sequence: 4, run: 'q-1', status: 'Counting' },
             { kind: 'block', sequence: 5, run: 'q-1', block },
-            { kind: 'answerEnded', sequence: 6, run: 'q-1', outcome: 'completed' },
+            { kind: 'answerEnded', sequence: 6, run: 'q-1', outcome: 'completed', followUps: [] },
         ]);
 
         expect(turns).toMatchObject([
@@ -63,7 +63,7 @@ describe('threadOf', () => {
         const turns = threadOf([
             asked,
             started,
-            { kind: 'answerEnded', sequence: 3, run: 'q-1', outcome: 'stopped' },
+            { kind: 'answerEnded', sequence: 3, run: 'q-1', outcome: 'stopped', followUps: [] },
             { kind: 'message', sequence: 4, messageId: 'n-1', author: 'agent', text: 'Stopped.', scope: null },
         ]);
 
@@ -75,13 +75,46 @@ describe('threadOf', () => {
     });
 });
 
+describe('proposedNext', () => {
+    const suggested: AgentConversationEntry = {
+        kind: 'answerEnded',
+        sequence: 3,
+        run: 'q-1',
+        outcome: 'completed',
+        followUps: ['Draft a reply', 'Who else was copied?'],
+    };
+
+    it('is what the last answer suggested once it ended', () => {
+        expect(proposedNext(threadOf([asked, started, suggested]))).toEqual(['Draft a reply', 'Who else was copied?']);
+    });
+
+    it('is nothing while the last answer is still being composed', () => {
+        expect(proposedNext(threadOf([asked, started]))).toEqual([]);
+    });
+
+    it('is nothing once the conversation moved past the answer that suggested it', () => {
+        const turns = threadOf([
+            asked,
+            started,
+            suggested,
+            { kind: 'message', sequence: 4, messageId: 'q-2', author: 'person', text: 'Draft a reply', scope: null },
+        ]);
+
+        expect(proposedNext(turns)).toEqual([]);
+    });
+});
+
 describe('answerInFlight', () => {
     it('is the last answer while it has not ended', () => {
         expect(answerInFlight(threadOf([asked, started]))).toMatchObject({ run: 'q-1' });
     });
 
     it('is nothing once the last answer ended', () => {
-        const turns = threadOf([asked, started, { kind: 'answerEnded', sequence: 3, run: 'q-1', outcome: 'failed' }]);
+        const turns = threadOf([
+            asked,
+            started,
+            { kind: 'answerEnded', sequence: 3, run: 'q-1', outcome: 'failed', followUps: [] },
+        ]);
 
         expect(answerInFlight(turns)).toBeNull();
     });

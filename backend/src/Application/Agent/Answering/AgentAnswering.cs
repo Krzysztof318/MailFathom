@@ -199,8 +199,9 @@ public sealed class AgentAnswering
             this.languages.LanguageOf(question.User),
             history);
 
-        await this.composer.ComposeAsync(brief, journal, cancellationToken);
-        await journal.EndAsync(AgentAnswerOutcome.Completed, cancellationToken);
+        var followUps = await this.composer.ComposeAsync(brief, journal, cancellationToken);
+
+        await journal.CompleteAsync(followUps, cancellationToken);
     }
 
     /// <summary>Composes the history the turn sends, compacting the conversation first where it has outgrown the budget.</summary>

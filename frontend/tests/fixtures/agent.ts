@@ -88,7 +88,15 @@ const answeredEntries = [
             },
         },
     },
-    { sequence: 6, entry: { entry: 'answerEnded', messageId: answeredQuestionId, outcome: 'Completed' } },
+    {
+        sequence: 6,
+        entry: {
+            entry: 'answerEnded',
+            messageId: answeredQuestionId,
+            outcome: 'Completed',
+            followUps: ['Who confirmed the bays?', 'Draft a reply asking to hold them another week'],
+        },
+    },
 ];
 
 const composingEntries = [
