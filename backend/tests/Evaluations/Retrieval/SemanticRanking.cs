@@ -30,7 +30,7 @@ internal static class SemanticRanking
                 .Select(entry => (entry.Message, Similarity: entry.Passages.Max(passage => CosineSimilarity(passage, question))))
                 .OrderByDescending(static scored => scored.Similarity)
                 .ThenByDescending(static scored => scored.Message.ReceivedAt)
-                .ThenBy(static scored => scored.Message.Id.Value)
+                .ThenByDescending(static scored => scored.Message.Id.Value)
                 .Select(static scored => scored.Message.Id),
         ];
 
