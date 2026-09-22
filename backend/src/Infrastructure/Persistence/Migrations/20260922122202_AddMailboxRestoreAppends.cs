@@ -15,6 +15,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<int>(
+                name: "RestoreGeneration",
+                table: "mailbox_accounts",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
             migrationBuilder.AddColumn<Guid>(
                 name: "RestoreStatePosition",
                 table: "mailbox_accounts",
@@ -64,6 +71,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "mailbox_restore_appends");
+
+            migrationBuilder.DropColumn(
+                name: "RestoreGeneration",
+                table: "mailbox_accounts");
 
             migrationBuilder.DropColumn(
                 name: "RestoreStatePosition",

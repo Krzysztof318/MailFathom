@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
@@ -46,14 +47,12 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// </remarks>
 public sealed class MailboxRestorePass
 {
-    /// <summary>The identity every mutation record the restore writes names as the act that asked for it.</summary>
+    /// <summary>What every mutation record the restore writes names as the act that asked for it, before the restore is named.</summary>
     /// <remarks>
-    /// One identity rather than one per message, because the idempotency identity is the occurrence, the requester, and
-    /// the mutation together — so a stable name here is what makes a record written twice for one message one record.
     /// It is the restore itself rather than a person: what each record replays is an act the mailbox's own user already
     /// took locally, and the requester says which mechanism is carrying it.
     /// </remarks>
-    private const string RestoreRequesterIdentity = "custody-restore";
+    private const string RestoreRequesterMechanism = "custody-restore";
 
     /// <summary>The most unanswered appends one reading reports, which is a ceiling rather than a page.</summary>
     private const int MaximumReportedUnansweredAppends = 100;
@@ -182,7 +181,12 @@ public sealed class MailboxRestorePass
 
         await this.CarryAnsweredPlacementsAsync(account, tally, cancellationToken);
 
-        budget -= await this.WriteStoredStateOntoOccurrencesAsync(account, tally, budget, cancellationToken);
+        budget -= await this.WriteStoredStateOntoOccurrencesAsync(
+            account,
+            phase.RestoreGeneration,
+            tally,
+            budget,
+            cancellationToken);
 
         if (budget > 0)
         {
@@ -224,11 +228,13 @@ public sealed class MailboxRestorePass
     /// </remarks>
     private async Task<int> WriteStoredStateOntoOccurrencesAsync(
         MailAccountId account,
+        int restoreGeneration,
         RestoreTally tally,
         int budget,
         CancellationToken cancellationToken)
     {
         var candidates = await this.store.ReadStateCandidatesAsync(account, budget, cancellationToken);
+        var requester = RequesterOf(restoreGeneration);
         var written = 0;
 
         foreach (var candidate in candidates)
@@ -259,7 +265,14 @@ public sealed class MailboxRestorePass
             }
 
             await this.commitPolicy.CommitAsync(
-                (session, token) => this.OpenStateRecordsAsync(session, account, candidate, destination, keywords, token),
+                (session, token) => this.OpenStateRecordsAsync(
+                    session,
+                    account,
+                    candidate,
+                    destination,
+                    keywords,
+                    requester,
+                    token),
                 cancellationToken);
 
             tally.StateWritten();
@@ -297,10 +310,9 @@ public sealed class MailboxRestorePass
         MailboxRestoredStateCandidate candidate,
         MailFolderResolution? destination,
         AuthoredMailKeywords? keywords,
+        MailboxMutationRequester requester,
         CancellationToken cancellationToken)
     {
-        var requester = MailboxMutationRequester.Command(RestoreRequesterIdentity);
-
         await this.mutations.OpenAsync(
             session,
             MailboxMutationRequest.SetSeen(candidate.Email, candidate.Occurrence, requester, candidate.State.IsSeen),
@@ -679,6 +691,22 @@ public sealed class MailboxRestorePass
     private bool SynchronizesAVirtualFolder(MailAccountId account) => this.mappings.FoldersOf(account)
         .Any(static mapping => mapping.Participation.IsSynchronized
             && VirtualMailFolderRoles.Includes(mapping.SpecialUse));
+
+    /// <summary>Names one restore as the act every mutation record it writes was asked for by.</summary>
+    /// <remarks>
+    /// One identity per restore rather than one per message, because a record's idempotency identity is the occurrence,
+    /// the requester, and the mutation together: a stable name across the pass is what makes a message written down
+    /// twice one record, and it is why a restore interrupted half way asks for nothing twice when it resumes.
+    /// <para>
+    /// The restore it names is why the generation is in the text. A completed record is kept for good and the
+    /// occurrence of a message nobody moved is the same one cycle later, so an identity naming only the mechanism
+    /// would let a second hold-and-restore read the first restore's finished records as its own: nothing would be
+    /// carried, the walk would stamp past every such message, and the account would leave the phase having told the
+    /// source none of the second hold's read, star, or label state.
+    /// </para>
+    /// </remarks>
+    private static MailboxMutationRequester RequesterOf(int restoreGeneration) => MailboxMutationRequester.Command(
+        string.Create(CultureInfo.InvariantCulture, $"{RestoreRequesterMechanism}:{restoreGeneration}"));
 
     /// <summary>Sorts a failure into the kinds an operator does different things about.</summary>
     private static MailboxRestoreFailure Classify(Exception failure) => failure switch

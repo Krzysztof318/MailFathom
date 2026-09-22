@@ -15,6 +15,17 @@ namespace MailFathom.Domain.Accounts;
 /// </remarks>
 public sealed record MailAccountCustodyState(MailAccountCustody Requested, MailAccountCustodyPhase Phase)
 {
+    /// <summary>Gets which restore of this account is the current one, counted from one and zero for an account that has never restored.</summary>
+    /// <remarks>
+    /// It advances once each time the account enters <see cref="MailAccountCustodyPhase.Restoring" />, and it is what
+    /// tells one restore's work apart from an earlier one's. The restore writes a held message's state down as ordinary
+    /// mutation records, whose identity is the occurrence, the requester, and the mutation together, and a completed
+    /// record is kept for good — so without this a second hold-and-restore cycle would find the first cycle's records
+    /// already standing for every message nobody moved, carry none of the second hold's read, star, or label state, and
+    /// end the phase saying it had.
+    /// </remarks>
+    public int RestoreGeneration { get; init; }
+
     /// <summary>The state of an account nobody has switched, which is what a deployment reads for every account it holds.</summary>
     public static MailAccountCustodyState Mirrored { get; } =
         new(MailAccountCustody.MirrorSource, MailAccountCustodyPhase.Mirrored);

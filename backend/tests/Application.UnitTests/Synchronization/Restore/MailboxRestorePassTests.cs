@@ -320,6 +320,38 @@ public sealed class MailboxRestorePassTests
     }
 
     /// <summary>
+    /// A second hold-and-restore cycle owes the source the second hold's state, and a completed mutation record is
+    /// kept for good — so for a message nobody moved the occurrence is the same one cycle later and the requester is
+    /// the only part of the identity left to tell the two restores apart. Naming the mechanism alone would let the
+    /// first cycle's finished records answer this one: nothing would be carried, the walk would stamp past the
+    /// message, and the phase would end saying the mailbox was back.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_TheAccountIsRestoredASecondTime_OpensRecordsOfItsOwnRatherThanTheFirstRestores()
+    {
+        // Arrange
+        var message = StillOnTheSource(Inbox, Inbox.Alias, seen: true, keywords: ["$Label1"]);
+        var records = new InMemoryMailboxMutationRecordStore();
+
+        var firstRestore = new RestoreContext(RestoringAt(1), mutations: records).AwaitingStateWriteOf(message);
+        await firstRestore.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        var openedByTheFirstRestore = records.OpenedRecordCount;
+        var secondRestore = new RestoreContext(RestoringAt(2), mutations: records).AwaitingStateWriteOf(message);
+
+        // Act
+        var report = await secondRestore.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(3, openedByTheFirstRestore);
+        Assert.Equal(1, report.StateWrittenCount);
+        Assert.Equal(openedByTheFirstRestore * 2, records.OpenedRecordCount);
+        Assert.Equal(
+            ["custody-restore:1", "custody-restore:2"],
+            records.OpenedRequests.Select(request => request.Requester.Identity).Distinct());
+    }
+
+    /// <summary>
     /// A move somebody made while the account was held reaches the source as an ordinary relocation, and it is opened
     /// last: the converger carries these in the order they were opened, so a move ahead of them would leave the three
     /// <c>UID STORE</c> commands naming a UID the folder no longer holds — which a server answers as success.
@@ -699,6 +731,9 @@ public sealed class MailboxRestorePassTests
     private static MailAccountCustodyState Restoring { get; } =
         new(MailAccountCustody.MirrorSource, MailAccountCustodyPhase.Restoring);
 
+    private static MailAccountCustodyState RestoringAt(int generation) =>
+        Restoring with { RestoreGeneration = generation };
+
     private static MailboxRestoreCandidate Drained(
         MailFolderAlias folder,
         bool seen = false,
@@ -733,9 +768,17 @@ public sealed class MailboxRestorePassTests
 
         private uint nextUid = 41;
 
-        internal RestoreContext(MailAccountCustodyState custody, int maxPerRun = 100)
+        internal RestoreContext(
+            MailAccountCustodyState custody,
+            int maxPerRun = 100,
+            InMemoryMailboxMutationRecordStore? mutations = null)
         {
             this.Custody = InMemoryMailAccountCustodyStore.With(Account, custody);
+
+            // Handed in where a test restores one account twice: everything else a pass touches is rebuilt between
+            // two restores of a real deployment — the process, the session, the walk — and the mutation records are
+            // the one thing that outlives both, because a completed record is never deleted.
+            this.Mutations = mutations ?? new InMemoryMailboxMutationRecordStore();
 
             var persistenceSession = Substitute.For<IPersistenceSession>();
             persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
@@ -813,7 +856,7 @@ public sealed class MailboxRestorePassTests
 
         internal InMemoryMailboxRestoreStore Store { get; } = new();
 
-        internal InMemoryMailboxMutationRecordStore Mutations { get; } = new();
+        internal InMemoryMailboxMutationRecordStore Mutations { get; }
 
         internal IEmailContentStore Content { get; }
 

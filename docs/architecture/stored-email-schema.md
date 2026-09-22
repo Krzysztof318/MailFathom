@@ -407,6 +407,14 @@ the drain never reached, whose held state has still to be written onto the occur
 `uuid` on the account rather than a stamp per message, because a per-message column would need a filtered index on the
 largest table in the schema and every mirrored deployment would carry it for nothing.
 
+`mailbox_accounts.RestoreGeneration` names which restore of that account is the current one. Every entry into
+`Restoring` advances it, in the same conditional statement that writes the phase, and nothing ever clears it. It is
+what the mutation records written by the other half of the restore are asked for by: a record's identity is the
+occurrence, the requester and the mutation together, a completed record is kept for good, and a message nobody moved
+has the same occurrence one hold-and-restore cycle later — so a requester naming only the mechanism would let the first
+cycle's finished records answer the second, which would then carry none of the second hold's read, star, label, or move
+state and end the phase saying it had.
+
 ## Where a delete left a message flagged
 
 `mailbox_flagged_deletes` holds one row per occurrence a `FlagDeleted` delete left on its server, written in the

@@ -216,6 +216,11 @@ A held mailbox is in two states at once, and each owes the source something diff
   message being refused or its labels cleared on the source. The run counts it, so the reading below shows it; the
   remedy is to correct the keyword on the message.
 
+  **Each restore asks for its own records.** A mailbox may be held and restored more than once, and a message nobody
+  moved is at the same place on the source both times — so a mutation is asked for under the restore that asked for it
+  rather than under the mode. A second restore therefore writes the second hold's read, star, labels and move down in
+  full, instead of reading the first restore's finished records as its own and telling the source nothing.
+
 **A folder is created on the source only where a mapping's `CreateIfMissing` says so.** The restore appends into the
 folder the run's own folder resolution bound, and creates none of its own, so a local folder whose mapping names a
 source path that does not exist is created by that mapping or by nobody.

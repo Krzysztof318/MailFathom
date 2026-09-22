@@ -2063,6 +2063,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasDefaultValueSql("'MirrorSource'");
 
+                    b.Property<int>("RestoreGeneration")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("RestoreStatePosition")
                         .HasColumnType("uuid");
 

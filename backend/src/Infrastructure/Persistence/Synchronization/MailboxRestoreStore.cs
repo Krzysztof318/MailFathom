@@ -339,6 +339,12 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
     {
         var accountValue = account.Value;
 
+        // Mail the mailbox regards as deleted holds nothing up, on the same rule the two halves of the restore read:
+        // a tombstoned row keeps its folder, so a folder holding only deleted mail would pause the phase for ever
+        // over messages neither half would put back and which every mailbox query hides from the operator sent to
+        // look at them.
+        var liveMail = readContext.StoredEmails.Where(StoredEmailTombstone.IsNotTombstoned);
+
         return await readContext.LocalMailFolders
             .AsNoTracking()
             .CountAsync(
@@ -347,7 +353,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                 // would let the restore append those messages nowhere and end the phase over them.
                 folder => folder.MailboxAccountId == accountValue
                     && folder.SourceFolderAlias == null
-                    && readContext.StoredEmails.Any(email => email.LocalMailFolderId == folder.Id),
+                    && liveMail.Any(email => email.LocalMailFolderId == folder.Id),
                 cancellationToken);
     }
 

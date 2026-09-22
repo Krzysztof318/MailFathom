@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260922112035_AddMailboxRestoreAppends")]
+    [Migration("20260922122202_AddMailboxRestoreAppends")]
     partial class AddMailboxRestoreAppends
     {
         /// <inheritdoc />
@@ -2065,6 +2065,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasDefaultValueSql("'MirrorSource'");
+
+                    b.Property<int>("RestoreGeneration")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("RestoreStatePosition")
                         .HasColumnType("uuid");
