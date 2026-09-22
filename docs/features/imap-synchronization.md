@@ -636,7 +636,9 @@ still stands on the source — never drained, or already appended back — the s
 the run carries to the server, so an act taken during the restore reaches the source instead of being undone by it. A
 message the drain has already taken off the source carries no record, the restore writing its local state onto the
 occurrence when it appends the message. The erasure above is the one act that is local in every phase: a run on a
-restoring account erases the record opened as one and carries the rest.
+restoring account erases the record opened as one and carries the rest. A copy is the one act that opens no record
+either, whatever the copied message still holds: the second message it writes has never stood on the source, so it
+holds no occurrence and the restore appends it like any other message MailFathom alone holds.
 
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary

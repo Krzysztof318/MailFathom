@@ -333,7 +333,7 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.states.Store(
             Email,
-            new LocalEmailState(Inbox, Folder: null, IsSeen: true, IsFlagged: true, CarriedKeywords));
+            new LocalEmailState(Inbox, HoldsSourceOccurrence: true, Folder: null, IsSeen: true, IsFlagged: true, CarriedKeywords));
         var junk = JunkDestination();
         var prepared = await this.PrepareCopyAsync();
 
@@ -705,6 +705,27 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
         Assert.True(this.states.States[Email].IsSeen);
         Assert.Null(submitted.Record);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>A copy on a restoring account is a message the source has never held, so it is committed with no record beside it.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyOnARestoringAccount_CommitsTheSecondMessageWithoutRecordingItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+        var junk = JunkDestination();
+        var prepared = await this.PrepareCopyAsync();
+
+        // Act
+        var submitted = await this.Submission(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(Copy, submitted.Change!.Email);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.folders.Placements[Copy]);
         Assert.Equal(0, this.records.OpenedRecordCount);
     }
 

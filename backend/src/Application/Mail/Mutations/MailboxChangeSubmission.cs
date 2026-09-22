@@ -156,13 +156,21 @@ public sealed class MailboxChangeSubmission
     /// <param name="account">The account the batch acts on.</param>
     /// <param name="sources">The message each planned copy duplicates, one entry per copy, which may name one message twice.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The placed copies, or none at all where the account is not held.</returns>
+    /// <returns>The placed copies, or none at all where the account's source is the truth about its mailbox.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sources" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The phase is read here as well as inside the transaction, and the two readings do different work: this one
     /// decides whether anything is worth placing, and the one inside decides what is committed. An account that stops
     /// being held in between has copies placed for it that nothing commits, which is the orphaned object the content
     /// reclamation pass takes; the reverse ordering would be a copy the transaction cannot make.
+    /// </para>
+    /// <para>
+    /// A restoring account places one for the same reason a held one does: its stored mail is still what the local
+    /// change commits against, so a copy there is a second stored message rather than a command for the source. Asking
+    /// only for <see cref="MailAccountCustodyPhase.Held" /> would leave the transaction with nothing to commit and a
+    /// rule's copy answering <see cref="MailboxChangeSubmissionOutcome.SourceContentMissing" /> for the whole restore.
+    /// </para>
     /// </remarks>
     public async Task<PreparedLocalCopies> PrepareCopiesAsync(
         MailAccountId account,
@@ -172,7 +180,8 @@ public sealed class MailboxChangeSubmission
         ArgumentNullException.ThrowIfNull(sources);
 
         if (sources.Count == 0
-            || await this.localFolders.ReadAsync(account, cancellationToken) is not { Phase: MailAccountCustodyPhase.Held })
+            || await this.localFolders.ReadAsync(account, cancellationToken)
+                is not { Phase: MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring })
         {
             return PreparedLocalCopies.None;
         }
@@ -470,6 +479,11 @@ public sealed class MailboxChangeSubmission
     /// entry is always a performed change, and this is the one local act that can decline to write anything while its
     /// caller commits the transaction anyway — a rule records the refusal and carries on — so auditing first would
     /// leave the trail permanently stating a copy that produced no row.
+    /// </para>
+    /// <para>
+    /// It is the one local change a restoring account owes its source no record for. A record carries an act to a
+    /// message the source already holds, and the copy is a message the source has never seen: it holds no occurrence,
+    /// which is exactly what the restore appends. Asking for a record beside it would ask the source twice.
     /// </para>
     /// </remarks>
     private async Task<SubmittedMailboxChange> CommitCopyAsync(

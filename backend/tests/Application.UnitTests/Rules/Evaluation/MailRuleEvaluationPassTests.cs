@@ -144,6 +144,7 @@ public sealed class MailRuleEvaluationPassTests
                 MailFolderResolution.FirstBindingOf(
                     MailFolderAlias.Create("inbox"),
                     RemoteFolderPath.Create("INBOX")),
+                HoldsSourceOccurrence: true,
                 Folder: null,
                 IsSeen: false,
                 IsFlagged: false,

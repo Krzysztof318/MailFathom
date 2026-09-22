@@ -750,6 +750,7 @@ public sealed class MailRuleActionRecorderTests
             LocalEmail,
             new LocalEmailState(
                 MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                HoldsSourceOccurrence: true,
                 Folder: null,
                 IsSeen: false,
                 IsFlagged: false,
