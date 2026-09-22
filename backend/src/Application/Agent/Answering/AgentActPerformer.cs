@@ -29,7 +29,7 @@ namespace MailFathom.Application.Agent.Answering;
 /// act, so the grant the send needs is theirs at that moment rather than whatever it was when the proposal was written.
 /// </para>
 /// </remarks>
-public sealed class AgentActPerformer
+public sealed class AgentActPerformer : IAgentActPerformer
 {
     private readonly AuthoredMailDrafting messageDrafting;
     private readonly AuthoredResponseDrafting responseDrafting;

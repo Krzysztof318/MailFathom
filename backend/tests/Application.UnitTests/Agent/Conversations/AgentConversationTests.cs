@@ -82,7 +82,7 @@ public sealed class AgentConversationTests
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
-            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
 
         // Act
         var conversation = Compose(entries);
@@ -238,7 +238,7 @@ public sealed class AgentConversationTests
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
             new AgentCitationDeclared(answered, PresentationPlanExample.Citations()[0]),
-            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
 
         // Act
         var conversation = Compose(entries);
@@ -267,7 +267,7 @@ public sealed class AgentConversationTests
         // Arrange
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
-            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
 
         // Act, Assert
         Assert.Throws<ArgumentException>(() => Compose(entries));

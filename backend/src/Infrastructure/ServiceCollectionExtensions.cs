@@ -1148,7 +1148,7 @@ public static class ServiceCollectionExtensions
         // accepting caller's principal, and a run composes under the principal of the person who asked — both of which
         // are the scope's. The composer is resolved optionally for the reason the Discover run's are: a deployment that
         // declared no chat endpoint has none, and its runs have to reach the refusal rather than fail to resolve.
-        services.AddScoped<AgentActPerformer>();
+        services.AddScoped<IAgentActPerformer, AgentActPerformer>();
         services.AddScoped<AgentProposalAcceptance>();
         services.AddScoped(provider => new AgentAnswering(
             provider.GetRequiredService<IAgentConversationStore>(),

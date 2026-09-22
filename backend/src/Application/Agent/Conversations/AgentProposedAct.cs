@@ -24,7 +24,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// sensitive exactly as the rest of the conversation is.
 /// </para>
 /// </remarks>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "act")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(AgentMessageSending), AgentMessageSending.Kind)]
 [JsonDerivedType(typeof(AgentResponseSending), AgentResponseSending.Kind)]
 public abstract record AgentProposedAct

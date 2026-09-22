@@ -26,7 +26,7 @@ namespace MailFathom.Application.Agent.Answering;
 public sealed class AgentProposalAcceptance
 {
     private readonly IAgentConversationStore store;
-    private readonly AgentActPerformer performer;
+    private readonly IAgentActPerformer performer;
     private readonly AccessAuthorization authorization;
     private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
@@ -40,7 +40,7 @@ public sealed class AgentProposalAcceptance
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public AgentProposalAcceptance(
         IAgentConversationStore store,
-        AgentActPerformer performer,
+        IAgentActPerformer performer,
         AccessAuthorization authorization,
         ClientSignals signals,
         TimeProvider timeProvider)
