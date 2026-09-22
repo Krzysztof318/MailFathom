@@ -4,12 +4,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { MailThreadMessage, MailThreadState, MailThreadStateAspect } from '@mailfathom/client-backend';
+import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
 import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
+import { useAgentHandOver, type AgentHandOver } from '../routing/agentHandOver';
 import { useScreenLayer } from '../shell/screenLayers';
 import { useDesktopComposition, useWideWorkspace } from '../shell/useWideWorkspace';
 import { sourceOf, type ThreadStateSource } from './threadStateSources';
@@ -24,7 +26,9 @@ import { sourceOf, type ThreadStateSource } from './threadStateSources';
 // - **Desktop** — a row of cards above the conversation, each carrying its label, what it says, and its source.
 // - **Tablet and the fold** — the same statements as chips inside the body, tighter and without the source link,
 //   because a card that has to hold a link as well stops fitting at that width.
-// - **A phone** — one line saying the first of them, and a control opening the whole block as a sheet.
+// - **A phone** — one line saying the first of them, and a control opening the whole block as a sheet. The same row
+//   carries *Ask*, which hands the conversation to the agent: on a phone the design moves it here from the head, and
+//   the sheet ends with the same way to the agent, worded for somebody who has read the block and wants to go on.
 //
 // Absence is a state rather than a failure, and it is the common one: a deployment that never turned the derivation
 // on and one that has not reached this conversation yet both answer with nothing at all. So a conversation with no
@@ -61,6 +65,7 @@ export function ThreadState({
     reading,
     online,
     messages,
+    thread,
     onFollowSource,
 }: {
     /** Where the conversation stands, or `null` where this deployment has derived nothing about it. */
@@ -74,6 +79,9 @@ export function ThreadState({
 
     /** The conversation's messages, which is what a statement's source is resolved against. */
     readonly messages: readonly MailThreadMessage[];
+
+    /** The conversation this block is about, as it is handed to the agent. */
+    readonly thread: AgentHandOver;
 
     /** Reveals the message a statement rests on, in the conversation below. */
     readonly onFollowSource: (storedEmailId: string) => void;
@@ -97,22 +105,28 @@ export function ThreadState({
         return (
             <section
                 aria-label={translate('threadState.label')}
-                className="border-b border-line bg-sunken px-5.5 py-2.25"
+                className={
+                    wideWorkspace
+                        ? 'border-b border-line bg-sunken px-5.5 py-2.25'
+                        : 'flex items-center gap-2.25 border-b border-line bg-sunken px-3 py-2.25'
+                }
             >
                 {/* Said out of sight while it waits and on the screen otherwise, which is the same statement either
                     way: a block that replaced its wait announcement with a shape would wait in silence for anybody
                     not looking at it. */}
-                <p role="status" className={waiting ? 'sr-only' : 'text-sm text-muted'}>
+                <p role="status" className={waiting ? 'sr-only' : 'min-w-0 flex-1 text-sm text-muted'}>
                     {translate(nothingDrawn(reading, online, state))}
                 </p>
 
-                {waiting ? <Skeleton className="h-2.5" fills={58} /> : null}
+                {waiting ? <Skeleton className="h-2.5 flex-1" fills={58} /> : null}
+
+                {wideWorkspace ? null : <AskAboutThread thread={thread} />}
             </section>
         );
     }
 
     if (!wideWorkspace) {
-        return <StateLine entries={entries} messages={messages} onFollowSource={onFollowSource} />;
+        return <StateLine entries={entries} messages={messages} thread={thread} onFollowSource={onFollowSource} />;
     }
 
     // The two wide compositions draw the same statements and differ in what a card has room for, which is why the
@@ -173,10 +187,12 @@ export function ThreadState({
 function StateLine({
     entries,
     messages,
+    thread,
     onFollowSource,
 }: {
     readonly entries: MailThreadState['entries'];
     readonly messages: readonly MailThreadMessage[];
+    readonly thread: AgentHandOver;
     readonly onFollowSource: (storedEmailId: string) => void;
 }) {
     const { translate } = useLocalization();
@@ -204,12 +220,15 @@ function StateLine({
                 >
                     <Icon name="insights" className="size-4.5" />
                 </button>
+
+                <AskAboutThread thread={thread} />
             </div>
 
             <StateSheet
                 shown={shown}
                 entries={entries}
                 messages={messages}
+                thread={thread}
                 onFollowSource={onFollowSource}
                 onClose={() => {
                     setShown(false);
@@ -226,16 +245,19 @@ function StateSheet({
     shown,
     entries,
     messages,
+    thread,
     onFollowSource,
     onClose,
 }: {
     readonly shown: boolean;
     readonly entries: MailThreadState['entries'];
     readonly messages: readonly MailThreadMessage[];
+    readonly thread: AgentHandOver;
     readonly onFollowSource: (storedEmailId: string) => void;
     readonly onClose: () => void;
 }) {
     const { translate } = useLocalization();
+    const handToAgent = useAgentHandOver();
     const sheet = useRef<HTMLDialogElement | null>(null);
 
     useEffect(() => {
@@ -307,6 +329,20 @@ function StateSheet({
                 ))}
             </ul>
 
+            {handToAgent === null ? null : (
+                <button
+                    type="button"
+                    className="flex min-h-12.5 items-center justify-center gap-2.25 rounded-2xl border border-accent-line bg-accent-soft px-3.5 text-md font-semibold text-accent-deep transition hover:border-accent hover:bg-accent hover:text-on-accent"
+                    onClick={() => {
+                        onClose();
+                        handToAgent(thread);
+                    }}
+                >
+                    <Icon name="forum" className="size-4.75" />
+                    {translate('agent.goWithThread')}
+                </button>
+            )}
+
             <button
                 type="button"
                 className="self-end rounded-lg px-3 py-2 text-base text-text-soft transition hover:bg-hover"
@@ -315,6 +351,24 @@ function StateSheet({
                 {translate('threadState.close')}
             </button>
         </dialog>
+    );
+}
+
+// *Ask*, the accent pill that hands the conversation to the agent, drawn only where there is an agent to reach.
+function AskAboutThread({ thread }: { readonly thread: AgentHandOver }) {
+    const { translate } = useLocalization();
+    const handToAgent = useAgentHandOver();
+
+    return handToAgent === null ? null : (
+        <Control
+            label={translate('message.ask')}
+            hint={translate('message.askTitle')}
+            icon="auto_awesome"
+            shape="accentPill"
+            onPress={() => {
+                handToAgent(thread);
+            }}
+        />
     );
 }
 

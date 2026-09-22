@@ -7,6 +7,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailThreadMessage, MailThreadState, MailThreadStateEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 import { ThreadState } from './ThreadState';
 
 // The block is drawn three ways and the width decides which, so every test here states the width it is about. jsdom
@@ -93,6 +94,11 @@ function stateOf(
     return { threadId: 'a-conversation', coverage, derivedAt: '2026-09-08T09:00:00+00:00', current, entries };
 }
 
+const conversation: AgentHandOver = {
+    scope: { kind: 'thread', subject: '0198f4a1-0000-7000-8000-00000000b001' },
+    title: 'Hall lease',
+};
+
 const staleSentence =
     'This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.';
 
@@ -101,16 +107,20 @@ function drawing(
     reading = false,
     onFollowSource: (storedEmailId: string) => void = () => undefined,
     online = true,
+    handToAgent: ((handOver: AgentHandOver) => void) | null = null,
 ): ReactElement {
     return (
         <LocalizationProvider>
-            <ThreadState
-                state={state}
-                reading={reading}
-                online={online}
-                messages={held}
-                onFollowSource={onFollowSource}
-            />
+            <AgentHandOverContext value={handToAgent}>
+                <ThreadState
+                    state={state}
+                    reading={reading}
+                    online={online}
+                    messages={held}
+                    thread={conversation}
+                    onFollowSource={onFollowSource}
+                />
+            </AgentHandOverContext>
         </LocalizationProvider>
     );
 }
@@ -184,6 +194,7 @@ describe('ThreadState', () => {
                     reading={false}
                     online={true}
                     messages={[message('one', 0)]}
+                    thread={conversation}
                     onFollowSource={() => undefined}
                 />
             </LocalizationProvider>,
@@ -220,6 +231,35 @@ describe('ThreadState', () => {
         expect(sheet.open).toBe(true);
     });
 
+    it('hands the conversation to the agent from the line a phone draws, and from the foot of its sheet', () => {
+        const handToAgent = vi.fn();
+        render(drawing(stateOf([entry()]), false, undefined, true, handToAgent));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Where this conversation stands' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Go to the agent — I’ll ask in my own words' }));
+
+        expect(handToAgent).toHaveBeenNthCalledWith(1, conversation);
+        expect(handToAgent).toHaveBeenNthCalledWith(2, conversation);
+        expect(screen.getByRole<HTMLDialogElement>('dialog', { hidden: true }).open).toBe(false);
+    });
+
+    // Absence is the common state, and a phone still owes the way to the agent there: the head has given it up.
+    it('hands the conversation to the agent from a phone band with nothing derived to say', () => {
+        const handToAgent = vi.fn();
+        render(drawing(null, false, undefined, true, handToAgent));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+        expect(handToAgent).toHaveBeenCalledWith(conversation);
+    });
+
+    it('draws no way to the agent on a phone for a credential that has no agent to reach', () => {
+        render(drawing(stateOf([entry()])));
+
+        expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+    });
+
     it('closes the sheet a phone opened, so nothing is reachable that cannot be left', () => {
         render(drawing(stateOf([entry()])));
 
@@ -239,6 +279,7 @@ describe('ThreadState', () => {
                     reading={false}
                     online={true}
                     messages={[message('one', 0)]}
+                    thread={conversation}
                     onFollowSource={() => undefined}
                 />
             </LocalizationProvider>,

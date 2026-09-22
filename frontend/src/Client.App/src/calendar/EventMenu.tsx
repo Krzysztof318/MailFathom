@@ -6,14 +6,14 @@ import type { CalendarEvent } from '@mailfathom/client-backend';
 import { ContextMenu, type ContextMenuItem } from '../contextMenu/ContextMenu';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { useLocalization } from '../localization/useLocalization';
+import { useAgentHandOver } from '../routing/agentHandOver';
 
 // What one event offers, which is this screen's own items handed to the one menu seven lists share: where the menu
 // stands, how it is walked, and how it is left are `contextMenu/ContextMenu.tsx`'s.
 //
-// **One of the design project's five items is absent, and it waits on a deployment route rather than on this screen.**
-// *Ask the agent* has no agent to reach — the Agent space is a placeholder. An item the client cannot yet perform is
-// left out rather than drawn inert, which is the rule the message row's own menu states, and it arrives with the
-// change that gives it somewhere to go.
+// ***Ask the agent* hands this event over to the agent**, and is drawn only where this credential has an agent to
+// reach: an item the client cannot perform is left out rather than drawn inert, which is the rule the message row's
+// own menu states.
 //
 // **Reminders open the event rather than a surface of their own**, because what edits them is the panel the event's
 // own dialog already carries: a second way into the same set would be a second answer to what the event announces.
@@ -47,11 +47,26 @@ export function EventMenu({
     readonly onClose: () => void;
 }) {
     const { translate } = useLocalization();
+    const handToAgent = useAgentHandOver();
+
+    const asking: ContextMenuItem[] =
+        handToAgent === null
+            ? []
+            : [
+                  {
+                      icon: 'auto_awesome',
+                      label: translate('agent.askAgent'),
+                      choose: () => {
+                          handToAgent({ scope: { kind: 'calendarEvent', subject: event.id }, title: event.title });
+                      },
+                  },
+              ];
 
     const items: ContextMenuItem[] = [
         { icon: 'check_box', label: translate('calendar.selectEvents'), choose: onSelect },
         { icon: 'event', label: translate('calendar.openEvent'), choose: onOpen },
         { icon: 'notifications', label: translate('calendar.eventReminders'), choose: onAskReminders },
+        ...asking,
         { icon: 'delete', label: translate('calendar.deleteEvent'), destroys: true, choose: onAskDeletion },
     ];
 

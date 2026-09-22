@@ -1496,17 +1496,16 @@ test('draws the region again when it is retried, and hands the keyboard into it'
     await expect(message).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     // Somebody rather than nobody holds the keyboard, and the next tab stop says where they are: the first control
-    // the region draws, which is handing the conversation to the agent from the head of the message. Both are asked in
-    // a browser rather than in jsdom, which draws no boxes and so does not model the element a browser refuses focus
-    // to — the wrapper this lands on was one until this change. Named in full because the head's other acts share
-    // their names with the toolbar's, as the design draws them, and the toolbar has no control for this one.
+    // the region draws, which for a message belonging to no conversation is replying from the head of the message —
+    // there is no thread to hand the agent, so no way to the agent is drawn before it. Both are asked in a browser
+    // rather than in jsdom, which draws no boxes and so does not model the element a browser refuses focus to — the
+    // wrapper this lands on was one until this change. Looked for inside the message because the head's acts share
+    // their names with the toolbar's, as the design draws them.
     expect(await page.evaluate('document.activeElement !== document.body')).toBe(true);
 
     await page.keyboard.press('Tab');
 
-    await expect(
-        page.getByRole('button', { name: 'Go to the agent with this thread as context — not built yet' }),
-    ).toBeFocused();
+    await expect(message.getByRole('button', { name: /^Reply/u })).toBeFocused();
 });
 
 // The failure no boundary is left to contain, induced by refusing the element every surface in this client is built

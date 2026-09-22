@@ -24,6 +24,9 @@ const starters: readonly MessageKey[] = ['agent.starter.day', 'agent.starter.sli
  * so moving to another puts the draft down — except where a new conversation is given its identity by the question
  * being sent from this field, which is the same conversation acquiring a name.
  * @param focusAsked Changed by the screen when what held focus went away, which puts focus in the field.
+ * @param context What the next question is asked about, already worded for the chip, and `null` where it is about
+ * nothing narrower — which draws no chip rather than an empty one.
+ * @param onClearContext Drops that context, so the next question is asked about everything again.
  */
 export function AgentComposer({
     running,
@@ -31,16 +34,20 @@ export function AgentComposer({
     notSent,
     conversation,
     focusAsked,
+    context,
     onSend,
     onCancel,
+    onClearContext,
 }: {
     readonly running: boolean;
     readonly offersStarters: boolean;
     readonly notSent: string | null;
     readonly conversation: string | null;
     readonly focusAsked: number;
+    readonly context: string | null;
     readonly onSend: (text: string) => Promise<string | null>;
     readonly onCancel: () => void;
+    readonly onClearContext: () => void;
 }) {
     const { translate } = useLocalization();
     const field = useId();
@@ -85,6 +92,25 @@ export function AgentComposer({
 
     return (
         <div className="flex shrink-0 flex-col gap-2.25 border-t border-line bg-panel px-3.5 py-3 workspace:gap-2.5 workspace:px-6.5 workspace:pt-3.5 workspace:pb-4">
+            {context === null ? null : (
+                <p className="flex max-w-full items-center gap-2.25 self-start rounded-xl border border-accent-line bg-accent-soft py-2 ps-3 pe-2.5 text-accent-deep">
+                    <Icon name="attach_file" className="size-4.25 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-base">{context}</span>
+                    <button
+                        type="button"
+                        aria-label={translate('agent.clearContext')}
+                        title={translate('agent.clearContext')}
+                        className="flex shrink-0 items-center justify-center rounded-xs transition hover:text-text"
+                        onClick={() => {
+                            onClearContext();
+                            input.current?.focus();
+                        }}
+                    >
+                        <Icon name="close" className="size-4.25" />
+                    </button>
+                </p>
+            )}
+
             {offersStarters ? (
                 <ul aria-label={translate('agent.starters')} className="flex flex-wrap gap-2">
                     {starters.map((starter) => (

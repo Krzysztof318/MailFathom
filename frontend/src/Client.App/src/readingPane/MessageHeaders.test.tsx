@@ -4,9 +4,10 @@
 
 import { useEffect } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -61,13 +62,22 @@ function HidesThePanels({ hidden }: { readonly hidden: boolean }) {
     return null;
 }
 
-function drawing(written: Partial<MailMessageHeaders> = {}, panelsHidden = false): void {
+const conversation = '0198f4a1-0000-7000-8000-00000000b001';
+
+function drawing(
+    written: Partial<MailMessageHeaders> = {},
+    panelsHidden = false,
+    handToAgent: (handOver: AgentHandOver) => void = vi.fn(),
+    thread: string | null = conversation,
+): void {
     render(
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <HidesThePanels hidden={panelsHidden} />
-                <MessageHeaders headers={{ ...headers, ...written }} message={message} />
-            </WorkspaceProvider>
+            <AgentHandOverContext value={handToAgent}>
+                <WorkspaceProvider>
+                    <HidesThePanels hidden={panelsHidden} />
+                    <MessageHeaders headers={{ ...headers, ...written }} message={message} thread={thread} />
+                </WorkspaceProvider>
+            </AgentHandOverContext>
         </LocalizationProvider>,
     );
 }
@@ -251,17 +261,34 @@ describe('MessageHeaders at the width its column has', () => {
         expect(screen.getByRole('button', { name: 'Back to the list' })).toBeDefined();
     });
 
-    it('offers handing the conversation to the agent only where the head has a column to itself', () => {
+    it('offers handing the conversation to the agent everywhere but on a phone', () => {
+        const handToAgent = vi.fn();
         atWorkspaceWidth(true);
-        drawing();
+        drawing({}, false, handToAgent);
 
-        expect(screen.getByText('Ask')).toBeDefined();
+        fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+        expect(handToAgent).toHaveBeenCalledWith({
+            scope: { kind: 'thread', subject: conversation },
+            title: 'Quarterly invoice',
+        });
 
         cleanup();
         atWorkspaceWidth(false);
         drawing();
 
         expect(screen.queryByText('Ask')).toBeNull();
+    });
+
+    // A message the deployment placed in no conversation has nothing the conversation routes accept as a subject, so
+    // the head offers no way to the agent rather than a hand-over naming nothing.
+    it('offers no way to the agent for a message that belongs to no conversation', () => {
+        const handToAgent = vi.fn();
+        atWorkspaceWidth(true);
+        drawing({}, false, handToAgent, null);
+
+        expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+        expect(handToAgent).not.toHaveBeenCalled();
     });
 
     it('offers the address details from the sender line itself, and names what pressing it does either way', () => {

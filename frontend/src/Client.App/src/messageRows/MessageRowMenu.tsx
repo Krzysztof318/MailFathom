@@ -11,6 +11,7 @@ import { useMailboxActs, type ActedMessage, type MailboxActs } from '../mailboxA
 import type { Translate } from '../localization/useLocalization';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking, type ReadMarking } from '../readMarking/useReadMarking';
+import { useAgentHandOver } from '../routing/agentHandOver';
 
 // What a message row offers, which is the design project's own menu for it: picking messages out, answering the
 // message, and the five acts that change the mailbox it is in. It is this row's items and nothing else — where the
@@ -24,8 +25,11 @@ import { useReadMarking, type ReadMarking } from '../readMarking/useReadMarking'
 // **An item the client cannot yet perform is left out rather than drawn inert.** That is the opposite of what a strip
 // does, and deliberately: a strip is a fixed row whose controls would otherwise appear and disappear under a reader's
 // cursor, while a menu is read top to bottom in the moment it opens, and a column of sentences nobody can act on is
-// not a menu. *Ask the agent*, which the design draws second, is out for the same reason and arrives with the intent
-// field.
+// not a menu.
+//
+// ***Ask the agent* hands the conversation this message belongs to over to the agent**, second as the design draws it,
+// and only where there is both an agent to reach and a conversation to name: a message the deployment has not placed
+// in one has nothing the question could be scoped to.
 //
 // **The two acts that stand behind a question are asked outside this menu**, because the question outlives it: the
 // menu is gone the moment an item is chosen, and a dialog inside it would go with it.
@@ -70,6 +74,18 @@ export function MessageRowMenu({
     const acts = useMailboxActs();
     const marking = useReadMarking();
     const composing = useComposing();
+    const handToAgent = useAgentHandOver();
+    const thread = email.threadId;
+
+    const askAgent =
+        handToAgent === null || thread === null
+            ? null
+            : () => {
+                  handToAgent({
+                      scope: { kind: 'thread', subject: thread },
+                      title: email.subject ?? translate('list.noSubject'),
+                  });
+              };
 
     return (
         <ContextMenu
@@ -83,6 +99,7 @@ export function MessageRowMenu({
                 composing,
                 translate,
                 onSelect,
+                askAgent,
                 onAsk,
                 onCheckReadings,
             })}
@@ -100,6 +117,7 @@ function rowItems({
     composing,
     translate,
     onSelect,
+    askAgent,
     onAsk,
     onCheckReadings,
 }: {
@@ -110,6 +128,7 @@ function rowItems({
     readonly composing: Composing;
     readonly translate: Translate;
     readonly onSelect: () => void;
+    readonly askAgent: (() => void) | null;
     readonly onAsk: (act: ActAsked, messages: readonly ActedMessage[]) => void;
     readonly onCheckReadings: (() => void) | undefined;
 }): readonly ContextMenuItem[] {
@@ -165,8 +184,12 @@ function rowItems({
             ? []
             : [{ icon: 'auto_awesome', label: translate('reading.check'), choose: onCheckReadings }];
 
+    const asking: readonly ContextMenuItem[] =
+        askAgent === null ? [] : [{ icon: 'auto_awesome', label: translate('agent.askAgent'), choose: askAgent }];
+
     return [
         { icon: 'check_box', label: translate('mail.selectMessages'), choose: onSelect },
+        ...asking,
         ...answering,
         ...mailbox,
         ...readings,

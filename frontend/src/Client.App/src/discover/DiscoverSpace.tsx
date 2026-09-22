@@ -15,9 +15,11 @@ import { EvidenceInspector } from '../answerCanvas/EvidenceInspector';
 import { RunStatus } from '../answerCanvas/RunStatus';
 import { useFollowedRun } from '../answerCanvas/useFollowedRun';
 import { useRunStopping } from '../answerCanvas/useRunStopping';
+import { Control } from '../controls/Control';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useAgentHandOver } from '../routing/agentHandOver';
 import { askScopeInForce, withAsked, type AskedQuestion } from '../workspace/askScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { DiscoverIdle } from './DiscoverIdle';
@@ -36,8 +38,12 @@ import { useStartedRun } from './useStartedRun';
 // finished before anybody looked draws in full, and a deployment serving no signal channel costs the follower's
 // interval rather than the answer.
 //
-// **What the design draws and this does not, it does not draw inert.** *Continue with the agent* and *Hand to the
-// agent* wait for the Agent space to exist (#2088) and *Save as Case* for a Case (#2087); the idle state's morning
+// **An answer is carried on in the Agent space.** *Continue with the agent* stands in the head while a run exists and
+// *Hand to the agent* under an answer that finished, and both hand the run over — so the conversation they open asks
+// its next question about this answer rather than about the whole mailbox.
+//
+// **What the design draws and this does not, it does not draw inert.** *Save as Case* waits for a Case (#2087); the
+// idle state's morning
 // briefing and its *needs you today* list are derived before anybody asks, which #1174 defers as a question about
 // unattended spend that nothing has settled. Each is left out rather than drawn as a control leading nowhere.
 
@@ -105,6 +111,19 @@ export function DiscoverSpace({
 
     const source = checking === null ? null : (answer.sources.get(checking) ?? null);
 
+    const handToAgent = useAgentHandOver();
+    const run = started.run;
+    const handRunOver =
+        handToAgent === null || run === null || asked === null
+            ? null
+            : () => {
+                  handToAgent({ scope: { kind: 'discoveryRun', subject: run }, title: asked.question });
+              };
+
+    // Offered under an answer once it is whole, which is where the design puts it: a run still composing, or one that
+    // could not be read, has nothing yet worth carrying anywhere.
+    const answered = !answer.running && answer.failure === null && answer.blocks.length > 0;
+
     function ask(question: string): void {
         revise({
             question,
@@ -126,7 +145,16 @@ export function DiscoverSpace({
                 {status}
 
                 {asked === null ? null : (
-                    <span className="ms-auto">
+                    <span className="ms-auto flex items-center gap-2.25">
+                        {handRunOver === null ? null : (
+                            <Control
+                                label={translate('discover.continueWithAgent')}
+                                icon="auto_awesome"
+                                shape="primary"
+                                onPress={handRunOver}
+                            />
+                        )}
+
                         <SecondaryButton label={translate('discover.newQuestion')} onActivate={askSomethingElse} />
                     </span>
                 )}
@@ -170,6 +198,25 @@ export function DiscoverSpace({
                                 />
                             }
                         />
+
+                        {handRunOver !== null && answered ? (
+                            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent-line bg-accent-soft px-4 py-3.25">
+                                <span className="rounded-xs bg-accent px-1.75 py-0.75 text-2xs tracking-wide text-on-accent">
+                                    {translate('ai.badge')}
+                                </span>
+
+                                <p className="text-md text-pretty text-text-soft">
+                                    {translate('discover.handToAgentPrompt')}
+                                </p>
+
+                                <Control
+                                    label={translate('discover.handToAgent')}
+                                    shape="primary"
+                                    className="ms-auto"
+                                    onPress={handRunOver}
+                                />
+                            </div>
+                        ) : null}
                     </div>
                 )}
             </div>

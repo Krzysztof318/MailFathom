@@ -11,6 +11,8 @@ import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
 import { flagActFor, refusalSaid, standsInTheWay } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
+import { useAgentHandOver, type AgentHandOver } from '../routing/agentHandOver';
+import { useWideWorkspace } from '../shell/useWideWorkspace';
 
 // What stands at the end of the head of a message or a conversation, beside its subject: handing the thread to the
 // agent, and the three things the design project offers to do with it from there. One component because two heads
@@ -19,9 +21,9 @@ import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs
 //
 // The design draws the three as words alone wherever the head has a column to itself, and as symbols alone where the
 // column is the whole screen and the head is one compact bar over the message. Asking the agent is drawn on the accent
-// as a pill, and only where the head is not that compact bar: on a phone the design moves it into the row of the
-// thread's own state, which is the AI enrichment the client does not draw yet — so that one is still a control the
-// product will have, inert until it does.
+// as a pill everywhere but on a phone, the compact bar of a one-pane window wider than one included: on a phone the
+// design moves it into the row of the thread's own state, and a width between the two would otherwise have neither. It is drawn only where there is an agent to reach and a conversation to hand over, which a
+// message the deployment has not placed in one does not have.
 //
 // The other three act on the message the head is about, and each goes the way every other surface already goes: an
 // answer is `useComposing`'s, exactly as the toolbar's three answers and a row's own menu are, and the flag is a
@@ -39,6 +41,7 @@ import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs
 export function HeadActs({
     compact,
     message,
+    thread,
 }: {
     readonly compact: boolean;
 
@@ -50,9 +53,14 @@ export function HeadActs({
      * the same one. An act over a whole conversation is a screen of its own and is not what this draws.
      */
     readonly message: ActedMessage | null;
+
+    /** The conversation the head stands over, as it is handed to the agent, or `null` where there is none to hand. */
+    readonly thread: AgentHandOver | null;
 }) {
     const { translate } = useLocalization();
+    const wideWorkspace = useWideWorkspace();
     const acts = useMailboxActs();
+    const handToAgent = useAgentHandOver();
 
     // Read rather than required, for the reason `mailSpace/NothingOpen.tsx` reads it that way: a head is drawn in
     // surfaces a test mounts on their own, and writing is offered by a deployment rather than by this component.
@@ -102,12 +110,15 @@ export function HeadActs({
 
     return (
         <div className="ms-auto flex shrink-0 items-center gap-2">
-            {compact ? null : (
-                <PlannedControl
+            {!wideWorkspace || handToAgent === null || thread === null ? null : (
+                <Control
                     label={translate('message.ask')}
+                    hint={translate('message.askTitle')}
                     icon="auto_awesome"
                     shape="accentPill"
-                    why={translate('control.notBuiltYet', { control: translate('message.askTitle') })}
+                    onPress={() => {
+                        handToAgent(thread);
+                    }}
                 />
             )}
 

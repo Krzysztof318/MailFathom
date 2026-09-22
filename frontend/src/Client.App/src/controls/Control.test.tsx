@@ -47,6 +47,18 @@ describe('Control', () => {
         expect(screen.getByRole('button', { name: 'New message' }).hasAttribute('aria-pressed')).toBe(false);
     });
 
+    // A control whose words are shorter than what it does says the rest on hovering, and every other one says its own
+    // name there — so a hint is an addition to the name rather than a replacement for it.
+    it('says what it is for on hovering, which is its own name where nothing else was given', () => {
+        render(<Control label="Ask" hint="Ask the agent about this conversation" onPress={() => undefined} />);
+        render(<Control label="New message" onPress={() => undefined} />);
+
+        expect(screen.getByRole('button', { name: 'Ask' }).getAttribute('title')).toBe(
+            'Ask the agent about this conversation',
+        );
+        expect(screen.getByRole('button', { name: 'New message' }).getAttribute('title')).toBe('New message');
+    });
+
     it('does what it is for when it is pressed, which is what makes it not a planned one', () => {
         const pressed = vi.fn();
 

@@ -354,6 +354,23 @@ describe('App', () => {
         expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
+    // Every entry the other spaces draw hands over the same way, and the frame is what carries the hand-over across:
+    // it holds what was handed, moves to the Agent, and the Agent states it. The entries themselves are proven where
+    // they are drawn; what only this file can prove is that pressing one arrives somewhere with the context on it.
+    it('moves to the agent with what a space handed over, and says what it is about', async () => {
+        renderApp(servedFrom, heldSession, deploymentDrawingAConversation());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+
+        expect(await screen.findByRole('main', { name: 'Agent' })).toBeDefined();
+        expect(screen.getByText('Context: thread “Quarterly invoice”')).toBeDefined();
+    });
+
     it('shows the space whose link was activated, and marks it as the current one', async () => {
         renderApp();
         await screen.findByRole('heading', { name: 'Discover', level: 1 });

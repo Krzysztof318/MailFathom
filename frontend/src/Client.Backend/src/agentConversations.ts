@@ -195,6 +195,7 @@ export function readAgentConversation(
  *
  * @param conversationId The conversation, which the client names itself when it starts one.
  * @param messageId The question's own identifier, so a retry of the same post is the same question.
+ * @param scope What the question is about, where it was carried in from a screen, and `null` for one narrowing nothing.
  * @returns The answer it opened, or why it was not asked.
  */
 export function askAgent(
@@ -203,9 +204,15 @@ export function askAgent(
     conversationId: string,
     messageId: string,
     text: string,
+    scope: AgentMessageScope | null = null,
 ): Promise<ClientResult<AgentMessagePosted>> {
     return spanned('POST /agent/conversations/{conversationId}/messages', () =>
-        posted(session, transport, `${agentConversationRoute(conversationId)}/messages`, { messageId, text }),
+        posted(
+            session,
+            transport,
+            `${agentConversationRoute(conversationId)}/messages`,
+            scope === null ? { messageId, text } : { messageId, text, scope: wireScopeOf(scope) },
+        ),
     );
 }
 
@@ -267,7 +274,7 @@ async function posted(
     session: ClientSession,
     transport: MailFathomTransport,
     route: string,
-    message: { readonly messageId: string; readonly text: string },
+    message: { readonly messageId: string; readonly text: string; readonly scope?: WireScope },
 ): Promise<ClientResult<AgentMessagePosted>> {
     const response = await send(transport, {
         method: 'POST',
@@ -480,6 +487,23 @@ function parseEntry(value: unknown): AgentConversationEntry | null {
         default:
             return typeof entry['entry'] === 'string' ? { kind: 'other', sequence } : null;
     }
+}
+
+// The service spells a scope's kind as its own enumeration member's name, which is the reverse of the table above.
+const wireScopeKinds: Readonly<Record<AgentMessageScope['kind'], string>> = {
+    mailbox: 'Mailbox',
+    thread: 'Thread',
+    calendarEvent: 'CalendarEvent',
+    discoveryRun: 'DiscoveryRun',
+};
+
+interface WireScope {
+    readonly kind: string;
+    readonly subject: string | null;
+}
+
+function wireScopeOf(scope: AgentMessageScope): WireScope {
+    return { kind: wireScopeKinds[scope.kind], subject: scope.subject };
 }
 
 /** The scope a question carries, `null` where it carries none, and `undefined` where what arrived is not one. */
