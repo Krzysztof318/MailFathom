@@ -187,6 +187,31 @@ public sealed class MailboxMutationConvergerTests
         Assert.NotEqual(MailboxMutationStage.Completed, context.Store.RecordOf(carried).Stage);
     }
 
+    /// <summary>The phase decides nothing about an erasure, so a record opened as one is still run after the account has gone back to mirroring its source.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AMirroredAccountsDueErasure_ErasesTheMessageWithoutOpeningAWriteSession()
+    {
+        // Arrange
+        var states = new InMemoryLocalEmailStateStore(Account);
+        var context = new ConvergerContext(states: states);
+        var request = await context.LeaveOutstandingAsync(DeleteRequest(uid: 57U), record => record, erasesLocalCopy: true);
+        states.Store(
+            request.StoredEmailId,
+            new LocalEmailState(InboxFolder, HoldsSourceOccurrence: true, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([])));
+
+        // Act
+        var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, report.CompletedCount);
+        Assert.Equal(request.StoredEmailId, Assert.Single(states.Erased));
+        await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderResolution>(),
+            Arg.Any<MailTransportSecurityPolicy>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>An erasure a person asked for is run whichever phase the account has since reached, so a restore never appends a message back that was erased.</summary>
     [Fact]
     public async Task ConvergeAsync_ARestoringAccountsDueErasure_ErasesTheMessageWithoutOpeningAWriteSession()

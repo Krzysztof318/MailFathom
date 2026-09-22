@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -302,6 +303,55 @@ public sealed class MailDeletionRecorderTests
     }
 
     /// <summary>
+    /// A restoring account's delete is applied at once and still owes the source a record, so the account is woken for
+    /// it exactly as a mirrored account's delete wakes it — otherwise the source waits out the ordinary schedule for a
+    /// change the person has already seen take effect.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteOnARestoringAccountCarryingNoWindow_AppliesItAndBringsTheRunForward()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.RestoringRecorder(runSignal);
+
+        // Act
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
+
+        Assert.Equal(MailDeletionOutcome.Applied, result.Outcome);
+        Assert.NotNull(result.RecordId);
+        Assert.True(waiting.Token.IsCancellationRequested);
+    }
+
+    /// <summary>The window is the person's way back, so a restoring account's delete waits it out before anything wakes the run for the record it left.</summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteOnARestoringAccountCarryingAWindow_AppliesItAndLeavesTheAccountAsleep()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.RestoringRecorder(runSignal);
+
+        // Act
+        var result = await recorder.RecordAsync(
+            LocalEmail,
+            Requester,
+            TimeSpan.FromSeconds(15),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
+
+        Assert.Equal(MailDeletionOutcome.Applied, result.Outcome);
+        Assert.NotNull(result.RecordId);
+        Assert.False(waiting.Token.IsCancellationRequested);
+        Assert.Equal(
+            RecordedAt + TimeSpan.FromSeconds(15),
+            this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+    }
+
+    /// <summary>
     /// The grant is asked before the window is measured, as a withdrawal asks it before it measures a batch, so a caller
     /// holding nothing is refused as unauthorized whatever else is wrong with what it sent.
     /// </summary>
@@ -328,7 +378,9 @@ public sealed class MailDeletionRecorderTests
     private MailDeletionRecorder Recorder(
         AuthoredMailboxTarget? target,
         AccessAuthorization? authorization = null,
-        MailAccountRunSignal? runSignal = null)
+        MailAccountRunSignal? runSignal = null,
+        InMemoryLocalMailFolderStore? localFolders = null,
+        InMemoryLocalEmailStateStore? states = null)
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDelete);
@@ -353,13 +405,36 @@ public sealed class MailDeletionRecorderTests
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             this.dispositions,
-            MailboxChangeSubmissions.Over(this.records),
+            MailboxChangeSubmissions.Over(this.records, localFolders, states),
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider(RecordedAt)),
             runSignal ?? new MailAccountRunSignal(),
             new FakeTimeProvider(RecordedAt));
+    }
+
+    /// <summary>Arranges a restoring account whose message still stands on the source and is not yet in the local trash.</summary>
+    private MailDeletionRecorder RestoringRecorder(MailAccountRunSignal runSignal)
+    {
+        var target = TargetIn(MailFolderAlias.Create("INBOX"));
+        var states = new InMemoryLocalEmailStateStore(Account);
+
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                target.Folder,
+                HoldsSourceOccurrence: true,
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+
+        return this.Recorder(
+            target,
+            runSignal: runSignal,
+            localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Restoring),
+            states: states);
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)

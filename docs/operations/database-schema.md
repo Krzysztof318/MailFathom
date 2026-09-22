@@ -357,6 +357,14 @@ be kept — is erased rather than left alone if an older replica takes it in han
 account that is held or being restored is exposed to it, and only for as long as two builds are running. Finish the
 rollout before restoring a mailbox, or leave the account held until it has finished.
 
+**It backfills nothing, and that is the right answer rather than an omission.** A row written by a release older than
+this one is a change a server is owed, because the local commit that opens an erasure record has never shipped: it
+arrived after the last release and no deployed build writes one. So there is no row a backfill would be correcting, and
+the only predicate one could use — every outstanding delete of a held account, which is what the previous build erased —
+would mark the deletes an account inherited from before its hold as erasures and destroy exactly the local copies their
+own `LocalDisposition` asked to keep. That is the defect the column exists to remove, so the migration leaves the
+default alone.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The

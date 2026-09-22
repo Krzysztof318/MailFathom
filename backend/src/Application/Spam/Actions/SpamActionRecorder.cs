@@ -20,7 +20,9 @@ namespace MailFathom.Application.Spam.Actions;
 /// session, or touches the local row: it opens a durable record per change, and the account's own convergence pass
 /// carries each one exactly as it carries a change somebody authored by hand. The local folder and flags change later,
 /// because synchronization observed the server — never because this decided they should. A held account has no server
-/// to observe, so there the flag and the filing are committed to the stored row instead, and no record is opened.
+/// to observe, so there the flag and the filing are committed to the stored row instead, and no record is opened. An
+/// account being restored to its source does both: it commits the same way and, where the message still stands on the
+/// source, opens the records the convergence pass carries there, which the answer names beside the change.
 /// </para>
 /// <para>
 /// Two rules keep filing from turning into an argument with the mailbox's user, and they are the reason this type is
@@ -276,7 +278,7 @@ public sealed class SpamActionRecorder
     }
 
     /// <summary>Opens the records, in the order the changes have to be applied, inside one commit.</summary>
-    /// <remarks>On a held account the same submissions commit the changes instead, and clients are told only once the commit is durable.</remarks>
+    /// <remarks>On a held account the same submissions commit the changes instead, and clients are told only once the commit is durable. A restoring account commits in the same way and still opens the records its source is owed, so the answer is applied and carries them both.</remarks>
     private async Task<SpamActionResult> OpenRecordsAsync(
         SpamActionOccurrence occurrence,
         MailboxMutationRequester requester,

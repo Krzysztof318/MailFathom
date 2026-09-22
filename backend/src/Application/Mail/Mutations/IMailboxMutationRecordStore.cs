@@ -30,7 +30,7 @@ public interface IMailboxMutationRecordStore
     /// <param name="session">The session the write joins.</param>
     /// <param name="request">The change that was asked for.</param>
     /// <param name="heldUntil">The instant before which no convergence pass may take the record in hand, or <see langword="null" /> where it may be taken at once.</param>
-    /// <param name="erasesLocalCopy">Whether the record is a held account's erasure of its own copy rather than a change a mail server is to be told about.</param>
+    /// <param name="erasesLocalCopy">Whether the record erases MailFathom's own copy — the second delete of a message already in the local trash, on an account holding or restoring its mailbox — rather than naming a change a mail server is to be told about.</param>
     /// <param name="cancellationToken">Cancels the write or the read that follows a losing insert.</param>
     /// <returns>The record for this request, whether this call created it or another one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>

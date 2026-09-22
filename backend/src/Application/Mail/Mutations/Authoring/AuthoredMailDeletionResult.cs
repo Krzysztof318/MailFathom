@@ -27,7 +27,7 @@ public enum MailDeletionOutcome
     AccountNoLongerConfigured = 2,
 
     /// <summary>The account holds its mailbox, and the message was moved into its local trash; a restoring one also opened the delete its source is owed.</summary>
-    /// <remarks>A delete of a message already in a held account's trash is an erasure instead, which is <see cref="Recorded" />: its record is what holds the cascade for the grace window.</remarks>
+    /// <remarks>A delete of a message already in the local trash of an account holding or restoring its mailbox is an erasure instead, which is <see cref="Recorded" />: its record is what holds the cascade for the grace window, and the restore never appends back what a person erased.</remarks>
     Applied = 3,
 }
 

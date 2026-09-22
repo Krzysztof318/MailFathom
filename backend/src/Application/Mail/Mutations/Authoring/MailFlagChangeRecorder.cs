@@ -97,7 +97,9 @@ public sealed class MailFlagChangeRecorder
     /// a caller that starred a message, unstarred it, and starred it again has made three requests and means all three.
     /// A second call is a retry only when it asks for what the first asked for, which is why the terms are compared
     /// rather than assumed from the identity. All of this is the record's: a held account applies the change and keeps no
-    /// record for a repeat to be matched against, so there every call applies the change it names.
+    /// record for a repeat to be matched against, so there every call applies the change it names. A restoring account is
+    /// the case where both hold at once — it applies the change and opens the record its source is owed — so a repeat
+    /// there is matched against that record and refused where it asks for another value, exactly as a mirrored one is.
     /// </remarks>
     public async Task<AuthoredMailFlagChangeResult> RecordAsync(
         AuthoredMailFlagChange change,
