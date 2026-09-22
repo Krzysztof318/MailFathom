@@ -48,6 +48,18 @@ function nothingDrawn(state: AnswerBlockState): state is NothingDrawn {
 }
 
 /**
+ * How a card stands against the thread: settled like any block, lifted while it waits on somebody's decision, and
+ * outlined only once it was declined, so a turned-down proposal reads as what the history kept rather than as an answer.
+ */
+export type BlockCardTone = 'settled' | 'awaiting' | 'declined';
+
+const tones: Readonly<Record<BlockCardTone, string>> = {
+    settled: 'border-line bg-panel',
+    awaiting: 'border-accent-line bg-accent-soft',
+    declined: 'border-dashed border-line-strong bg-transparent',
+};
+
+/**
  * One block of an answer, in whichever of its six states it is.
  *
  * @param label What this block is called, already in the reader's language.
@@ -56,6 +68,10 @@ function nothingDrawn(state: AnswerBlockState): state is NothingDrawn {
  * @param note What the failing or empty state says, where the caller knows more about it than the state does, and
  * nothing where the state's own sentence is the whole of it.
  * @param onRetry What the way out of a failure does, and nothing where this block has none to offer.
+ * @param retryName What the way out of a failure is called to a screen reader, where the block can name what it retries.
+ * @param emptyIcon What an empty block draws above its sentence, where the block's own type has a better one.
+ * @param tone How the card stands against the thread, which only a proposal changes.
+ * @param chip What the block says about where it stands, drawn at the end of the line its name is on.
  * @param children The body, which is drawn for a block that is ready and for one that is partly so.
  */
 export function AnswerBlockCard({
@@ -64,6 +80,10 @@ export function AnswerBlockCard({
     state,
     note,
     onRetry,
+    retryName,
+    emptyIcon,
+    tone = 'settled',
+    chip,
     children,
 }: {
     readonly label: string;
@@ -71,6 +91,10 @@ export function AnswerBlockCard({
     readonly state: AnswerBlockState;
     readonly note?: string | undefined;
     readonly onRetry?: (() => void) | undefined;
+    readonly retryName?: string | undefined;
+    readonly emptyIcon?: IconName | undefined;
+    readonly tone?: BlockCardTone;
+    readonly chip?: ReactNode;
     readonly children?: ReactNode;
 }) {
     const { translate } = useLocalization();
@@ -93,7 +117,7 @@ export function AnswerBlockCard({
     }, [offersAWayOut]);
 
     return (
-        <BlockCard label={label} labelId={named} meta={meta} ref={region}>
+        <BlockCard chip={chip} label={label} labelId={named} meta={meta} ref={region} tone={tone}>
             {state === 'loading' ? (
                 <>
                     <p className="sr-only" role="status">
@@ -117,7 +141,7 @@ export function AnswerBlockCard({
                 <div className="flex flex-col items-center gap-1.75 px-2.5 py-5.5 text-center">
                     <Icon
                         className={`size-6.5 ${state === 'error' ? 'text-warning' : 'text-faint'}`}
-                        name={stateIcons[state]}
+                        name={state === 'empty' && emptyIcon !== undefined ? emptyIcon : stateIcons[state]}
                     />
 
                     <p className="max-w-95 text-sm text-text-soft text-pretty">
@@ -128,6 +152,7 @@ export function AnswerBlockCard({
                         <button
                             className="mt-0.5 rounded-md bg-accent px-3.5 py-1.75 text-sm font-medium text-on-accent transition hover:bg-accent-strong"
                             type="button"
+                            aria-label={retryName}
                             onClick={onRetry}
                         >
                             {translate('connection.retry')}
@@ -177,18 +202,22 @@ function BlockCard({
     labelId,
     meta,
     ref,
+    tone = 'settled',
+    chip,
     children,
 }: {
     readonly label: string;
     readonly labelId: string;
     readonly meta?: string | undefined;
     readonly ref?: RefObject<HTMLElement | null>;
+    readonly tone?: BlockCardTone;
+    readonly chip?: ReactNode;
     readonly children: ReactNode;
 }) {
     return (
         <article
             aria-labelledby={labelId}
-            className="flex flex-col gap-3 rounded-xl border border-line bg-panel px-4.5 py-4"
+            className={`flex flex-col gap-3 rounded-xl border px-4.5 py-4 ${tones[tone]}`}
             ref={ref}
             tabIndex={0}
         >
@@ -198,6 +227,8 @@ function BlockCard({
                 </h3>
 
                 {meta === undefined ? null : <p className="ms-auto text-xs whitespace-nowrap text-muted">{meta}</p>}
+
+                {chip}
             </div>
 
             {children}

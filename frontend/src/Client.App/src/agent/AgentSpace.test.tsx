@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
     ClientSession,
@@ -11,6 +11,8 @@ import type {
     RunFollowingSchedule,
 } from '@mailfathom/client-backend';
 import * as agent from '../../../../tests/fixtures/agent';
+import { newsletterId } from '../../../../tests/fixtures/messages';
+import type { ProposalLook } from '../answerCanvas/proposalAnswering';
 import { LocalizationProvider } from '../localization/Localization';
 import type { AgentHandOver } from '../routing/agentHandOver';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -68,6 +70,10 @@ function deploymentAnswering(posting: { readonly status: number; readonly body: 
                 });
             }
 
+            if (request.method === 'PUT' && request.path.includes('/proposals/')) {
+                return Promise.resolve({ status: 200, body: JSON.stringify({ sequence: 11 }), headers: {} });
+            }
+
             if (request.method === 'DELETE' || request.method === 'PUT') {
                 return Promise.resolve({ status: 204, body: '', headers: {} });
             }
@@ -84,7 +90,11 @@ function deploymentAnswering(posting: { readonly status: number; readonly body: 
     };
 }
 
-function drawn(transport: MailFathomTransport, handOver: AgentHandOver | null = null) {
+function drawn(
+    transport: MailFathomTransport,
+    handOver: AgentHandOver | null = null,
+    onLook: ((where: ProposalLook) => void) | null = null,
+) {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
@@ -94,6 +104,7 @@ function drawn(transport: MailFathomTransport, handOver: AgentHandOver | null = 
                     status={null}
                     handOver={handOver}
                     schedule={neverPolls}
+                    onLook={onLook}
                 />
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -658,5 +669,84 @@ describe('AgentSpace', () => {
         expect((await screen.findByRole('alert')).textContent).toBe(
             'The deployment could not be reached, so the archive did not change. Try again.',
         );
+    });
+
+    describe('what the agent proposed', () => {
+        const proposals = `${conversations}/${agent.answeredConversationId}/proposals`;
+
+        it('accepts a proposal through its route and reads the conversation again for what that did', async () => {
+            const { transport, asked } = deploymentAnswering();
+            screenOf(transport);
+
+            await opened('How many bays were confirmed');
+            fireEvent.click(
+                await screen.findByRole('button', { name: /^Add to calendar: “Walk through the four bays”/ }),
+            );
+
+            await waitFor(() => {
+                expect(asked.filter((request) => request.method === 'PUT')).toEqual([
+                    expect.objectContaining({ path: `${proposals}/6`, body: JSON.stringify({ decision: 'accepted' }) }),
+                ]);
+            });
+
+            const answeredAt = asked.findIndex((request) => request.method === 'PUT');
+
+            await waitFor(() => {
+                expect(
+                    asked
+                        .slice(answeredAt + 1)
+                        .some((request) => request.path.startsWith(`${conversations}/${agent.answeredConversationId}`)),
+                ).toBe(true);
+            });
+        });
+
+        it('asks for another time by declining the proposal and saying so in the conversation', async () => {
+            const { transport, asked } = deploymentAnswering();
+            screenOf(transport);
+
+            await opened('How many bays were confirmed');
+            fireEvent.click(
+                await screen.findByRole('button', { name: 'Ask for another time for “Walk through the four bays”' }),
+            );
+
+            await waitFor(() => {
+                expect(asked.filter((request) => request.method === 'POST')).toHaveLength(1);
+            });
+
+            expect(asked.find((request) => request.method === 'PUT')).toMatchObject({
+                path: `${proposals}/6`,
+                body: JSON.stringify({ decision: 'declined' }),
+            });
+            expect(JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}')).toMatchObject({
+                text: 'Find another time for “Walk through the four bays”',
+            });
+        });
+
+        it('draws a proposal the record says was accepted as done, with nothing left to press', async () => {
+            screenOf(deploymentAnswering().transport);
+
+            await opened('How many bays were confirmed');
+
+            const task = await screen.findByRole('article', { name: 'Task proposal' });
+
+            expect(within(task).getByText('done')).toBeDefined();
+            expect(within(task).getByText('Added to tasks')).toBeDefined();
+            expect(within(task).queryByRole('button', { name: /^Add the task/ })).toBeNull();
+        });
+
+        it('hands what a proposal points at to the frame, which opens it', async () => {
+            const onLook = vi.fn<(where: ProposalLook) => void>();
+            render(drawn(deploymentAnswering().transport, null, onLook));
+
+            await opened('How many bays were confirmed');
+
+            const event = await screen.findByRole('article', { name: 'Event proposal' });
+            const task = screen.getByRole('article', { name: 'Task proposal' });
+
+            fireEvent.click(within(event).getByRole('button', { name: /^Open the calendar —/ }));
+            fireEvent.click(within(task).getByRole('button', { name: /^Open the thread —/ }));
+
+            expect(onLook.mock.calls).toEqual([[{ kind: 'calendar' }], [{ kind: 'thread', email: newsletterId }]]);
+        });
     });
 });

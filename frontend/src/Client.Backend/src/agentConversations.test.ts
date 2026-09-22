@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     agentConversationRoute,
+    answerAgentProposal,
     archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
@@ -519,6 +520,61 @@ describe('stopAgentRun', () => {
     });
 });
 
+describe('answerAgentProposal', () => {
+    it('puts the decision at the place the proposal was written and answers with where it was recorded', async () => {
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ sequence: 9 }) });
+
+        const answered = await answerAgentProposal(session, transport, conversation, 7, 'declined');
+
+        expect(answered).toEqual({ outcome: 'read', value: 9 });
+        expect(requests[0]).toMatchObject({
+            method: 'PUT',
+            path: `${base}/${conversation}/proposals/7`,
+            body: JSON.stringify({ decision: 'declined' }),
+        });
+    });
+
+    it.each([404, 409])('reads a proposal no longer answerable that way, a %s, as missing', async (status) => {
+        const answered = await answerAgentProposal(
+            session,
+            answering({ status, body: '' }),
+            conversation,
+            7,
+            'accepted',
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'missing', status } });
+    });
+
+    it.each([
+        ['names no place', '{}'],
+        ['names a place that is not a positive whole number', JSON.stringify({ sequence: 0 })],
+        ['is not a document', 'accepted'],
+    ])('refuses an answer that %s', async (_, body) => {
+        const answered = await answerAgentProposal(
+            session,
+            answering({ status: 200, body }),
+            conversation,
+            7,
+            'accepted',
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
+    it('reads a refused grant as the reason it was not answered', async () => {
+        const answered = await answerAgentProposal(
+            session,
+            answering({ status: 403, body: '' }),
+            conversation,
+            7,
+            'accepted',
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unauthorized' } });
+    });
+});
+
 describe('every Agent operation', () => {
     const unreachable: MailFathomTransport = () => Promise.reject(new Error('down'));
 
@@ -530,6 +586,7 @@ describe('every Agent operation', () => {
         ['stopping', () => stopAgentRun(session, unreachable, conversation, question)],
         ['archiving', () => archiveAgentConversation(session, unreachable, conversation)],
         ['restoring', () => restoreAgentConversation(session, unreachable, conversation)],
+        ['answering a proposal', () => answerAgentProposal(session, unreachable, conversation, 7, 'accepted')],
         ['deleting', () => deleteAgentConversation(session, unreachable, conversation)],
     ])('reports a deployment it could not reach while %s', async (_, operation) => {
         expect(await operation()).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });

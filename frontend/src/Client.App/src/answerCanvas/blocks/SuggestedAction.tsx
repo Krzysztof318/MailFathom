@@ -5,16 +5,18 @@
 import type { AnswerBlock, SuggestedActionImpact } from '@mailfathom/client-backend';
 import { Icon } from '../../controls/Icon';
 import { useLocalization } from '../../localization/useLocalization';
-import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
+import { UnrecognisedAnswerBlock } from '../AnswerBlockCard';
+import { ProposalCard, type ProposalControl } from '../ProposalCard';
+import { useProposalAnswering } from '../proposalAnswering';
 import { Citation } from './Citation';
 import { actionImpacts, suggestedActions, supportVerdicts } from './blockWording';
 
 // A next step somebody may take, and the block where the autonomy boundary this product draws becomes visible. It
 // offers rather than reports, and three things follow.
 //
-// **Nothing here performs anything.** The block draws the step, why it is suggested, and what taking it would change;
-// the control that takes it belongs to the surface that governs that step and carries its own permission. A suggestion
-// rendered as a button that just does it is the one way this block can be badly wrong.
+// **Nothing here performs anything on its own.** The block draws the step, why it is suggested, and what taking it would
+// change. Read-only, as Discover draws it, that is all; in a conversation the same card offers the step and *Decline*,
+// and taking it is a request to the service that decides it rather than an act this client performs.
 //
 // **What it would change is stated before anybody agrees**, as the impact's own sentence rather than the member's name:
 // opening a thread costs nothing, filing a message is reversible by whoever filed it, and a message that has left the
@@ -30,11 +32,11 @@ import { actionImpacts, suggestedActions, supportVerdicts } from './blockWording
 // The sentences are `confirmation/ProposedAction.tsx`'s, because this says the same four things that component says and
 // a second wording of *why*, *what would change*, and *nothing has happened yet* is how one product comes to describe
 // its own autonomy boundary two ways. That component itself is not what is drawn here: it performs, offering a control
-// that agrees and the confirmation behind it, and a block of a Discover answer has no act to offer — the conversation
-// surface is where the same suggestion gains controls, which is what the design project draws as its other half.
+// that agrees and the confirmation behind it, while this one only asks the service to take a step it already proposed.
 
 export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
     const { translate } = useLocalization();
+    const answering = useProposalAnswering();
 
     if (block.type !== 'suggestedAction') {
         return <UnrecognisedAnswerBlock named={block.named} />;
@@ -44,16 +46,46 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
     const verdict = supportVerdicts[evidence.support];
     const step = suggestedActions[suggestion.action];
     const confirmationRequired = mustBeConfirmed(suggestion.impact, suggestion.requiresConfirmation);
+    const title = translate(step.label);
+    const waiting = answering === null || answering.phase === 'pending';
+
+    const controls: readonly ProposalControl[] =
+        answering === null
+            ? []
+            : [
+                  {
+                      said: translate('suggestedAction.take'),
+                      name: translate('suggestedAction.takeName', { title }),
+                      primary: true,
+                      run: () => {
+                          answering.answer('accepted');
+                      },
+                  },
+                  {
+                      said: translate('proposal.decline'),
+                      name: translate('suggestedAction.declineName', { title }),
+                      run: () => {
+                          answering.answer('declined');
+                      },
+                  },
+              ];
 
     return (
-        <AnswerBlockCard label={translate('suggestedAction.label')} state="ready">
+        <ProposalCard
+            citations={evidence.citations}
+            confirmationRequired={confirmationRequired}
+            controls={controls}
+            kind="suggestedAction"
+            label={translate('suggestedAction.label')}
+            title={title}
+        >
             <div className="flex flex-wrap items-start gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-deep">
                     <Icon className="size-4.5" name={step.icon} />
                 </span>
 
                 <div className="flex min-w-0 flex-col gap-1.25">
-                    <p className="text-sm font-semibold">{translate(step.label)}</p>
+                    <p className="text-sm font-semibold">{title}</p>
 
                     <p className="text-sm text-text-soft text-pretty">
                         {translate('proposal.reason', { reason: suggestion.reason })}
@@ -63,17 +95,10 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
                         {translate('proposal.impact', { impact: translate(actionImpacts[suggestion.impact]) })}
                     </p>
 
-                    {confirmationRequired ? (
+                    {confirmationRequired && waiting ? (
                         <p className="text-xs text-muted text-pretty">{translate('proposal.confirmed')}</p>
                     ) : null}
                 </div>
-
-                {confirmationRequired ? (
-                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2.25 py-0.5 text-2xs whitespace-nowrap text-warning-text workspace:ms-auto">
-                        <Icon className="size-3.25" name="gpp_maybe" />
-                        {translate('suggestedAction.needsConfirmation')}
-                    </span>
-                ) : null}
             </div>
 
             <p className="flex flex-wrap items-center gap-2">
@@ -88,9 +113,10 @@ export function SuggestedAction({ block }: { readonly block: AnswerBlock }) {
             </p>
 
             {/* Said where the suggestion is rather than once on the screen: what somebody needs to know is that this
-                card is a proposal, and a reader meets one card at a time. */}
-            <p className="text-xs text-faint text-pretty">{translate('proposal.offered')}</p>
-        </AnswerBlockCard>
+                card is a proposal, and a reader meets one card at a time. Once it is answered the phase says what
+                happened instead, and this would contradict it. */}
+            {waiting ? <p className="text-xs text-faint text-pretty">{translate('proposal.offered')}</p> : null}
+        </ProposalCard>
     );
 }
 

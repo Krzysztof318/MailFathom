@@ -202,7 +202,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// <para>
     /// An acceptance is what permits an act with a side effect, so two presses arriving together must produce one
     /// acceptance rather than two. A pending offer may be accepted or declined, an accepted one may go on to have
-    /// failed, and nothing else moves.
+    /// failed, a failed one may be accepted again, and nothing else moves.
     /// </para>
     /// <para>
     /// Where the offer stands is read under <see cref="HoldConversationStatement" /> rather than under this statement's
@@ -242,7 +242,8 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
               AND c."{AgentConversationEntity.VisibleEntryCountColumnName}" < @mostOrdinaryEntries
               AND s.offered
               AND ((s.stands IS NULL AND @state IN (@accepted, @declined))
-                   OR (s.stands = @accepted AND @state = @failed))
+                   OR (s.stands = @accepted AND @state = @failed)
+                   OR (s.stands = @failed AND @state = @accepted))
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
         )
         INSERT INTO "{AgentConversationEntryEntity.TableName}"

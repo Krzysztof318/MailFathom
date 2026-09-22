@@ -10,24 +10,28 @@ import {
     parseComposedDraft,
     parseConversationStanding,
     parseDeclaredSource,
+    parseEventProposal,
     parseEvidenceEntries,
     parseFactTableColumns,
     parseFactTableRows,
     parsePersonEntries,
     parseSuggestedAction,
     parseSynthesizedAnswer,
+    parseTaskProposal,
     parseTimelineEntries,
     type AttachmentEntry,
     type BlockEvidence,
     type ComposedDraft,
     type ConversationStanding,
     type DeclaredSource,
+    type EventProposal,
     type EvidenceEntry,
     type FactTableColumn,
     type FactTableRow,
     type PersonEntry,
     type SuggestedAction,
     type SynthesizedAnswer,
+    type TaskProposal,
     type TimelineEntry,
 } from './presentationBlocks';
 import type { RunTail } from './runFollowing';
@@ -69,8 +73,7 @@ export function discoveryRunRoute(runId: string): string {
  * The revision of the presentation plan this client was written against.
  *
  * A run whose plan states a higher revision is drawn as far as it can be and the reader is told so; a run stating this
- * one or lower carries no plan shape this client was not built for. A block type with no renderer here is named to the
- * reader at either revision, which is how revision 3's event and task proposals reach this build until they are drawn.
+ * one or lower carries no plan shape this client was not built for.
  */
 export const understoodPlanSchemaVersion = 3;
 
@@ -84,6 +87,8 @@ export const answerBlockTypes = [
     'threadState',
     'attachmentGallery',
     'draft',
+    'eventProposal',
+    'taskProposal',
     'suggestedAction',
 ] as const;
 
@@ -111,7 +116,7 @@ interface NamedBlock {
  *
  * Every type the catalogue carries is read in full here, so the last member is a type this contract does not carry at
  * all: a run written by a newer service. It arrives named and nothing more, which is the whole of what a reader is
- * owed — and it is the member that keeps one unfamiliar block from discarding the answer around it. A tenth type added
+ * owed — and it is the member that keeps one unfamiliar block from discarding the answer around it. A type added
  * to the catalogue and not read here would fail to compile in `parseBlock` rather than arriving as one of these.
  */
 export type AnswerBlock =
@@ -158,6 +163,16 @@ export type AnswerBlock =
           readonly type: 'draft';
           readonly evidence: BlockEvidence;
           readonly draft: ComposedDraft;
+      })
+    | (NamedBlock & {
+          readonly type: 'eventProposal';
+          readonly evidence: BlockEvidence;
+          readonly proposal: EventProposal;
+      })
+    | (NamedBlock & {
+          readonly type: 'taskProposal';
+          readonly evidence: BlockEvidence;
+          readonly proposal: TaskProposal;
       })
     | (NamedBlock & {
           readonly type: 'suggestedAction';
@@ -743,6 +758,20 @@ export function parseBlock(value: unknown): AnswerBlock | null {
             const draft = parseComposedDraft(record);
 
             return evidence === null || draft === null ? null : { type: named, named, evidence, draft };
+        }
+
+        case 'eventProposal': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const proposal = parseEventProposal(record);
+
+            return evidence === null || proposal === null ? null : { type: named, named, evidence, proposal };
+        }
+
+        case 'taskProposal': {
+            const evidence = parseBlockEvidence(record['evidence']);
+            const proposal = parseTaskProposal(record);
+
+            return evidence === null || proposal === null ? null : { type: named, named, evidence, proposal };
         }
 
         case 'suggestedAction': {

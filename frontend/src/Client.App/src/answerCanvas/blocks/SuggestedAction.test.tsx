@@ -2,9 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import type {
+    AgentProposalDecision,
     AnswerBlock,
     BlockEvidence,
     DeclaredSource,
@@ -13,6 +14,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
 import { AnswerSourcesContext } from '../answerSources';
+import { ProposalAnsweringContext, type ProposalAnswering, type ProposalPhase } from '../proposalAnswering';
 import { SuggestedAction } from './SuggestedAction';
 
 const addendum: DeclaredSource = {
@@ -46,7 +48,14 @@ function suggested(over: Partial<Suggestion> = {}): AnswerBlock {
     };
 }
 
-function renderSuggestion(block: AnswerBlock) {
+function inConversation(
+    phase: ProposalPhase,
+    answer: (decision: AgentProposalDecision) => void = () => undefined,
+): ProposalAnswering {
+    return { phase, answering: false, refused: null, answer, askAnotherTime: () => undefined, look: null };
+}
+
+function renderSuggestion(block: AnswerBlock, answering: ProposalAnswering | null = null) {
     const declared = new Map([[addendum.id, addendum]]);
 
     return render(
@@ -54,7 +63,9 @@ function renderSuggestion(block: AnswerBlock) {
             {/* A citation is given somewhere to follow to, as the canvas gives every block one: a chip with nowhere to
                 go says so in its own name, which is `Citation`'s behaviour rather than this block's. */}
             <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
-                <SuggestedAction block={block} />
+                <ProposalAnsweringContext value={answering}>
+                    <SuggestedAction block={block} />
+                </ProposalAnsweringContext>
             </AnswerSourcesContext>
         </LocalizationProvider>,
     );
@@ -126,5 +137,24 @@ describe('SuggestedAction', () => {
         renderSuggestion({ type: null, named: 'RiskScore' });
 
         expect(screen.getByText('type: RiskScore')).toBeDefined();
+    });
+
+    describe('in a conversation', () => {
+        it('takes the step or declines it, each named for the step', () => {
+            const answer = vi.fn<(decision: AgentProposalDecision) => void>();
+            renderSuggestion(suggested(), inConversation('pending', answer));
+
+            fireEvent.click(screen.getByRole('button', { name: 'Do it: Reply to this conversation' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Decline: Reply to this conversation' }));
+
+            expect(answer.mock.calls).toEqual([['accepted'], ['declined']]);
+        });
+
+        it('stops saying nothing has happened once the step was taken', () => {
+            renderSuggestion(suggested(), inConversation('accepted'));
+
+            expect(screen.getByText('Done')).toBeDefined();
+            expect(screen.queryByText('MailFathom suggests this. Nothing has happened yet.')).toBeNull();
+        });
     });
 });

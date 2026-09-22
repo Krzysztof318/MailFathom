@@ -644,6 +644,8 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var failedAfterDeclining = await Resolve(store, conversation, user, declinedAt, AgentProposalState.Failed, cancellationToken);
             var accepted = await Resolve(store, conversation, user, acceptedAt, AgentProposalState.Accepted, cancellationToken);
             var failedAfterAccepting = await Resolve(store, conversation, user, acceptedAt, AgentProposalState.Failed, cancellationToken);
+            var acceptedAgainAfterFailing = await Resolve(store, conversation, user, acceptedAt, AgentProposalState.Accepted, cancellationToken);
+            var declinedAfterAcceptingAgain = await Resolve(store, conversation, user, acceptedAt, AgentProposalState.Declined, cancellationToken);
 
             // The offer this one names is still pending, so nothing but the person refuses it — against one already
             // somewhere it cannot move from, the assertion would hold with the ownership check gone.
@@ -662,6 +664,8 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.Null(failedAfterDeclining);
             Assert.NotNull(accepted);
             Assert.NotNull(failedAfterAccepting);
+            Assert.NotNull(acceptedAgainAfterFailing);
+            Assert.Null(declinedAfterAcceptingAgain);
             Assert.Null(somebodyElses);
             Assert.NotNull(theirsStillMoves);
             Assert.Null(nothingWasOfferedThere);

@@ -12,10 +12,10 @@ import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // The Agent's conversations as `/api/client` serves them: the history, one conversation read from a cursor, and the
-// writes a person makes into one — asking, steering the answer being composed, stopping it, putting the conversation
-// away or taking it back, and deleting the whole thing. A conversation is the entries it was written as, so what
-// arrives here is that record rather than a rendering of it: which entries make one answer, and which proposal a
-// resolution decides, is the screen's to fold.
+// writes a person makes into one — asking, steering the answer being composed, stopping it, answering a proposal,
+// putting the conversation away or taking it back, and deleting the whole thing. A conversation is the entries it was
+// written as, so what arrives here is that record rather than a rendering of it: which entries make one answer, and
+// which proposal a resolution decides, is the screen's to fold.
 
 /** Where the history is read. */
 export const agentConversationsRoute = '/agent/conversations';
@@ -77,6 +77,9 @@ export type AgentAnswerOutcome = 'completed' | 'stopped' | 'failed';
 
 /** What a person decided about a proposal, and what became of one they accepted. */
 export type AgentProposalState = 'accepted' | 'failed' | 'declined';
+
+/** What a person may answer a proposal with, which is also how one that failed is tried again. */
+export type AgentProposalDecision = 'accepted' | 'declined';
 
 /**
  * One entry of a conversation, in the order it was written.
@@ -307,6 +310,49 @@ export function restoreAgentConversation(
     return spanned('DELETE /agent/conversations/{conversationId}/archive', () =>
         acknowledged(session, transport, 'DELETE', agentConversationArchiveRoute(conversationId)),
     );
+}
+
+/**
+ * Answers one proposal, named by the place it was written at. Accepting carries out exactly what was proposed, and a
+ * proposal whose act failed is accepted again to try it again.
+ *
+ * @returns The place the answer was written at, or why it was not answered. One already decided, or no longer offered,
+ * is `missing`: asking again reaches the same refusal, and what the proposal became is what the conversation says.
+ */
+export function answerAgentProposal(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    conversationId: string,
+    proposedAt: number,
+    decision: AgentProposalDecision,
+): Promise<ClientResult<number>> {
+    return spanned('PUT /agent/conversations/{conversationId}/proposals/{proposedAt}', async () => {
+        const response = await send(transport, {
+            method: 'PUT',
+            path: routeFor(session, `${agentConversationRoute(conversationId)}/proposals/${String(proposedAt)}`),
+            headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision }),
+            longestAnswer: longestWriteAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status === 404 || response.status === 409) {
+            return failed('missing', response.status);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const place = parsed(response.body)?.['sequence'];
+
+        return typeof place === 'number' && Number.isSafeInteger(place) && place > 0
+            ? read(place)
+            : failed('unreadable', response.status);
+    });
 }
 
 /**

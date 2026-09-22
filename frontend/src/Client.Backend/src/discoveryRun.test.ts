@@ -685,6 +685,57 @@ describe('readDiscoveryRunTail', () => {
 
         expect(answered).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
+
+    it('reads an event and a task proposal off the block that carries each', async () => {
+        const evidence = {
+            support: 'Supported',
+            citations: ['c-1'],
+            freshness: { staleness: 'Current', observedAt: '2026-09-20T08:00:00+00:00' },
+        };
+
+        const answered = await readDiscoveryRunTail(
+            session,
+            answering({
+                status: 200,
+                body: bodyOf([
+                    {
+                        event: 'block',
+                        sequence: 10,
+                        block: {
+                            type: 'eventProposal',
+                            version: 1,
+                            evidence,
+                            title: 'Renewal call',
+                            start: '2026-09-23T09:00:00+00:00',
+                            end: null,
+                            isAllDay: false,
+                        },
+                    },
+                    {
+                        event: 'block',
+                        sequence: 11,
+                        block: { type: 'taskProposal', version: 1, evidence, title: 'Send the schedule', dueOn: null },
+                    },
+                ]),
+            }),
+            runId,
+            0,
+        );
+
+        const proposals = answered.outcome === 'read' ? answered.value.events : [];
+
+        expect(
+            proposals.map((event) =>
+                event.kind === 'block' && (event.block.type === 'eventProposal' || event.block.type === 'taskProposal')
+                    ? event.block.proposal
+                    : null,
+            ),
+        ).toEqual([
+            { title: 'Renewal call', start: '2026-09-23T09:00:00+00:00', end: null, isAllDay: false },
+            { title: 'Send the schedule', dueOn: null },
+        ]);
+    });
+
     it('refuses a block whose own payload it cannot read rather than drawing the type as unknown', async () => {
         const answered = await readDiscoveryRunTail(
             session,

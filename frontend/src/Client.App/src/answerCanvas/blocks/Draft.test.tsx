@@ -3,8 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
+    AgentProposalDecision,
     AnswerBlock,
     BlockEvidence,
     ComposedDraft,
@@ -13,6 +14,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../../localization/Localization';
 import { AnswerSourcesContext } from '../answerSources';
+import { ProposalAnsweringContext, type ProposalAnswering, type ProposalPhase } from '../proposalAnswering';
 import { Draft } from './Draft';
 
 const addendum: DeclaredSource = {
@@ -41,7 +43,14 @@ function drafted(disposition: DraftDisposition = 'Composed'): AnswerBlock {
     return { type: 'draft', named: 'draft', evidence: backed, draft: { ...composed, disposition } };
 }
 
-function renderDraft(block: AnswerBlock) {
+function inConversation(
+    phase: ProposalPhase,
+    answer: (decision: AgentProposalDecision) => void = () => undefined,
+): ProposalAnswering {
+    return { phase, answering: false, refused: null, answer, askAnotherTime: () => undefined, look: null };
+}
+
+function renderDraft(block: AnswerBlock, answering: ProposalAnswering | null = null) {
     const declared = new Map([[addendum.id, addendum]]);
 
     return render(
@@ -49,7 +58,9 @@ function renderDraft(block: AnswerBlock) {
             {/* A citation is given somewhere to follow to, as the canvas gives every block one: a chip with nowhere to
                 go says so in its own name, which is `Citation`'s behaviour rather than this block's. */}
             <AnswerSourcesContext value={{ sources: declared, follow: () => undefined }}>
-                <Draft block={block} />
+                <ProposalAnsweringContext value={answering}>
+                    <Draft block={block} />
+                </ProposalAnsweringContext>
             </AnswerSourcesContext>
         </LocalizationProvider>,
     );
@@ -181,5 +192,75 @@ describe('Draft', () => {
         renderDraft({ type: null, named: 'RiskScore' });
 
         expect(screen.getByText('type: RiskScore')).toBeDefined();
+    });
+
+    describe('in a conversation', () => {
+        it('sends it, opens it for editing here, or discards it, each named for who it is addressed to', () => {
+            const answer = vi.fn<(decision: AgentProposalDecision) => void>();
+            renderDraft(drafted(), inConversation('pending', answer));
+
+            fireEvent.click(screen.getByRole('button', { name: 'Send the draft to anna@contoso.example' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Discard the draft to anna@contoso.example' }));
+
+            expect(answer.mock.calls).toEqual([['accepted'], ['declined']]);
+            expect(
+                screen.getByRole('button', {
+                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                }),
+            ).toBeDefined();
+        });
+
+        it('swaps the controls for sending and for stopping while the text is open, and keeps what was typed', () => {
+            renderDraft(drafted(), inConversation('pending'));
+
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                }),
+            );
+
+            expect(screen.getByRole('button', { name: 'Send the edited draft to anna@contoso.example' })).toBeDefined();
+            expect(screen.queryByRole('button', { name: 'Discard the draft to anna@contoso.example' })).toBeNull();
+
+            fireEvent.change(screen.getByRole('textbox', { name: 'Draft text' }), { target: { value: 'Agreed.' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Stop editing the draft to anna@contoso.example' }));
+
+            expect(screen.getByText('Agreed.')).toBeDefined();
+        });
+
+        it('holds Send once the text differs from what was proposed, and says why', () => {
+            const answer = vi.fn<(decision: AgentProposalDecision) => void>();
+            renderDraft(drafted(), inConversation('pending', answer));
+
+            fireEvent.click(
+                screen.getByRole('button', {
+                    name: 'Edit here — the draft to anna@contoso.example, inside the conversation',
+                }),
+            );
+            fireEvent.change(screen.getByRole('textbox', { name: 'Draft text' }), { target: { value: 'Agreed.' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send the edited draft to anna@contoso.example' }));
+
+            expect(answer).not.toHaveBeenCalled();
+            expect(screen.getByText(/Your edit cannot be sent from here yet/)).toBeDefined();
+        });
+
+        it('reads the subject and the text out in the language they were written in', () => {
+            renderDraft(drafted(), inConversation('pending'));
+
+            expect(screen.getByText('Re: proposed terms for 2027').getAttribute('lang')).toBe('');
+            expect(
+                screen
+                    .getByText('We accept shortening the response time to 2 hours on business days.')
+                    .getAttribute('lang'),
+            ).toBe('');
+        });
+
+        it('offers no editing once the draft was sent', () => {
+            renderDraft(drafted(), inConversation('accepted'));
+
+            expect(screen.getByText('Sent')).toBeDefined();
+            expect(screen.queryAllByRole('button').map((control) => control.textContent)).not.toContain('Edit here');
+            expect(screen.queryByRole('button', { name: 'Edit the text' })).toBeNull();
+        });
     });
 });

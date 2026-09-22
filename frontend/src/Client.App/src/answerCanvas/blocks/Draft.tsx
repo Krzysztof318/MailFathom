@@ -6,7 +6,9 @@ import { useId, useState } from 'react';
 import type { AnswerBlock } from '@mailfathom/client-backend';
 import { Icon } from '../../controls/Icon';
 import { useLocalization } from '../../localization/useLocalization';
-import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
+import { UnrecognisedAnswerBlock } from '../AnswerBlockCard';
+import { ProposalCard, type ProposalControl } from '../ProposalCard';
+import { useProposalAnswering } from '../proposalAnswering';
 import { Citation } from './Citation';
 import { draftDispositions, supportVerdicts } from './blockWording';
 
@@ -23,7 +25,15 @@ import { draftDispositions, supportVerdicts } from './blockWording';
 // **It is editable, and the edit stays on this screen.** The draft is somebody's to correct before they put their name
 // to it, so the body opens in a text area on request; saving it anywhere is the mail surface's and is stated under the
 // area rather than implied by an absent control. That is what the design project draws too — its own editing state swaps
-// the paragraphs for a text area — and the *Send* beside it there is the conversation surface's control, not this one's.
+// the paragraphs for a text area.
+//
+// **In a conversation it is a proposal, and sending is how it is accepted.** The conversation answers it with *Send*,
+// *Edit here* and *Discard*, and the service sends what it proposed — which is the whole of what accepting one carries.
+// So an edit that changed the text holds *Send* rather than sending the text the reader moved away from, and says why
+// beside the field: sending what somebody typed needs the route to carry it, which it does not yet.
+//
+// Everything quoted out of the draft carries an empty `lang`, because the contract states no language for it and the
+// conversation around it is in the reader's own: the agent writes a reply in the language of the thread it answers.
 
 /**
  * Who a draft is addressed to, as one list in the reader's own language.
@@ -39,6 +49,7 @@ function addressedTo(recipients: readonly string[], locale: string): string {
 
 export function Draft({ block }: { readonly block: AnswerBlock }) {
     const { locale, translate } = useLocalization();
+    const answering = useProposalAnswering();
     const written = useId();
 
     // The edit is this block's own state and nothing outside it reads one, which is why it is held here rather than
@@ -57,9 +68,70 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
     const { draft, evidence } = block;
     const verdict = supportVerdicts[evidence.support];
     const body = typed ?? draft.body;
+    const to = addressedTo(draft.recipients, locale);
+    const changed = typed !== null && typed !== draft.body;
+
+    const controls: readonly ProposalControl[] =
+        answering === null
+            ? []
+            : editing
+              ? [
+                    {
+                        said: translate('draft.send'),
+                        name: translate('draft.sendEditedName', { to }),
+                        primary: true,
+                        held: changed,
+                        run: () => {
+                            answering.answer('accepted');
+                        },
+                    },
+                    {
+                        said: translate('draft.stopEditing'),
+                        name: translate('draft.stopEditingName', { to }),
+                        run: () => {
+                            setEditing(false);
+                        },
+                    },
+                ]
+              : [
+                    {
+                        said: translate('draft.send'),
+                        name: translate('draft.sendName', { to }),
+                        primary: true,
+                        held: changed,
+                        run: () => {
+                            answering.answer('accepted');
+                        },
+                    },
+                    {
+                        said: translate('draft.editHere'),
+                        name: translate('draft.editHereName', { to }),
+                        run: () => {
+                            setEditing(true);
+                        },
+                    },
+                    {
+                        said: translate('draft.discard'),
+                        name: translate('draft.discardName', { to }),
+                        run: () => {
+                            answering.answer('declined');
+                        },
+                    },
+                ];
+
+    // The field is open only while the proposal can still be answered: a draft already sent or discarded keeps the
+    // text the reader last saw as a paragraph rather than inviting an edit nothing could use.
+    const editable = answering === null || answering.phase === 'pending';
 
     return (
-        <AnswerBlockCard label={translate('draft.label')} state="ready">
+        <ProposalCard
+            citations={evidence.citations}
+            controls={controls}
+            kind="draft"
+            label={translate('draft.label')}
+            quotesMail
+            title={draft.subject}
+        >
             <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-rail px-2.25 py-0.5 text-2xs text-muted">
                     {translate(draftDispositions[draft.disposition])}
@@ -75,16 +147,18 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                 <p className="flex flex-wrap gap-2 text-sm">
                     <span className="text-muted">{translate('draft.to')}</span>
 
-                    <span>{addressedTo(draft.recipients, locale)}</span>
+                    <span lang="">{to}</span>
                 </p>
 
                 <p className="flex flex-wrap gap-2 text-sm">
                     <span className="text-muted">{translate('draft.subject')}</span>
 
-                    <span className="font-semibold">{draft.subject}</span>
+                    <span className="font-semibold" lang="">
+                        {draft.subject}
+                    </span>
                 </p>
 
-                {editing ? (
+                {editing && editable ? (
                     <>
                         <label className="text-2xs tracking-wider text-muted uppercase" htmlFor={written}>
                             {translate('draft.bodyLabel')}
@@ -96,6 +170,7 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                         <textarea
                             className="min-h-32 w-full rounded-md border border-line bg-panel px-2.75 py-2 text-sm leading-relaxed focus-visible:border-accent"
                             id={written}
+                            lang=""
                             autoFocus
                             value={body}
                             onChange={(event) => {
@@ -104,14 +179,20 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                         />
                     </>
                 ) : (
-                    <p className="text-sm leading-relaxed whitespace-pre-line text-text-soft text-pretty">{body}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-line text-text-soft text-pretty" lang="">
+                        {body}
+                    </p>
                 )}
 
                 {/* The sentence stays with the text it is about rather than with the text area: once the editor closes,
                     the paragraph above draws what the reader wrote under a chip saying what became of the draft, and
                     nothing else would say that the text on the screen is not the text the deployment holds. */}
-                {editing || typed !== null ? (
+                {answering === null && (editing || typed !== null) ? (
                     <p className="text-xs text-faint text-pretty">{translate('draft.editKept')}</p>
+                ) : null}
+
+                {answering !== null && editable && changed ? (
+                    <p className="text-xs text-faint text-pretty">{translate('draft.editedUnsendable')}</p>
                 ) : null}
 
                 {evidence.citations.length === 0 ? null : (
@@ -123,15 +204,17 @@ export function Draft({ block }: { readonly block: AnswerBlock }) {
                 )}
             </div>
 
-            <button
-                className="self-start rounded-md border border-line-strong px-3 py-1.75 text-sm text-text-soft transition hover:bg-hover"
-                type="button"
-                onClick={() => {
-                    setEditing(!editing);
-                }}
-            >
-                {translate(editing ? 'draft.stopEditing' : 'draft.edit')}
-            </button>
-        </AnswerBlockCard>
+            {answering === null ? (
+                <button
+                    className="self-start rounded-md border border-line-strong px-3 py-1.75 text-sm text-text-soft transition hover:bg-hover"
+                    type="button"
+                    onClick={() => {
+                        setEditing(!editing);
+                    }}
+                >
+                    {translate(editing ? 'draft.stopEditing' : 'draft.edit')}
+                </button>
+            ) : null}
+        </ProposalCard>
     );
 }

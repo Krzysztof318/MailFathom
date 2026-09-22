@@ -185,8 +185,10 @@ public interface IAgentConversationStore
     /// <remarks>
     /// <para>
     /// The move is judged against where the proposal stands, in the statement that records it: a pending proposal may
-    /// be accepted or declined, an accepted one may go on to have failed, and nothing else moves. So a proposal
-    /// answered twice is answered once, which matters because an acceptance is what permits an act with a side effect.
+    /// be accepted or declined, an accepted one may go on to have failed, a failed one may be accepted again, and
+    /// nothing else moves. So a proposal answered twice at once is answered once, which matters because an acceptance
+    /// is what permits an act with a side effect — and one whose act could not be carried out is offered the attempt
+    /// again rather than left to be proposed a second time.
     /// </para>
     /// <para>
     /// A refusal is one answer for every way the move was not this caller's to make — no such conversation, not theirs,

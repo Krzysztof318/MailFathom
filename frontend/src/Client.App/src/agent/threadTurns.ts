@@ -10,13 +10,11 @@ import type {
     AnswerBlock,
     DeclaredSource,
 } from '@mailfathom/client-backend';
+import type { ProposalPhase } from '../answerCanvas/proposalAnswering';
 
 // What a conversation reads as, folded out of the entries it was written as. The record is flat — a status, a citation
 // and a block each name the answer they belong to — and the screen draws turns, so this is the one place that decides
 // which entries make one answer and which proposal a resolution decides.
-
-/** Where a proposal stands: pending until a resolution says otherwise, and the latest resolution after that. */
-export type ProposalPhase = 'pending' | AgentProposalState;
 
 /** One block of an answer, and the phase it stands in where it is a proposal rather than a reading. */
 export interface AnsweredBlock {
