@@ -3,10 +3,12 @@
     "answer": 1,
     "attachmentGallery": 1,
     "draft": 1,
+    "eventProposal": 1,
     "evidenceList": 1,
     "factTable": 1,
     "people": 1,
     "suggestedAction": 1,
+    "taskProposal": 1,
     "threadState": 1,
     "timeline": 1
   },
@@ -740,6 +742,117 @@
             },
             {
               "properties": {
+                "end": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting",
+                        "Stale"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "isAllDay": {
+                  "type": "boolean"
+                },
+                "start": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "title": true,
+                "type": {
+                  "const": "eventProposal"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "title",
+                "start",
+                "end",
+                "isAllDay",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "dueOn": {
+                  "format": "date",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting",
+                        "Stale"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "title": true,
+                "type": {
+                  "const": "taskProposal"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "title",
+                "dueOn",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
                 "action": {
                   "enum": [
                     "ReplyToThread",
@@ -985,5 +1098,5 @@
       "null"
     ]
   },
-  "schemaVersion": 2
+  "schemaVersion": 3
 }

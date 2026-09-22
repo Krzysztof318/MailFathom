@@ -93,7 +93,7 @@
   description: How a question and its scope become a retrieval plan and a block composition, what the model decides and what the code derives, and what a run does when no plan can be read.
 - name: The presentation plan
   href: presentation-plan.md
-  description: The typed contract an answer about a mailbox takes — the nine block types it may hold, how every fact leads back to a message, how it says what it cannot support, and how a client behind the service reads one.
+  description: The typed contract an answer about a mailbox takes — the block types it may hold, how every fact leads back to a message, how it says what it cannot support, and how a client behind the service reads one.
 - name: MCP tools
   href: mcp-tools.md
   description: The conventions every tool follows, the contract of each tool that exists, and what a client reads when a call fails.

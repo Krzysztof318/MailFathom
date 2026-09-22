@@ -191,6 +191,71 @@ public sealed class PresentationBlockTests
         Assert.Equal([PresentationPlanExample.SecondCitation], block.ReferencedCitations);
     }
 
+    /// <summary>An event that ends before it begins is a span nobody can draw and a date the calendar would refuse on acceptance.</summary>
+    [Fact]
+    public void EventProposalBlock_AnEndThatIsNotAfterTheStart_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new EventProposalBlock(
+            PresentationPlanExample.Supported(),
+            PresentationPlanExample.Text("Renewal call"),
+            PresentationPlanExample.ObservedAt,
+            PresentationPlanExample.ObservedAt,
+            isAllDay: false));
+    }
+
+    /// <summary>An event with no end is a proposal about when something begins, which is all some mail says.</summary>
+    [Fact]
+    public void EventProposalBlock_NoEnd_IsKept()
+    {
+        // Act
+        var block = new EventProposalBlock(
+            PresentationPlanExample.Supported(),
+            PresentationPlanExample.Text("Renewal call"),
+            PresentationPlanExample.ObservedAt,
+            end: null,
+            isAllDay: true);
+
+        // Assert
+        Assert.Null(block.End);
+    }
+
+    [Fact]
+    public void EventProposalBlock_AnUnspecifiedTitle_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new EventProposalBlock(
+            PresentationPlanExample.Supported(),
+            title: default,
+            PresentationPlanExample.ObservedAt,
+            end: null,
+            isAllDay: false));
+    }
+
+    /// <summary>A task owed by no particular day is what mail asking for something "soon" proposes.</summary>
+    [Fact]
+    public void TaskProposalBlock_NoDueDay_IsKept()
+    {
+        // Act
+        var block = new TaskProposalBlock(
+            PresentationPlanExample.Supported(),
+            PresentationPlanExample.Text("Send the revised schedule"),
+            dueOn: null);
+
+        // Assert
+        Assert.Null(block.DueOn);
+    }
+
+    [Fact]
+    public void TaskProposalBlock_AnUnspecifiedTitle_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new TaskProposalBlock(
+            PresentationPlanExample.Supported(),
+            title: default,
+            dueOn: null));
+    }
+
     [Fact]
     public void PeopleBlock_NoEntryList_IsRefused()
     {

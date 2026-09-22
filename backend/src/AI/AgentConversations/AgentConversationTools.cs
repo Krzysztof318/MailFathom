@@ -19,6 +19,7 @@ using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Calendar;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Tasks;
@@ -99,7 +100,11 @@ internal sealed class AgentConversationTools
     internal bool HasProposed { get; private set; }
 
     /// <summary>Creates the tools the person's grant allows.</summary>
-    /// <returns>The reading tools where the grant reads mail, and the proposing tools where it also drafts and sends.</returns>
+    /// <returns>
+    /// The reading tools where the grant reads mail, beside the two that propose onto the person's own calendar and task
+    /// list — which those use cases admit under the same grant — and the ones proposing mail where it also drafts and
+    /// sends.
+    /// </returns>
     internal IReadOnlyList<AITool> Create()
     {
         List<AITool> tools = [];
@@ -111,6 +116,8 @@ internal sealed class AgentConversationTools
             tools.Add(AIFunctionFactory.Create(this.ShowThreadStateAsync, "show_thread_state", "Shows the person where the conversation a message belongs to stands — what was agreed, what is still open, what somebody owes — exactly as it was already derived. The reading is placed in the conversation for them; do not restate it."));
             tools.Add(AIFunctionFactory.Create(this.ReadCalendarAsync, "read_calendar", "Reads the person's calendar between two instants, earliest first."));
             tools.Add(AIFunctionFactory.Create(this.ReadTasksAsync, "read_tasks", "Reads the person's task list, soonest due first, including what their mail proposed as a task."));
+            tools.Add(AIFunctionFactory.Create(this.ProposeEventAsync, "propose_event", "Proposes a calendar event for the person to review. Nothing is scheduled: the person sees the event, corrects its hour, and decides."));
+            tools.Add(AIFunctionFactory.Create(this.ProposeTaskAsync, "propose_task", "Proposes a task for the person's own list. Nothing is created: the person sees the task, corrects its due day, and decides."));
         }
 
         if (this.readers.Authorization.Permits(MailFathomPermission.MailDraftsWrite) && this.readers.Authorization.Permits(MailFathomPermission.MailSend))
@@ -338,6 +345,136 @@ internal sealed class AgentConversationTools
 
         return "Proposed. Nothing was sent; the person reviews the draft and decides.";
     }
+
+    [Description("Proposes a calendar event.")]
+    private async Task<string> ProposeEventAsync(
+        [Description("What the event is called.")] string title,
+        [Description("When it begins, as an ISO 8601 instant with an offset.")] string start,
+        [Description("When it ends, as an ISO 8601 instant with an offset, or empty to state no end.")] string? end,
+        [Description("True where it is a whole day rather than a clock time.")] bool allDay,
+        [Description("The id of a message this conversation has already shown you that the event was read out of, or empty.")] string? messageId,
+        CancellationToken cancellationToken)
+    {
+        await this.ReportAsync(AgentActivity.PreparingProposal, cancellationToken);
+
+        if (!CalendarEventTitle.TryCreate(title, out _)
+            || !PresentationText.TryCreate(title, out var titled)
+            || !TryParseInstant(start, out var begins))
+        {
+            return $"Give a title of at most {CalendarEventTitle.MaximumLength} characters and a start as an ISO 8601 instant with an offset.";
+        }
+
+        DateTimeOffset? ends = null;
+
+        if (!string.IsNullOrWhiteSpace(end))
+        {
+            if (!TryParseInstant(end, out var closes) || closes <= begins)
+            {
+                return "Give an end as an ISO 8601 instant with an offset, later than the start, or leave it out.";
+            }
+
+            ends = closes;
+        }
+
+        var source = await this.SourceOfAsync(messageId, cancellationToken);
+        var block = new EventProposalBlock(EvidenceOf(source), titled, begins, ends, allDay);
+
+        await this.WriteAsync(this.journal.ProposeAsync(
+            block,
+            new AgentEventScheduling(titled, begins, ends, allDay, source?.Message),
+            cancellationToken));
+        this.HasProposed = true;
+
+        return $"Proposed. Nothing was put on the calendar; the person reviews the event and decides.{UncitedNote(messageId, source)}";
+    }
+
+    [Description("Proposes a task.")]
+    private async Task<string> ProposeTaskAsync(
+        [Description("The line the task list is drawn with.")] string title,
+        [Description("The day it is due, as yyyy-MM-dd, or empty where nothing says when.")] string? dueOn,
+        [Description("The id of a message this conversation has already shown you that the task comes from, or empty.")] string? messageId,
+        CancellationToken cancellationToken)
+    {
+        await this.ReportAsync(AgentActivity.PreparingProposal, cancellationToken);
+
+        if (!PresentationText.TryCreate(title, out var titled) || titled.Value.Length > PersonalTask.MaximumTitleLength)
+        {
+            return $"Give a title of at most {PersonalTask.MaximumTitleLength} characters.";
+        }
+
+        DateOnly? due = null;
+
+        if (!string.IsNullOrWhiteSpace(dueOn))
+        {
+            if (!DateOnly.TryParseExact(dueOn, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+            {
+                return "Give the due day as yyyy-MM-dd, or leave it out.";
+            }
+
+            due = day;
+        }
+
+        var source = await this.SourceOfAsync(messageId, cancellationToken);
+        var block = new TaskProposalBlock(EvidenceOf(source), titled, due);
+
+        await this.WriteAsync(this.journal.ProposeAsync(
+            block,
+            new AgentTaskRecording(titled, due, source?.Message),
+            cancellationToken));
+        this.HasProposed = true;
+
+        return $"Proposed. Nothing was added to the list; the person reviews the task and decides.{UncitedNote(messageId, source)}";
+    }
+
+    /// <summary>Reads the message a proposal cites out of what this run has already shown the model.</summary>
+    /// <remarks>
+    /// <para>
+    /// A citation is minted from what a tool read, never from a name a model supplied, so a proposal rests on a message
+    /// this run actually opened or searched up, or on nothing at all. That is also what keeps an invented identifier from
+    /// becoming a source a reader is invited to follow.
+    /// </para>
+    /// <para>
+    /// A message the search showed is declared here rather than left to <see cref="DeclareSearchedAsync" />, which runs
+    /// once the run has ended: searching and then proposing out of what was found is the ordinary path, and waiting for
+    /// the end would leave every such proposal uncited.
+    /// </para>
+    /// </remarks>
+    private async Task<(StoredEmailId Message, PresentationCitationId Citation)?> SourceOfAsync(
+        string? messageId,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(messageId, out var named))
+        {
+            return null;
+        }
+
+        var message = StoredEmailId.Create(named);
+
+        if (this.cited.TryGetValue(message, out var known))
+        {
+            return (message, known.Id);
+        }
+
+        if (this.retrieval.Report.Passages.FirstOrDefault(passage => passage.StoredEmailId == message) is not { } searched)
+        {
+            return null;
+        }
+
+        var citation = await this.CiteAsync(message, searched.Subject, cancellationToken);
+
+        return (message, citation.Id);
+    }
+
+    private static PresentationEvidence EvidenceOf((StoredEmailId Message, PresentationCitationId Citation)? source) =>
+        source is { } read
+            ? new PresentationEvidence(PresentationSupport.Supported, [read.Citation], PresentationFreshness.Unknown)
+            : PresentationEvidence.Unsupported(PresentationFreshness.Unknown);
+
+    /// <summary>Says that a message the model named was not one this run had read, so that the missing source is not silent.</summary>
+    private static string UncitedNote(string? messageId, (StoredEmailId Message, PresentationCitationId Citation)? source) =>
+        !string.IsNullOrWhiteSpace(messageId) && source is null
+            ? " The message you named is not one this conversation has shown you, so the proposal cites no source."
+            : string.Empty;
 
     private static List<EmailAddress>? AddressesOf(IReadOnlyList<string> written)
     {

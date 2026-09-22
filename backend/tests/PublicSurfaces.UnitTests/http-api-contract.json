@@ -8929,6 +8929,12 @@
             "$ref": "#/components/schemas/PresentationBlockDraftBlock"
           },
           {
+            "$ref": "#/components/schemas/PresentationBlockEventProposalBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockTaskProposalBlock"
+          },
+          {
             "$ref": "#/components/schemas/PresentationBlockSuggestedActionBlock"
           }
         ],
@@ -8937,10 +8943,12 @@
             "answer": "#/components/schemas/PresentationBlockAnswerBlock",
             "attachmentGallery": "#/components/schemas/PresentationBlockAttachmentGalleryBlock",
             "draft": "#/components/schemas/PresentationBlockDraftBlock",
+            "eventProposal": "#/components/schemas/PresentationBlockEventProposalBlock",
             "evidenceList": "#/components/schemas/PresentationBlockEvidenceListBlock",
             "factTable": "#/components/schemas/PresentationBlockFactTableBlock",
             "people": "#/components/schemas/PresentationBlockPeopleBlock",
             "suggestedAction": "#/components/schemas/PresentationBlockSuggestedActionBlock",
+            "taskProposal": "#/components/schemas/PresentationBlockTaskProposalBlock",
             "threadState": "#/components/schemas/PresentationBlockThreadStateBlock",
             "timeline": "#/components/schemas/PresentationBlockTimelineBlock"
           },
@@ -9060,6 +9068,51 @@
           "subject",
           "body",
           "disposition",
+          "evidence"
+        ]
+      },
+      "PresentationBlockEventProposalBlock": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "isAllDay": {
+            "type": "boolean"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "type": {
+            "enum": [
+              "eventProposal"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "end",
+          "isAllDay",
           "evidence"
         ]
       },
@@ -9215,6 +9268,42 @@
           "reason",
           "impact",
           "requiresConfirmation",
+          "evidence"
+        ]
+      },
+      "PresentationBlockTaskProposalBlock": {
+        "properties": {
+          "dueOn": {
+            "format": "date",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "type": {
+            "enum": [
+              "taskProposal"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "dueOn",
           "evidence"
         ]
       },

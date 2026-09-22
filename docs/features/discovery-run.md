@@ -418,6 +418,6 @@ nothing about the question or the mail it read.
 - **A live Case's own updates.** Nothing here updates an answer on its own yet. When something does, it runs through the
   same ledgers as a question somebody asked, so unattended spend is bounded by what is written above rather than by a
   second mechanism.
-- **Rendering.** The client draws two of the nine block types — the synthesized answer and the evidence list — and
-  names any other type to the reader rather than dropping it. What each of them looks like is the client's and is
+- **Rendering.** The client draws nine of the eleven block types, and names any other type — the Agent's event and
+  task proposals, until their own renderers exist — to the reader rather than dropping it. What each of them looks like is the client's and is
   described nowhere here.

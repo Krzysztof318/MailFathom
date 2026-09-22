@@ -13,8 +13,8 @@ described here, because what a block looks like is the client's rather than the 
 
 ## Two properties the contract is built around
 
-**It is closed.** A plan holds blocks drawn from a catalogue of nine types and nothing else. No part of it is markup, a
-template, an expression, or a reference to code, and adding a tenth block type is a change to
+**It is closed.** A plan holds blocks drawn from a catalogue of eleven types and nothing else. No part of it is markup,
+a template, an expression, or a reference to code, and adding a twelfth block type is a change to
 `PresentationBlockType` that a reviewer reads rather than a string a model chose. That is what makes generative
 presentation safe here: the flexibility is in which blocks a run composes and what it puts in them, and the drawing is
 typed UI a client already has.
@@ -26,9 +26,9 @@ The plan carries a schema version, and every block carries the version of its ow
 blocks it recognizes, say what it cannot, and keep the rest of the run. Without both, the only safe answer to one
 unfamiliar block would be to discard the whole thing.
 
-Neither number is the application's version. The plan's schema version moves when the shape of the plan itself moves;
-a block type's version moves when that block's own shape does, and for no other reason. A release that changes neither
-leaves both where they are.
+Neither number is the application's version. The plan's schema version moves when the shape of the plan itself moves —
+a type joining the catalogue among it, because that changes which blocks a plan may hold; a block type's version moves
+when that block's own shape does, and for no other reason. A release that changes neither leaves both where they are.
 
 A block's version is written from the catalogue rather than supplied by whatever composed the plan, so nothing can
 stamp a revision it did not write, and it is checked again on the way in: reading a plan whose block claims a revision
@@ -66,7 +66,7 @@ yielded nothing is not an account that was skipped, and its staleness may be why
 bound **what the run drew on** rather than what the mailbox holds, so a reader can see that an answer about a decade of
 correspondence rested on three weeks of it.
 
-## The nine block types
+## The eleven block types
 
 Each block carries the evidence behind it — see [§ What the correspondence does for a block](#what-the-correspondence-does-for-a-block) —
 beside the data below.
@@ -81,14 +81,17 @@ beside the data below.
 | `threadState` | where a conversation stands is wanted | participants, plus what was agreed, what is open, and what somebody undertook |
 | `attachmentGallery` | files are being looked for | per entry: the citation, the name, the declared media type, the size, and whether it can be opened |
 | `draft` | the result is text to be sent | recipients, subject, body, and what has become of it locally |
+| `eventProposal` | a date is to be put on the person's calendar | a title, when it begins, when it ends where it states an end, and whether it is a whole day |
+| `taskProposal` | something is to be owed | a title, and the day it is due where it states one |
 | `suggestedAction` | there is a sensible next step | which step, why, what it would change, and whether it must be confirmed |
 
-**Two of the nine offer the reader something to do**, and the catalogue says which: `draft` and `suggestedAction`
-carry controls where a surface draws them with any, while the other seven are read. A Discover run's answer is drawn
-read-only throughout, so nothing there acts on the distinction; the Agent's record does, writing a block the person can
-answer as a proposal it can then record an outcome against, and everything else as a reading.
+**Four of the eleven offer the reader something to do**, and the catalogue says which: `draft`, `eventProposal`,
+`taskProposal`, and `suggestedAction` carry controls where a surface draws them with any, while the other seven are
+read. A Discover run's answer is drawn read-only throughout, so nothing there acts on the distinction; the Agent's
+record does, writing a block the person can answer as a proposal it can then record an outcome against, and everything
+else as a reading.
 
-Three of them are worth a note.
+Four of them are worth a note.
 
 **A fact table's columns come from a catalogue** rather than from the producer, and a column carries no heading. A
 heading is words in somebody's language and the client is localized, so a producer that shipped the word "Amount"
@@ -99,6 +102,13 @@ a different thing from a cell somebody left blank.
 **A draft is a proposal and never an act.** Its local status can say that it was composed, saved into the user's
 drafts, or queued in the outbox, and the set deliberately holds no member meaning sent: sending is something a person
 does afterwards, through the surface that governs sending.
+
+**An event or a task proposal is a type of its own only because its object has to be seen and corrected before it
+is approved** — an hour read out of a message, a day something is owed by. Anything whose whole content fits in one
+line stays a suggested action. Neither carries who is invited or what would announce it: an event here is the person's
+own record rather than an invitation, and a reminder is measured from the person's own day, which a run cannot know.
+Where a proposal cites a message, it cites one the run actually read; a proposal resting on nothing it read is
+`Unsupported` rather than resting on an identifier a model supplied.
 
 **A suggested action names a step from a closed set**, so a plan cannot propose something nobody wrote a control for.
 It says what taking the step would change, and an action that sends mail is refused unless it also asks to be

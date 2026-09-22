@@ -9,7 +9,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <summary>The guards every block in the catalogue applies to the values it is built from.</summary>
 /// <remarks>
 /// <para>
-/// Two of them, stated once because nine blocks apply them. A text value must be specified rather than the reachable
+/// Two of them, stated once because every block applies them. A text value must be specified rather than the reachable
 /// struct default, and every list a plan carries is bounded and non-empty where the block would mean nothing empty — a
 /// timeline with no entries is a block a client draws as a heading over nothing, and an unbounded list is a screen a
 /// model can make arbitrarily long.

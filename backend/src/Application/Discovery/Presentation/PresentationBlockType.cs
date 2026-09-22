@@ -11,7 +11,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <summary>The closed catalogue of block types a presentation plan may hold.</summary>
 /// <remarks>
 /// <para>
-/// Nine members and no tenth. A plan is composed by a model, and a catalogue that were an open string would let one
+/// Eleven members and no twelfth. A plan is composed by a model, and a catalogue that were an open string would let one
 /// invent a presentation the client has no renderer for — so the set is declared here, adding to it is a source change
 /// that reaches a review, and a client can switch over it exhaustively.
 /// </para>
@@ -56,6 +56,12 @@ public readonly record struct PresentationBlockType
     /// <summary>The identity of the block presenting text to be sent.</summary>
     public const string DraftIdentity = "draft";
 
+    /// <summary>The identity of the block presenting a date to be put on the calendar.</summary>
+    public const string EventProposalIdentity = "eventProposal";
+
+    /// <summary>The identity of the block presenting a task to be owed.</summary>
+    public const string TaskProposalIdentity = "taskProposal";
+
     /// <summary>The identity of the block presenting a next step somebody may take.</summary>
     public const string SuggestedActionIdentity = "suggestedAction";
 
@@ -98,6 +104,18 @@ public readonly record struct PresentationBlockType
     /// <summary>Gets the type of the block presenting text to be sent.</summary>
     public static PresentationBlockType Draft { get; } = new(DraftIdentity, version: 1, actionable: true);
 
+    /// <summary>Gets the type of the block presenting a date to be put on the calendar.</summary>
+    /// <remarks>
+    /// A type of its own rather than a <see cref="SuggestedAction" /> because its object has to be seen and corrected
+    /// before it is approved: an hour a run read out of a message is exactly the part a person changes, and a step
+    /// stated in one line leaves them nothing to change it in.
+    /// </remarks>
+    public static PresentationBlockType EventProposal { get; } = new(EventProposalIdentity, version: 1, actionable: true);
+
+    /// <summary>Gets the type of the block presenting a task to be owed.</summary>
+    /// <remarks>A type of its own for the reason <see cref="EventProposal" /> is one, the correctable part being the day it is due.</remarks>
+    public static PresentationBlockType TaskProposal { get; } = new(TaskProposalIdentity, version: 1, actionable: true);
+
     /// <summary>Gets the type of the block presenting a next step somebody may take.</summary>
     public static PresentationBlockType SuggestedAction { get; } = new(SuggestedActionIdentity, version: 1, actionable: true);
 
@@ -115,6 +133,8 @@ public readonly record struct PresentationBlockType
         ThreadState,
         AttachmentGallery,
         Draft,
+        EventProposal,
+        TaskProposal,
         SuggestedAction,
     ];
 

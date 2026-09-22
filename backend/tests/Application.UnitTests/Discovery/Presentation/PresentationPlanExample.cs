@@ -61,6 +61,8 @@ internal static class PresentationPlanExample
         ThreadState(),
         AttachmentGallery(),
         Draft(),
+        EventProposal(),
+        TaskProposal(),
         SuggestedAction(),
     ];
 
@@ -158,6 +160,17 @@ internal static class PresentationPlanExample
             Text("Confirming that we accept the revised figure."),
             DraftDisposition.Composed);
     }
+
+    private static EventProposalBlock EventProposal() =>
+        new(
+            Supported(),
+            Text("Renewal call with Northwind"),
+            ObservedAt.AddDays(1),
+            ObservedAt.AddDays(1).AddHours(1),
+            isAllDay: false);
+
+    private static TaskProposalBlock TaskProposal() =>
+        new(Supported(), Text("Send the revised schedule"), DateOnly.FromDateTime(ObservedAt.AddDays(2).UtcDateTime));
 
     private static SuggestedActionBlock SuggestedAction() =>
         new(
