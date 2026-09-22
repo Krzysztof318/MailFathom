@@ -4,11 +4,14 @@
 
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
@@ -51,6 +54,10 @@ internal static class ClientAgentConversationEndpoints
     /// <summary>The route a person's conversations are listed at, relative to the client prefix.</summary>
     internal const string ConversationsRoute = "/agent/conversations";
 
+    /// <summary>The route a person's conversations are searched at, relative to the client prefix.</summary>
+    /// <remarks>Beside the listing rather than beneath a conversation, and it cannot be mistaken for one: a conversation's route takes a <c>guid</c> alone.</remarks>
+    internal const string SearchRoute = "/agent/conversations/search";
+
     /// <summary>The route one conversation is read and deleted at, relative to the client prefix.</summary>
     internal const string ConversationRoute = "/agent/conversations/{conversationId:guid}";
 
@@ -72,6 +79,10 @@ internal static class ClientAgentConversationEndpoints
     /// <remarks>Generous against the longest text a message may carry in any encoding, and small enough that a body is refused before it is read.</remarks>
     internal const int MaxMessageRequestBytes = 24 * 1024;
 
+    /// <summary>The greatest size a search may have on the wire.</summary>
+    /// <remarks>Generous against the bound a query carries in any encoding and against the envelope around it, and small enough that a body is refused before it is read.</remarks>
+    internal const int MaxSearchRequestBytes = 4 * 1024;
+
     /// <summary>The greatest size an answer to a proposal may have on the wire.</summary>
     internal const int MaxProposalAnswerRequestBytes = 1024;
 
@@ -83,6 +94,13 @@ internal static class ClientAgentConversationEndpoints
         ArgumentNullException.ThrowIfNull(api);
 
         api.MapGet(ConversationsRoute, List)
+            .RequirePermission(MailFathomPermission.MailAsk);
+
+        // A POST for an operation that changes nothing, for the reason the mail search phrasing is one: what somebody
+        // looks for in their own history is as revealing as the history, and a query string is the part of a request
+        // that reaches an access log by default, here and on every proxy in front of it.
+        api.MapPost(SearchRoute, SearchAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxSearchRequestBytes))
             .RequirePermission(MailFathomPermission.MailAsk);
 
         api.MapGet(ConversationRoute, Read)
@@ -144,6 +162,59 @@ internal static class ClientAgentConversationEndpoints
                 line.StartedAt,
                 line.LastActivityAt)),
         ]));
+    }
+
+    /// <summary>Searches the signed-in person's conversations by their words and by their meaning.</summary>
+    /// <param name="request">What to look for, and how many conversations to return.</param>
+    /// <param name="scopeResolver">Names the acting user, whose history is the only one searched.</param>
+    /// <param name="search">Ranks the history.</param>
+    /// <param name="cancellationToken">Cancels the search.</param>
+    /// <returns><c>200</c> with the conversations found and the mode that ordered them, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// The history is searched here rather than filtered in the browser: a client holds at most a page of titles, and
+    /// what a person remembers is what was said, which only the deployment holds.
+    /// </para>
+    /// <para>
+    /// An embedding provider that cannot be reached leaves this search lexical and says so rather than failing it, so
+    /// <c>200</c> is what a person gets whenever their deployment can read its own database.
+    /// </para>
+    /// </remarks>
+    internal static async Task<Results<Ok<ClientAgentConversationSearchResponse>, ProblemHttpResult>> SearchAsync(
+        [FromBody] ClientAgentConversationSearchRequest? request,
+        [FromServices] MailboxScopeResolver scopeResolver,
+        [FromServices] AgentConversationSearch search,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(search);
+
+        if (request is null)
+        {
+            return RefuseSearch("The request carries nothing to search for.");
+        }
+
+        var limit = request.Limit ?? AgentConversationSearch.MaximumResults;
+        if (limit is < 1 or > AgentConversationSearch.MaximumResults)
+        {
+            return RefuseSearch(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The limit has to be between 1 and {AgentConversationSearch.MaximumResults}."));
+        }
+
+        EmailSearchQueryText query;
+        try
+        {
+            query = EmailSearchQueryText.Create(request.Query);
+        }
+        catch (MailboxQueryFilterInvalidException refusal)
+        {
+            return RefuseSearch(refusal.Message);
+        }
+
+        var found = await search.SearchAsync(scopeResolver.User, query, limit, cancellationToken);
+
+        return TypedResults.Ok(ClientAgentConversationSearchResponse.For(found));
     }
 
     /// <summary>Reads one conversation from wherever the caller left off, on whichever replica the request reached.</summary>
@@ -475,6 +546,10 @@ internal static class ClientAgentConversationEndpoints
     /// <remarks>Without echoing it because a question is the most revealing value this surface carries, and a problem detail is the one part of a response that reaches a log by default.</remarks>
     private static Results<Accepted<ClientAgentMessageResponse>, NotFound, ProblemHttpResult> Refuse(string stated) =>
         TypedResults.Problem(stated, statusCode: StatusCodes.Status400BadRequest);
+
+    /// <summary>States what a search has to change, without echoing the query, for the reason <see cref="Refuse" /> echoes no question.</summary>
+    private static ProblemHttpResult RefuseSearch(string stated) =>
+        TypedResults.Problem(stated, statusCode: StatusCodes.Status400BadRequest);
 }
 
 /// <summary>A question asked in a conversation.</summary>
@@ -555,3 +630,49 @@ internal sealed record ClientAgentConversationEntry(long Sequence, JsonElement E
     internal static ClientAgentConversationEntry For(AgentConversationEntry entry) =>
         new(entry.Sequence, JsonSerializer.SerializeToElement(entry, AgentConversationEntryJsonContext.Default.AgentConversationEntry));
 }
+
+/// <summary>A search of a person's conversation history.</summary>
+/// <param name="Query">What to look for, bounded exactly as a mail search's text is.</param>
+/// <param name="Limit">The greatest number of conversations to return, and absent for the most a search returns.</param>
+/// <remarks>It names no user: whose history is searched comes off the credential.</remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ClientAgentConversationSearchRequest(string? Query, int? Limit);
+
+/// <summary>What a search of the history found, and how.</summary>
+/// <param name="Results">The conversations found, best first, each at the message that matched.</param>
+/// <param name="RetrievalMode">How this search ordered them: <c>Lexical</c> for words alone, <c>Hybrid</c> for words and meaning together.</param>
+/// <param name="SemanticSearch">What semantic retrieval could do for this search: <c>Inactive</c>, <c>Available</c>, or <c>Degraded</c>.</param>
+internal sealed record ClientAgentConversationSearchResponse(
+    IReadOnlyList<ClientAgentConversationSearchResult> Results,
+    string RetrievalMode,
+    string SemanticSearch)
+{
+    /// <summary>Describes one search for the wire.</summary>
+    /// <param name="found">What the search found.</param>
+    /// <returns>The response body.</returns>
+    internal static ClientAgentConversationSearchResponse For(AgentConversationSearchResult found) =>
+        new(
+        [
+            .. found.Hits.Select(static hit => new ClientAgentConversationSearchResult(
+                hit.Conversation.Value,
+                hit.Title,
+                hit.LastActivityAt,
+                hit.Message.Value,
+                hit.Sequence)),
+        ],
+            found.RetrievalMode.ToString(),
+            found.SemanticSearch.ToString());
+}
+
+/// <summary>One conversation a search found.</summary>
+/// <param name="ConversationId">The conversation.</param>
+/// <param name="Title">What it is called, and <see langword="null" /> where the agent never named it.</param>
+/// <param name="LastActivityAt">When anything was last written into it.</param>
+/// <param name="MessageId">The message that matched, which is where the conversation opens rather than at its end.</param>
+/// <param name="Sequence">The place of the entry that matched, which a reader scrolls to once it has read that far.</param>
+internal sealed record ClientAgentConversationSearchResult(
+    Guid ConversationId,
+    string? Title,
+    DateTimeOffset LastActivityAt,
+    Guid MessageId,
+    long Sequence);

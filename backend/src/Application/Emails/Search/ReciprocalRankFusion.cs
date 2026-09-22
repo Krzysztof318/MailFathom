@@ -63,11 +63,18 @@ public static class ReciprocalRankFusion
         ArgumentNullException.ThrowIfNull(semanticCandidates);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var fusedScores = new Dictionary<StoredEmailId, float>();
         var positions = new Dictionary<StoredEmailId, EmailTimelinePosition>();
 
-        Accumulate(lexicalCandidates, fusedScores, positions);
-        Accumulate(semanticCandidates, fusedScores, positions);
+        // Both producers derive a position from the same stored columns, so the two agree; taking the first keeps that
+        // agreement from depending on which ranking is read last.
+        foreach (var candidate in lexicalCandidates.Concat(semanticCandidates))
+        {
+            _ = positions.TryAdd(candidate.StoredEmailId, candidate.Position);
+        }
+
+        var fusedScores = Score(
+            [.. lexicalCandidates.Select(static candidate => candidate.StoredEmailId)],
+            [.. semanticCandidates.Select(static candidate => candidate.StoredEmailId)]);
 
         return
         [
@@ -78,33 +85,51 @@ public static class ReciprocalRankFusion
         ];
     }
 
-    /// <summary>Adds one ranking's reciprocal contributions to the running fused scores.</summary>
+    /// <summary>Scores every document either ranking placed by the places it holds in them, and orders nothing.</summary>
+    /// <typeparam name="TDocument">What the two rankings rank, compared by its own equality.</typeparam>
+    /// <param name="lexicalRanking">The lexical ranking, best first.</param>
+    /// <param name="semanticRanking">The semantic ranking, nearest first.</param>
+    /// <returns>Each document either ranking returned, with its fused score.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either ranking is <see langword="null" />.</exception>
     /// <remarks>
-    /// The first appearance of a candidate decides its place, which is what makes a repeated identifier score once. The
-    /// position is recorded on that first appearance too: both producers derive it from the same stored columns, so the
-    /// two agree, and taking the first keeps that agreement from depending on which ranking was accumulated last.
+    /// The arithmetic <see cref="Fuse" /> applies to mail, published for a ranking of anything else. Ordering is left to
+    /// the caller, because what settles a tie is a property of what is ranked rather than of fusion: the timeline for
+    /// mail, a conversation's own recency for the Agent's history. A document repeated within one ranking scores once,
+    /// at its best place there.
     /// </remarks>
-    private static void Accumulate(
-        IReadOnlyList<RankedEmailCandidate> candidates,
-        Dictionary<StoredEmailId, float> fusedScores,
-        Dictionary<StoredEmailId, EmailTimelinePosition> positions)
+    public static IReadOnlyDictionary<TDocument, float> Score<TDocument>(
+        IReadOnlyList<TDocument> lexicalRanking,
+        IReadOnlyList<TDocument> semanticRanking)
+        where TDocument : notnull
     {
-        var seen = new HashSet<StoredEmailId>();
+        ArgumentNullException.ThrowIfNull(lexicalRanking);
+        ArgumentNullException.ThrowIfNull(semanticRanking);
 
-        for (var index = 0; index < candidates.Count; index++)
+        var fusedScores = new Dictionary<TDocument, float>();
+
+        Accumulate(lexicalRanking, fusedScores);
+        Accumulate(semanticRanking, fusedScores);
+
+        return fusedScores;
+    }
+
+    /// <summary>Adds one ranking's reciprocal contributions to the running fused scores.</summary>
+    /// <remarks>The first appearance of a document decides its place, which is what makes a repeated one score once.</remarks>
+    private static void Accumulate<TDocument>(IReadOnlyList<TDocument> ranking, Dictionary<TDocument, float> fusedScores)
+        where TDocument : notnull
+    {
+        var seen = new HashSet<TDocument>();
+
+        for (var index = 0; index < ranking.Count; index++)
         {
-            var candidate = candidates[index];
+            var document = ranking[index];
 
-            if (!seen.Add(candidate.StoredEmailId))
+            if (!seen.Add(document))
             {
                 continue;
             }
 
-            _ = positions.TryAdd(candidate.StoredEmailId, candidate.Position);
-
-            var contribution = 1f / (RankConstant + index + 1);
-            fusedScores[candidate.StoredEmailId] =
-                fusedScores.GetValueOrDefault(candidate.StoredEmailId) + contribution;
+            fusedScores[document] = fusedScores.GetValueOrDefault(document) + (1f / (RankConstant + index + 1));
         }
     }
 }

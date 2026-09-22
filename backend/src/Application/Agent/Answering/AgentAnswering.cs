@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Retrieval.AskMail;
@@ -45,6 +46,7 @@ public sealed class AgentAnswering
     private readonly IAgentConversationStore store;
     private readonly IAgentAnswerComposer? composer;
     private readonly IAgentConversationSummarizer? summarizer;
+    private readonly AgentConversationEmbedding embedding;
     private readonly AgentContextBudget contextBudget;
     private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly ClientSignals signals;
@@ -55,6 +57,7 @@ public sealed class AgentAnswering
     /// <param name="store">Where the conversation is held.</param>
     /// <param name="composer">Composes the answer, or <see langword="null" /> on a deployment that declared no chat endpoint, where every run ends as failed before anything is spent.</param>
     /// <param name="summarizer">Summarises a conversation that outgrew the budget, or <see langword="null" /> where no chat endpoint was declared.</param>
+    /// <param name="embedding">Places what was said in the turn beside the stored vectors once the answer has ended.</param>
     /// <param name="contextBudget">What one turn may send before its earlier part is compacted.</param>
     /// <param name="spendLedger">Admits the run against the deployment's period.</param>
     /// <param name="signals">Announces each write.</param>
@@ -65,6 +68,7 @@ public sealed class AgentAnswering
         IAgentConversationStore store,
         IAgentAnswerComposer? composer,
         IAgentConversationSummarizer? summarizer,
+        AgentConversationEmbedding embedding,
         AgentContextBudget contextBudget,
         IMailAnsweringSpendLedger spendLedger,
         ClientSignals signals,
@@ -72,6 +76,7 @@ public sealed class AgentAnswering
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(embedding);
         ArgumentNullException.ThrowIfNull(contextBudget);
         ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(signals);
@@ -81,6 +86,7 @@ public sealed class AgentAnswering
         this.store = store;
         this.composer = composer;
         this.summarizer = summarizer;
+        this.embedding = embedding;
         this.contextBudget = contextBudget;
         this.spendLedger = spendLedger;
         this.signals = signals;
@@ -97,6 +103,8 @@ public sealed class AgentAnswering
     /// A failure this use case has a name for ends the answer as failed and is not raised; one it does not is raised
     /// after the answer has been ended, so the caller can report it without leaving the conversation composing forever.
     /// A stop the person recorded writes nothing here, the store having already ended the answer with the stop.
+    /// Once the answer has ended without a raised failure, what the turn said is embedded for the history search, which a
+    /// process that is stopping leaves undone: the conversation is still found by its words.
     /// </remarks>
     public async Task RunAsync(AgentQuestion question, CancellationToken cancellationToken)
     {
@@ -113,6 +121,15 @@ public sealed class AgentAnswering
             this.timeProvider);
 
         await this.ComposeUntilEndedAsync(question, journal, cancellationToken);
+
+        try
+        {
+            await this.embedding.EmbedTurnAsync(question, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The process is stopping, and a turn left unembedded ranks lexically rather than going missing.
+        }
     }
 
     private static bool IsNamed(Exception failure, CancellationToken run) => failure switch

@@ -2,6 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using MailFathom.Application.Agent.Conversations;
+using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -32,6 +35,15 @@ namespace MailFathom.Infrastructure.Persistence.Agent.Configurations;
 /// </remarks>
 internal sealed class AgentConversationEntryConfiguration : IEntityTypeConfiguration<AgentConversationEntryEntity>
 {
+    private readonly PostgresTextSearchConfiguration textSearchConfiguration;
+
+    internal AgentConversationEntryConfiguration(PostgresTextSearchConfiguration textSearchConfiguration)
+    {
+        ArgumentNullException.ThrowIfNull(textSearchConfiguration);
+
+        this.textSearchConfiguration = textSearchConfiguration;
+    }
+
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<AgentConversationEntryEntity> entity)
     {
@@ -65,9 +77,43 @@ internal sealed class AgentConversationEntryConfiguration : IEntityTypeConfigura
             .HasFilter($"\"{AgentConversationEntryEntity.AnsweredProposalAtColumnName}\" IS NOT NULL")
             .HasDatabaseName(PersistenceConstraintNames.AgentConversationAnsweredProposalIndexName);
 
+        entity.Property(written => written.SearchVector)
+            .HasColumnName(AgentConversationEntryEntity.SearchVectorColumnName)
+            .HasColumnType("tsvector")
+            .HasComputedColumnSql(this.SearchVectorExpression(), stored: true);
+
+        entity.HasIndex(written => written.SearchVector)
+            .HasDatabaseName(PersistenceConstraintNames.AgentConversationEntrySearchVectorIndexName)
+            .HasMethod("GIN");
+
         entity.HasOne<AgentConversationEntity>()
             .WithMany()
             .HasForeignKey(written => written.ConversationId)
             .OnDelete(DeleteBehavior.Cascade);
     }
+
+    /// <summary>What the history search reads of an entry: a message's own text, or every string a block holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// Read out of the payload by PostgreSQL rather than written beside it, so an entry written before the column existed
+    /// is searchable the moment the migration lands, and the one statement every entry goes through stays the only
+    /// statement there is. Every other kind — a status line, a citation, tool traffic, a summary — has nothing a person
+    /// said or was shown as prose, and carries no vector at all.
+    /// </para>
+    /// <para>
+    /// A block's strings are taken whole with <c>json_to_tsvector</c>, which reads the values and never the keys, because
+    /// what a block's fields are called differs by block and all of them are what a person was shown. It also reads the
+    /// few values a block carries that nobody reads — its kind, an identifier — which cost a term each and match only a
+    /// query that typed them.
+    /// </para>
+    /// </remarks>
+    private string SearchVectorExpression() => string.Format(
+        CultureInfo.InvariantCulture,
+        """CASE WHEN "{0}" = '{1}' THEN to_tsvector('{4}'::regconfig, coalesce("{5}" ->> 'text', '')) WHEN "{0}" IN ('{2}', '{3}') THEN json_to_tsvector('{4}'::regconfig, "{5}" -> 'block', '["string"]') END""",
+        AgentConversationEntryEntity.KindColumnName,
+        AgentMessageWritten.Kind,
+        AgentBlockComposed.Kind,
+        AgentActionProposed.Kind,
+        this.textSearchConfiguration.Value,
+        AgentConversationEntryEntity.PayloadColumnName);
 }

@@ -5,10 +5,14 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.Agent.Conversations;
+using MailFathom.Application.UnitTests.Agent.Search;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -39,6 +43,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
 
     private readonly IUserLanguages languages = Substitute.For<IUserLanguages>();
 
+    private readonly IAgentConversationSearchIndex searchIndex = Substitute.For<IAgentConversationSearchIndex>();
+
     private readonly List<AgentConversationEntry> written = [];
 
     private readonly AgentMessageId earlierQuestion = AgentMessageId.New();
@@ -50,6 +56,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
     private readonly ClientSignals signals;
 
     private AgentContextBudget budget = AgentContextBudget.Default;
+
+    private ActiveEmbeddingSpace space = EmbeddingSpaceExample.Inactive();
 
     private bool stopped;
 
@@ -99,6 +107,38 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
             Conversation,
             SyntheticUser.Deployment,
             PresentationText.Create("Accept it for me."),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Once the answer has ended, what the turn said is placed for the history search.</summary>
+    [Fact]
+    public async Task RunAsync_AnswerEnded_EmbedsTheQuestionForTheHistorySearch()
+    {
+        // Arrange
+        this.space = EmbeddingSpaceExample.Serving(EmbeddingSpaceExample.Generator());
+        this.store
+            .ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Visible, 3, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentConversationReading(
+                Title: null,
+                Now,
+                Composing: false,
+                [
+                    AgentConversationExample.Question(this.question, "Accept it for me.") with { Sequence = 4 },
+                    new AgentAnswerStarted(this.answer) { Sequence = 5 },
+                    new AgentAnswerEnded(this.answer, AgentAnswerOutcome.Completed) { Sequence = 6 },
+                ],
+                MoreFollows: false));
+
+        // Act
+        await this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.searchIndex.Received(1).SaveEmbeddingAsync(
+            Conversation,
+            SyntheticUser.Deployment,
+            4,
+            EmbeddingSpaceExample.Profile,
+            Arg.Any<EmbeddingVector>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -292,6 +332,7 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
         this.store,
         composing ? this.composer : null,
         this.summarizer,
+        new AgentConversationEmbedding(this.store, this.space, this.searchIndex),
         this.budget,
         this.spendLedger,
         this.signals,

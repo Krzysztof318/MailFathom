@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.CodeCoverage;
+using NpgsqlTypes;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
@@ -70,6 +71,9 @@ internal sealed class AgentConversationEntryEntity
     /// <summary>The column holding when the entry was written, named here for the same reason the table is.</summary>
     internal const string WrittenAtColumnName = "WrittenAt";
 
+    /// <summary>The generated column the history search ranks an entry's words by.</summary>
+    internal const string SearchVectorColumnName = "SearchVector";
+
     /// <summary>Gets or sets the conversation this entry belongs to.</summary>
     public Guid ConversationId { get; set; }
 
@@ -101,4 +105,12 @@ internal sealed class AgentConversationEntryEntity
 
     /// <summary>Gets or sets when the entry was written, in UTC.</summary>
     public DateTimeOffset WrittenAt { get; set; }
+
+    /// <summary>Gets or sets the words the history search ranks this entry by, which PostgreSQL generates from the payload.</summary>
+    /// <remarks>
+    /// <see langword="null" /> on every entry nobody said anything in — a status line, a citation, tool traffic — so the
+    /// lexical ranking reads a message's own text and a block's fields and nothing else. Generated rather than written,
+    /// so no statement the store issues can forget it and an entry written before the column existed carries it too.
+    /// </remarks>
+    public NpgsqlTsVector? SearchVector { get; set; }
 }

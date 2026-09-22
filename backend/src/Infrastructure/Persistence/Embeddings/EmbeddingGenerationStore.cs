@@ -209,7 +209,8 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
         var profileId = await dbContext.EmbeddingProfiles
             .AsNoTracking()
             .Where(candidate => candidate.LifecycleState == EmbeddingProfileLifecycleState.Superseded)
-            .Where(candidate => candidate.Embeddings.Any())
+            .Where(candidate => candidate.Embeddings.Any()
+                || dbContext.AgentConversationEmbeddings.Any(vector => vector.EmbeddingProfileId == candidate.Id))
             .OrderBy(candidate => candidate.SupersededAt)
             .Select(candidate => (Guid?)candidate.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -233,6 +234,11 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     /// that had already been decided would charge the operator for re-embedding them. The subquery is uncorrelated, so
     /// PostgreSQL evaluates it once for the statement rather than per row.
     /// </para>
+    /// <para>
+    /// The Agent's history vectors of the same generation go first, whole and under the same re-check. They are one
+    /// person's conversations rather than a mailbox, so a batch has nothing to bound, and counting them into what the
+    /// call removed keeps the upkeep calling until both tables hold nothing of the generation.
+    /// </para>
     /// </remarks>
     public async Task<int> RemoveVectorsAsync(
         IPersistenceSession session,
@@ -246,7 +252,14 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
         var supersededProfileId = profileId.Value;
         var supersededState = nameof(EmbeddingProfileLifecycleState.Superseded);
 
-        return await sessionContext.Database.ExecuteSqlAsync(
+        var conversationVectors = await sessionContext.AgentConversationEmbeddings
+            .Where(vector => vector.EmbeddingProfileId == supersededProfileId)
+            .Where(_ => sessionContext.EmbeddingProfiles.Any(generation =>
+                generation.Id == supersededProfileId
+                && generation.LifecycleState == EmbeddingProfileLifecycleState.Superseded))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        return conversationVectors + await sessionContext.Database.ExecuteSqlAsync(
             $"""
              DELETE FROM email_embeddings
              WHERE ctid IN (
