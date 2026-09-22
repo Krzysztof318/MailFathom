@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -42,7 +41,7 @@ internal sealed class ProviderChatClient : DelegatingChatClient
         SpendMeter spend)
     {
         var credential = ProviderEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null);
-        var transport = MeteredTransport(spend, requestTimeout);
+        var transport = ProviderSpendHandler.MeteredTransport(spend, requestTimeout);
 
         try
         {
@@ -59,20 +58,6 @@ internal sealed class ProviderChatClient : DelegatingChatClient
         }
     }
 
-    /// <summary>Opens the transport every request is sent over, with the meter that reads what each answer cost in it.</summary>
-    [SuppressMessage(
-        "Reliability",
-        "CA2000:Dispose objects before losing scope",
-        Justification = "The client disposes the metering handler, which disposes the connection it was given; the analyzer does not follow ownership through a DelegatingHandler.")]
-    private static HttpClient MeteredTransport(SpendMeter spend, TimeSpan requestTimeout)
-    {
-        return new HttpClient(
-            new ProviderSpendHandler(spend, new SocketsHttpHandler { AllowAutoRedirect = false }),
-            disposeHandler: true)
-        {
-            Timeout = requestTimeout,
-        };
-    }
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

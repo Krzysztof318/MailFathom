@@ -17,6 +17,11 @@ set -euo pipefail
 # parameter at all. MAILFATHOM_EVALUATION_REPETITIONS says how many times each case is asked of each
 # model, from 1 to 20, and a run that leaves it unset asks each case once.
 #
+# The retrieval scenario measures embedding models rather than chat models, so it reads its own:
+# MAILFATHOM_EVALUATION_EMBEDDING_MODELS and MAILFATHOM_EMBEDDING_API_KEY, which a requested run cannot
+# proceed without, beside MAILFATHOM_EMBEDDING_ADDRESS and MAILFATHOM_EVALUATION_EMBEDDING_DIMENSION, which
+# it may leave unset for the provider's own address and each model's own width.
+#
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it
 # elsewhere, which is how the workflow hands in the store the previous run left.
