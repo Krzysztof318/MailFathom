@@ -583,7 +583,7 @@ internal sealed record AgentConversationScenario(
             History =
             [
                 Person("Kiedy przeprowadzamy się na ul. Wrzosową?"),
-                Agent("W sobotę, 26 września 2026 – tak potwierdziła administracja budynku."),
+                Agent("W sobotę, 26 września 2026 – potwierdziła to administracja budynku."),
             ],
         },
         new(
