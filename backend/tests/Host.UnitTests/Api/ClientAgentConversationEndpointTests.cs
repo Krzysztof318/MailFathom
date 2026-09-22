@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Mailboxes;
@@ -11,6 +12,9 @@ using MailFathom.Host.Api;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -66,12 +70,9 @@ public sealed class ClientAgentConversationEndpointTests
             .Returns(new AgentMessagePosting(AgentMessagePostingOutcome.Written, 2, answer));
 
         // Act
-        var answered = await ClientAgentConversationEndpoints.Ask(
+        var answered = await this.AskAsync(
             Conversation,
-            new ClientAgentMessageRequest(message, "What did the supplier quote?", new ClientAgentMessageScope(AgentScopeKind.Mailbox, null)),
-            Resolver(),
-            this.Controls(),
-            TestContext.Current.CancellationToken);
+            new ClientAgentMessageRequest(message, "What did the supplier quote?", new ClientAgentMessageScope(AgentScopeKind.Mailbox, null)));
 
         // Assert
         var accepted = Assert.IsType<Accepted<ClientAgentMessageResponse>>(answered.Result);
@@ -88,16 +89,60 @@ public sealed class ClientAgentConversationEndpointTests
         var (conversation, request) = MalformedQuestionCases[malformed];
 
         // Act
-        var answered = await ClientAgentConversationEndpoints.Ask(
-            conversation,
-            request,
-            Resolver(),
-            this.Controls(),
-            TestContext.Current.CancellationToken);
+        var answered = await this.AskAsync(conversation, request);
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
         Assert.Empty(this.store.ReceivedCalls());
+    }
+
+    /// <summary>A question reached under no admitted caller is refused, since there would be nobody for its answer to run as.</summary>
+    [Fact]
+    public async Task Ask_NoAdmittedCaller_RefusesItWithoutWriting()
+    {
+        // Arrange
+        var principals = Substitute.For<IAuthorizedPrincipalSource>();
+        principals.Current.Returns((AuthorizedPrincipal?)null);
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.Ask(
+            Conversation,
+            new ClientAgentMessageRequest(Guid.CreateVersion7(Now), "What did the supplier quote?", null),
+            Resolver(),
+            this.Controls(),
+            principals,
+            this.Launcher(),
+            new FakeTimeProvider(Now),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusOf(answered.Result));
+        Assert.Empty(this.store.ReceivedCalls());
+    }
+
+    /// <summary>Accepting goes through the acceptance, which finds no proposal at a place holding none and answers a conflict.</summary>
+    [Fact]
+    public async Task AnswerProposal_AcceptingAPlaceHoldingNoProposal_AnswersConflictWithoutResolvingAnything()
+    {
+        // Arrange
+        this.store
+            .ReadAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, 2, 1, Arg.Any<CancellationToken>())
+            .Returns(new AgentConversationReading(null, Now, false, [], false));
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.AnswerProposal(
+            Conversation,
+            proposedAt: 3,
+            new ClientAgentProposalAnswerRequest(ClientAgentProposalAnswerRequest.Accepted),
+            Resolver(),
+            this.Controls(),
+            this.Acceptance(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status409Conflict, StatusOf(answered.Result));
+        await this.store.DidNotReceive().TryResolveProposalAsync(
+            Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<long>(), Arg.Any<AgentProposalState>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>Each refusal the store reports is a status a client can act on, and a conversation that is not the person's reads as none.</summary>
@@ -116,12 +161,9 @@ public sealed class ClientAgentConversationEndpointTests
             .Returns(AgentMessagePosting.Refused(outcome));
 
         // Act
-        var answered = await ClientAgentConversationEndpoints.Ask(
+        var answered = await this.AskAsync(
             Conversation,
-            new ClientAgentMessageRequest(Guid.CreateVersion7(Now), "What did the supplier quote?", null),
-            Resolver(),
-            this.Controls(),
-            TestContext.Current.CancellationToken);
+            new ClientAgentMessageRequest(Guid.CreateVersion7(Now), "What did the supplier quote?", null));
 
         // Assert
         Assert.Equal(status, StatusOf(answered.Result));
@@ -141,8 +183,8 @@ public sealed class ClientAgentConversationEndpointTests
         var request = new ClientAgentMessageRequest(Guid.CreateVersion7(Now), "What did the supplier quote?", null);
 
         // Act
-        var retried = await ClientAgentConversationEndpoints.Ask(Conversation, request, Resolver(), this.Controls(), TestContext.Current.CancellationToken);
-        var reused = await ClientAgentConversationEndpoints.Ask(Conversation, request, Resolver(), this.Controls(), TestContext.Current.CancellationToken);
+        var retried = await this.AskAsync(Conversation, request);
+        var reused = await this.AskAsync(Conversation, request);
 
         // Assert
         Assert.Equal(answer.Value, Assert.IsType<Accepted<ClientAgentMessageResponse>>(retried.Result).Value!.RunId);
@@ -213,6 +255,7 @@ public sealed class ClientAgentConversationEndpointTests
             new ClientAgentProposalAnswerRequest(decision),
             Resolver(),
             this.Controls(),
+            this.Acceptance(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -231,8 +274,8 @@ public sealed class ClientAgentConversationEndpointTests
         var request = new ClientAgentProposalAnswerRequest(ClientAgentProposalAnswerRequest.Declined);
 
         // Act
-        var first = await ClientAgentConversationEndpoints.AnswerProposal(Conversation, 3, request, Resolver(), this.Controls(), TestContext.Current.CancellationToken);
-        var second = await ClientAgentConversationEndpoints.AnswerProposal(Conversation, 3, request, Resolver(), this.Controls(), TestContext.Current.CancellationToken);
+        var first = await ClientAgentConversationEndpoints.AnswerProposal(Conversation, 3, request, Resolver(), this.Controls(), this.Acceptance(), TestContext.Current.CancellationToken);
+        var second = await ClientAgentConversationEndpoints.AnswerProposal(Conversation, 3, request, Resolver(), this.Controls(), this.Acceptance(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(new ClientAgentProposalAnswerResponse(8), Assert.IsType<Ok<ClientAgentProposalAnswerResponse>>(first.Result).Value);
@@ -363,4 +406,42 @@ public sealed class ClientAgentConversationEndpointTests
 
     private AgentConversationControls Controls() =>
         new(this.store, ClientSignalPublishers.ReachingNobody, Substitute.For<IUserLanguages>(), new FakeTimeProvider(Now));
+
+    private AgentProposalAcceptance Acceptance() =>
+        new(
+            this.store,
+            Substitute.For<IAgentActPerformer>(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend),
+            ClientSignalPublishers.ReachingNobody,
+            new FakeTimeProvider(Now));
+
+    private Task<Results<Accepted<ClientAgentMessageResponse>, NotFound, ProblemHttpResult>> AskAsync(
+        Guid conversation,
+        ClientAgentMessageRequest? request,
+        AuthorizedPrincipal? caller = null)
+    {
+        var principals = Substitute.For<IAuthorizedPrincipalSource>();
+        principals.Current.Returns(caller ?? AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.MailAsk]));
+
+        return ClientAgentConversationEndpoints.Ask(
+            conversation,
+            request,
+            Resolver(),
+            this.Controls(),
+            principals,
+            this.Launcher(),
+            new FakeTimeProvider(Now),
+            TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A launcher whose runs find no composition, so a question the store wrote ends as failed rather than reaching a model.</summary>
+    private AgentAnswerLauncher Launcher() =>
+        new(
+            Substitute.For<IServiceScopeFactory>(),
+            this.store,
+            ClientSignalPublishers.ReachingNobody,
+            Substitute.For<IUserLanguages>(),
+            Substitute.For<IHostApplicationLifetime>(),
+            new FakeTimeProvider(Now),
+            NullLogger<AgentAnswerLauncher>.Instance);
 }
