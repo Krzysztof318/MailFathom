@@ -18,15 +18,17 @@ const selectionCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
 
 /**
  * What stands over the history while conversations are picked out: a way to put the selection down, how many are
- * picked out, and deleting all of them. On a phone the act is drawn as its symbol alone.
+ * picked out, and archiving or deleting all of them. On a phone each act is drawn as its symbol alone.
  */
 export function ConversationSelectionBar({
     count,
     onClear,
+    onArchive,
     onAskDeletion,
 }: {
     readonly count: number;
     readonly onClear: () => void;
+    readonly onArchive: () => void;
     readonly onAskDeletion: () => void;
 }) {
     const { locale, translate } = useLocalization();
@@ -47,10 +49,17 @@ export function ConversationSelectionBar({
             </p>
 
             <Control
+                label={translate('agent.archive')}
+                icon="archive"
+                shape={wide ? 'selected' : 'selectedSymbol'}
+                className="ms-auto"
+                onPress={onArchive}
+            />
+
+            <Control
                 label={translate('agent.delete')}
                 icon="delete"
                 shape={wide ? 'selected' : 'selectedSymbol'}
-                className="ms-auto"
                 onPress={onAskDeletion}
             />
         </div>

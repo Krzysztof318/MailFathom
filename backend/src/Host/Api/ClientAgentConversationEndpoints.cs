@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Reads a person's conversations with the Agent, posts into them, steers and stops an answer, and answers what it proposed.</summary>
+/// <summary>Reads a person's conversations with the Agent, posts into them, steers and stops an answer, answers what it proposed, and puts a conversation away or takes it back.</summary>
 /// <remarks>
 /// <para>
 /// <strong>Every route answers from any replica, and none of them waits for an answer.</strong> A conversation is rows
@@ -60,6 +60,10 @@ internal static class ClientAgentConversationEndpoints
 
     /// <summary>The route one conversation is read and deleted at, relative to the client prefix.</summary>
     internal const string ConversationRoute = "/agent/conversations/{conversationId:guid}";
+
+    /// <summary>The route a conversation is put away and taken back out at, relative to the client prefix.</summary>
+    /// <remarks>The archive is a mark on the conversation rather than a place it moves to, so putting one there and taking it back are the two writes of one sub-resource.</remarks>
+    internal const string ArchiveRoute = "/agent/conversations/{conversationId:guid}/archive";
 
     /// <summary>The route a question is asked at, relative to the client prefix.</summary>
     /// <remarks>Beneath the conversation it is asked in, which the client names — so the first question of a conversation is posted exactly as every later one is, and starts it.</remarks>
@@ -107,6 +111,12 @@ internal static class ClientAgentConversationEndpoints
             .RequirePermission(MailFathomPermission.MailAsk);
 
         api.MapDelete(ConversationRoute, Delete)
+            .RequirePermission(MailFathomPermission.MailAsk);
+
+        api.MapPut(ArchiveRoute, Archive)
+            .RequirePermission(MailFathomPermission.MailAsk);
+
+        api.MapDelete(ArchiveRoute, Restore)
             .RequirePermission(MailFathomPermission.MailAsk);
 
         api.MapPost(MessagesRoute, Ask)
@@ -160,7 +170,8 @@ internal static class ClientAgentConversationEndpoints
                 line.Id.Value,
                 line.Title,
                 line.StartedAt,
-                line.LastActivityAt)),
+                line.LastActivityAt,
+                line.Archived)),
         ]));
     }
 
@@ -215,6 +226,54 @@ internal static class ClientAgentConversationEndpoints
         var found = await search.SearchAsync(scopeResolver.User, query, limit, cancellationToken);
 
         return TypedResults.Ok(ClientAgentConversationSearchResponse.For(found));
+    }
+
+    /// <summary>Puts a conversation away, so it leaves the history this person is working in without leaving the record.</summary>
+    /// <param name="conversationId">The conversation to archive.</param>
+    /// <param name="scopeResolver">Names the acting user, whose conversation it has to be.</param>
+    /// <param name="store">Where conversations are held.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><c>204</c> where it is this person's and archived, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>
+    /// Nothing but where the conversation is listed changes: every entry stays, it opens and deletes as it did, and an
+    /// answer being composed in it is not stopped. A conversation already archived answers <c>204</c> as well, this
+    /// being the state the caller asked for.
+    /// </remarks>
+    internal static Task<Results<NoContent, NotFound>> Archive(
+        [FromRoute] Guid conversationId,
+        [FromServices] MailboxScopeResolver scopeResolver,
+        [FromServices] IAgentConversationStore store,
+        CancellationToken cancellationToken) =>
+        SetArchivedAsync(conversationId, archived: true, scopeResolver, store, cancellationToken);
+
+    /// <summary>Takes a conversation back out of the archive, into the history this person is working in.</summary>
+    /// <param name="conversationId">The conversation to restore.</param>
+    /// <param name="scopeResolver">Names the acting user, whose conversation it has to be.</param>
+    /// <param name="store">Where conversations are held.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><c>204</c> where it is this person's and restored, <c>404</c> where this person holds no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>One never archived answers <c>204</c> as well, for the reason archiving one already archived does.</remarks>
+    internal static Task<Results<NoContent, NotFound>> Restore(
+        [FromRoute] Guid conversationId,
+        [FromServices] MailboxScopeResolver scopeResolver,
+        [FromServices] IAgentConversationStore store,
+        CancellationToken cancellationToken) =>
+        SetArchivedAsync(conversationId, archived: false, scopeResolver, store, cancellationToken);
+
+    private static async Task<Results<NoContent, NotFound>> SetArchivedAsync(
+        Guid conversationId,
+        bool archived,
+        MailboxScopeResolver scopeResolver,
+        IAgentConversationStore store,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(store);
+
+        return conversationId != Guid.Empty
+            && await store.TrySetArchivedAsync(AgentConversationId.Create(conversationId), scopeResolver.User, archived, cancellationToken)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
     }
 
     /// <summary>Reads one conversation from wherever the caller left off, on whichever replica the request reached.</summary>
@@ -591,7 +650,7 @@ internal sealed record ClientAgentProposalAnswerRequest(string? Decision)
 internal sealed record ClientAgentProposalAnswerResponse(long Sequence);
 
 /// <summary>A person's conversation history.</summary>
-/// <param name="Conversations">One line per conversation, the one that moved most recently first.</param>
+/// <param name="Conversations">One line per conversation, the ones not archived first and each group's most recently moved first.</param>
 internal sealed record ClientAgentConversationListResponse(IReadOnlyList<ClientAgentConversationSummary> Conversations);
 
 /// <summary>One line of a person's conversation history.</summary>
@@ -599,11 +658,13 @@ internal sealed record ClientAgentConversationListResponse(IReadOnlyList<ClientA
 /// <param name="Title">What it is called, and <see langword="null" /> until the agent names it.</param>
 /// <param name="StartedAt">When it was started.</param>
 /// <param name="LastActivityAt">When anything was last written into it.</param>
+/// <param name="Archived">Whether the person has put it away, which is what a client draws its archive section from.</param>
 internal sealed record ClientAgentConversationSummary(
     Guid Id,
     string? Title,
     DateTimeOffset StartedAt,
-    DateTimeOffset LastActivityAt);
+    DateTimeOffset LastActivityAt,
+    bool Archived);
 
 /// <summary>One read of a conversation: where it stands, and everything written past the place the reader held.</summary>
 /// <param name="Title">What the conversation is called, and <see langword="null" /> until the agent names it.</param>

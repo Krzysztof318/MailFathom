@@ -136,6 +136,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.SearchRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ArchiveRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ArchiveRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.MessagesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ProposalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.RunRoute}",
@@ -282,6 +284,7 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"DELETE {prefix}{ClientAgentConversationEndpoints.ConversationRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"DELETE {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"DELETE {prefix}{ClientAgentConversationEndpoints.RunRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"DELETE {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"DELETE {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",
@@ -385,6 +388,7 @@ public sealed class ClientApiEndpointsTests
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
                     .Order(StringComparer.Ordinal),
                 $"POST {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"PUT {prefix}{ClientAgentConversationEndpoints.ArchiveRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"PUT {prefix}{ClientAgentConversationEndpoints.ProposalRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"PUT {prefix}{ClientCalendarEndpoints.CalendarEventRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"PUT {prefix}{ClientContactEndpoints.ContactRoute} -> {MailFathomPermission.MailContactsWrite.Name}",

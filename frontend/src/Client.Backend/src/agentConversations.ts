@@ -12,9 +12,10 @@ import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // The Agent's conversations as `/api/client` serves them: the history, one conversation read from a cursor, and the
-// four writes a person makes into one — asking, steering the answer being composed, stopping it, and deleting the whole
-// conversation. A conversation is the entries it was written as, so what arrives here is that record rather than a
-// rendering of it: which entries make one answer, and which proposal a resolution decides, is the screen's to fold.
+// writes a person makes into one — asking, steering the answer being composed, stopping it, putting the conversation
+// away or taking it back, and deleting the whole thing. A conversation is the entries it was written as, so what
+// arrives here is that record rather than a rendering of it: which entries make one answer, and which proposal a
+// resolution decides, is the screen's to fold.
 
 /** Where the history is read. */
 export const agentConversationsRoute = '/agent/conversations';
@@ -22,6 +23,11 @@ export const agentConversationsRoute = '/agent/conversations';
 /** Where one conversation is read and deleted. */
 export function agentConversationRoute(conversationId: string): string {
     return `${agentConversationsRoute}/${encodeURIComponent(conversationId)}`;
+}
+
+/** Where a conversation is put away and taken back out. */
+export function agentConversationArchiveRoute(conversationId: string): string {
+    return `${agentConversationRoute(conversationId)}/archive`;
 }
 
 /** The most conversations one listing answers with, which is the service's own ceiling. */
@@ -55,6 +61,9 @@ export interface AgentConversationSummary {
 
     readonly startedAt: string;
     readonly lastActivityAt: string;
+
+    /** Whether the person has put it away, which is what the archive section of the history is drawn from. */
+    readonly archived: boolean;
 }
 
 /** What a person's question was about, where they asked it from a screen that carries one. */
@@ -256,7 +265,46 @@ export function stopAgentRun(
     run: string,
 ): Promise<ClientResult<void>> {
     return spanned('DELETE /agent/conversations/{conversationId}/runs/{runId}', () =>
-        removed(session, transport, `${agentConversationRoute(conversationId)}/runs/${encodeURIComponent(run)}`),
+        acknowledged(
+            session,
+            transport,
+            'DELETE',
+            `${agentConversationRoute(conversationId)}/runs/${encodeURIComponent(run)}`,
+        ),
+    );
+}
+
+/**
+ * Puts a conversation away, so it leaves the history the person is working in without leaving the record.
+ *
+ * Nothing else about it moves: it keeps its entries, opens and deletes as it did, and an answer being composed in it
+ * goes on being composed.
+ *
+ * @returns Nothing where it is archived, or why not. One already archived is nothing as well, that being what was
+ * asked for.
+ */
+export function archiveAgentConversation(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    conversationId: string,
+): Promise<ClientResult<void>> {
+    return spanned('PUT /agent/conversations/{conversationId}/archive', () =>
+        acknowledged(session, transport, 'PUT', agentConversationArchiveRoute(conversationId)),
+    );
+}
+
+/**
+ * Takes a conversation back out of the archive, into the history the person is working in.
+ *
+ * @returns Nothing where it is restored, or why not. One that was never archived is nothing as well.
+ */
+export function restoreAgentConversation(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    conversationId: string,
+): Promise<ClientResult<void>> {
+    return spanned('DELETE /agent/conversations/{conversationId}/archive', () =>
+        acknowledged(session, transport, 'DELETE', agentConversationArchiveRoute(conversationId)),
     );
 }
 
@@ -271,7 +319,7 @@ export function deleteAgentConversation(
     conversationId: string,
 ): Promise<ClientResult<void>> {
     return spanned('DELETE /agent/conversations/{conversationId}', () =>
-        removed(session, transport, agentConversationRoute(conversationId)),
+        acknowledged(session, transport, 'DELETE', agentConversationRoute(conversationId)),
     );
 }
 
@@ -306,13 +354,15 @@ async function posted(
     return run === null ? failed('unreadable', response.status) : read({ run });
 }
 
-async function removed(
+/** A write whose whole answer is that it happened: `204`, or `404` where this person holds no such conversation. */
+async function acknowledged(
     session: ClientSession,
     transport: MailFathomTransport,
+    method: 'PUT' | 'DELETE',
     route: string,
 ): Promise<ClientResult<void>> {
     const response = await send(transport, {
-        method: 'DELETE',
+        method,
         path: routeFor(session, route),
         headers: headersFor(session),
         longestAnswer: longestWriteAnswer,
@@ -354,12 +404,19 @@ function parseSummaries(body: string): readonly AgentConversationSummary[] | nul
         const title = record?.['title'];
         const startedAt = instant(record?.['startedAt']);
         const lastActivityAt = instant(record?.['lastActivityAt']);
+        const archived = record?.['archived'];
 
-        if (id === null || startedAt === null || lastActivityAt === null || !isTitle(title)) {
+        if (
+            id === null ||
+            startedAt === null ||
+            lastActivityAt === null ||
+            !isTitle(title) ||
+            typeof archived !== 'boolean'
+        ) {
             return null;
         }
 
-        conversations.push({ id, title: title ?? null, startedAt, lastActivityAt });
+        conversations.push({ id, title: title ?? null, startedAt, lastActivityAt, archived });
     }
 
     return conversations;

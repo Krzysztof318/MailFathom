@@ -158,6 +158,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/agent/conversations/search` | `mailfathom.mail.ask` |
 | `GET /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
 | `DELETE /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
+| `PUT /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.mail.ask` |
+| `DELETE /api/client/agent/conversations/{conversationId}/archive` | `mailfathom.mail.ask` |
 | `POST /api/client/agent/conversations/{conversationId}/messages` | `mailfathom.mail.ask` |
 | `POST /api/client/agent/conversations/{conversationId}/runs/{runId}/messages` | `mailfathom.mail.ask` |
 | `DELETE /api/client/agent/conversations/{conversationId}/runs/{runId}` | `mailfathom.mail.ask` |
@@ -3408,7 +3410,9 @@ order, so the places a client receives can have gaps where they stand, and a rea
 its limit counts visible entries, a cursor never lands on a technical one, and an empty page with nothing following
 means the client is caught up. `composing` says an answer
 is still being written, and `moreFollows` says more is written than one read returns, at most 250; the client reads
-again from the last place it was given. The listing returns at most 100 conversations, the one that moved last first.
+again from the last place it was given. The listing returns at most 100 conversations, the ones not archived first and
+each group the one that moved last first, and every line carries `archived` — so a listing cut at the bound loses an
+archived conversation before one the person is working in.
 
 **The history is searched the way mail is: by its words and by its meaning, fused.** The query travels in the body
 rather than the address, so it reaches no access log:
@@ -3522,6 +3526,20 @@ conversation then shows. A caller whose grant does not carry every permission th
 and `mailfathom.mail.send`, and `mailfathom.mail.read` as well for an answer to a message — is `403` before anything is
 recorded. Declining carries nothing out. `DELETE /api/client/agent/conversations/{conversationId}` removes
 the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
+
+**Archiving puts a conversation away without losing any of it:**
+
+```http
+PUT    /api/client/agent/conversations/{conversationId}/archive
+DELETE /api/client/agent/conversations/{conversationId}/archive
+```
+
+The `PUT` archives the conversation and the `DELETE` restores it, each answered `204`, and `404` where this person holds
+no such conversation. Either answers `204` when the conversation is already where it was asked to be. Archiving is a
+state of the conversation the deployment keeps, so it follows the person to every client they sign in on, and it
+changes where the conversation is listed and nothing else: every entry stays, it reads, answers, and deletes as it did,
+an answer still being composed in it goes on being composed, and it does not move the instant the history is ordered
+by. Nothing archives a conversation on its own.
 
 **Every visible write is announced as `run.advanced`** over [the signal channel](#the-signal-channel), naming the conversation,
 the run where the write belongs to one, and the place reached — never the question, a block, a status line, or a

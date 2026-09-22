@@ -1374,6 +1374,7 @@ to.
 | `Sequence` | The place the last entry was written at. It is advanced inside the statement that writes the next one, so the number is the database's rather than one a replica counted — and the row lock that advance takes is what serializes the two writers a conversation genuinely has, a person typing while a run composes |
 | `VisibleEntryCount` | How many entries of the visible history the conversation holds. Advanced by the same statement as `Sequence`, only for a visible entry, so the ceiling a person meets counts what they can read and a run's tool traffic never fills a conversation sooner |
 | `ComposingMessageId` | Which answer is being composed, and null where none is. It is what refuses a second answer opening while one is open, and what refuses a part of an answer arriving after that answer has ended — both as conditions on this row rather than as a check some replica performs and then acts on |
+| `Archived` | Whether the person has put the conversation away, false for every conversation until they do. It decides where the history lists it and nothing else — the entries stay, an answer being composed goes on, and `LastActivityAt` does not move when it changes |
 
 | `agent_conversation_entries` column | What it records |
 |---|---|
@@ -1401,7 +1402,9 @@ everything said in one.
 
 **Two indexes and five bounds hold it.** `ix_agent_conversations_user_last_activity` over
 `(UserId, LastActivityAt DESC)` is a person's history, which is the only shape that listing takes, and it answers the
-cascade's own lookup as well. `ix_agent_conversation_entries_answered` over `(ConversationId, AnsweredProposalAt)` is
+cascade's own lookup as well. The listing sorts the archived conversations behind the rest, and the index leaves
+`Archived` out: one person holds at most a thousand rows, so that order is settled over a set the index has already
+narrowed to them. `ix_agent_conversation_entries_answered` over `(ConversationId, AnsweredProposalAt)` is
 partial over the rows where that column is not null, because answers to offers are a small minority of what a
 conversation holds and an index over all of them would be rewritten on every block a run composes to serve a query only
 a press makes. The bounds are a conversation's entry counts — 5 000 of the visible history and 50 000 of the whole

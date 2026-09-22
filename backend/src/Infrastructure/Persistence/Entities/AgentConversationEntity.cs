@@ -63,6 +63,9 @@ internal sealed class AgentConversationEntity
     /// <summary>The column naming the answer currently being composed, named here for the same reason the table is.</summary>
     internal const string ComposingMessageIdColumnName = "ComposingMessageId";
 
+    /// <summary>The column saying whether the person has put the conversation away, named here for the same reason the table is.</summary>
+    internal const string ArchivedColumnName = "Archived";
+
     /// <summary>The longest name the column takes, which is the bound the contract already states.</summary>
     internal const int TitleLengthLimit = AgentConversationBounds.MaximumTitleLength;
 
@@ -102,4 +105,12 @@ internal sealed class AgentConversationEntity
     /// is how a control pressed on one replica reaches a run on another without anything having to reach it.
     /// </remarks>
     public Guid? ComposingMessageId { get; set; }
+
+    /// <summary>Gets or sets whether the person has put the conversation away, which keeps it out of the working history without losing anything.</summary>
+    /// <remarks>
+    /// A state of the conversation rather than of one client, so archiving follows the person to every screen they sign
+    /// in on. It changes nothing else about the row: the entries stay, an answer being composed goes on being composed,
+    /// and the conversation reads, answers and deletes exactly as it did.
+    /// </remarks>
+    public bool Archived { get; set; }
 }

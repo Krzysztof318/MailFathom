@@ -299,17 +299,32 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         ORDER BY e."{AgentConversationEntryEntity.SequenceColumnName}";
         """;
 
-    /// <summary>Reads one person's conversation history, the one that moved most recently first.</summary>
-    /// <remarks>The identifier breaks a tie, so two conversations written in the same instant come back in one order rather than whichever the plan happened to produce.</remarks>
+    /// <summary>Reads one person's conversation history, the ones they are working in first and each group's most recently moved first.</summary>
+    /// <remarks>
+    /// The archived conversations sort behind the rest so a listing cut at the bound loses one of those before it loses
+    /// a working conversation. The identifier breaks a tie, so two conversations written in the same instant come back
+    /// in one order rather than whichever the plan happened to produce.
+    /// </remarks>
     private const string ListConversationsStatement = $"""
         SELECT "{AgentConversationEntity.IdColumnName}",
                "{AgentConversationEntity.TitleColumnName}",
                "{AgentConversationEntity.StartedAtColumnName}",
-               "{AgentConversationEntity.LastActivityAtColumnName}"
+               "{AgentConversationEntity.LastActivityAtColumnName}",
+               "{AgentConversationEntity.ArchivedColumnName}"
         FROM "{AgentConversationEntity.TableName}"
         WHERE "{AgentConversationEntity.UserIdColumnName}" = @userId
-        ORDER BY "{AgentConversationEntity.LastActivityAtColumnName}" DESC, "{AgentConversationEntity.IdColumnName}"
+        ORDER BY "{AgentConversationEntity.ArchivedColumnName}",
+                 "{AgentConversationEntity.LastActivityAtColumnName}" DESC,
+                 "{AgentConversationEntity.IdColumnName}"
         LIMIT @listLimit;
+        """;
+
+    /// <summary>Puts a conversation this person holds away, or takes it back out of the archive.</summary>
+    /// <remarks>It touches that column alone, leaving the instant the history is ordered by where it was, for the reason naming a conversation does.</remarks>
+    private const string SetArchivedStatement = $"""
+        UPDATE "{AgentConversationEntity.TableName}"
+        SET "{AgentConversationEntity.ArchivedColumnName}" = @archived
+        WHERE "{AgentConversationEntity.IdColumnName}" = @id AND "{AgentConversationEntity.UserIdColumnName}" = @userId;
         """;
 
     /// <summary>Names a conversation, leaving the instant its history is ordered by where it was.</summary>
@@ -563,10 +578,26 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
                 AgentConversationId.Create(reader.GetGuid(0)),
                 await reader.IsDBNullAsync(1, cancellationToken) ? null : reader.GetString(1),
                 reader.GetFieldValue<DateTimeOffset>(2),
-                reader.GetFieldValue<DateTimeOffset>(3)));
+                reader.GetFieldValue<DateTimeOffset>(3),
+                reader.GetBoolean(4)));
         }
 
         return history;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TrySetArchivedAsync(
+        AgentConversationId id,
+        UserId user,
+        bool archived,
+        CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand(SetArchivedStatement);
+        command.Parameters.AddWithValue("id", id.Value);
+        command.Parameters.AddWithValue("userId", user.Value);
+        command.Parameters.AddWithValue("archived", archived);
+
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
     /// <inheritdoc />

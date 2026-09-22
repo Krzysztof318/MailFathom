@@ -49,6 +49,7 @@ public sealed class ClientAgentConversationEndpointTests
                 "/agent/conversations",
                 "/agent/conversations/search",
                 "/agent/conversations/{conversationId:guid}",
+                "/agent/conversations/{conversationId:guid}/archive",
                 "/agent/conversations/{conversationId:guid}/messages",
                 "/agent/conversations/{conversationId:guid}/runs/{runId:guid}",
                 "/agent/conversations/{conversationId:guid}/runs/{runId:guid}/messages",
@@ -58,6 +59,7 @@ public sealed class ClientAgentConversationEndpointTests
                 ClientAgentConversationEndpoints.ConversationsRoute,
                 ClientAgentConversationEndpoints.SearchRoute,
                 ClientAgentConversationEndpoints.ConversationRoute,
+                ClientAgentConversationEndpoints.ArchiveRoute,
                 ClientAgentConversationEndpoints.MessagesRoute,
                 ClientAgentConversationEndpoints.RunRoute,
                 ClientAgentConversationEndpoints.RunMessagesRoute,
@@ -349,12 +351,12 @@ public sealed class ClientAgentConversationEndpointTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The history is the signed-in person's, read at the bound, and each line carries what the store listed.</summary>
+    /// <summary>The history is the signed-in person's, read at the bound, and each line carries what the store listed, whether it is archived among it.</summary>
     [Fact]
     public async Task List_ThePersonsHistory_ListsEveryLineTheStoreReturned()
     {
         // Arrange
-        var line = new AgentConversationSummary(AgentConversationId.Create(Conversation), "Supplier quotes", Now, Now.AddMinutes(3));
+        var line = new AgentConversationSummary(AgentConversationId.Create(Conversation), "Supplier quotes", Now, Now.AddMinutes(3), Archived: true);
         this.store
             .ListAsync(SyntheticUser.Deployment, AgentConversationBounds.MaximumConversationsPerListing, Arg.Any<CancellationToken>())
             .Returns([line]);
@@ -364,7 +366,7 @@ public sealed class ClientAgentConversationEndpointTests
 
         // Assert
         Assert.Equal(
-            [new ClientAgentConversationSummary(Conversation, "Supplier quotes", Now, Now.AddMinutes(3))],
+            [new ClientAgentConversationSummary(Conversation, "Supplier quotes", Now, Now.AddMinutes(3), Archived: true)],
             answered.Value!.Conversations);
     }
 
@@ -433,6 +435,55 @@ public sealed class ClientAgentConversationEndpointTests
 
     /// <summary>Indexes into <see cref="MalformedSearchCases" />, which the request records being internal keeps out of a theory's own data.</summary>
     public static TheoryData<int> MalformedSearches => [.. Enumerable.Range(0, MalformedSearchCases.Length)];
+
+    /// <summary>Archiving marks the person's own conversation archived and answers <c>204</c>, and one they do not hold is <c>404</c>.</summary>
+    [Theory]
+    [InlineData(true, typeof(NoContent))]
+    [InlineData(false, typeof(NotFound))]
+    public async Task Archive_AConversation_AnswersByWhetherItWasThePersons(bool held, Type expected)
+    {
+        // Arrange
+        this.store
+            .TrySetArchivedAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, true, Arg.Any<CancellationToken>())
+            .Returns(held);
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.Archive(Conversation, Resolver(), this.store, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType(expected, answered.Result);
+    }
+
+    /// <summary>Restoring takes the person's own conversation back out of the archive and answers <c>204</c>, and one they do not hold is <c>404</c>.</summary>
+    [Theory]
+    [InlineData(true, typeof(NoContent))]
+    [InlineData(false, typeof(NotFound))]
+    public async Task Restore_AConversation_AnswersByWhetherItWasThePersons(bool held, Type expected)
+    {
+        // Arrange
+        this.store
+            .TrySetArchivedAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, false, Arg.Any<CancellationToken>())
+            .Returns(held);
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.Restore(Conversation, Resolver(), this.store, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType(expected, answered.Result);
+    }
+
+    /// <summary>An empty identifier names no conversation, so it is answered <c>404</c> without the store being asked.</summary>
+    [Fact]
+    public async Task Archive_AnEmptyIdentifier_IsNotFoundWithoutAskingTheStore()
+    {
+        // Act
+        var answered = await ClientAgentConversationEndpoints.Archive(Guid.Empty, Resolver(), this.store, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound>(answered.Result);
+        await this.store.DidNotReceive().TrySetArchivedAsync(
+            Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
 
     /// <summary>Indexes into <see cref="MalformedQuestionCases" />, which the request records being internal keeps out of a theory's own data.</summary>
     public static TheoryData<int> MalformedQuestions => [.. Enumerable.Range(0, MalformedQuestionCases.Length)];

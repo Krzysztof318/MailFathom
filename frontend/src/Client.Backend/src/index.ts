@@ -119,12 +119,15 @@ export {
     type DiscoveryRunSpend,
 } from './discoveryRun';
 export {
+    agentConversationArchiveRoute,
     agentConversationRoute,
     agentConversationsRoute,
+    archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
     listAgentConversations,
     readAgentConversation,
+    restoreAgentConversation,
     steerAgentRun,
     stopAgentRun,
     type AgentAnswerOutcome,

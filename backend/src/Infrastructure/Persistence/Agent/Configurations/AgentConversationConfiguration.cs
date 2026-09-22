@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -20,6 +21,12 @@ namespace MailFathom.Infrastructure.Persistence.Agent.Configurations;
 /// the only query this table has beside reading one conversation — a person's history, most recently active first —
 /// and because the person leads it, it is also the index the foreign key and an erasure of that person reach the rows
 /// by. A second index on the person alone would be that one's prefix and would earn nothing.
+/// </para>
+/// <para>
+/// The listing sorts the archived conversations behind the rest, and the index does not carry that column: one person
+/// holds at most <see cref="AgentConversationBounds.MaximumConversations" /> rows, so ordering them is settled in
+/// memory over a set already bounded, and widening the index to spare that sort would cost every write of every
+/// conversation to save nothing measurable.
 /// </para>
 /// </remarks>
 internal sealed class AgentConversationConfiguration : IEntityTypeConfiguration<AgentConversationEntity>
@@ -48,6 +55,8 @@ internal sealed class AgentConversationConfiguration : IEntityTypeConfiguration<
             .HasColumnName(AgentConversationEntity.VisibleEntryCountColumnName);
         entity.Property(conversation => conversation.ComposingMessageId)
             .HasColumnName(AgentConversationEntity.ComposingMessageIdColumnName);
+        entity.Property(conversation => conversation.Archived)
+            .HasColumnName(AgentConversationEntity.ArchivedColumnName);
 
         entity.HasIndex(conversation => new { conversation.UserId, conversation.LastActivityAt })
             .IsDescending(false, true)

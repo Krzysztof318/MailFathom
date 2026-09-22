@@ -42,8 +42,15 @@ export const pl: Catalogue = {
     'agent.selectConversations': 'Zaznacz rozmowy',
     'agent.openConversation': 'Otwórz rozmowę',
     'agent.deleteConversation': 'Usuń rozmowę',
+    'agent.archiveConversation': 'Archiwizuj',
+    'agent.restoreConversation': 'Przywróć z archiwum',
+    'agent.archived': 'Zarchiwizowane ({count})',
+    'agent.showArchived': 'Pokaż zarchiwizowane rozmowy',
+    'agent.hideArchived': 'Ukryj zarchiwizowane rozmowy',
+    'agent.archivedConversations': 'Zarchiwizowane rozmowy',
     'agent.selectionBar': 'Działania na zaznaczonych rozmowach',
     'agent.clearSelection': 'Anuluj zaznaczenie',
+    'agent.archive': 'Archiwizuj',
     'agent.delete': 'Usuń',
     'agent.deleteOne': 'Usunąć tę rozmowę?',
     'agent.deleteOneConsequence': 'Wiadomości w rozmowie „{title}” z agentem zostaną trwale usunięte.',
@@ -59,6 +66,13 @@ export const pl: Catalogue = {
         'Nie udało się połączyć z wdrożeniem, więc rozmowa nie została usunięta. Spróbuj ponownie.',
     'agent.notDeleted.unreadable':
         'Wdrożenie odpowiedziało w sposób, którego ten klient nie potrafi odczytać, więc nie wiadomo, czy rozmowa została usunięta.',
+    'agent.notArchived.unauthenticated':
+        'Sesja wygasła, zanim archiwum się zmieniło. Zaloguj się ponownie i spróbuj jeszcze raz.',
+    'agent.notArchived.unauthorized': 'To konto nie ma uprawnień do archiwizowania rozmów z agentem.',
+    'agent.notArchived.unavailable':
+        'Nie udało się połączyć z wdrożeniem, więc archiwum się nie zmieniło. Spróbuj ponownie.',
+    'agent.notArchived.unreadable':
+        'Wdrożenie odpowiedziało w sposób, którego ten klient nie potrafi odczytać, więc nie wiadomo, czy archiwum się zmieniło.',
     'agent.tabs': 'Otwarte rozmowy',
     'agent.closeTab': 'Zamknij: {title}',
     'agent.thread': 'Rozmowa z agentem',

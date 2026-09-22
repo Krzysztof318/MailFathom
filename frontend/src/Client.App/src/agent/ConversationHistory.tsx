@@ -7,10 +7,11 @@ import type { AgentConversationSummary, ClientFailureReason } from '@mailfathom/
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { onlySelected, withToggled } from '../contextMenu/rowSelection';
 import { Control } from '../controls/Control';
+import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { ConversationRow } from './ConversationRow';
+import { ConversationList } from './ConversationList';
 import { ConversationRowMenu } from './ConversationRowMenu';
 import { ConversationSelectionBar } from './ConversationSelectionBar';
 import type { ConversationHistory as History } from './useConversationHistory';
@@ -24,7 +25,8 @@ const historyFailures: Readonly<Record<ClientFailureReason, MessageKey>> = {
 };
 
 /**
- * The conversations this person has had with the agent, newest first, and what can be done to them from here.
+ * The conversations this person has had with the agent, newest first, and what can be done to them from here. The ones
+ * put away stand under the rest in a section of their own, folded until it is opened.
  *
  * The design draws a search field over the list; it is left out until the history can be searched the way mail is,
  * because filtering the hundred titles this client happens to hold would answer a different question.
@@ -36,6 +38,7 @@ export function ConversationHistory({
     onOpen,
     onSelected,
     onNew,
+    onArchive,
     onAskDeletion,
     onReadAgain,
     onClose,
@@ -49,13 +52,17 @@ export function ConversationHistory({
     readonly onOpen: (conversation: string) => void;
     readonly onSelected: (selected: readonly string[]) => void;
     readonly onNew: () => void;
+
+    /** Puts the conversations named away, or takes them back out of the archive where `archived` is false. */
+    readonly onArchive: (conversations: readonly string[], archived: boolean) => void;
+
     readonly onAskDeletion: (conversations: readonly string[]) => void;
     readonly onReadAgain: () => void;
 
     /** Puts the panel away, which only a panel drawn over the thread offers. */
     readonly onClose: (() => void) | null;
 }) {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
     const [menu, setMenu] = useState<{
         readonly conversation: AgentConversationSummary;
         readonly at: MenuPoint;
@@ -63,15 +70,19 @@ export function ConversationHistory({
     } | null>(null);
 
     const [reached, setReached] = useState<string | null>(null);
+    const [archiveOpen, setArchiveOpen] = useState(false);
     const rows = useRef(new Map<string, HTMLLIElement>());
 
     const { conversations, reading, failure } = history;
+    const working = conversations.filter((summary) => !summary.archived);
+    const archived = conversations.filter((summary) => summary.archived);
 
     // One row is in the tab order, as in every list here: the one the keyboard last reached, else the one open, else
-    // the first — so reaching the history is one stop and the arrow keys walk it.
+    // the first — so reaching the history is one stop and the arrow keys walk it, on into the archive where it is open.
+    const walkable = archiveOpen ? [...working, ...archived] : working;
     const listed = (conversation: string | null): conversation is string =>
-        conversations.some((summary) => summary.id === conversation);
-    const focusable = listed(reached) ? reached : listed(open) ? open : (conversations[0]?.id ?? null);
+        walkable.some((summary) => summary.id === conversation);
+    const focusable = listed(reached) ? reached : listed(open) ? open : (walkable[0]?.id ?? null);
 
     function focusOn(conversation: string | null): void {
         if (conversation !== null) {
@@ -81,19 +92,56 @@ export function ConversationHistory({
     }
 
     function walked(event: KeyboardEvent<HTMLUListElement>): void {
-        const at = conversations.findIndex((summary) => summary.id === focusable);
+        const at = walkable.findIndex((summary) => summary.id === focusable);
         const to: Readonly<Record<string, number>> = {
-            ArrowDown: Math.min(at + 1, conversations.length - 1),
+            ArrowDown: Math.min(at + 1, walkable.length - 1),
             ArrowUp: Math.max(at - 1, 0),
             Home: 0,
-            End: conversations.length - 1,
+            End: walkable.length - 1,
         };
         const reachedAt = to[event.key];
 
         if (reachedAt !== undefined) {
             event.preventDefault();
-            focusOn(conversations[reachedAt]?.id ?? null);
+            focusOn(walkable[reachedAt]?.id ?? null);
         }
+    }
+
+    function attachRow(conversation: string, row: HTMLLIElement | null): void {
+        if (row === null) {
+            rows.current.delete(conversation);
+        } else {
+            rows.current.set(conversation, row);
+        }
+    }
+
+    function pressRow(conversation: AgentConversationSummary, at: MenuPoint): void {
+        // Focus goes back where it was when the menu closes, which for a menu opened from the keyboard is the row it
+        // was opened on.
+        const opener = document.activeElement;
+        setMenu({ conversation, at, opener: opener instanceof HTMLElement ? opener : null });
+    }
+
+    function toggleRow(conversation: string): void {
+        onSelected(withToggled(selected, conversation));
+    }
+
+    function listOf(label: string, listedHere: readonly AgentConversationSummary[]) {
+        return (
+            <ConversationList
+                label={label}
+                conversations={listedHere}
+                open={open}
+                selected={selected}
+                focusable={focusable}
+                onWalk={walked}
+                attach={attachRow}
+                onReached={setReached}
+                onOpen={onOpen}
+                onToggle={toggleRow}
+                onPress={pressRow}
+            />
+        );
     }
 
     // The bar that held focus goes with the selection, so focus is put on the list before it does.
@@ -120,53 +168,39 @@ export function ConversationHistory({
                 <ConversationSelectionBar
                     count={selected.length}
                     onClear={clearSelection}
+                    onArchive={() => {
+                        clearSelection();
+                        onArchive(selected, true);
+                    }}
                     onAskDeletion={() => {
                         onAskDeletion(selected);
                     }}
                 />
             ) : null}
 
-            {conversations.length > 0 ? (
-                <ul
-                    role="listbox"
-                    aria-label={translate('agent.conversations')}
-                    aria-multiselectable={true}
-                    className="flex flex-col gap-px"
-                    onKeyDown={walked}
-                >
-                    {conversations.map((conversation) => (
-                        <ConversationRow
-                            key={conversation.id}
-                            conversation={conversation}
-                            open={conversation.id === open}
-                            selected={selected.includes(conversation.id)}
-                            selecting={selected.length > 0}
-                            focusable={conversation.id === focusable}
-                            attach={(row) => {
-                                if (row === null) {
-                                    rows.current.delete(conversation.id);
-                                } else {
-                                    rows.current.set(conversation.id, row);
-                                }
-                            }}
-                            onReached={() => {
-                                setReached(conversation.id);
-                            }}
-                            onOpen={() => {
-                                onOpen(conversation.id);
-                            }}
-                            onToggle={() => {
-                                onSelected(withToggled(selected, conversation.id));
-                            }}
-                            onPress={(at) => {
-                                // Focus goes back where it was when the menu closes, which for a menu opened from the
-                                // keyboard is the row it was opened on.
-                                const opener = document.activeElement;
-                                setMenu({ conversation, at, opener: opener instanceof HTMLElement ? opener : null });
-                            }}
-                        />
-                    ))}
-                </ul>
+            {working.length > 0 ? listOf(translate('agent.conversations'), working) : null}
+
+            {archived.length > 0 ? (
+                <>
+                    <button
+                        type="button"
+                        aria-expanded={archiveOpen}
+                        aria-label={translate(archiveOpen ? 'agent.hideArchived' : 'agent.showArchived')}
+                        className="mt-1 flex cursor-pointer items-center gap-1.5 border-t border-line-soft px-0.5 pt-2 pb-1 text-muted hover:text-text"
+                        onClick={() => {
+                            setArchiveOpen((before) => !before);
+                        }}
+                    >
+                        <Icon name={archiveOpen ? 'expand_more' : 'chevron_right'} className="size-4 shrink-0" />
+                        <span className="text-xs tracking-widest uppercase">
+                            {translate('agent.archived', {
+                                count: new Intl.NumberFormat(locale).format(archived.length),
+                            })}
+                        </span>
+                    </button>
+
+                    {archiveOpen ? listOf(translate('agent.archivedConversations'), archived) : null}
+                </>
             ) : null}
 
             {reading && conversations.length === 0 ? (
@@ -198,12 +232,16 @@ export function ConversationHistory({
             {menu === null ? null : (
                 <ConversationRowMenu
                     title={menu.conversation.title ?? translate('agent.newConversation')}
+                    archived={menu.conversation.archived}
                     at={menu.at}
                     onSelect={() => {
                         onSelected(onlySelected(menu.conversation.id));
                     }}
                     onOpen={() => {
                         onOpen(menu.conversation.id);
+                    }}
+                    onArchive={() => {
+                        onArchive([menu.conversation.id], !menu.conversation.archived);
                     }}
                     onAskDeletion={() => {
                         onAskDeletion([menu.conversation.id]);
