@@ -192,6 +192,55 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         }
     }
 
+    /// <summary>An answer still running when its conversation fills can be ended, at the last place the ceiling allows.</summary>
+    /// <remarks>
+    /// Every other entry stops one short of the ceiling, so a stop reaching a full conversation still ends the answer
+    /// rather than being refused as though that answer were not running. Nothing is written past the ending.
+    /// </remarks>
+    [Fact]
+    public async Task AppendAsync_AnAnswerRunningWhenTheConversationFills_CanStillBeEndedAtTheLastPlace()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var person = UserId.Create(user);
+            var conversation = await StartedAsync(store, user, cancellationToken);
+            var answer = AgentMessageId.New();
+            await store.AppendAsync(conversation, person, new AgentAnswerStarted(answer), Instant, cancellationToken);
+
+            for (var place = 2; place < AgentConversationBounds.MaximumEntries; place++)
+            {
+                await store.AppendAsync(conversation, person, Composed(answer), Instant, cancellationToken);
+            }
+
+            // Act
+            var composedIntoTheLastPlace = await store.AppendAsync(conversation, person, Composed(answer), Instant, cancellationToken);
+            var ended = await store.AppendAsync(
+                conversation,
+                person,
+                new AgentAnswerEnded(answer, AgentAnswerOutcome.Stopped),
+                Instant,
+                cancellationToken);
+            var pastTheEnd = await store.AppendAsync(conversation, person, Note(), Instant, cancellationToken);
+
+            // Assert
+            Assert.Null(composedIntoTheLastPlace);
+            Assert.Equal(AgentConversationBounds.MaximumEntries, ended);
+            Assert.Null(pastTheEnd);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+        }
+    }
+
     /// <summary>An answer ended on one replica is one no other replica may go on writing into, and what it composed stays.</summary>
     /// <remarks>
     /// This is how a person stopping their run reaches the replica spending against a provider, and it is the whole of

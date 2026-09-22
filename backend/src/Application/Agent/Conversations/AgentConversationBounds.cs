@@ -20,7 +20,8 @@ public static class AgentConversationBounds
     /// <remarks>
     /// A conversation is durable and never swept, so without a ceiling one would grow until reading it stopped being
     /// possible. Reaching it means this conversation is full rather than that anything failed: what the person does
-    /// next is start another, and the reply that says so belongs to whichever surface they reached this through.
+    /// next is start another, and the reply that says so belongs to whichever surface they reached this through. The
+    /// last place is kept for an answer's ending, so an answer running when the conversation fills can still end.
     /// </remarks>
     public const int MaximumEntries = 5_000;
 

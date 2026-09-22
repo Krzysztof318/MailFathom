@@ -95,6 +95,11 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// being composed, which is exactly what a run that was stopped meets and is how the stop reaches it wherever it is
     /// executing.
     /// </para>
+    /// <para>
+    /// The last place is kept for an answer's ending: every other entry stops one short of the ceiling, so an answer
+    /// being composed when a conversation fills can still be ended, whether by its run or by a person stopping it. A
+    /// refused ending therefore always means the answer named is not the one being composed.
+    /// </para>
     /// </remarks>
     private const string AppendEntryStatement = $"""
         WITH advanced AS (
@@ -107,7 +112,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
                     ELSE c."{AgentConversationEntity.ComposingMessageIdColumnName}" END
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostEntries
+              AND c."{AgentConversationEntity.SequenceColumnName}" < CASE WHEN @endsTheAnswer THEN @mostEntries ELSE @mostEntries - 1 END
               AND (NOT @opensTheAnswer OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" IS NULL)
               AND (@composedInto IS NULL OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" = @composedInto)
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
@@ -215,7 +220,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
             FROM standing s
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostEntries
+              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostEntries - 1
               AND s.offered
               AND ((s.stands IS NULL AND @state IN (@accepted, @declined))
                    OR (s.stands = @accepted AND @state = @failed))
@@ -615,7 +620,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         AgentConversationEntry[] entries = steering ? [message] : [message, new AgentAnswerStarted(answer)];
 
-        if (held.Reached + entries.Length > AgentConversationBounds.MaximumEntries)
+        if (held.Reached + entries.Length > AgentConversationBounds.MaximumEntries - 1)
         {
             return AgentMessagePosting.Refused(AgentMessagePostingOutcome.ConversationFull);
         }
