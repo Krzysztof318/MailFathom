@@ -252,6 +252,49 @@ describe('AgentSpace', () => {
         expect(JSON.parse(posted?.body ?? '{}')).toMatchObject({ text: 'Who confirmed the bays?' });
     });
 
+    it('asks a suggestion once however often it is pressed while it is being sent', async () => {
+        const { transport } = deploymentAnswering();
+        let posts = 0;
+        let answer: () => void = () => undefined;
+        screenOf((request) => {
+            if (request.method !== 'POST') {
+                return transport(request);
+            }
+
+            posts += 1;
+
+            return new Promise((resolve) => {
+                answer = () => {
+                    void transport(request).then(resolve);
+                };
+            });
+        });
+
+        await opened('How many bays were confirmed');
+        const suggestion = within(await screen.findByRole('list', { name: 'Proposed next' })).getByRole('button', {
+            name: 'Ask the agent to: Who confirmed the bays?',
+        });
+        fireEvent.click(suggestion);
+        fireEvent.click(suggestion);
+
+        expect(suggestion.hasAttribute('disabled')).toBe(true);
+        expect(posts).toBe(1);
+
+        answer();
+        await waitFor(() => {
+            expect(suggestion.isConnected && suggestion.hasAttribute('disabled')).toBe(false);
+        });
+    });
+
+    it('draws what an opened conversation already suggested without animating it in', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        await opened('How many bays were confirmed');
+        const suggested = await screen.findByRole('list', { name: 'Proposed next' });
+
+        expect(suggested.parentElement?.className).not.toContain('animate-arrival');
+    });
+
     it('suggests nothing under an answer still being composed', async () => {
         screenOf(deploymentAnswering().transport);
 

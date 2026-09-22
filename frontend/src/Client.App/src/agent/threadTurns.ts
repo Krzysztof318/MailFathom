@@ -56,9 +56,15 @@ export type ThreadTurn =
           /** How it ended, and `null` while it is still being composed. */
           readonly ending: AgentAnswerOutcome | null;
 
-          /** What the agent suggests asking next, which only an ending carries. */
-          readonly followUps: readonly string[];
+          /** What the agent suggests asking next, which only an ending carries, and `null` before the answer ended. */
+          readonly followUps: FollowUps | null;
       };
+
+/** The questions an answer's ending suggests asking next, and where in the conversation that ending was written. */
+export interface FollowUps {
+    readonly sequence: number;
+    readonly questions: readonly string[];
+}
 
 /** One answer of the thread. */
 export type Answer = Extract<ThreadTurn, { kind: 'answer' }>;
@@ -119,7 +125,7 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
                     sources: new Map(),
                     status: null,
                     ending: null,
-                    followUps: [],
+                    followUps: null,
                 });
 
                 break;
@@ -155,7 +161,11 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
 
             case 'answerEnded':
                 lastEnding = entry.outcome;
-                revise(entry.run, (answer) => ({ ...answer, ending: entry.outcome, followUps: entry.followUps }));
+                revise(entry.run, (answer) => ({
+                    ...answer,
+                    ending: entry.outcome,
+                    followUps: { sequence: entry.sequence, questions: entry.followUps },
+                }));
 
                 break;
 
@@ -171,12 +181,14 @@ export function threadOf(entries: readonly AgentConversationEntry[]): readonly T
 /**
  * What to offer asking next: what the thread's last turn suggested, where that turn is an answer that ended. A question
  * or a note written after it means the conversation has moved on, and an answer still being composed has suggested
- * nothing yet.
+ * nothing yet. `null` where there is nothing to offer.
  */
-export function proposedNext(turns: readonly ThreadTurn[]): readonly string[] {
+export function proposedNext(turns: readonly ThreadTurn[]): FollowUps | null {
     const last = turns.at(-1);
 
-    return last?.kind === 'answer' && last.ending !== null ? last.followUps : [];
+    return last?.kind === 'answer' && last.followUps !== null && last.followUps.questions.length > 0
+        ? last.followUps
+        : null;
 }
 
 /** The answer still being composed, which is the last one where it has not ended, and `null` where none is. */

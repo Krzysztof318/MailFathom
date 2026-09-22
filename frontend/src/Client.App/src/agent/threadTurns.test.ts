@@ -76,7 +76,7 @@ describe('threadOf', () => {
 });
 
 describe('proposedNext', () => {
-    const suggested: AgentConversationEntry = {
+    const suggested: Extract<AgentConversationEntry, { kind: 'answerEnded' }> = {
         kind: 'answerEnded',
         sequence: 3,
         run: 'q-1',
@@ -84,12 +84,19 @@ describe('proposedNext', () => {
         followUps: ['Draft a reply', 'Who else was copied?'],
     };
 
-    it('is what the last answer suggested once it ended', () => {
-        expect(proposedNext(threadOf([asked, started, suggested]))).toEqual(['Draft a reply', 'Who else was copied?']);
+    it('is what the last answer suggested once it ended, at the ending that carried it', () => {
+        expect(proposedNext(threadOf([asked, started, suggested]))).toEqual({
+            sequence: 3,
+            questions: ['Draft a reply', 'Who else was copied?'],
+        });
     });
 
     it('is nothing while the last answer is still being composed', () => {
-        expect(proposedNext(threadOf([asked, started]))).toEqual([]);
+        expect(proposedNext(threadOf([asked, started]))).toBeNull();
+    });
+
+    it('is nothing where the answer that ended suggested nothing', () => {
+        expect(proposedNext(threadOf([asked, started, { ...suggested, followUps: [] }]))).toBeNull();
     });
 
     it('is nothing once the conversation moved past the answer that suggested it', () => {
@@ -100,7 +107,7 @@ describe('proposedNext', () => {
             { kind: 'message', sequence: 4, messageId: 'q-2', author: 'person', text: 'Draft a reply', scope: null },
         ]);
 
-        expect(proposedNext(turns)).toEqual([]);
+        expect(proposedNext(turns)).toBeNull();
     });
 });
 

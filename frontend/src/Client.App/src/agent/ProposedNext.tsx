@@ -12,13 +12,16 @@ import { useLocalization } from '../localization/useLocalization';
  * sent, so one press asks once.
  *
  * @param followUps What the last answer suggested, which the service wrote and the client never makes up.
+ * @param arriving Whether they arrived while the conversation was open, which is the only time the row animates in.
  * @param onAsk Asks one of them, answering once the question has been sent or refused.
  */
 export function ProposedNext({
     followUps,
+    arriving,
     onAsk,
 }: {
     readonly followUps: readonly string[];
+    readonly arriving: boolean;
     readonly onAsk: (question: string) => Promise<unknown>;
 }) {
     const { translate } = useLocalization();
@@ -31,12 +34,8 @@ export function ProposedNext({
         setAsking(false);
     }
 
-    if (followUps.length === 0) {
-        return null;
-    }
-
     return (
-        <div className="flex animate-arrival flex-col gap-2 self-start pt-0.5">
+        <div className={`flex flex-col gap-2 self-start pt-0.5 ${arriving ? 'animate-arrival' : ''}`}>
             <p id={label} className="text-2xs tracking-wider text-muted uppercase">
                 {translate('agent.proposedNext')}
             </p>

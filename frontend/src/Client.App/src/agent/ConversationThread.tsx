@@ -49,6 +49,7 @@ export function ConversationThread({
 }) {
     const { translate } = useLocalization();
     const { attachScroller, onScroll, onGesture } = usePinnedToBottom(turns, following);
+    const next = proposedNext(turns);
 
     return (
         <div
@@ -118,7 +119,9 @@ export function ConversationThread({
                     </p>
                 )}
 
-                <ProposedNext followUps={proposedNext(turns)} onAsk={onAsk} />
+                {next === null ? null : (
+                    <ProposedNext followUps={next.questions} arriving={next.sequence > settledThrough} onAsk={onAsk} />
+                )}
             </div>
         </div>
     );
