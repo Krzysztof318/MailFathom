@@ -6,7 +6,7 @@ import { asRecord } from './json';
 
 // What the blocks of a presentation plan carry, and the sources they rest on. It sits apart from `discoveryRun.ts`
 // because that module is the route — when a run is read, what a cursor means, how a tail is asked for — and this is
-// the document the route answers with. Nine block types will land here one at a time, and a route module growing a
+// the document the route answers with. Every block type the catalogue holds is read here, and a route module growing a
 // parser per type is a module that stops being about the route.
 //
 // **Everything here is read from untrusted input at the trust boundary**, so every bound the service composes a plan
@@ -341,6 +341,33 @@ export interface SuggestedAction {
     readonly requiresConfirmation: boolean;
 }
 
+/**
+ * A date to be put on the person's calendar, carried with its hour so they can correct it before they agree to it.
+ *
+ * It carries no attendees and nothing about what would announce it: an event the deployment holds is the person's own
+ * record of when they are committed rather than an invitation, which is the contract's answer rather than an omission.
+ */
+export interface EventProposal {
+    readonly title: string;
+
+    /** When it would begin, as the instant the service wrote. */
+    readonly start: string;
+
+    /** When it would end, and `null` where the proposal states no end. */
+    readonly end: string | null;
+
+    /** Whether it is proposed as a day rather than as a clock time. */
+    readonly isAllDay: boolean;
+}
+
+/** A task to be owed, carried with the day it is due so the person can correct it before they take it on. */
+export interface TaskProposal {
+    readonly title: string;
+
+    /** The day it would be due on, as `YYYY-MM-DD`, and `null` where the proposal says nothing about when. */
+    readonly dueOn: string | null;
+}
+
 // The service's own bounds, restated because this side of the boundary refuses what it will not draw rather than
 // trusting the side that composed it. Each is the constant the contract names: a block rests on at most twenty-four
 // sources, presents at most six sides of a disagreement, lists at most fifty messages, events, or files, compares
@@ -603,6 +630,60 @@ export function parseSuggestedAction(value: unknown): SuggestedAction | null {
     }
 
     return impact === 'SendsMail' && !requiresConfirmation ? null : { action, reason, impact, requiresConfirmation };
+}
+
+/**
+ * A date a run proposed putting on the calendar, or `null` where what arrived is not one.
+ *
+ * An end that does not fall after the start is refused, because `EventProposalBlock` refuses one: a span running
+ * backwards is a producer that broke the contract, and drawing its duration would draw a negative one.
+ */
+export function parseEventProposal(value: unknown): EventProposal | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const title = parseText(record['title']);
+    const start = parseInstant(record['start']);
+    const end = parseStatedInstant(record['end']);
+    const isAllDay = record['isAllDay'];
+
+    if (title === null || start === null || end === null || typeof isAllDay !== 'boolean') {
+        return null;
+    }
+
+    if (end.at !== null && !(Date.parse(end.at) > Date.parse(start))) {
+        return null;
+    }
+
+    return { title, start, end: end.at, isAllDay };
+}
+
+/** A task a run proposed owing, or `null` where what arrived is not one. */
+export function parseTaskProposal(value: unknown): TaskProposal | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const title = parseText(record['title']);
+    const dueOn = record['dueOn'];
+
+    if (title === null) {
+        return null;
+    }
+
+    if (dueOn === undefined || dueOn === null) {
+        return { title, dueOn: null };
+    }
+
+    return isCalendarDay(dueOn) ? { title, dueOn } : null;
+}
+
+/** A day as the service spells a `DateOnly`, which is a date with nothing after it. */
+function isCalendarDay(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value) && !Number.isNaN(Date.parse(value));
 }
 
 function parseTimelineEntry(value: unknown): TimelineEntry | null {

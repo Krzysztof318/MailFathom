@@ -48,6 +48,13 @@ describe('wordInstant', () => {
         expect(wordInstant(instant, 'en', 'stamp', null)).toBe('8/31/26, 6:41 PM');
     });
 
+    it('words an instant standing for a whole day as the day alone, on the reader’s side of midnight', () => {
+        const lateInTheEvening = '2026-08-31T20:00:00+00:00';
+
+        expect(wordInstant(lateInTheEvening, 'en', 'day', 'Asia/Tokyo')).toBe('Tuesday, September 1, 2026');
+        expect(wordInstant(lateInTheEvening, 'en', 'day', 'America/Los_Angeles')).toBe('Monday, August 31, 2026');
+    });
+
     // The deployment's zone database is what validated the identifier and the two need not be the same build, so a
     // zone this runtime has never heard of leaves one date in the runtime's zone rather than throwing through every
     // row on the screen at once.

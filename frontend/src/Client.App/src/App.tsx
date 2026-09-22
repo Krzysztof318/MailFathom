@@ -39,6 +39,7 @@ import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
 import { AgentSpace } from './agent/AgentSpace';
+import type { ProposalLook } from './answerCanvas/proposalAnswering';
 import { DiscoverSpace } from './discover/DiscoverSpace';
 import { FolderTree } from './folders/FolderTree';
 import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
@@ -81,6 +82,7 @@ import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { Refresh } from './shell/Refresh';
+import { ReturnToConversation } from './shell/ReturnToConversation';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
 import { useBackNavigation } from './shellOperations/backNavigation';
@@ -528,6 +530,23 @@ export function App({
     const desktopComposition = useDesktopComposition();
     const inTabs = preferences.openMailInTabs && desktopComposition;
     const openTabs = useOpenTabs(inTabs);
+
+    // Whether somebody left an agent conversation to look at what one of its proposals pointed to, which is what raises
+    // the way back over whichever space they opened. Only that way back puts it down, which is the design project's
+    // own rule: arriving at the Agent by the rail merely hides it, and leaving again brings it back.
+    const [lookedAwayFromAgent, setLookedAwayFromAgent] = useState(false);
+    const lookFromAgent = useCallback(
+        (where: ProposalLook): void => {
+            setLookedAwayFromAgent(true);
+
+            if (where.kind === 'thread') {
+                openTabs.openMail(where.email, null);
+            }
+
+            window.location.hash = addressOf(where.kind === 'thread' ? 'mail' : 'calendar');
+        },
+        [openTabs],
+    );
 
     // Who the person is, asked on the same three conditions and for the same reasons. It is read here rather than in
     // the menu that shows it because the settings screen behind that menu writes it, and two reads made separately
@@ -989,6 +1008,18 @@ export function App({
                         the region is what the connection says — reaching, retrying, offline, or refused — because that is
                         the only thing on the screen there is to read, and the way out of a deployment that never answers
                         has to be somewhere. */}
+                                                                            {lookedAwayFromAgent &&
+                                                                            space !== null &&
+                                                                            space !== 'agent' ? (
+                                                                                <ReturnToConversation
+                                                                                    onReturn={() => {
+                                                                                        setLookedAwayFromAgent(false);
+                                                                                        window.location.hash =
+                                                                                            addressOf('agent');
+                                                                                    }}
+                                                                                />
+                                                                            ) : null}
+
                                                                             {space === null ? (
                                                                                 <main className="flex-1 px-4 py-6 workspace:px-8">
                                                                                     <ConnectionSummary
@@ -1016,6 +1047,7 @@ export function App({
                                                                                                 session={session}
                                                                                                 transport={readMail}
                                                                                                 handOver={handedToAgent}
+                                                                                                onLook={lookFromAgent}
                                                                                                 status={
                                                                                                     space === 'agent'
                                                                                                         ? connectionSummary

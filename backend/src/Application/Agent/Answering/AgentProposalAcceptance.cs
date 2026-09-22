@@ -15,7 +15,9 @@ namespace MailFathom.Application.Agent.Answering;
 /// <strong>The acceptance is recorded before the act is carried out, and a failure after it.</strong> Recording is what
 /// makes the act once-only: the store moves a pending proposal to accepted in one conditional statement, so two presses
 /// at once produce one acceptance and one act, and the second press is refused before anything is sent. What the act then
-/// did reaches the record as the proposal moving on to failed, or as nothing further where it worked.
+/// did reaches the record as the proposal moving on to failed, or as nothing further where it worked. A failed proposal
+/// is accepted again the same way, which is what trying it again is, and it is requested under the same key as the
+/// first attempt.
 /// </para>
 /// <para>
 /// <strong>The act is carried out under the grant of the person accepting.</strong> Every grant it needs is required
@@ -63,7 +65,7 @@ public sealed class AgentProposalAcceptance
     /// <param name="user">The person accepting, whose conversation it has to be.</param>
     /// <param name="proposedAt">The place the proposal was written at.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
-    /// <returns>The place the last answer to the proposal was written at, or <see langword="null" /> when there is no pending proposal at that place this person can accept.</returns>
+    /// <returns>The place the last answer to the proposal was written at, or <see langword="null" /> when there is no pending or failed proposal at that place this person can accept.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="proposedAt" /> is not a written place.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the person's grant does not carry every grant the act needs; nothing is recorded.</exception>
     public async Task<long?> AcceptAsync(

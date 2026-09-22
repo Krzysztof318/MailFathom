@@ -6,11 +6,13 @@ import type { ComponentType } from 'react';
 import type { AnswerBlock, AnswerBlockType } from '@mailfathom/client-backend';
 import { AttachmentGallery } from './blocks/AttachmentGallery';
 import { Draft } from './blocks/Draft';
+import { EventProposal } from './blocks/EventProposal';
 import { EvidenceList } from './blocks/EvidenceList';
 import { FactTable } from './blocks/FactTable';
 import { People } from './blocks/People';
 import { SuggestedAction } from './blocks/SuggestedAction';
 import { SynthesizedAnswer } from './blocks/SynthesizedAnswer';
+import { TaskProposal } from './blocks/TaskProposal';
 import { ThreadState } from './blocks/ThreadState';
 import { Timeline } from './blocks/Timeline';
 
@@ -49,4 +51,6 @@ export const answerBlockRenderers: AnswerBlockRenderers = {
     attachmentGallery: AttachmentGallery,
     draft: Draft,
     suggestedAction: SuggestedAction,
+    eventProposal: EventProposal,
+    taskProposal: TaskProposal,
 };

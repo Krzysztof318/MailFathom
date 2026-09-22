@@ -242,7 +242,8 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
               AND c."{AgentConversationEntity.VisibleEntryCountColumnName}" < @mostOrdinaryEntries
               AND s.offered
               AND ((s.stands IS NULL AND @state IN (@accepted, @declined))
-                   OR (s.stands = @accepted AND @state = @failed))
+                   OR (s.stands = @accepted AND @state = @failed)
+                   OR (s.stands = @failed AND @state = @accepted))
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
         )
         INSERT INTO "{AgentConversationEntryEntity.TableName}"

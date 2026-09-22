@@ -29,14 +29,16 @@ import type { Locale } from './locale';
  * `stamp` is an instant standing in a row that is scanned rather than read, where the date has to fit beside a sender
  * and a subject. `full` is an instant a reader has stopped on, in a header they opened the message to read. `time` is
  * an instant whose day the surface around it has already said — an event in a calendar column that is one day wide,
- * where repeating the date on every entry would say the same thing as many times as there are entries.
+ * where repeating the date on every entry would say the same thing as many times as there are entries. `day` is an
+ * instant that stands for a whole day, where the clock time it happens to carry would claim an hour nobody chose.
  */
-export type InstantDetail = 'stamp' | 'full' | 'time';
+export type InstantDetail = 'stamp' | 'full' | 'time' | 'day';
 
 const details: Readonly<Record<InstantDetail, Intl.DateTimeFormatOptions>> = {
     stamp: { dateStyle: 'short', timeStyle: 'short' },
     full: { dateStyle: 'long', timeStyle: 'short' },
     time: { timeStyle: 'short' },
+    day: { dateStyle: 'full' },
 };
 
 /**

@@ -122,6 +122,7 @@ export {
     agentConversationArchiveRoute,
     agentConversationRoute,
     agentConversationsRoute,
+    answerAgentProposal,
     archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
@@ -136,6 +137,7 @@ export {
     type AgentConversationSummary,
     type AgentMessagePosted,
     type AgentMessageScope,
+    type AgentProposalDecision,
     type AgentProposalState,
 } from './agentConversations';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
@@ -153,6 +155,7 @@ export type {
     ConversationStanding,
     DeclaredSource,
     DraftDisposition,
+    EventProposal,
     EvidenceEntry,
     FactTableCell,
     FactTableColumn,
@@ -165,6 +168,7 @@ export type {
     SuggestedActionImpact,
     SuggestedActionKind,
     SynthesizedAnswer,
+    TaskProposal,
     ThreadCommitment,
     ThreadStatement,
     TimelineEntry,

@@ -11,6 +11,7 @@ import { Containment } from '../containment/Containment';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { AnswerableBlock } from './AnswerableBlock';
 import type { Answer } from './threadTurns';
 
 const scopes: Readonly<Record<AgentMessageScope['kind'], MessageKey>> = {
@@ -75,7 +76,9 @@ export function AgentAnswer({ answer, settledThrough }: { readonly answer: Answe
                                 className={answered.sequence > settledThrough ? 'animate-block-arrival' : undefined}
                             >
                                 <Containment drawing={String(answered.sequence)} region="answer_block">
-                                    <DrawnBlock block={answered} renderers={answerBlockRenderers} />
+                                    <AnswerableBlock phase={answered.phase} proposedAt={answered.sequence}>
+                                        <DrawnBlock block={answered} renderers={answerBlockRenderers} />
+                                    </AnswerableBlock>
                                 </Containment>
                             </li>
                         ))}

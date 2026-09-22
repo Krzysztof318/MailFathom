@@ -9,12 +9,14 @@ import {
     parseComposedDraft,
     parseConversationStanding,
     parseDeclaredSource,
+    parseEventProposal,
     parseEvidenceEntries,
     parseFactTableColumns,
     parseFactTableRows,
     parsePersonEntries,
     parseSuggestedAction,
     parseSynthesizedAnswer,
+    parseTaskProposal,
     parseTimelineEntries,
 } from './presentationBlocks';
 
@@ -624,5 +626,56 @@ describe('parseSuggestedAction', () => {
 
     it('refuses a step giving no reason, the reason being what makes agreeing informed', () => {
         expect(parseSuggestedAction({ ...suggestion, reason: '' })).toBeNull();
+    });
+});
+
+describe('parseEventProposal', () => {
+    const proposed = {
+        title: 'Renewal call with Northwind',
+        start: '2026-09-23T09:00:00+00:00',
+        end: '2026-09-23T10:00:00+00:00',
+        isAllDay: false,
+    };
+
+    it('reads what the event would be called, when it would begin and end, and whether it is a whole day', () => {
+        expect(parseEventProposal(proposed)).toEqual(proposed);
+    });
+
+    it('reads a proposal stating no end as one with none', () => {
+        expect(parseEventProposal({ ...proposed, end: null })).toEqual({ ...proposed, end: null });
+    });
+
+    it.each([
+        ['an end that does not fall after the start', { end: '2026-09-23T09:00:00+00:00' }],
+        ['no title', { title: '' }],
+        ['no start', { start: null }],
+        ['an end that is not an instant', { end: 7 }],
+        ['no statement of whether it is a whole day', { isAllDay: 'no' }],
+    ])('refuses a proposal with %s', (_, broken) => {
+        expect(parseEventProposal({ ...proposed, ...broken })).toBeNull();
+    });
+});
+
+describe('parseTaskProposal', () => {
+    it('reads the line the list would carry and the day it would be due on', () => {
+        expect(parseTaskProposal({ title: 'Send the revised schedule', dueOn: '2026-09-24' })).toEqual({
+            title: 'Send the revised schedule',
+            dueOn: '2026-09-24',
+        });
+    });
+
+    it('reads a task owed by no day as one with no day', () => {
+        expect(parseTaskProposal({ title: 'Send the revised schedule', dueOn: null })).toEqual({
+            title: 'Send the revised schedule',
+            dueOn: null,
+        });
+    });
+
+    it.each([
+        ['a day that is an instant', { title: 'Send it', dueOn: '2026-09-24T00:00:00Z' }],
+        ['a day that is no day', { title: 'Send it', dueOn: '2026-13-45' }],
+        ['no title', { title: '', dueOn: '2026-09-24' }],
+    ])('refuses a proposal with %s', (_, broken) => {
+        expect(parseTaskProposal(broken)).toBeNull();
     });
 });

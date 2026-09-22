@@ -4,18 +4,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    answerAgentProposal,
     archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
     restoreAgentConversation,
     steerAgentRun,
     stopAgentRun,
+    type AgentProposalDecision,
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
     type MailFathomTransport,
     type RunFollowingSchedule,
 } from '@mailfathom/client-backend';
+import type { ProposalLook } from '../answerCanvas/proposalAnswering';
 import { Confirmation } from '../confirmation/Confirmation';
 import { Control } from '../controls/Control';
 import type { MessageKey } from '../localization/en';
@@ -29,6 +32,7 @@ import { ConversationTabs } from './ConversationTabs';
 import { ConversationThread } from './ConversationThread';
 import { answerInFlight, threadOf } from './threadTurns';
 import { newIdentifier } from './newIdentifier';
+import { ProposalAnswersContext } from './proposalAnswers';
 import { useConversationHistory } from './useConversationHistory';
 import { useFollowedConversation } from './useFollowedConversation';
 
@@ -105,6 +109,7 @@ const deletingCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
  * @param handOver What another space last handed to the agent, and `null` before any has. Each hand-over is a new
  * value, and a new one opens a new conversation carrying it as the context, whatever was open before.
  * @param schedule How the follower waits, which a test replaces so nothing polls in it.
+ * @param onLook Opens what a proposal points at in the space that shows it, and nothing where the frame offers none.
  */
 export function AgentSpace({
     session,
@@ -112,12 +117,14 @@ export function AgentSpace({
     status,
     handOver = null,
     schedule = whileTheConversationIsSilent,
+    onLook = null,
 }: {
     readonly session: ClientSession | null;
     readonly transport: MailFathomTransport;
     readonly status: ReactNode;
     readonly handOver?: AgentHandOver | null;
     readonly schedule?: RunFollowingSchedule;
+    readonly onLook?: ((where: ProposalLook) => void) | null;
 }) {
     const { locale, translate } = useLocalization();
     const wide = useWideWorkspace();
@@ -263,6 +270,39 @@ export function AgentSpace({
         setRevision((before) => before + 1);
 
         return conversation;
+    }
+
+    // A decision is addressed to the conversation it was pressed in, and whatever it recorded — the phase it moved to,
+    // or the refusal of one somebody had already answered — arrives by reading that conversation again.
+    async function answerProposal(
+        proposedAt: number,
+        decision: AgentProposalDecision,
+    ): Promise<ClientFailureReason | null> {
+        if (session === null) {
+            return 'unauthenticated';
+        }
+
+        if (current === null) {
+            return 'missing';
+        }
+
+        const answered = await answerAgentProposal(session, transport, current, proposedAt, decision);
+
+        setRevision((before) => before + 1);
+
+        return answered.outcome === 'failed' ? answered.failure.reason : null;
+    }
+
+    // *Another time* is said in the conversation rather than done silently: the proposal is declined, and the reader's
+    // own line asks the agent for the same thing again, which is what brings a new proposal back pending.
+    async function askAnotherTime(proposedAt: number, title: string): Promise<ClientFailureReason | null> {
+        const refused = await answerProposal(proposedAt, 'declined');
+
+        if (refused === null) {
+            await send(translate('eventProposal.anotherTimeLine', { title }));
+        }
+
+        return refused;
     }
 
     function cancel(): void {
@@ -438,15 +478,17 @@ export function AgentSpace({
                 )}
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <ConversationThread
-                        turns={turns}
-                        reading={followed.reading}
-                        failure={followed.failure}
-                        status={inFlight === null ? undefined : inFlight.status}
-                        settledThrough={followed.settledThrough}
-                        following={following}
-                        onAsk={send}
-                    />
+                    <ProposalAnswersContext value={{ answer: answerProposal, askAnotherTime, look: onLook }}>
+                        <ConversationThread
+                            turns={turns}
+                            reading={followed.reading}
+                            failure={followed.failure}
+                            status={inFlight === null ? undefined : inFlight.status}
+                            settledThrough={followed.settledThrough}
+                            following={following}
+                            onAsk={send}
+                        />
+                    </ProposalAnswersContext>
 
                     {undeleted === null ? null : (
                         <p role="alert" className="px-3.5 py-2 text-sm text-warning-text workspace:px-6.5">

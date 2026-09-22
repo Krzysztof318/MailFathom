@@ -9,8 +9,10 @@ import { newsletterId } from './messages';
 // with, and `frontend/tests/AGENTS.md` § *The corpus* holds what may go in it.
 //
 // **The answered conversation cites a message this corpus already holds**, so following its citation reaches the
-// reading pane rather than a message nothing can read. The one still composing has said what it is doing and drawn
-// nothing yet, which is the state the status line exists for and none of the other screens can show.
+// reading pane rather than a message nothing can read. It also proposes an event, a task and a reply, the task already
+// accepted, so the proposal cards are looked at both waiting on somebody and answered. The one still composing has said
+// what it is doing and drawn nothing yet, which is the state the status line exists for and none of the other screens
+// can show.
 
 /** The conversation that was asked something and answered. */
 export const answeredConversationId = '0198f4a1-0000-7000-8000-00000000a9e1';
@@ -105,12 +107,56 @@ const answeredEntries = [
     {
         sequence: 6,
         entry: {
+            entry: 'proposal',
+            messageId: answeredQuestionId,
+            block: {
+                type: 'eventProposal',
+                evidence: { support: 'Supported', citations: ['c-1'], freshness: current },
+                title: 'Walk through the four bays',
+                start: '2026-09-02T09:00:00+00:00',
+                end: '2026-09-02T10:00:00+00:00',
+                isAllDay: false,
+            },
+        },
+    },
+    {
+        sequence: 7,
+        entry: {
+            entry: 'proposal',
+            messageId: answeredQuestionId,
+            block: {
+                type: 'taskProposal',
+                evidence: { support: 'Supported', citations: ['c-1'], freshness: current },
+                title: 'Confirm the bays in writing',
+                dueOn: '2026-09-04',
+            },
+        },
+    },
+    {
+        sequence: 8,
+        entry: {
+            entry: 'proposal',
+            messageId: answeredQuestionId,
+            block: {
+                type: 'draft',
+                evidence: { support: 'Supported', citations: ['c-1'], freshness: current },
+                recipients: ['bays@example.invalid'],
+                subject: 'Re: four bays to the end of the week',
+                body: 'Thank you — four bays until Friday suits us. We will confirm the times by Wednesday.',
+                disposition: 'Composed',
+            },
+        },
+    },
+    {
+        sequence: 9,
+        entry: {
             entry: 'answerEnded',
             messageId: answeredQuestionId,
             outcome: 'Completed',
             followUps: ['Who confirmed the bays?', 'Draft a reply asking to hold them another week'],
         },
     },
+    { sequence: 10, entry: { entry: 'resolution', proposedAt: 7, state: 'Accepted' } },
 ];
 
 const composingEntries = [
