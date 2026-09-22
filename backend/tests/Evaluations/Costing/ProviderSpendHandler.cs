@@ -2,11 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace MailFathom.Evaluations.Costing;
 
-/// <summary>Reads what a chat completion cost out of the answer the provider sent, and records it against one meter.</summary>
+/// <summary>Reads what a provider call cost out of the answer the provider sent, and records it against one meter.</summary>
 /// <remarks>
 /// <para>
 /// The charge is the provider's rather than this repository's arithmetic: OpenRouter returns <c>usage.cost</c> on every
@@ -23,6 +24,20 @@ namespace MailFathom.Evaluations.Costing;
 /// <param name="transport">The handler that actually sends the request.</param>
 internal sealed class ProviderSpendHandler(SpendMeter meter, HttpMessageHandler transport) : DelegatingHandler(transport)
 {
+    /// <summary>Opens the transport a scenario reaches a provider over, with this meter reading what each answer cost in it.</summary>
+    /// <param name="spend">What every answer's tokens and charge are recorded against.</param>
+    /// <param name="requestTimeout">How long one request may take before it is abandoned.</param>
+    /// <returns>The transport, which the caller disposes.</returns>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "The client disposes the metering handler, which disposes the connection it was given; the analyzer does not follow ownership through a DelegatingHandler.")]
+    public static HttpClient MeteredTransport(SpendMeter spend, TimeSpan requestTimeout) =>
+        new(new ProviderSpendHandler(spend, new SocketsHttpHandler { AllowAutoRedirect = false }), disposeHandler: true)
+        {
+            Timeout = requestTimeout,
+        };
+
     /// <inheritdoc />
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,

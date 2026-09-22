@@ -15,7 +15,13 @@ set -euo pipefail
 # endpoint and the same key as the models under test, so its model is all that is declared apart —
 # beside MAILFATHOM_JUDGE_REASONING_EFFORT, which a run may leave unset to send the judge no reasoning
 # parameter at all. MAILFATHOM_EVALUATION_REPETITIONS says how many times each case is asked of each
-# model, from 1 to 20, and a run that leaves it unset asks each case once.
+# model, from 1 to 20, and a run that leaves it unset asks each case once. MAILFATHOM_EVALUATION_REASONING_EFFORT
+# states how hard every model under test reasons, and a run that leaves it unset sends none.
+#
+# The retrieval scenario measures embedding models rather than chat models, so it reads its own:
+# MAILFATHOM_EVALUATION_EMBEDDING_MODELS and MAILFATHOM_EMBEDDING_API_KEY, which a requested run cannot
+# proceed without, beside MAILFATHOM_EMBEDDING_ADDRESS and MAILFATHOM_EVALUATION_EMBEDDING_DIMENSION, which
+# it may leave unset for the provider's own address and each model's own width.
 #
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it

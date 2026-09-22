@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.AI.Chat;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.AI;
@@ -51,6 +52,27 @@ public sealed class EvaluationStoreTests : IDisposable
         Assert.Equal([FellShort], next);
     }
 
+    [Fact]
+    public async Task CacheOverAsync_ARunDeclaringAReasoningEffort_AsksAgainRatherThanReadingTheAnswerCachedWithoutOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var withoutEffort = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
+        var withEffort = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest, "high");
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, withoutEffort),
+            await ReachesTheModelAsync(reporting, Held, withEffort),
+            await ReachesTheModelAsync(reporting, Held, withEffort),
+            await ReachesTheModelAsync(reporting, Held, withoutEffort),
+        ];
+
+        // Assert
+        Assert.Equal([true, true, false, false], reached);
+    }
+
     /// <inheritdoc />
     public void Dispose() => this.store.Delete(recursive: true);
 
@@ -85,13 +107,16 @@ public sealed class EvaluationStoreTests : IDisposable
         "Reliability",
         "CA2000:Dispose objects before losing scope",
         Justification = "Disposing the caching wrapper would dispose the model, which this method already disposes.")]
-    private static async Task<bool> ReachesTheModelAsync(ReportingConfiguration reporting, string scenarioName)
+    private static async Task<bool> ReachesTheModelAsync(
+        ReportingConfiguration reporting,
+        string scenarioName,
+        ChatGenerationPlan? plan = null)
     {
         using var model = ScriptedStructuredAnswerRun.Model("{}");
         var cached = await EvaluationStore.CacheOverAsync(
             reporting,
             model,
-            ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest),
+            plan ?? ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest),
             scenarioName,
             EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1),
             TestContext.Current.CancellationToken);

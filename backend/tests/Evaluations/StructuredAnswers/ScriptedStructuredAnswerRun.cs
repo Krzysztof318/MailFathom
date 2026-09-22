@@ -76,14 +76,15 @@ internal sealed class ScriptedStructuredAnswerRun : IDisposable
 
     /// <summary>Plans a scripted model the way a declared one is planned, under the routed name it answers as.</summary>
     /// <param name="model">The routed name.</param>
+    /// <param name="reasoningEffort">The reasoning effort every call states, or <see langword="null" /> to send none.</param>
     /// <returns>The plan.</returns>
-    public static ChatGenerationPlan PlanFor(string model) =>
+    public static ChatGenerationPlan PlanFor(string model, string? reasoningEffort = null) =>
         ChatGenerationPlan.Create(
             new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
             maximumOutputTokens: 1024,
             temperature: null,
             topP: null,
-            reasoningEffort: null,
+            reasoningEffort,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 64_000,
             maximumRequestImageOctets: 1024,
