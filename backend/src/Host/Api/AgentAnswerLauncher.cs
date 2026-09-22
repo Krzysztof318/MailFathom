@@ -107,7 +107,7 @@ internal sealed partial class AgentAnswerLauncher
 
             reached = true;
             await answering.RunAsync(question, this.lifetime.ApplicationStopping);
-            await this.EmbedTurnAsync(scope.ServiceProvider.GetRequiredService<AgentConversationEmbedding>(), question);
+            await this.EmbedTurnAsync(scope.ServiceProvider, question);
         }
         catch (Exception failure)
         {
@@ -127,10 +127,12 @@ internal sealed partial class AgentAnswerLauncher
     /// written down as that rather than as an answer that failed. A process that is stopping leaves it undone.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The answer has already ended; any failure placing its turn is a lost ranking signal to write down, never a failed answer.")]
-    internal async Task EmbedTurnAsync(AgentConversationEmbedding embedding, AgentQuestion question)
+    internal async Task EmbedTurnAsync(IServiceProvider services, AgentQuestion question)
     {
         try
         {
+            var embedding = services.GetRequiredService<AgentConversationEmbedding>();
+
             await embedding.EmbedTurnAsync(question, this.lifetime.ApplicationStopping);
         }
         catch (OperationCanceledException) when (this.lifetime.ApplicationStopping.IsCancellationRequested)

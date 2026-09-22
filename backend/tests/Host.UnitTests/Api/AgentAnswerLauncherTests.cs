@@ -107,15 +107,31 @@ public sealed class AgentAnswerLauncherTests
         this.store
             .ReadAsync(Question.Conversation, Question.User, AgentConversationHistory.Visible, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<AgentConversationReading?>(new InvalidOperationException("the record could not be read")));
+        using var services = new ServiceCollection().AddSingleton(this.Embedding()).BuildServiceProvider();
 
         // Act
-        await this.Launcher().EmbedTurnAsync(this.Embedding(), Question);
+        await this.Launcher().EmbedTurnAsync(services, Question);
 
         // Assert
         var written = Assert.Single(this.logger.Messages);
         Assert.Contains("could not be embedded", written, StringComparison.Ordinal);
         Assert.DoesNotContain("had no name for", written, StringComparison.Ordinal);
         Assert.DoesNotContain("supplier", written, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A scope that cannot compose the embedding step is a lost turn as well, since the answer was already delivered.</summary>
+    [Fact]
+    public async Task EmbedTurnAsync_AScopeThatCannotComposeTheStep_WritesDownALostTurnRatherThanAFailedAnswer()
+    {
+        // Arrange
+        using var services = new ServiceCollection().BuildServiceProvider();
+
+        // Act
+        await this.Launcher().EmbedTurnAsync(services, Question);
+
+        // Assert
+        var written = Assert.Single(this.logger.Messages);
+        Assert.Contains("could not be embedded", written, StringComparison.Ordinal);
     }
 
     private static AuthorizedPrincipal Caller =>
