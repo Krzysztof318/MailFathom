@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 import { HeadActs } from './HeadActs';
 
 const message: ActedMessage = {
@@ -17,27 +18,36 @@ const message: ActedMessage = {
     flagged: false,
 };
 
+const conversation: AgentHandOver = {
+    scope: { kind: 'thread', subject: '0198f4a1-0000-7000-8000-00000000b001' },
+    title: 'Hall lease',
+};
+
 function drawHead({
     offered = true,
     acting = message,
     acts = actsOffering(),
     compact = false,
+    handToAgent = null,
 }: {
     readonly offered?: boolean;
     readonly acting?: ActedMessage | null;
     readonly acts?: MailboxActs;
     readonly compact?: boolean;
+    readonly handToAgent?: ((handOver: AgentHandOver) => void) | null;
 } = {}): { composed: ReturnType<typeof vi.fn> } {
     const composed = vi.fn();
     const composing: Composing = { offered, drafts: false, opening: null, compose: composed, close: () => undefined };
 
     render(
         <LocalizationProvider>
-            <MailboxActsContext value={acts}>
-                <ComposingContext value={composing}>
-                    <HeadActs compact={compact} message={acting} />
-                </ComposingContext>
-            </MailboxActsContext>
+            <AgentHandOverContext value={handToAgent}>
+                <MailboxActsContext value={acts}>
+                    <ComposingContext value={composing}>
+                        <HeadActs compact={compact} message={acting} thread={conversation} />
+                    </ComposingContext>
+                </MailboxActsContext>
+            </AgentHandOverContext>
         </LocalizationProvider>,
     );
 
@@ -142,8 +152,23 @@ describe('HeadActs', () => {
         expect(performed).not.toHaveBeenCalled();
     });
 
+    it('hands the conversation it stands over to the agent', () => {
+        const handToAgent = vi.fn();
+        drawHead({ handToAgent });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+        expect(handToAgent).toHaveBeenCalledWith(conversation);
+    });
+
+    it('draws no way to the agent for a credential that has no agent to reach', () => {
+        drawHead();
+
+        expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+    });
+
     it('keeps the agent out of the compact head, where the design draws the symbols alone', () => {
-        drawHead({ compact: true });
+        drawHead({ compact: true, handToAgent: vi.fn() });
 
         expect(screen.queryByRole('button', { name: /Ask/u })).toBeNull();
         expect(screen.getByRole('button', { name: 'Reply' })).toBeDefined();

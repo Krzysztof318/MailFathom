@@ -23,12 +23,16 @@ export function Control({
     shape = 'labelled',
     className,
     pressed,
+    hint,
     onPress,
 }: {
     readonly label: string;
     readonly icon?: IconName;
     readonly shape?: ControlShape;
     readonly className?: string;
+
+    /** What the control does at more length than its name, shown on hover, where a short name leaves that unsaid. */
+    readonly hint?: string;
 
     /** Whether what this control turns on is on, for a control that turns something on, and absent for one that does not. */
     readonly pressed?: boolean;
@@ -42,7 +46,7 @@ export function Control({
             type="button"
             aria-label={labelled ? undefined : label}
             aria-pressed={pressed}
-            title={label}
+            title={hint ?? label}
             className={`flex shrink-0 items-center whitespace-nowrap transition ${controlShapes[shape]} ${className ?? ''}`}
             onClick={onPress}
         >

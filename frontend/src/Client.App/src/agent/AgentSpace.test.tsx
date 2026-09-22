@@ -12,6 +12,7 @@ import type {
 } from '@mailfathom/client-backend';
 import * as agent from '../../../../tests/fixtures/agent';
 import { LocalizationProvider } from '../localization/Localization';
+import type { AgentHandOver } from '../routing/agentHandOver';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { AgentSpace } from './AgentSpace';
 
@@ -83,14 +84,42 @@ function deploymentAnswering(posting: { readonly status: number; readonly body: 
     };
 }
 
-function screenOf(transport: MailFathomTransport) {
-    return render(
+function drawn(transport: MailFathomTransport, handOver: AgentHandOver | null = null) {
+    return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <AgentSpace session={session} transport={transport} status={null} schedule={neverPolls} />
+                <AgentSpace
+                    session={session}
+                    transport={transport}
+                    status={null}
+                    handOver={handOver}
+                    schedule={neverPolls}
+                />
             </WorkspaceProvider>
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
+}
+
+function screenOf(transport: MailFathomTransport) {
+    return render(drawn(transport));
+}
+
+const handedThread: AgentHandOver = {
+    scope: { kind: 'thread', subject: '0198f4a1-0000-7000-8000-00000000b001' },
+    title: 'Hall lease',
+};
+
+async function sent(asked: readonly ClientRequest[], question: string): Promise<unknown> {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tell the agent what to do' }), {
+        target: { value: question },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Send/ }));
+
+    await waitFor(() => {
+        expect(asked.filter((request) => request.method === 'POST')).toHaveLength(1);
+    });
+
+    return JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}');
 }
 
 async function opened(title: string): Promise<void> {
@@ -279,6 +308,45 @@ describe('AgentSpace', () => {
 
         expect(posted?.path).toMatch(new RegExp(`^${conversations}/[0-9a-f-]{36}/messages$`));
         expect(JSON.parse(posted?.body ?? '{}')).toMatchObject({ text: 'How many bays?' });
+    });
+
+    it('opens a new conversation carrying what another space handed over, and asks under it', async () => {
+        const { transport, asked } = deploymentAnswering();
+        const { rerender } = render(drawn(transport));
+
+        await opened('How many bays were confirmed');
+        rerender(drawn(transport, handedThread));
+
+        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Agent');
+        expect(screen.getByText('Context: thread “Hall lease”')).toBeDefined();
+        expect(await sent(asked, 'Who owes what?')).toMatchObject({
+            text: 'Who owes what?',
+            scope: { kind: 'Thread', subject: handedThread.scope.subject },
+        });
+    });
+
+    it('asks about everything again once the context is cleared', async () => {
+        const { transport, asked } = deploymentAnswering();
+        const { rerender } = render(drawn(transport));
+        rerender(drawn(transport, handedThread));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove context' }));
+
+        expect(screen.queryByText(/Context:/u)).toBeNull();
+        expect(await sent(asked, 'Who owes what?')).not.toHaveProperty('scope');
+    });
+
+    it('opens on nothing a hand-over made before it was drawn, which belongs to an earlier screen', () => {
+        render(drawn(deploymentAnswering().transport, handedThread));
+
+        expect(screen.queryByText(/Context:/u)).toBeNull();
+    });
+
+    it('draws no chip for a conversation opened with nothing handed over', () => {
+        screenOf(deploymentAnswering().transport);
+
+        expect(screen.queryByText(/Context:/u)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove context' })).toBeNull();
     });
 
     it('says why a question was not sent and keeps what was typed', async () => {

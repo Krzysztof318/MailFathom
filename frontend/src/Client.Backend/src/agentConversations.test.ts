@@ -354,6 +354,27 @@ describe('askAgent', () => {
         });
     });
 
+    it('names the thing the question is about in the service’s own spelling of its kind', async () => {
+        const event = '0198f4a1-0000-7000-8000-00000000b001';
+        const { transport, requests } = recording({
+            status: 202,
+            body: JSON.stringify({ messageId: question, runId: question, sequence: 1 }),
+        });
+
+        await askAgent(session, transport, conversation, question, 'Who owes what?', {
+            kind: 'calendarEvent',
+            subject: event,
+        });
+
+        expect(requests[0]?.body).toBe(
+            JSON.stringify({
+                messageId: question,
+                text: 'Who owes what?',
+                scope: { kind: 'CalendarEvent', subject: event },
+            }),
+        );
+    });
+
     it('refuses an acceptance that names no answer', async () => {
         const answered = await askAgent(
             session,

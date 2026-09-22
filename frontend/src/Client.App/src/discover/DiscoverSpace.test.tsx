@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
     ClientSession,
@@ -12,6 +12,7 @@ import type {
 } from '@mailfathom/client-backend';
 import * as discovery from '../../../../tests/fixtures/discovery';
 import { LocalizationProvider } from '../localization/Localization';
+import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { DiscoverSpace } from './DiscoverSpace';
 
@@ -50,20 +51,26 @@ function deploymentAnswering(tail: unknown = discovery.runTail(0)): {
     };
 }
 
-function screenOf(transport: MailFathomTransport, onOpenMessage: (storedEmailId: string) => void = () => undefined) {
+function screenOf(
+    transport: MailFathomTransport,
+    onOpenMessage: (storedEmailId: string) => void = () => undefined,
+    handToAgent: ((handOver: AgentHandOver) => void) | null = null,
+) {
     return render(
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <DiscoverSpace
-                    session={session}
-                    transport={transport}
-                    accounts={[]}
-                    intent={<p>{theQuestionField}</p>}
-                    status={<p>{theConnection}</p>}
-                    schedule={neverPolls}
-                    onOpenMessage={onOpenMessage}
-                />
-            </WorkspaceProvider>
+            <AgentHandOverContext value={handToAgent}>
+                <WorkspaceProvider>
+                    <DiscoverSpace
+                        session={session}
+                        transport={transport}
+                        accounts={[]}
+                        intent={<p>{theQuestionField}</p>}
+                        status={<p>{theConnection}</p>}
+                        schedule={neverPolls}
+                        onOpenMessage={onOpenMessage}
+                    />
+                </WorkspaceProvider>
+            </AgentHandOverContext>
         </LocalizationProvider>,
     );
 }
@@ -130,6 +137,27 @@ describe('DiscoverSpace', () => {
         await waitFor(() => {
             expect(screen.getByText('This run has finished.')).toBeDefined();
         });
+    });
+
+    it('hands a finished answer to the agent from under it and from the head, naming the run', async () => {
+        const handToAgent = vi.fn();
+        screenOf(deploymentAnswering().transport, undefined, handToAgent);
+        const question = askASuggestion();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Hand to the agent' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue with the agent' }));
+
+        const handedOver = { scope: { kind: 'discoveryRun', subject: discovery.runStarted.runId }, title: question };
+
+        expect(handToAgent).toHaveBeenNthCalledWith(1, handedOver);
+        expect(handToAgent).toHaveBeenNthCalledWith(2, handedOver);
+    });
+
+    it('offers nothing to hand over before anybody has asked', () => {
+        screenOf(deploymentAnswering().transport, undefined, vi.fn());
+
+        expect(screen.queryByRole('button', { name: 'Continue with the agent' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Hand to the agent' })).toBeNull();
     });
 
     it('offers stopping a run that is still working, and asks the deployment to stop the run itself', async () => {

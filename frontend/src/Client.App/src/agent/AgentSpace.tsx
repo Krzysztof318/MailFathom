@@ -17,6 +17,7 @@ import { Confirmation } from '../confirmation/Confirmation';
 import { Control } from '../controls/Control';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import type { AgentHandOver } from '../routing/agentHandOver';
 import { useScreenLayer } from '../shell/screenLayers';
 import { useDesktopComposition, useWideWorkspace } from '../shell/useWideWorkspace';
 import { AgentComposer } from './AgentComposer';
@@ -60,6 +61,14 @@ function refusedDeletion(reason: ClientFailureReason): reason is Exclude<ClientF
     return reason !== 'missing';
 }
 
+// What the chip says, by what was handed over. Exhaustive by its own type, so a kind a space learns to hand over does
+// not compile until the chip can name it.
+const contextSaid: Readonly<Record<AgentHandOver['scope']['kind'], MessageKey>> = {
+    thread: 'agent.context.thread',
+    calendarEvent: 'agent.context.calendarEvent',
+    discoveryRun: 'agent.context.discoveryRun',
+};
+
 const deletingCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     zero: 'agent.deleteMany.other',
     one: 'agent.deleteMany.one',
@@ -71,17 +80,21 @@ const deletingCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
 
 /**
  * @param status What the deployment is doing, which every space shows somewhere and this one shows in its header.
+ * @param handOver What another space last handed to the agent, and `null` before any has. Each hand-over is a new
+ * value, and a new one opens a new conversation carrying it as the context, whatever was open before.
  * @param schedule How the follower waits, which a test replaces so nothing polls in it.
  */
 export function AgentSpace({
     session,
     transport,
     status,
+    handOver = null,
     schedule = whileTheConversationIsSilent,
 }: {
     readonly session: ClientSession | null;
     readonly transport: MailFathomTransport;
     readonly status: ReactNode;
+    readonly handOver?: AgentHandOver | null;
     readonly schedule?: RunFollowingSchedule;
 }) {
     const { locale, translate } = useLocalization();
@@ -99,6 +112,28 @@ export function AgentSpace({
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [following, setFollowing] = useState(0);
     const [composerFocusAsked, setComposerFocusAsked] = useState(0);
+
+    // What the next question is asked about. It stays through the conversation and across switching to another until
+    // somebody clears it or another space hands something else over, which is how the design project holds it: the
+    // chip is visible above the field, so what a question is scoped to is never something the reader cannot see.
+    const [context, setContext] = useState<AgentHandOver | null>(null);
+
+    // What was handed over before this screen was drawn is taken as already seen: the frame keeps the last hand-over
+    // for as long as it lives, and a screen drawn again under a new session must not open on a thread from the last.
+    const [handedOver, setHandedOver] = useState(handOver);
+
+    // Adjusted while rendering rather than in an effect, so the conversation that was open is never drawn under the
+    // context of the one being opened.
+    if (handOver !== handedOver) {
+        setHandedOver(handOver);
+
+        if (handOver !== null) {
+            setContext(handOver);
+            setCurrent(null);
+            setUnsent(null);
+            setComposerFocusAsked((before) => before + 1);
+        }
+    }
 
     const asked = useRef<HTMLDialogElement>(null);
     const drawer = useRef<HTMLDialogElement>(null);
@@ -179,7 +214,7 @@ export function AgentSpace({
 
         const posted =
             current === null || inFlight === null
-                ? await askAgent(session, transport, conversation, message, text)
+                ? await askAgent(session, transport, conversation, message, text, context?.scope ?? null)
                 : await steerAgentRun(session, transport, conversation, inFlight.run, message, text);
 
         if (posted.outcome === 'failed') {
@@ -364,8 +399,16 @@ export function AgentSpace({
                         notSent={unsent === null ? null : translate(notSent[unsent])}
                         conversation={current}
                         focusAsked={composerFocusAsked}
+                        context={
+                            context === null
+                                ? null
+                                : translate(contextSaid[context.scope.kind], { title: context.title })
+                        }
                         onSend={send}
                         onCancel={cancel}
+                        onClearContext={() => {
+                            setContext(null);
+                        }}
                     />
                 </div>
             </div>

@@ -15,6 +15,7 @@ import {
     type MailboxAct,
     type MailboxActs,
 } from '../mailboxActs/useMailboxActs';
+import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 import { MessageRowMenu } from './MessageRowMenu';
 
 const email = {
@@ -54,6 +55,8 @@ function menuUnder({
     onSelect = vi.fn(),
     onAsk = vi.fn(),
     onCheckReadings,
+    row = email,
+    handToAgent = null,
 }: {
     acts?: MailboxActs;
     composing?: Composing;
@@ -61,22 +64,26 @@ function menuUnder({
     onSelect?: () => void;
     onAsk?: (act: 'delete' | 'move', messages: readonly ActedMessage[]) => void;
     onCheckReadings?: () => void;
+    row?: MailTimelineEntry;
+    handToAgent?: ((handOver: AgentHandOver) => void) | null;
 } = {}): void {
     render(
         <LocalizationProvider>
-            <ComposingContext value={composing}>
-                <MailboxActsContext value={acts}>
-                    <MessageRowMenu
-                        email={email}
-                        messages={about}
-                        at={{ x: 20, y: 30 }}
-                        onSelect={onSelect}
-                        onAsk={onAsk}
-                        onCheckReadings={onCheckReadings}
-                        onClose={vi.fn()}
-                    />
-                </MailboxActsContext>
-            </ComposingContext>
+            <AgentHandOverContext value={handToAgent}>
+                <ComposingContext value={composing}>
+                    <MailboxActsContext value={acts}>
+                        <MessageRowMenu
+                            email={row}
+                            messages={about}
+                            at={{ x: 20, y: 30 }}
+                            onSelect={onSelect}
+                            onAsk={onAsk}
+                            onCheckReadings={onCheckReadings}
+                            onClose={vi.fn()}
+                        />
+                    </MailboxActsContext>
+                </ComposingContext>
+            </AgentHandOverContext>
         </LocalizationProvider>,
     );
 }
@@ -121,6 +128,26 @@ describe('MessageRowMenu', () => {
 
         expect(drawn()).toContain('Mark as read');
         expect(drawn()).not.toContain('Mark as unread');
+    });
+
+    it('hands the conversation the message belongs to over to the agent, second as the design draws it', () => {
+        const handToAgent = vi.fn();
+        const thread = '0198f4a1-0000-7000-8000-00000000b001';
+        menuUnder({ row: { ...email, threadId: thread }, handToAgent });
+
+        expect(drawn()[1]).toBe('Ask the agent');
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Ask the agent' }));
+
+        expect(handToAgent).toHaveBeenCalledWith({
+            scope: { kind: 'thread', subject: thread },
+            title: 'Contract annex — signatures',
+        });
+    });
+
+    it('offers no way to the agent for a message the deployment placed in no conversation', () => {
+        menuUnder({ handToAgent: vi.fn() });
+        expect(screen.queryByRole('menuitem', { name: 'Ask the agent' })).toBeNull();
     });
 
     it('names the menu by what the row is about', () => {

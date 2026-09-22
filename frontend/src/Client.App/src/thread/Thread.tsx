@@ -382,6 +382,7 @@ export function Thread({
     // neither the absence nor the reason. What a read that answered with nothing draws is the absence itself, which is
     // a state the block says in a sentence.
     const derived = derivation?.outcome === 'read' ? derivation.value : null;
+    const subject = held[0]?.email.subject ?? translate('message.noSubject');
     const stateBlock =
         derivation?.outcome === 'failed' || (panelsHidden && twoPanes) ? undefined : (
             <ThreadState
@@ -389,6 +390,7 @@ export function Thread({
                 reading={derivation === null}
                 online={online}
                 messages={held}
+                thread={{ scope: { kind: 'thread', subject: conversation.threadId }, title: subject }}
                 onFollowSource={followSource}
             />
         );
@@ -406,8 +408,9 @@ export function Thread({
                     <MessageHeaders
                         headers={headersOf(opened)}
                         message={actedOn(opened)}
-                        subject={held[0]?.email.subject ?? translate('message.noSubject')}
+                        subject={subject}
                         messagesInThread={latest.messageCount}
+                        thread={conversation.threadId}
                     >
                         {latest.moreParticipantsNotNamed ? (
                             <p className="text-base text-muted">{translate('thread.moreParticipants')}</p>
