@@ -78,7 +78,7 @@ export function useFollowedRun(
         });
 
         const heard = changes.listen((change) => {
-            if (change.kind === 'discovery.run.advanced') {
+            if (change.kind === 'run.advanced' && change.conversation === null && change.run !== null) {
                 following.advanced(change.run, change.sequence);
             } else if (change.kind === 'refresh') {
                 // A refresh is the widest statement either side can make — a connection standing again after a gap, an

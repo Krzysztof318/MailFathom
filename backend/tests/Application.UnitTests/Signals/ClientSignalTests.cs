@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
@@ -38,6 +39,38 @@ public sealed class ClientSignalTests
     public void DiscoveryRunAdvanced_WithoutAPositiveSequence_IsRefused(long sequence) =>
         Assert.Throws<ArgumentOutOfRangeException>(
             () => ClientSignal.DiscoveryRunAdvanced(SyntheticUser.Deployment, DiscoveryRunId.New(), sequence));
+
+    /// <summary>A conversation that has reached nowhere has nothing to say it reached, so composing the statement is refused.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void AgentConversationAdvanced_WithoutAPositiveSequence_IsRefused(long sequence) =>
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ClientSignal.AgentConversationAdvanced(
+                SyntheticUser.Deployment,
+                AgentConversationId.New(),
+                AgentMessageId.New(),
+                sequence));
+
+    /// <summary>A Discover run and an Agent conversation announce under the one kind a running answer has, told apart by whether a conversation is named.</summary>
+    [Fact]
+    public void AgentConversationAdvanced_ForARunningAnswer_SharesTheDiscoverKindAndNamesTheConversationBesideTheRun()
+    {
+        // Arrange
+        var conversation = AgentConversationId.New();
+        var run = AgentMessageId.New();
+        var discovery = DiscoveryRunId.New();
+
+        // Act
+        var agent = ClientSignal.AgentConversationAdvanced(SyntheticUser.Deployment, conversation, run, sequence: 4);
+        var discover = ClientSignal.DiscoveryRunAdvanced(SyntheticUser.Deployment, discovery, sequence: 4);
+
+        // Assert
+        Assert.Equal(ClientSignalKind.RunAdvanced, agent.Kind);
+        Assert.Equal(ClientSignalKind.RunAdvanced, discover.Kind);
+        Assert.Equal((conversation, run.Value, 4L), (agent.Conversation!.Value, agent.Run!.Value, agent.Sequence));
+        Assert.Equal((null, discovery.Value), (discover.Conversation, discover.Run!.Value));
+    }
 
     /// <summary>A window that attributed one occurrence twice names it once, so a client re-reads each row once.</summary>
     [Fact]
@@ -189,12 +222,12 @@ public sealed class ClientSignalTests
         Assert.Equal(
             [
                 "account.state",
-                "discovery.run.advanced",
                 "folders.changed",
                 "mail.arrived",
                 "mail.changed",
                 "mail.flags.changed",
                 "notification.raised",
+                "run.advanced",
             ],
             [.. names.Order(StringComparer.Ordinal)]);
     }

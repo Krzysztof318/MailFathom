@@ -65,8 +65,9 @@ public sealed class DiscoveryRunJournalTests
 
         // Assert
         var announced = Assert.Single(channel.Published, signal => signal.Sequence == 2);
-        Assert.Equal(ClientSignalKind.DiscoveryRunAdvanced, announced.Kind);
-        Assert.Equal(journal.Id, announced.Run);
+        Assert.Equal(ClientSignalKind.RunAdvanced, announced.Kind);
+        Assert.Equal(journal.Id.Value, announced.Run);
+        Assert.Null(announced.Conversation);
         Assert.Equal(SyntheticUser.Deployment, announced.User);
         Assert.Equal(0, announced.Count);
         Assert.Empty(announced.Emails);

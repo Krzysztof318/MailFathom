@@ -16,8 +16,9 @@ namespace MailFathom.Host.Signals;
 /// <param name="NotificationKind">Which kind of notification was written, where the kind reports one.</param>
 /// <param name="Headline">The notification's own headline, and nothing for every other kind.</param>
 /// <param name="SecondLine">The notification's own second line, and nothing for every other kind.</param>
-/// <param name="Run">The Discover run that advanced, where the kind names one.</param>
-/// <param name="Sequence">How far that run has got, which is the cursor the client re-reads its tail from, and zero for every other kind.</param>
+/// <param name="Run">The Discover run, or the Agent answer being composed, that advanced, where the kind names one.</param>
+/// <param name="Conversation">The Agent conversation that advanced, and nothing for a Discover run or any other kind.</param>
+/// <param name="Sequence">How far that run or conversation has got, which is the cursor the client re-reads its tail from, and zero for every other kind.</param>
 /// <remarks>
 /// <para>
 /// <b>It names no user.</b> The connection already belongs to one — it joined that user's group and nothing else can
@@ -26,8 +27,8 @@ namespace MailFathom.Host.Signals;
 /// </para>
 /// <para>
 /// <b>No mail crosses.</b> The vocabulary is the one <see cref="ClientSignal" /> holds and nothing widens it here: a
-/// count, an account alias, a folder alias, a stored identity, and the two server flags of one, plus a run identifier
-/// and the sequence it has reached, plus the notification record's own already-derived two lines, which are the stated
+/// count, an account alias, a folder alias, a stored identity, and the two server flags of one, plus a run or an Agent
+/// conversation identifier and the sequence it has reached, plus the notification record's own already-derived two lines, which are the stated
 /// exception and reach a client entitled to read that record over its own route. A run's advance carries no part of
 /// the answer, which is read back over that run's own route.
 /// </para>
@@ -43,6 +44,7 @@ internal sealed record ClientSignalPayload(
     string? Headline,
     string? SecondLine,
     string? Run,
+    string? Conversation,
     long Sequence)
 {
     /// <summary>Renders one signal for the wire.</summary>
@@ -68,7 +70,8 @@ internal sealed record ClientSignalPayload(
             signal.NotificationKind?.ToString(),
             signal.Headline,
             signal.SecondLine,
-            signal.Run?.Value.ToString(),
+            signal.Run?.ToString(),
+            signal.Conversation?.ToString(),
             signal.Sequence);
     }
 }

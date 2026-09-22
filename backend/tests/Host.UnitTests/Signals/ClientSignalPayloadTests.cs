@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
@@ -58,7 +59,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(
-            new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], [], null, null, null, null, 0),
+            new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], [], null, null, null, null, null, 0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -83,6 +84,7 @@ public sealed class ClientSignalPayloadTests
                 0,
                 [email.Value.ToString()],
                 [],
+                null,
                 null,
                 null,
                 null,
@@ -119,6 +121,7 @@ public sealed class ClientSignalPayloadTests
                 null,
                 null,
                 null,
+                null,
                 0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
@@ -136,7 +139,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(
-            new ClientSignalPayload("folders.changed", "work", null, 0, [], [], null, null, null, null, 0),
+            new ClientSignalPayload("folders.changed", "work", null, 0, [], [], null, null, null, null, null, 0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -176,6 +179,7 @@ public sealed class ClientSignalPayloadTests
                 "Mail arrived",
                 "Four messages arrived in work.",
                 null,
+                null,
                 0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
@@ -193,7 +197,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(
-            new ClientSignalPayload("account.state", "work", null, 0, [], [], null, null, null, null, 0),
+            new ClientSignalPayload("account.state", "work", null, 0, [], [], null, null, null, null, null, 0),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
@@ -217,7 +221,7 @@ public sealed class ClientSignalPayloadTests
         // Assert
         AssertPayloadIs(
             new ClientSignalPayload(
-                "discovery.run.advanced",
+                "run.advanced",
                 null,
                 null,
                 0,
@@ -227,7 +231,39 @@ public sealed class ClientSignalPayloadTests
                 null,
                 null,
                 run.Value.ToString(),
+                null,
                 7),
+            payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
+    }
+
+    /// <summary>An advancing Agent conversation names the conversation, the run, and how far it has got, under the same kind a Discover run uses.</summary>
+    [Fact]
+    public void For_AgentConversationAdvanced_RendersTheConversationTheRunAndHowFarItGotAndNothingElse()
+    {
+        // Arrange
+        var conversation = AgentConversationId.New();
+        var run = AgentMessageId.New();
+        var signal = ClientSignal.AgentConversationAdvanced(SyntheticUser.Deployment, conversation, run, sequence: 12);
+
+        // Act
+        var payload = ClientSignalPayload.For(signal);
+
+        // Assert
+        AssertPayloadIs(
+            new ClientSignalPayload(
+                "run.advanced",
+                null,
+                null,
+                0,
+                [],
+                [],
+                null,
+                null,
+                null,
+                run.Value.ToString(),
+                conversation.Value.ToString(),
+                12),
             payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }

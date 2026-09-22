@@ -49,16 +49,16 @@ public readonly record struct ClientSignalKind
     /// <summary>Gets the kind raised when a run finished, failed, or found the mailbox unreachable.</summary>
     public static ClientSignalKind AccountState { get; } = new("account.state");
 
-    /// <summary>Gets the kind raised when a Discover run has written more of its answer.</summary>
+    /// <summary>Gets the kind raised when a running AI answer has had more written — a Discover run's, or an Agent conversation's.</summary>
     /// <remarks>
-    /// It names the run and the sequence that run has reached, and carries no part of the answer — no block, citation,
-    /// count, spend figure, or model name. The answer is read back over the run's own route from the cursor the client
-    /// holds, which is what keeps mail-derived content off the backplane an operator may point at a service somebody
-    /// else runs;
+    /// It names the run, the Agent conversation where the answer belongs to one, and the sequence reached, and carries
+    /// no part of the answer — no block, citation, count, spend figure, model name, or anything a person wrote. The
+    /// answer is read back over the run's or the conversation's own route from the cursor the client holds, which is
+    /// what keeps mail-derived content off the backplane an operator may point at a service somebody else runs;
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
-    /// decides that and Amendment 3 to ADR 0032 admits this kind under it.
+    /// decides that and Amendment 3 to ADR 0032 admits this one kind for both surfaces.
     /// </remarks>
-    public static ClientSignalKind DiscoveryRunAdvanced { get; } = new("discovery.run.advanced");
+    public static ClientSignalKind RunAdvanced { get; } = new("run.advanced");
 
     /// <summary>Gets every kind this deployment publishes.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
@@ -70,7 +70,7 @@ public readonly record struct ClientSignalKind
         FoldersChanged,
         NotificationRaised,
         AccountState,
-        DiscoveryRunAdvanced,
+        RunAdvanced,
     ];
 
     /// <summary>Gets whether this value names a kind rather than the unusable struct default.</summary>

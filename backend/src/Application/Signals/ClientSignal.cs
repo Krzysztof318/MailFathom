@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -25,9 +26,9 @@ namespace MailFathom.Application.Signals;
 /// <para>
 /// <b>No mail crosses.</b> A count, an account alias, a folder alias, a stored identity, a server flag, a state, and a
 /// run with the sequence it has reached are the whole vocabulary; no subject, address, body fragment, filename,
-/// attachment name, or snippet reaches a signal at any size. <see cref="ClientSignalKind.DiscoveryRunAdvanced" /> is
-/// the kind whose subject is mail-derived and which therefore carries none of it: a run identifier and a number, with
-/// the answer read back over the run's own route.
+/// attachment name, or snippet reaches a signal at any size. <see cref="ClientSignalKind.RunAdvanced" /> is the kind
+/// whose subject is mail-derived and which therefore carries none of it: identifiers and a number, with the answer read
+/// back over the run's or the conversation's own route.
 /// The one exception is <see cref="Headline" /> and <see cref="SecondLine" /> on
 /// <see cref="ClientSignalKind.NotificationRaised" />, which are the notification record's own already-derived text and
 /// reach a client that is entitled to read that record over its own route.
@@ -59,7 +60,8 @@ public sealed class ClientSignal
         NotificationKind? notificationKind,
         string? headline,
         string? secondLine,
-        DiscoveryRunId? run,
+        Guid? run,
+        AgentConversationId? conversation,
         long sequence)
     {
         this.Kind = kind;
@@ -73,6 +75,7 @@ public sealed class ClientSignal
         this.Headline = headline;
         this.SecondLine = secondLine;
         this.Run = run;
+        this.Conversation = conversation;
         this.Sequence = sequence;
     }
 
@@ -112,15 +115,23 @@ public sealed class ClientSignal
     /// <summary>Gets the notification's own second line, and nothing for every other kind.</summary>
     public string? SecondLine { get; }
 
-    /// <summary>Gets the Discover run the change is in, where the kind names one.</summary>
-    public DiscoveryRunId? Run { get; }
+    /// <summary>Gets the run the change is in — a Discover run, or the Agent answer being composed — where the kind names one.</summary>
+    /// <remarks>
+    /// An identifier rather than either surface's own type, because one kind serves both and a client tells them apart by
+    /// whether <see cref="Conversation" /> is named. An Agent conversation advancing outside any run — a proposal being
+    /// answered — names no run at all.
+    /// </remarks>
+    public Guid? Run { get; }
 
-    /// <summary>Gets how far that run has got, counted the way its own events are, and zero for every other kind.</summary>
-    /// <remarks>A place in the run rather than a quantity of anything, which is why it is not the count above: a client holds it as the cursor it reads the tail from.</remarks>
+    /// <summary>Gets the Agent conversation the change is in, and nothing for a Discover run or any other kind.</summary>
+    public AgentConversationId? Conversation { get; }
+
+    /// <summary>Gets how far that run or conversation has got, counted the way its own record is, and zero for every other kind.</summary>
+    /// <remarks>A place in the record rather than a quantity of anything, which is why it is not the count above: a client holds it as the cursor it reads the tail from.</remarks>
     public long Sequence { get; }
 
     /// <summary>Gets the scope two signals must share before one folds into the other.</summary>
-    internal ClientSignalScope Scope => new(this.User, this.Kind, this.Account, this.Folder, this.Run);
+    internal ClientSignalScope Scope => new(this.User, this.Kind, this.Account, this.Folder, this.Run, this.Conversation);
 
     /// <summary>States that a synchronization run committed mail into one folder.</summary>
     /// <param name="account">The account the run was over.</param>
@@ -144,6 +155,7 @@ public sealed class ClientSignal
             headline: null,
             secondLine: null,
             run: null,
+            conversation: null,
             sequence: 0);
     }
 
@@ -172,6 +184,7 @@ public sealed class ClientSignal
             headline: null,
             secondLine: null,
             run: null,
+            conversation: null,
             sequence: 0);
     }
 
@@ -221,6 +234,7 @@ public sealed class ClientSignal
             headline: null,
             secondLine: null,
             run: null,
+            conversation: null,
             sequence: 0);
     }
 
@@ -240,6 +254,7 @@ public sealed class ClientSignal
             headline: null,
             secondLine: null,
             run: null,
+            conversation: null,
             sequence: 0);
 
     /// <summary>States that a notification record was written for one person.</summary>
@@ -266,6 +281,7 @@ public sealed class ClientSignal
             notification.Title,
             notification.Body,
             run: null,
+            conversation: null,
             sequence: 0);
     }
 
@@ -291,6 +307,7 @@ public sealed class ClientSignal
             headline: null,
             secondLine: null,
             run: null,
+            conversation: null,
             sequence: 0);
 
     /// <summary>States that a Discover run has written more of its answer, and how far it has got.</summary>
@@ -302,7 +319,7 @@ public sealed class ClientSignal
     /// <remarks>
     /// <b>It carries no part of the answer</b>, and that is the whole shape of it: no block, no citation, no retrieval
     /// count, no spend figure, no model name, and no alias. An answer quotes mail by construction, and this is the one
-    /// signal whose subject is mail-derived — so what crosses is a run identifier and a number, and the answer is read
+    /// kind whose subject is mail-derived — so what crosses is a run identifier and a number, and the answer is read
     /// back over the run's own route. Widening it is what
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0035-delivering-a-running-ai-answer-from-a-persisted-run-by-cursor-signal-and-re-read.md">ADR 0035</see>
     /// refuses, because the backplane this crosses may be a service the deployment does not run.
@@ -311,19 +328,31 @@ public sealed class ClientSignal
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sequence);
 
-        return new ClientSignal(
-            ClientSignalKind.DiscoveryRunAdvanced,
-            user,
-            account: null,
-            folder: null,
-            count: 0,
-            emails: [],
-            flags: [],
-            notificationKind: null,
-            headline: null,
-            secondLine: null,
-            run,
-            sequence);
+        return RunAdvanced(user, run.Value, conversation: null, sequence);
+    }
+
+    /// <summary>States that an Agent conversation has had more written into it, and how far it has got.</summary>
+    /// <param name="user">Whose conversation it is, which is whose connections are told — a second screen of the same person as much as the one that wrote.</param>
+    /// <param name="conversation">The conversation that advanced, which is what the client re-reads.</param>
+    /// <param name="run">The answer being composed where the advance belongs to one, and <see langword="null" /> where it belongs to none — a proposal being answered.</param>
+    /// <param name="sequence">The place the conversation has reached, which is the cursor a client already past reads nothing from.</param>
+    /// <returns>The signal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="sequence" /> is not positive, a conversation having reached nothing being no advance.</exception>
+    /// <remarks>
+    /// The same kind a Discover run raises rather than one of its own, because
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>
+    /// admitted exactly one kind for a running answer on either surface. It carries identifiers and a number, and no
+    /// part of what was written: no question, no block, no status line, no title.
+    /// </remarks>
+    public static ClientSignal AgentConversationAdvanced(
+        UserId user,
+        AgentConversationId conversation,
+        AgentMessageId? run,
+        long sequence)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sequence);
+
+        return RunAdvanced(user, run?.Value, conversation, sequence);
     }
 
     /// <summary>Folds a later signal of the same scope into this one, so a window produces one statement rather than many.</summary>
@@ -362,8 +391,25 @@ public sealed class ClientSignal
             later.Headline,
             later.SecondLine,
             this.Run,
+            this.Conversation,
             later.Sequence);
     }
+
+    private static ClientSignal RunAdvanced(UserId user, Guid? run, AgentConversationId? conversation, long sequence) =>
+        new(
+            ClientSignalKind.RunAdvanced,
+            user,
+            account: null,
+            folder: null,
+            count: 0,
+            emails: [],
+            flags: [],
+            notificationKind: null,
+            headline: null,
+            secondLine: null,
+            run,
+            conversation,
+            sequence);
 
     /// <summary>Joins two windows' flag statements, one entry per email, bounded like every other list a signal carries.</summary>
     /// <remarks>The order the earlier statement established is kept, so an email folded into is not moved to the end of the list and pushed past the bound by one a client had already been told about.</remarks>
@@ -392,11 +438,13 @@ public sealed class ClientSignal
 /// <param name="Kind">Which of the seven kinds it is.</param>
 /// <param name="Account">The account it names, where the kind names one.</param>
 /// <param name="Folder">The folder it names, where the kind names one.</param>
-/// <param name="Run">The Discover run it names, where the kind names one.</param>
+/// <param name="Run">The Discover run or Agent answer it names, where the kind names one.</param>
+/// <param name="Conversation">The Agent conversation it names, where it names one.</param>
 /// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look, and folding two of one person's runs into one would leave a client told to re-read a run at a sequence the other one reached.</remarks>
 internal readonly record struct ClientSignalScope(
     UserId? User,
     ClientSignalKind Kind,
     MailAccountId? Account,
     MailFolderAlias? Folder,
-    DiscoveryRunId? Run);
+    Guid? Run,
+    AgentConversationId? Conversation);
