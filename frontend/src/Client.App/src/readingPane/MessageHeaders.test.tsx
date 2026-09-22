@@ -68,13 +68,14 @@ function drawing(
     written: Partial<MailMessageHeaders> = {},
     panelsHidden = false,
     handToAgent: (handOver: AgentHandOver) => void = vi.fn(),
+    thread: string | null = conversation,
 ): void {
     render(
         <LocalizationProvider>
             <AgentHandOverContext value={handToAgent}>
                 <WorkspaceProvider>
                     <HidesThePanels hidden={panelsHidden} />
-                    <MessageHeaders headers={{ ...headers, ...written }} message={message} thread={conversation} />
+                    <MessageHeaders headers={{ ...headers, ...written }} message={message} thread={thread} />
                 </WorkspaceProvider>
             </AgentHandOverContext>
         </LocalizationProvider>,
@@ -260,7 +261,7 @@ describe('MessageHeaders at the width its column has', () => {
         expect(screen.getByRole('button', { name: 'Back to the list' })).toBeDefined();
     });
 
-    it('offers handing the conversation to the agent only where the head has a column to itself', () => {
+    it('offers handing the conversation to the agent everywhere but on a phone', () => {
         const handToAgent = vi.fn();
         atWorkspaceWidth(true);
         drawing({}, false, handToAgent);
@@ -277,6 +278,17 @@ describe('MessageHeaders at the width its column has', () => {
         drawing();
 
         expect(screen.queryByText('Ask')).toBeNull();
+    });
+
+    // A message the deployment placed in no conversation has nothing the conversation routes accept as a subject, so
+    // the head offers no way to the agent rather than a hand-over naming nothing.
+    it('offers no way to the agent for a message that belongs to no conversation', () => {
+        const handToAgent = vi.fn();
+        atWorkspaceWidth(true);
+        drawing({}, false, handToAgent, null);
+
+        expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+        expect(handToAgent).not.toHaveBeenCalled();
     });
 
     it('offers the address details from the sender line itself, and names what pressing it does either way', () => {

@@ -12,6 +12,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { flagActFor, refusalSaid, standsInTheWay } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useAgentHandOver, type AgentHandOver } from '../routing/agentHandOver';
+import { useWideWorkspace } from '../shell/useWideWorkspace';
 
 // What stands at the end of the head of a message or a conversation, beside its subject: handing the thread to the
 // agent, and the three things the design project offers to do with it from there. One component because two heads
@@ -20,8 +21,8 @@ import { useAgentHandOver, type AgentHandOver } from '../routing/agentHandOver';
 //
 // The design draws the three as words alone wherever the head has a column to itself, and as symbols alone where the
 // column is the whole screen and the head is one compact bar over the message. Asking the agent is drawn on the accent
-// as a pill, and only where the head is not that compact bar: on a phone the design moves it into the row of the
-// thread's own state. It is drawn only where there is an agent to reach and a conversation to hand over, which a
+// as a pill everywhere but on a phone, the compact bar of a one-pane window wider than one included: on a phone the
+// design moves it into the row of the thread's own state, and a width between the two would otherwise have neither. It is drawn only where there is an agent to reach and a conversation to hand over, which a
 // message the deployment has not placed in one does not have.
 //
 // The other three act on the message the head is about, and each goes the way every other surface already goes: an
@@ -57,6 +58,7 @@ export function HeadActs({
     readonly thread: AgentHandOver | null;
 }) {
     const { translate } = useLocalization();
+    const wideWorkspace = useWideWorkspace();
     const acts = useMailboxActs();
     const handToAgent = useAgentHandOver();
 
@@ -108,7 +110,7 @@ export function HeadActs({
 
     return (
         <div className="ms-auto flex shrink-0 items-center gap-2">
-            {compact || handToAgent === null || thread === null ? null : (
+            {!wideWorkspace || handToAgent === null || thread === null ? null : (
                 <Control
                     label={translate('message.ask')}
                     hint={translate('message.askTitle')}

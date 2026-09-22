@@ -244,6 +244,16 @@ describe('ThreadState', () => {
         expect(screen.getByRole<HTMLDialogElement>('dialog', { hidden: true }).open).toBe(false);
     });
 
+    // Absence is the common state, and a phone still owes the way to the agent there: the head has given it up.
+    it('hands the conversation to the agent from a phone band with nothing derived to say', () => {
+        const handToAgent = vi.fn();
+        render(drawing(null, false, undefined, true, handToAgent));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+        expect(handToAgent).toHaveBeenCalledWith(conversation);
+    });
+
     it('draws no way to the agent on a phone for a credential that has no agent to reach', () => {
         render(drawing(stateOf([entry()])));
 
