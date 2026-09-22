@@ -1871,7 +1871,8 @@ mail into a folder the caller cannot read would move it out of sight rather than
 **On an account whose mailbox MailFathom holds, a change is made rather than recorded.** There is no server to carry it
 to, so a flag, a keyword, a move, or a delete on a [held account](#the-folder-management-routes) is committed to the stored
 message in the same transaction as its audit entry where the account keeps one, the answer is `applied`, and `changes` is empty because no record
-exists to follow. Treat `applied` as finished: nothing converges afterwards and no later state will be reported.
+exists to follow. Treat an `applied` result carrying no change as finished: nothing converges afterwards and no later
+state will be reported.
 `requestId` matches a repeat only against a record, so a submission repeated on a held account applies its changes
 again. A move
 files into the local folder the destination's role names, or into the local folder the destination's source folder
@@ -1882,6 +1883,28 @@ from it, so it is held for the same window as every other delete and can be with
 window passes. This surface names no copy at all, on a held account or any other: a rule is the only thing here that
 copies a message, and [what it produces on a held account](../features/mail-rules.md#when-a-change-cannot-be-made) is a
 second stored message rather than a record this route would have to report on.
+
+**While the mailbox is being appended back to its source, a change is both made and recorded.** An account in the
+`Restoring` phase is still the truth about its own mail, so every act is committed exactly as it is on a held account
+and the answer is `applied` for the same reason. What differs is what comes with it: where the message still stands on
+the source — never drained, or already appended back by the restore — the same transaction opens the ordinary record
+that carries the act to the server, and the answer names it where it names a record at all: `changes` on the flags
+route, which reports one entry per value, and the single `change` on the move and the delete routes. So `applied` there
+means the mail has changed and a record may still be converging, which is what keeps a message acted on during the
+restore from arriving back in the state the source last had; a message the drain has already taken off the source
+carries no record and is answered as a held account's act is, the restore writing the act onto it when it appends the
+message. A delete answered `applied` on such an account moves the message into the local trash and records the delete
+the source has not heard about; the erasure a second delete asks for is `recorded` and reaches no server, exactly as on
+a held account.
+
+**The record beside an `applied` change is not one a withdrawal takes back**, which is the one thing a client has to
+treat differently about it. `withdrawal_window_seconds` buys the stretch in which a change that has only been
+`recorded` may still be stopped, and a change answered `applied` has already happened to the stored message — so the
+record carrying it to the source is opened with no window at all, and the withdrawal routes leave it exactly where it
+stands and answer it `pending` rather than `cancelled`. The answer is what says which case a client is in: an undo
+affordance belongs to `recorded`, and `applied` is the same finished act on a restoring account that it is on a held
+one, with the record reported beside it so the caller can watch the source catch up rather than so it can change its
+mind.
 
 **Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
 flag misdescribes mail the user can still find; a move puts the mail somewhere else, and on a server without `MOVE` it

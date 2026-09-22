@@ -6,6 +6,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
@@ -41,6 +42,8 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
     private const uint ForeignAccountUid = 811;
 
     private const uint RoundTrippedUid = 812;
+
+    private const uint DrainedUid = 813;
 
     /// <summary>Past the payload PostgreSQL keeps in a heap page, so the figure moves by a length no rounding could produce.</summary>
     private const int PayloadByteCount = 64 * 1024;
@@ -114,6 +117,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
         var anotherAccount = MailAccountId.Create("local-email-state-elsewhere");
         var refusedState = new LocalEmailState(
             binding,
+            HoldsSourceOccurrence: true,
             Folder: null,
             IsSeen: true,
             IsFlagged: true,
@@ -159,6 +163,7 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             cancellationToken);
         var written = new LocalEmailState(
             binding,
+            HoldsSourceOccurrence: true,
             Folder: null,
             IsSeen: true,
             IsFlagged: true,
@@ -183,7 +188,48 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
         Assert.Null(readBack.Folder);
         Assert.True(readBack.IsSeen);
         Assert.True(readBack.IsFlagged);
+        Assert.True(readBack.HoldsSourceOccurrence);
         Assert.Equal(written.Keywords, readBack.Keywords);
+    }
+
+    /// <summary>
+    /// Whether the message still stands on the source is read off the row's own occurrence columns rather than written
+    /// onto the state, and it is what decides whether a change made while the account is being restored opens the record
+    /// the source is owed. A drain clears those columns, so a message it has already taken off the server answers false
+    /// and its local commit is the whole of the act.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AMessageTheDrainHasTakenOffTheSource_AnswersThatItHoldsNoOccurrence()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            SyntheticEmail.OccurrenceIn(binding, DrainedUid),
+            "local-email-state-drained",
+            cancellationToken);
+
+        var beforeTheDrain = await ReadAsync(services, SyntheticMailAccount.Account, storedEmailId, cancellationToken);
+
+        // Act
+        await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IMailboxDrainStore>().ClearOccurrencesAsync(
+                session,
+                SyntheticMailAccount.Account,
+                [storedEmailId],
+                token),
+            cancellationToken);
+
+        var afterTheDrain = await ReadAsync(services, SyntheticMailAccount.Account, storedEmailId, cancellationToken);
+
+        // Assert
+        Assert.NotNull(beforeTheDrain);
+        Assert.True(beforeTheDrain.HoldsSourceOccurrence);
+
+        Assert.NotNull(afterTheDrain);
+        Assert.False(afterTheDrain.HoldsSourceOccurrence);
     }
 
     /// <summary>Reads through the store inside a session of its own, which is the only way the port reads.</summary>

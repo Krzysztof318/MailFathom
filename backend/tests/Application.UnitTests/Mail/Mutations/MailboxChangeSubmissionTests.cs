@@ -52,7 +52,7 @@ public sealed class MailboxChangeSubmissionTests
 
     private readonly InMemoryMailboxMutationRecordStore records = new();
 
-    private readonly InMemoryLocalMailFolderStore heldFolders = new(Account, MailAccountCustodyPhase.Held);
+    private readonly InMemoryLocalMailFolderStore folders = new(Account, MailAccountCustodyPhase.Held);
 
     private readonly InMemoryLocalEmailStateStore states = new(Account);
 
@@ -118,7 +118,7 @@ public sealed class MailboxChangeSubmissionTests
         this.Store();
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
@@ -136,7 +136,7 @@ public sealed class MailboxChangeSubmissionTests
         var request = MailboxMutationRequest.SetFlagged(Email, Occurrence, Requester, isFlagged: true);
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, request, null, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, request, null, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
@@ -164,7 +164,7 @@ public sealed class MailboxChangeSubmissionTests
         };
 
         // Act
-        await this.Held().SubmitAsync(this.session, request, null, null, Token);
+        await this.Submission().SubmitAsync(this.session, request, null, null, Token);
 
         // Assert
         Assert.Equal(expected.Split(','), this.states.States[Email].Keywords.Values);
@@ -179,7 +179,7 @@ public sealed class MailboxChangeSubmissionTests
         var junk = JunkDestination();
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
@@ -198,13 +198,13 @@ public sealed class MailboxChangeSubmissionTests
             LocalMailFolderName.Create("Archive"),
             Role: null,
             SourceFolderAlias: Archive);
-        await this.heldFolders.SaveAsync(this.session, Account, [archive], [], Token);
+        await this.folders.SaveAsync(this.session, Account, [archive], [], Token);
         var destination = new MailboxDestination(
             MailFolderResolution.FirstBindingOf(Archive, RemoteFolderPath.Create("Archive")),
             IsMirrored: true);
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, MoveRequest(destination.Path), destination, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, MoveRequest(destination.Path), destination, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
@@ -222,7 +222,7 @@ public sealed class MailboxChangeSubmissionTests
             IsMirrored: true);
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, MoveRequest(destination.Path), destination, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, MoveRequest(destination.Path), destination, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.DestinationMissing, submitted.Outcome);
@@ -236,7 +236,7 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.Store();
         var junk = JunkDestination();
-        var submission = this.Held();
+        var submission = this.Submission();
         await submission.SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
 
         // Act
@@ -254,7 +254,7 @@ public sealed class MailboxChangeSubmissionTests
         this.Store();
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, DeleteRequest(), null, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, DeleteRequest(), null, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
@@ -268,7 +268,7 @@ public sealed class MailboxChangeSubmissionTests
     {
         // Arrange
         this.Store();
-        var submission = this.Held();
+        var submission = this.Submission();
         await submission.SubmitAsync(this.session, DeleteRequest(), null, null, Token);
         var window = Now.AddSeconds(30);
 
@@ -287,7 +287,7 @@ public sealed class MailboxChangeSubmissionTests
     {
         // Arrange
         this.Store();
-        var submission = this.Held();
+        var submission = this.Submission();
         var ruleDelete = MailboxMutationRequest.Delete(
             Email,
             Occurrence,
@@ -315,13 +315,13 @@ public sealed class MailboxChangeSubmissionTests
         var prepared = await this.PrepareCopyAsync();
 
         // Act
-        var submitted = await this.Held(copier: this.Copying())
+        var submitted = await this.Submission(copier: this.Copying())
             .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
         Assert.Equal(Copy, submitted.Change!.Email);
-        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.heldFolders.Placements[Copy]);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.folders.Placements[Copy]);
         Assert.Null(this.states.States[Email].Folder);
         Assert.Equal(0, this.records.OpenedRecordCount);
     }
@@ -333,12 +333,12 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.states.Store(
             Email,
-            new LocalEmailState(Inbox, Folder: null, IsSeen: true, IsFlagged: true, CarriedKeywords));
+            new LocalEmailState(Inbox, HoldsSourceOccurrence: true, Folder: null, IsSeen: true, IsFlagged: true, CarriedKeywords));
         var junk = JunkDestination();
         var prepared = await this.PrepareCopyAsync();
 
         // Act
-        await this.Held(copier: this.Copying())
+        await this.Submission(copier: this.Copying())
             .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
 
         // Assert
@@ -362,12 +362,12 @@ public sealed class MailboxChangeSubmissionTests
         var junk = JunkDestination();
 
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, CopyRequest(junk), junk, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, CopyRequest(junk), junk, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.SourceContentMissing, submitted.Outcome);
         Assert.Equal(0, this.records.OpenedRecordCount);
-        Assert.Empty(this.heldFolders.Placements);
+        Assert.Empty(this.folders.Placements);
     }
 
     /// <summary>Copying a message into the folder it is already in is the nothing a move into it is.</summary>
@@ -377,16 +377,16 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.Store();
         var junk = JunkDestination();
-        await this.Held().SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
+        await this.Submission().SubmitAsync(this.session, MoveRequest(junk.Path), junk, null, Token);
         var prepared = await this.PrepareCopyAsync();
 
         // Act
-        var submitted = await this.Held(copier: this.Copying())
+        var submitted = await this.Submission(copier: this.Copying())
             .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.AlreadyInDestination, submitted.Outcome);
-        Assert.DoesNotContain(Copy, this.heldFolders.Placements.Keys);
+        Assert.DoesNotContain(Copy, this.folders.Placements.Keys);
     }
 
     /// <summary>A destination no local folder corresponds to is nowhere to file a copy, exactly as it is nowhere to move one.</summary>
@@ -401,12 +401,12 @@ public sealed class MailboxChangeSubmissionTests
         var prepared = await this.PrepareCopyAsync();
 
         // Act
-        var submitted = await this.Held(copier: this.Copying())
+        var submitted = await this.Submission(copier: this.Copying())
             .SubmitAsync(this.session, CopyRequest(unheld), unheld, null, prepared, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.DestinationMissing, submitted.Outcome);
-        Assert.Empty(this.heldFolders.Placements);
+        Assert.Empty(this.folders.Placements);
     }
 
     /// <summary>An account whose source is still the truth copies through a record, so nothing is placed for it.</summary>
@@ -428,7 +428,7 @@ public sealed class MailboxChangeSubmissionTests
     public async Task PrepareCopiesAsync_ForAMessageCopiedTwice_PlacesAPayloadPerCopy()
     {
         // Act
-        var prepared = await this.Held(copier: this.Copying()).PrepareCopiesAsync(Account, [Email, Email], Token);
+        var prepared = await this.Submission(copier: this.Copying()).PrepareCopiesAsync(Account, [Email, Email], Token);
 
         // Assert
         Assert.Equal(2, prepared.Of(Email).Count);
@@ -445,7 +445,7 @@ public sealed class MailboxChangeSubmissionTests
         this.CopyWritesNothing();
 
         // Act
-        var submitted = await this.Held(Auditing(), copier: this.Copying())
+        var submitted = await this.Submission(Auditing(), copier: this.Copying())
             .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
 
         // Assert
@@ -458,7 +458,7 @@ public sealed class MailboxChangeSubmissionTests
     public async Task SubmitAsync_AMessageAHeldAccountNoLongerStores_ReportsItMissing()
     {
         // Act
-        var submitted = await this.Held().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+        var submitted = await this.Submission().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.MessageMissing, submitted.Outcome);
@@ -472,7 +472,7 @@ public sealed class MailboxChangeSubmissionTests
         this.Store();
 
         // Act
-        await this.Held(Auditing()).SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+        await this.Submission(Auditing()).SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
 
         // Assert
         await this.auditEntries.Received(1).AppendAsync(
@@ -494,7 +494,7 @@ public sealed class MailboxChangeSubmissionTests
         this.Store();
 
         // Act
-        await this.Held().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+        await this.Submission().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
 
         // Assert
         await this.auditEntries.DidNotReceiveWithAnyArgs().AppendAsync(default!, default!, Token);
@@ -507,10 +507,10 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.Store();
         this.records.AuditsMutations = true;
-        var record = await this.records.OpenAsync(this.session, DeleteRequest(), heldUntil: null, Token);
+        var record = await this.records.OpenAsync(this.session, DeleteRequest(), heldUntil: null, MailboxMutationLocalChange.None, Token);
 
         // Act
-        var erased = await this.Held().EraseAsync(this.session, record, Token);
+        var erased = await this.Submission().EraseAsync(this.session, record, Token);
 
         // Assert
         Assert.NotNull(erased);
@@ -528,7 +528,7 @@ public sealed class MailboxChangeSubmissionTests
     {
         // Arrange
         this.Store();
-        var submission = this.Held();
+        var submission = this.Submission();
         await submission.SubmitAsync(this.session, DeleteRequest(), null, null, Token);
         var submitted = await submission.SubmitAsync(this.session, DeleteRequest(), null, Now.AddSeconds(30), Token);
         var readByThePass = submitted.Record!;
@@ -553,7 +553,7 @@ public sealed class MailboxChangeSubmissionTests
         // Act
         await using (var signals = new ClientSignals([channel], new FakeTimeProvider(Now)))
         {
-            this.Held(signals: signals).Announce(change);
+            this.Submission(signals: signals).Announce(change);
         }
 
         // Assert
@@ -577,7 +577,7 @@ public sealed class MailboxChangeSubmissionTests
         // Act
         await using (var signals = new ClientSignals([channel], new FakeTimeProvider(Now)))
         {
-            this.Held(signals: signals).Announce(change);
+            this.Submission(signals: signals).Announce(change);
         }
 
         // Assert
@@ -588,6 +588,174 @@ public sealed class MailboxChangeSubmissionTests
                 && signal.Folder == Inbox.Alias
                 && signal.Emails.SequenceEqual(new[] { Email })),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A restoring account applies a read change at once and opens the record the source is still owed.</summary>
+    [Fact]
+    public async Task SubmitAsync_ASeenChangeOnARestoringAccountHoldingAnOccurrence_CommitsItAndRecordsItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.True(this.states.States[Email].IsSeen);
+        Assert.Equal(MailboxMutation.SetSeen, Assert.Single(this.records.OpenedRequests).Mutation);
+        Assert.Equal(Occurrence, submitted.Record!.Request.Occurrence);
+        Assert.Equal(MailboxMutationLocalChange.AlreadyCommitted, submitted.Record.LocalChange);
+    }
+
+    /// <summary>The star is committed and carried on the same terms the read state is.</summary>
+    [Fact]
+    public async Task SubmitAsync_AFlaggedChangeOnARestoringAccountHoldingAnOccurrence_CommitsItAndRecordsItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+        var request = MailboxMutationRequest.SetFlagged(Email, Occurrence, Requester, isFlagged: true);
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(this.session, request, null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.True(this.states.States[Email].IsFlagged);
+        Assert.Equal(MailboxMutation.SetFlagged, Assert.Single(this.records.OpenedRequests).Mutation);
+    }
+
+    /// <summary>The keywords a message ends up carrying are written locally and asked of the source as one replacement.</summary>
+    [Fact]
+    public async Task SubmitAsync_AKeywordChangeOnARestoringAccountHoldingAnOccurrence_CommitsItAndRecordsItForTheSource()
+    {
+        // Arrange
+        this.Store(keywords: ["kept"]);
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+        var request = MailboxMutationRequest.AddKeywords(
+            Email,
+            Occurrence,
+            Requester,
+            AuthoredMailKeywords.Create(["added"]));
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(this.session, request, null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(["ADDED", "KEPT"], this.states.States[Email].Keywords.Values);
+        Assert.Equal(MailboxMutation.AddKeywords, Assert.Single(this.records.OpenedRequests).Mutation);
+    }
+
+    /// <summary>A move files the message into the local folder at once and leaves the source the relocation to make.</summary>
+    [Fact]
+    public async Task SubmitAsync_AMoveOnARestoringAccountHoldingAnOccurrence_CommitsItAndRecordsItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+        var destination = JunkDestination();
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(
+            this.session,
+            MoveRequest(destination.Path),
+            destination,
+            null,
+            Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.states.States[Email].Folder);
+        Assert.Equal(MailboxMutation.Relocate, Assert.Single(this.records.OpenedRequests).Mutation);
+    }
+
+    /// <summary>A delete moves the message into the local trash and leaves the source the delete it has not heard about.</summary>
+    [Fact]
+    public async Task SubmitAsync_ADeleteOnARestoringAccountHoldingAnOccurrence_TrashesItLocallyAndRecordsItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(this.session, DeleteRequest(), null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Trash), this.states.States[Email].Folder);
+        Assert.Equal(MailboxMutation.Delete, Assert.Single(this.records.OpenedRequests).Mutation);
+        Assert.Equal(MailboxMutationLocalChange.AlreadyCommitted, submitted.Record!.LocalChange);
+    }
+
+    /// <summary>A message the drain has taken off the source has nothing to record against, so the local commit is the whole act.</summary>
+    [Fact]
+    public async Task SubmitAsync_AChangeOnARestoringAccountHoldingNoOccurrence_CommitsItWithoutARecord()
+    {
+        // Arrange
+        this.Store(holdsSourceOccurrence: false);
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+
+        // Act
+        var submitted = await this.Submission().SubmitAsync(this.session, SeenRequest(isSeen: true), null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.True(this.states.States[Email].IsSeen);
+        Assert.Null(submitted.Record);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>A copy on a restoring account is a message the source has never held, so it is committed with no record beside it.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACopyOnARestoringAccount_CommitsTheSecondMessageWithoutRecordingItForTheSource()
+    {
+        // Arrange
+        this.Store();
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+        var junk = JunkDestination();
+        var prepared = await this.PrepareCopyAsync();
+
+        // Act
+        var submitted = await this.Submission(copier: this.Copying())
+            .SubmitAsync(this.session, CopyRequest(junk), junk, null, prepared, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
+        Assert.Equal(Copy, submitted.Change!.Email);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Junk), this.folders.Placements[Copy]);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>A delete of a message already in the trash is the person's erasure whichever phase the account is in, and nothing is asked of the source.</summary>
+    [Fact]
+    public async Task SubmitAsync_ADeleteOfATrashedMessageOnARestoringAccount_OpensTheRecordAsALocalErasure()
+    {
+        // Arrange
+        this.Store();
+        var submission = this.Submission();
+        await submission.SubmitAsync(this.session, DeleteRequest(), null, null, Token);
+        this.folders.Phase = MailAccountCustodyPhase.Restoring;
+
+        // Act
+        var submitted = await submission.SubmitAsync(
+            this.session,
+            MailboxMutationRequest.Delete(
+                Email,
+                Occurrence,
+                MailboxMutationRequester.Command("call-2"),
+                AuthoredDeleteEmailDisposition.RetainLocalCopy,
+                AuthoredDeleteServerDisposition.Expunge),
+            null,
+            Now.AddSeconds(30),
+            Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Recorded, submitted.Outcome);
+        Assert.Equal(MailboxMutationLocalChange.Erasure, submitted.Record!.LocalChange);
+        Assert.Contains(Email, this.states.States.Keys);
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -640,14 +808,14 @@ public sealed class MailboxChangeSubmissionTests
         IsMirrored: true,
         MailFolderSpecialUse.Junk);
 
-    private MailboxChangeSubmission Held(
+    private MailboxChangeSubmission Submission(
         IMailboxMutationAuditSettingsReader? auditSettings = null,
         ClientSignals? signals = null,
         LocalMailCopier? copier = null) => MailboxChangeSubmissions.Over(
         this.records,
-        this.heldFolders,
+        this.folders,
         this.states,
-        copier ?? LocalMailCopiers.Over(this.heldFolders),
+        copier ?? LocalMailCopiers.Over(this.folders),
         this.auditEntries,
         auditSettings,
         signals,
@@ -680,17 +848,23 @@ public sealed class MailboxChangeSubmissionTests
 
     /// <summary>Builds a copier that finds the copied message's payload and writes the copy as <see cref="Copy" />.</summary>
     private LocalMailCopier Copying() => LocalMailCopiers.Over(
-        this.heldFolders,
+        this.folders,
         StoredContentFound(),
         this.copies,
         MimeReadingNothing());
 
-    private void Store(IEnumerable<string>? keywords = null) => this.states.Store(
+    private void Store(IEnumerable<string>? keywords = null, bool holdsSourceOccurrence = true) => this.states.Store(
         Email,
-        new LocalEmailState(Inbox, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create(keywords ?? [])));
+        new LocalEmailState(
+            Inbox,
+            holdsSourceOccurrence,
+            Folder: null,
+            IsSeen: false,
+            IsFlagged: false,
+            RemoteEmailKeywords.Create(keywords ?? [])));
 
     private LocalMailFolderId FolderWithRole(MailFolderSpecialUse role) =>
-        this.heldFolders.Folders.Single(folder => folder.Role == role).Id;
+        this.folders.Folders.Single(folder => folder.Role == role).Id;
 
     /// <summary>Places the payload one copy is committed from, which is what a caller does before its transaction.</summary>
     private async Task<PreparedLocalCopy> PrepareCopyAsync()
@@ -707,6 +881,6 @@ public sealed class MailboxChangeSubmissionTests
             .Returns(Task.FromResult<StoredEmailId?>(Copy));
 
         return Assert.Single(
-            (await this.Held(copier: this.Copying()).PrepareCopiesAsync(Account, [Email], Token)).Of(Email));
+            (await this.Submission(copier: this.Copying()).PrepareCopiesAsync(Account, [Email], Token)).Of(Email));
     }
 }

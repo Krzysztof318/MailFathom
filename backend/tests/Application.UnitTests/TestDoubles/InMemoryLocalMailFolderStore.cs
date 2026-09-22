@@ -12,8 +12,8 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 
 /// <summary>Keeps one account's local folders and placements in memory, answering as the store does for any other account.</summary>
 /// <remarks>
-/// Folders are read back only while the account is held, which is what the real store loads, so a test cannot see a
-/// hierarchy the use case could not. An erased folder's source alias is kept and reported, as the real store keeps the
+/// Folders are read back while the account holds its mailbox and while it is being restored, which is what the real store
+/// loads, so a test cannot see a hierarchy the use case could not. An erased folder's source alias is kept and reported, as the real store keeps the
 /// erased row, because it is what sends a later arrival from that source to the inbox. Writes naming another account
 /// change nothing, as the real store's writes are scoped to the account they name.
 /// </remarks>
@@ -54,7 +54,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken) =>
         Task.FromResult(account == this.Account
-            ? this.Phase == MailAccountCustodyPhase.Held
+            ? this.Phase is MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring
                 ? new LocalMailFolderHolding(this.Phase, [.. this.folders.Values], [.. this.erasedSourceAliases])
                 : new LocalMailFolderHolding(this.Phase, [], [])
             : null);

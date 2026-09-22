@@ -85,7 +85,7 @@ public sealed class MailFlagChangeRecorder
     /// <param name="change">What the caller asked for.</param>
     /// <param name="requester">The invocation asking, which is what decides whether asking again is the same request.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The record opened for each value, in the order the change states them, or no record where a held account applied the change.</returns>
+    /// <returns>The record opened for each value, in the order the change states them; no record where a held account applied the change; and, on a restoring account, the change applied beside the record each value whose message still stands on the source is carried by.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="AuthoredMailChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
@@ -97,7 +97,9 @@ public sealed class MailFlagChangeRecorder
     /// a caller that starred a message, unstarred it, and starred it again has made three requests and means all three.
     /// A second call is a retry only when it asks for what the first asked for, which is why the terms are compared
     /// rather than assumed from the identity. All of this is the record's: a held account applies the change and keeps no
-    /// record for a repeat to be matched against, so there every call applies the change it names.
+    /// record for a repeat to be matched against, so there every call applies the change it names. A restoring account is
+    /// the case where both hold at once — it applies the change and opens the record its source is owed — so a repeat
+    /// there is matched against that record and refused where it asks for another value, exactly as a mirrored one is.
     /// </remarks>
     public async Task<AuthoredMailFlagChangeResult> RecordAsync(
         AuthoredMailFlagChange change,
@@ -141,52 +143,52 @@ public sealed class MailFlagChangeRecorder
                         heldUntil: null,
                         attemptCancellationToken);
 
-                    switch (submitted.Outcome)
+                    if (submitted.Outcome is not (MailboxChangeSubmissionOutcome.Recorded or MailboxChangeSubmissionOutcome.Applied))
                     {
-                        case MailboxChangeSubmissionOutcome.Recorded when submitted.Record is { } record:
-                            if (!StatesTheSameChangeAs(record.Request, request))
-                            {
-                                throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
-                            }
+                        throw new AuthoredMailChangeTargetNotFoundException();
+                    }
 
-                            opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
-                            break;
-                        case MailboxChangeSubmissionOutcome.Applied when submitted.Change is { } change:
-                            applied.Add(change);
-                            break;
-                        default:
-                            throw new AuthoredMailChangeTargetNotFoundException();
+                    // The two are not alternatives: a restoring account commits the change to stored state and opens the
+                    // record its source is still owed, so a call there reports both halves of what it did.
+                    if (submitted.Change is { } appliedChange)
+                    {
+                        applied.Add(appliedChange);
+                    }
+
+                    if (submitted.Record is { } record)
+                    {
+                        if (!StatesTheSameChangeAs(record.Request, request))
+                        {
+                            throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
+                        }
+
+                        opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
                     }
                 }
             },
             cancellationToken);
 
-        if (applied.Count > 0)
+        foreach (var committed in applied)
         {
-            foreach (var committed in applied)
-            {
-                this.submission.Announce(committed);
-            }
-
-            return new AuthoredMailFlagChangeResult(
-                change.StoredEmailId,
-                target.Occurrence.AccountId,
-                target.Folder.Alias,
-                [],
-                IsApplied: true);
+            this.submission.Announce(committed);
         }
 
-        // Raised once the records are durable, and never before: the run this brings forward reads the records rather
-        // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited
-        // out the interval anyway. It is a hint and nothing is done about it failing — the account's own schedule is
-        // what makes the change correct, and this only decides whether it is prompt.
-        this.runSignal.BringForward(target.Occurrence.AccountId);
+        if (opened.Count > 0)
+        {
+            // Raised once the records are durable, and never before: the run this brings forward reads the records rather
+            // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited
+            // out the interval anyway. It is a hint and nothing is done about it failing — the account's own schedule is
+            // what makes the change correct, and this only decides whether it is prompt. A restoring account's records are
+            // brought forward the same way, the change having already taken effect locally.
+            this.runSignal.BringForward(target.Occurrence.AccountId);
+        }
 
         return new AuthoredMailFlagChangeResult(
             change.StoredEmailId,
             target.Occurrence.AccountId,
             target.Folder.Alias,
-            opened);
+            opened,
+            IsApplied: applied.Count > 0);
     }
 
     /// <summary>Reports whether the record this call was answered with asks for what this call asked for.</summary>

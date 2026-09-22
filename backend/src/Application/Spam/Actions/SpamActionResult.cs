@@ -33,10 +33,14 @@ public sealed record SpamActionResult(
                 "A result that asked for nothing does not carry the requested outcome.")
             : new SpamActionResult(outcome, MarkedReadRecordId: null, FiledRecordId: null);
 
-    /// <summary>Records changes applied to a held account's mail, which leave no record to name.</summary>
+    /// <summary>Records changes applied to a held account's mail, with whatever record a restoring account's source is still owed.</summary>
+    /// <param name="markedReadRecordId">The record carrying the <c>\Seen</c> change to the source, or <see langword="null" /> where there is none.</param>
+    /// <param name="filedRecordId">The record carrying the relocation to the source, or <see langword="null" /> where there is none.</param>
     /// <returns>The result.</returns>
-    public static SpamActionResult Applied() =>
-        new(SpamActionOutcome.Applied, MarkedReadRecordId: null, FiledRecordId: null);
+    public static SpamActionResult Applied(
+        MailboxMutationRecordId? markedReadRecordId = null,
+        MailboxMutationRecordId? filedRecordId = null) =>
+        new(SpamActionOutcome.Applied, markedReadRecordId, filedRecordId);
 
     /// <summary>Records the changes that were written down.</summary>
     /// <param name="markedReadRecordId">The record carrying the <c>\Seen</c> change, or <see langword="null" /> when none was asked for.</param>

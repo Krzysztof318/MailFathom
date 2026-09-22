@@ -99,6 +99,43 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
     }
 
     /// <summary>
+    /// The one record withdrawal refuses, proved against the provider rather than against a substitute: a change a
+    /// restoring account has already committed is carried by a record that stays recorded, because cancelling it would
+    /// undo nothing and leave the source with nothing to be told by. The value has to round-trip through the column and
+    /// be compared there, which is what only the real store answers.
+    /// </summary>
+    [Fact]
+    public async Task WithdrawAsync_ARecordCarryingAChangeAlreadyCommitted_LeavesItRecorded()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, "mutation-withdrawal", cancellationToken);
+
+        var carried = await OpenAsync(
+            services,
+            binding,
+            uid: 7105U,
+            isSeen: true,
+            cancellationToken,
+            localChange: MailboxMutationLocalChange.AlreadyCommitted);
+
+        // Act
+        var withdrawn = await services.CommitProducingAsync(
+            (scope, session, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
+                .WithdrawAsync(session, [SyntheticMailAccount.AccountId], [carried], token),
+            cancellationToken);
+
+        // Assert
+        var answered = Assert.Single(withdrawn);
+
+        Assert.Equal(MailboxMutationStage.Recorded, answered.Stage);
+        Assert.Equal(MailboxMutationLocalChange.AlreadyCommitted, answered.LocalChange);
+        Assert.False(answered.IsWithdrawable);
+        Assert.Contains(carried, await ReadOutstandingIdsAsync(services, cancellationToken));
+    }
+
+    /// <summary>
     /// The hold in front of a change a person can still take back, which is a comparison in the outstanding query and
     /// a write through a batched read — both of them things only the real provider answers. A record opened with its
     /// window still running is absent from what a pass is handed, and releasing it puts it there without moving its
@@ -156,7 +193,8 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
         uint uid,
         bool isSeen,
         CancellationToken cancellationToken,
-        DateTimeOffset? heldUntil = null)
+        DateTimeOffset? heldUntil = null,
+        MailboxMutationLocalChange localChange = MailboxMutationLocalChange.None)
     {
         var occurrence = SyntheticEmail.OccurrenceIn(binding, uid);
         var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
@@ -175,7 +213,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
 
         return await services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, heldUntil, token)).Id,
+                .OpenAsync(session, request, heldUntil, localChange, token)).Id,
             cancellationToken);
     }
 }

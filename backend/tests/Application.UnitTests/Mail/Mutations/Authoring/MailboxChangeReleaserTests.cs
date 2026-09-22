@@ -223,6 +223,7 @@ public sealed class MailboxChangeReleaserTests
         CommittingSession(),
         request,
         ReleasedAt.AddSeconds(15),
+        MailboxMutationLocalChange.None,
         TestContext.Current.CancellationToken);
 
     private MailboxChangeReleaser Releaser(

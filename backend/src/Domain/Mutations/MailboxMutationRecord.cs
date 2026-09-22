@@ -79,6 +79,24 @@ public sealed record MailboxMutationRecord
     /// </remarks>
     public required bool IsAudited { get; init; }
 
+    /// <summary>Gets what this record was opened to do to MailFathom's own copy of the message.</summary>
+    /// <remarks>
+    /// <para>
+    /// An account holding its mailbox commits every act to stored state, and opens a record for one act only: a delete
+    /// of a message already in its local trash, which is the erasure a person asked for twice. That record exists to
+    /// hold the cascade for the window the person may withdraw it in, and nothing about it is ever issued to a server.
+    /// An account restoring its mailbox commits the act and opens a record to carry it to the source, so its record is
+    /// the opposite case — the local change has already happened and only the telling is outstanding.
+    /// </para>
+    /// <para>
+    /// It is written down rather than inferred from the account's phase, because the phase moves while the record waits.
+    /// All three kinds are deletes against a trashed message once the account is held again — so a converger asking what
+    /// the account is now cannot tell the erasure a person asked for from the delete the source has still to be told
+    /// about, and erasing the second would destroy the local copy its own disposition asked to keep.
+    /// </para>
+    /// </remarks>
+    public MailboxMutationLocalChange LocalChange { get; init; }
+
     /// <summary>Gets how many times this mutation has been attempted, counted before each attempt rather than after it.</summary>
     /// <remarks>
     /// Counting first is what makes the bound survive a crash loop: an attempt that kills the process still counted, so a
@@ -139,13 +157,22 @@ public sealed record MailboxMutationRecord
 
     /// <summary>Gets whether the change is still one a person may withdraw.</summary>
     /// <remarks>
+    /// <para>
     /// Withdrawal is offered for exactly as long as nothing has been asked of the mail server, because after that a
     /// record is a statement about a mailbox somebody else now holds: an issued <c>STORE</c> cannot be recalled, and a
     /// placement whose answer never came back is the one outcome that must be re-established rather than declared void.
     /// Undoing a change that already reached the server is asking for the opposite change, which is an ordinary
     /// mutation of its own.
+    /// </para>
+    /// <para>
+    /// A record opened as <see cref="MailboxMutationLocalChange.AlreadyCommitted" /> is not withdrawable at any stage,
+    /// for the same reason read the other way round: the change has happened, to the stored message rather than on a
+    /// server. Cancelling it would undo nothing and would take away the only thing that was going to tell the source,
+    /// leaving MailFathom and the mailbox permanently disagreeing with no record left to notice it by.
+    /// </para>
     /// </remarks>
-    public bool IsWithdrawable => this.Stage is MailboxMutationStage.Recorded;
+    public bool IsWithdrawable => this.Stage is MailboxMutationStage.Recorded
+        && this.LocalChange is not MailboxMutationLocalChange.AlreadyCommitted;
 
     /// <summary>Gets whether a command for this mutation may have reached the mail server.</summary>
     /// <remarks>

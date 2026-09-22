@@ -918,7 +918,7 @@ public sealed class MailboxMutationPerformerTests
         internal async Task OpenRecordFor(MailboxMutationRequest request)
         {
             var session = Substitute.For<IPersistenceSession>();
-            await this.Store.OpenAsync(session, request, heldUntil: null, CancellationToken.None);
+            await this.Store.OpenAsync(session, request, heldUntil: null, MailboxMutationLocalChange.None, CancellationToken.None);
         }
     }
 }

@@ -190,6 +190,25 @@ public sealed class MailboxMutationRecordMappingTests
         Assert.Null(record.Request.DesiredFlaggedState);
     }
 
+    /// <summary>A row says what it was opened to do to MailFathom's own copy, because the account's phase moves while it waits and a pass that read the phase instead would erase a delete the source is still owed.</summary>
+    [Theory]
+    [InlineData(MailboxMutationLocalChange.None)]
+    [InlineData(MailboxMutationLocalChange.Erasure)]
+    [InlineData(MailboxMutationLocalChange.AlreadyCommitted)]
+    public void ToRecord_ARowOpenedForOneKindOfLocalChange_RestoresWhatItWasOpenedAs(
+        MailboxMutationLocalChange localChange)
+    {
+        // Arrange
+        var entity = StoredRelocation();
+        entity.LocalChange = localChange;
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(localChange, record.LocalChange);
+    }
+
     /// <summary>
     /// A row can only name an unstorable keyword by having been edited outside this system, and issuing the subset that
     /// happens to be usable would be a narrower change than the one written down. Failing visibly is what an operator

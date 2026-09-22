@@ -400,7 +400,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         MailboxMutationRequest request,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, heldUntil: null, token)).Id,
+                .OpenAsync(session, request, heldUntil: null, MailboxMutationLocalChange.None, token)).Id,
             cancellationToken);
 
     private static MailboxWriteConnectionPool CreateMoveMaskedPool(IServiceProvider scope) => new(

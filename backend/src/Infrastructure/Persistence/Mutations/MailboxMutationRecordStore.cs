@@ -43,6 +43,7 @@ internal sealed class MailboxMutationRecordStore(
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
+        MailboxMutationLocalChange localChange,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -97,6 +98,7 @@ internal sealed class MailboxMutationRecordStore(
             // nothing about a change already begun.
             AuditTrailEnabled = auditSettingsReader.GetAuditSettings(request.Occurrence.AccountId).IsEnabled,
             Stage = MailboxMutationStage.Recorded,
+            LocalChange = localChange,
             RequiresSourceRemoval = false,
             AttemptCount = 0,
             HeldUntil = heldUntil,
@@ -225,7 +227,11 @@ internal sealed class MailboxMutationRecordStore(
 
         foreach (var entity in entities)
         {
-            if (entity.Stage is MailboxMutationStage.Recorded)
+            // The local change a restoring account already committed is not one withdrawal can take back, so its record
+            // is left where it stands exactly as a record the server has already heard about is. Cancelling it would
+            // undo nothing and would drop the only thing left to tell the source with.
+            if (entity.Stage is MailboxMutationStage.Recorded
+                && entity.LocalChange is not MailboxMutationLocalChange.AlreadyCommitted)
             {
                 entity.Stage = MailboxMutationStage.Cancelled;
                 entity.StageChangedAt = withdrawnAt;
@@ -346,19 +352,18 @@ internal sealed class MailboxMutationRecordStore(
         MailAccountId account,
         int limit,
         CancellationToken cancellationToken) =>
-        this.ReadOutstandingOfAsync(account, mutationName: null, limit, cancellationToken);
+        this.ReadOutstandingOfAsync(account, localErasuresOnly: false, limit, cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingLocalErasuresAsync(
         MailAccountId account,
-        MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken) =>
-        this.ReadOutstandingOfAsync(account, mutation.Name, limit, cancellationToken);
+        this.ReadOutstandingOfAsync(account, localErasuresOnly: true, limit, cancellationToken);
 
     private async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingOfAsync(
         MailAccountId account,
-        string? mutationName,
+        bool localErasuresOnly,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -378,7 +383,7 @@ internal sealed class MailboxMutationRecordStore(
             .Where(mutation => mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled &&
-                (mutationName == null || mutation.Mutation == mutationName) &&
+                (!localErasuresOnly || mutation.LocalChange == MailboxMutationLocalChange.Erasure) &&
 
                 // A record still inside its withdrawal window is not work this pass can do, so it is left out of the
                 // page rather than read and skipped — a page spent on records nothing may touch is a page the account's

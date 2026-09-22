@@ -225,7 +225,10 @@ refuses the rest and this feature does not reopen that record.
 stored message as the classification commits, where the junk destination is a mapping the account mirrors: the message
 is marked read and filed into the account's local junk folder in that transaction, with an audit entry for each where
 the account keeps one. Nothing is written down to converge later, which is also why a held message moved back out of
-junk is not recognized as one already filed. **An unmirrored junk destination resolves to nothing on a held account**,
+junk is not recognized as one already filed. **An account being restored to its source commits the same way and also
+records**: where the message still stands on the source, the same transaction opens the records the run carries there,
+so a verdict reached during the restore reaches the mailbox instead of being undone by it, and the answer names them
+beside the acts it applied. **An unmirrored junk destination resolves to nothing on a held account**,
 and so does one no local folder corresponds to, so the verdict ends as an unresolved destination and neither act is
 made — the message stays unread where it is.
 

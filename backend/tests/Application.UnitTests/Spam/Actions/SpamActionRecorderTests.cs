@@ -475,6 +475,7 @@ public sealed class SpamActionRecorderTests
             Email,
             new LocalEmailState(
                 MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                HoldsSourceOccurrence: true,
                 Folder: null,
                 IsSeen: false,
                 IsFlagged: false,
@@ -494,6 +495,57 @@ public sealed class SpamActionRecorderTests
         // Assert
         Assert.Equal(SpamActionOutcome.DestinationUnresolved, result.Outcome);
         await session.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A restoring account files and marks read at once, and the source is still owed both: the answer is applied and
+    /// names the records the convergence pass will carry, rather than reporting an act nothing will ever tell the
+    /// server about.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ARestoringAccountHoldingAnOccurrence_AppliesBothChangesAndNamesTheRecordsTheSourceIsOwed()
+    {
+        // Arrange
+        var junk = MailFolderAlias.Create("JUNK");
+        this.mappings.With(Account, MailFolderMapping.ToRemotePath(junk, RemoteFolderPath.Create("Junk")));
+        this.bindings.Bind(Account, junk, "Junk");
+
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            Email,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                HoldsSourceOccurrence: true,
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        var localFolders = new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Restoring);
+        await localFolders.SaveAsync(
+            Substitute.For<IPersistenceSession>(),
+            Account,
+            [
+                new LocalMailFolder(
+                    LocalMailFolderId.Create(Guid.CreateVersion7()),
+                    ParentId: null,
+                    LocalMailFolderName.Create("Junk"),
+                    Role: null,
+                    SourceFolderAlias: junk),
+            ],
+            [],
+            TestContext.Current.CancellationToken);
+        var recorder = this.Recorder(
+            SpamActionSettings.Create(filesJunk: true, marksJunkRead: true, MailFolderReference.ToAlias(junk)),
+            submission: MailboxChangeSubmissions.Over(this.records, localFolders, states));
+
+        // Act
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SpamActionOutcome.Applied, result.Outcome);
+        Assert.NotNull(result.MarkedReadRecordId);
+        Assert.NotNull(result.FiledRecordId);
+        Assert.True(states.States[Email].IsSeen);
     }
 
     [Fact]

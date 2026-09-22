@@ -49,6 +49,15 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
         // query and survive any later reordering of their enum.
         entity.Property(mutation => mutation.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
         entity.Property(mutation => mutation.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
+        // Defaulted in the database as well as in the model, because the column arrived on a table that already held
+        // rows: every one of them names a change a mail server is to be told about, and the alternative an added text
+        // column offers is the empty string, which names no declared member and would fail the read of a record that is
+        // perfectly good.
+        entity.Property(mutation => mutation.LocalChange)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .HasDefaultValue(MailboxMutationLocalChange.None)
+            .IsRequired();
 
         // Stored as text for the same reason, and nullable because only a delete carries one. A row whose text
         // names no declared disposition fails the read rather than being taken as the destructive value by
