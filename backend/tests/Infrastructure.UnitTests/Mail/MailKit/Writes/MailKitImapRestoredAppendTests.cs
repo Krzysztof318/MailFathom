@@ -35,9 +35,15 @@ public sealed class MailKitImapRestoredAppendTests
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
         var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
-        var openFolder = CreateWritableFolder(keptKeywords: "$Label1");
+        var openFolder = CreateWritableFolder(keptKeywords: "$LABEL1");
+        IAppendRequest? sent = null;
         openFolder.AppendAsync(Arg.Any<IAppendRequest>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<UniqueId?>(new UniqueId(11U)));
+            .Returns(call =>
+            {
+                sent = call.ArgAt<IAppendRequest>(0);
+
+                return Task.FromResult<UniqueId?>(new UniqueId(11U));
+            });
         await using var harness = CreateHarness(resilience, client, openFolder);
         await using var session = await harness.OpenSessionAsync();
 
@@ -54,13 +60,10 @@ public sealed class MailKitImapRestoredAppendTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        await openFolder.Received(1).AppendAsync(
-            Arg.Is<IAppendRequest>(request => request != null
-                && request.InternalDate == ArrivedAt
-                && request.Flags == (MessageFlags.Seen | MessageFlags.Answered | MessageFlags.Flagged)
-                && request.Keywords!.Count == 1
-                && request.Keywords.Contains("$Label1")),
-            Arg.Any<CancellationToken>());
+        Assert.NotNull(sent);
+        Assert.Equal(ArrivedAt, sent.InternalDate);
+        Assert.Equal(MessageFlags.Seen | MessageFlags.Answered | MessageFlags.Flagged, sent.Flags);
+        Assert.Equal(["$LABEL1"], sent.Keywords);
 
         Assert.Equal(ImapUidValidity.Create(7U), placement.UidValidity);
         Assert.Equal(ImapUid.Create(11U), placement.Uid);

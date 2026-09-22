@@ -127,7 +127,7 @@ public sealed class MailAccountCustodyEndpointsTests
 
         var named = Assert.Single(restore.Unanswered);
         Assert.Equal(unanswered.Id.Value, named.Record);
-        Assert.Equal("archive", named.Folder);
+        Assert.Equal("ARCHIVE", named.Folder);
         Assert.Equal(Moment, named.IssuedAt);
     }
 

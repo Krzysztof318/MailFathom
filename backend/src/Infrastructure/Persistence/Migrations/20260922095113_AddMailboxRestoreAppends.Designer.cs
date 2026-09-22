@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260922003633_AddMailboxRestoreAppends")]
+    [Migration("20260922095113_AddMailboxRestoreAppends")]
     partial class AddMailboxRestoreAppends
     {
         /// <inheritdoc />
@@ -2304,6 +2304,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
+
+                    b.Property<string>("LocalChange")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("None");
 
                     b.Property<string>("LocalDisposition")
                         .HasMaxLength(64)

@@ -275,6 +275,12 @@ public sealed class MailboxRestorePass
     /// outcome worse than leaving them as they are. Refusing the whole message would be worse still, because the walk
     /// would stop at it and the account could never leave the phase.
     /// </para>
+    /// <para>
+    /// Every record is opened as <see cref="MailboxMutationLocalChange.AlreadyCommitted" />, because that is what each
+    /// of them is: the state it names was written onto the stored message while the account was held, and the record
+    /// exists to carry it to a source that has not heard it yet. It also makes each unwithdrawable, which is the right
+    /// refusal — cancelling one would leave the stored message as it is with nothing left to tell the source with.
+    /// </para>
     /// </remarks>
     private async Task OpenStateRecordsAsync(
         IPersistenceSession session,
@@ -290,12 +296,14 @@ public sealed class MailboxRestorePass
             session,
             MailboxMutationRequest.SetSeen(candidate.Email, candidate.Occurrence, requester, candidate.State.IsSeen),
             heldUntil: null,
+            MailboxMutationLocalChange.AlreadyCommitted,
             cancellationToken);
 
         await this.mutations.OpenAsync(
             session,
             MailboxMutationRequest.SetFlagged(candidate.Email, candidate.Occurrence, requester, candidate.State.IsFlagged),
             heldUntil: null,
+            MailboxMutationLocalChange.AlreadyCommitted,
             cancellationToken);
 
         if (keywords is not null)
@@ -304,6 +312,7 @@ public sealed class MailboxRestorePass
                 session,
                 MailboxMutationRequest.SetKeywords(candidate.Email, candidate.Occurrence, requester, keywords),
                 heldUntil: null,
+                MailboxMutationLocalChange.AlreadyCommitted,
                 cancellationToken);
         }
 
@@ -313,6 +322,7 @@ public sealed class MailboxRestorePass
                 session,
                 MailboxMutationRequest.Relocate(candidate.Email, candidate.Occurrence, requester, folder.RemotePath),
                 heldUntil: null,
+                MailboxMutationLocalChange.AlreadyCommitted,
                 cancellationToken);
         }
 
