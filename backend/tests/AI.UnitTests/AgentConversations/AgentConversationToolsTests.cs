@@ -16,6 +16,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -34,6 +35,8 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
     private static readonly string[] Recipients = ["ada@example.org"];
 
+    private readonly FakeTimeProvider clock = new(Now);
+
     private readonly AgentConversationId conversation = AgentConversationId.New();
 
     private readonly IAgentConversationStore store = Substitute.For<IAgentConversationStore>();
@@ -47,7 +50,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     /// <summary>Arranges a store that accepts every write and records it.</summary>
     public AgentConversationToolsTests()
     {
-        this.signals = new ClientSignals([new RecordingClientSignalChannel()], TimeProvider.System);
+        this.signals = new ClientSignals([new RecordingClientSignalChannel()], this.clock);
         this.journal = new AgentAnswerJournal(
             this.conversation,
             SyntheticUser.Deployment,
@@ -56,7 +59,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
             this.store,
             this.signals,
             Substitute.For<IUserLanguages>(),
-            TimeProvider.System);
+            this.clock);
         this.store
             .AppendAsync(this.conversation, SyntheticUser.Deployment, Arg.Any<AgentConversationEntry>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(call =>

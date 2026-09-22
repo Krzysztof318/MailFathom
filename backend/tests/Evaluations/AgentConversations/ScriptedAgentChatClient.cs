@@ -13,9 +13,11 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// </remarks>
 /// <param name="calls">Each tool it calls, by name, with the arguments it passes; empty for a model that calls none.</param>
 /// <param name="answer">The text it answers with.</param>
+/// <param name="callsEveryTurn">Whether it makes its calls again on every turn and so never answers, which is a model that runs until its bounds stop it.</param>
 internal sealed class ScriptedAgentChatClient(
     IReadOnlyList<(string Tool, IDictionary<string, object?> Arguments)> calls,
-    string answer) : IChatClient
+    string answer,
+    bool callsEveryTurn = false) : IChatClient
 {
     private const string ModelName = "scripted-agent-model";
 
@@ -26,7 +28,7 @@ internal sealed class ScriptedAgentChatClient(
         CancellationToken cancellationToken = default)
     {
         var called = messages.SelectMany(static message => message.Contents).OfType<FunctionResultContent>().Any();
-        var reply = calls.Count > 0 && !called
+        var reply = calls.Count > 0 && (callsEveryTurn || !called)
             ? new ChatMessage(
                 ChatRole.Assistant,
                 [.. calls.Select(static (call, index) => new FunctionCallContent($"call-{index}", call.Tool, call.Arguments))])

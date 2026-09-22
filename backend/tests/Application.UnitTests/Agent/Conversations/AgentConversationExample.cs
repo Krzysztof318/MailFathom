@@ -54,7 +54,10 @@ internal static class AgentConversationExample
     /// <returns>The act.</returns>
     internal static AgentProposedAct Act()
     {
-        EmailAddress.TryCreate("Ada", "ada@northwind.example", out var recipient);
+        if (!EmailAddress.TryCreate("Ada", "ada@northwind.example", out var recipient))
+        {
+            throw new InvalidOperationException("The example recipient is a valid address.");
+        }
 
         return new AgentMessageSending(
             "work",

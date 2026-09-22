@@ -788,9 +788,9 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
 
     private static EmailAddress Recipient()
     {
-        EmailAddress.TryCreate(displayName: null, "ada@northwind.example", out var recipient);
-
-        return recipient;
+        return EmailAddress.TryCreate(displayName: null, "ada@northwind.example", out var recipient)
+            ? recipient
+            : throw new InvalidOperationException("The example recipient is a valid address.");
     }
 
     private static Task<int> CountEntriesOfAsync(

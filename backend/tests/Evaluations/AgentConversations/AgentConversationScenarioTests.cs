@@ -120,6 +120,19 @@ public sealed class AgentConversationScenarioTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_AModelThatNeverStopsSearching_FailsTheBoundsCheck()
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient([Search("LumenDesk export error")], "Never reached.", callsEveryTurn: true);
+
+        // Act
+        var verdict = await this.RunAsync(Quoting, model);
+
+        // Assert
+        Assert.False(verdict.Get<BooleanMetric>(AgentConversationScenario.WithinBoundsMetricName).Value);
+    }
+
+    [Fact]
     public void All_EveryPieceOfEvidence_IsCarriedBySomeMessageInTheMailbox()
     {
         // Arrange

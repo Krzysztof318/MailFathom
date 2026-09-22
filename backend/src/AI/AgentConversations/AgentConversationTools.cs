@@ -157,7 +157,7 @@ internal sealed class AgentConversationTools
             // and write a turn of its own after it.
             text.Append(CultureInfo.InvariantCulture, $"<message id=\"{message.StoredEmailId}\" source=\"{citation.Id.Value}\" from=\"{SecurityElement.Escape(SenderOf(message)?.Address)}\" sent=\"{message.Headers.SentAt:O}\">\n")
                 .Append(CultureInfo.InvariantCulture, $"<subject>{SecurityElement.Escape(message.Headers.Subject)}</subject>\n")
-                .Append(SecurityElement.Escape(body.Length <= MaximumBodyCharacters ? body : body[..MaximumBodyCharacters]))
+                .Append(SecurityElement.Escape(body.Length <= MaximumBodyCharacters ? body : MailTextBounds.TruncateAtTextElementBoundary(body, MaximumBodyCharacters)))
                 .Append("\n</message>\n");
         }
 

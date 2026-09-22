@@ -116,7 +116,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             this.egressGuard,
             brief.Question.AskedAt);
         var tools = new AgentConversationTools(journal, retrieval, this.readers, this.egressGuard, scope.AccountIds);
-        var messages = await this.ComposeMessagesAsync(brief, scope, cancellationToken);
+        var messages = ComposeMessages(brief, scope);
 
         var answer = await ChatModelFallThrough.RunAsync(
             this.plan,
@@ -157,27 +157,25 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         return PresentationText.TryCreate(bounded, out var presentable) ? presentable : null;
     }
 
-    private async Task<IReadOnlyList<ChatMessage>> ComposeMessagesAsync(
-        AgentAnswerBrief brief,
-        MailboxScope scope,
-        CancellationToken cancellationToken)
+    private static IReadOnlyList<ChatMessage> ComposeMessages(AgentAnswerBrief brief, MailboxScope scope) =>
+    [
+        .. brief.History.Select(static turn => new ChatMessage(
+            turn.Author is AgentMessageAuthor.Person ? ChatRole.User : ChatRole.Assistant,
+            turn.Text)),
+        new ChatMessage(
+            ChatRole.User,
+            AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, scope.AccountIds, brief.Question.Scope, brief.Question.Text.Value)),
+    ];
+
+    /// <summary>Scans every turn the person or the Agent wrote, which is what leaves this deployment on each call.</summary>
+    private async Task<IReadOnlyList<ChatMessage>> GuardAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
     {
-        var history = await this.egressGuard.GuardAllAsync(
+        var guarded = await this.egressGuard.GuardAllAsync(
             SensitiveContentEgressPoint.ChatPrompt,
-            [.. brief.History.Select(static turn => turn.Text)],
-            cancellationToken);
-        var question = await this.egressGuard.GuardAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            brief.Question.Text.Value,
+            [.. messages.Select(static message => message.Text)],
             cancellationToken);
 
-        return
-        [
-            .. brief.History.Select((turn, index) => new ChatMessage(
-                turn.Author is AgentMessageAuthor.Person ? ChatRole.User : ChatRole.Assistant,
-                history[index])),
-            new ChatMessage(ChatRole.User, AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, scope.AccountIds, brief.Question.Scope, question)),
-        ];
+        return [.. messages.Select((message, index) => new ChatMessage(message.Role, guarded[index]))];
     }
 
     private async Task<PresentationText> AskAsync(
@@ -189,7 +187,10 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {
+        // Against this model's own bounds, and before the scan, so a conversation refused by a ceiling costs no scan.
         ChatRequestBounds.RequireForAttempt(messages, model);
+
+        var guarded = await this.GuardAsync(messages, cancellationToken);
 
         var endpoint = model.Endpoint;
 
@@ -207,7 +208,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         using var steeredClient = new SteeredChatClient(budgetedClient, journal, this.egressGuard);
 
         var agent = AgentConversationComposition.Compose(steeredClient, model, language, tools.Create(), this.instructionEnvelope, this.loggerFactory);
-        var response = await agent.RunAsync(ChatConversationMapping.ToProviderConversation(messages), session: null, options: null, cancellationToken);
+        var response = await agent.RunAsync(ChatConversationMapping.ToProviderConversation(guarded), session: null, options: null, cancellationToken);
 
         if (Presentable(response.Text) is not { } answer)
         {

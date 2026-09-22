@@ -48,6 +48,7 @@ internal sealed partial class AgentAnswerLauncher
     /// <param name="lifetime">Reports that the process is stopping, which ends every run it is executing.</param>
     /// <param name="timeProvider">Stamps that ending.</param>
     /// <param name="logger">Reports the failures a run cannot name to its client.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public AgentAnswerLauncher(
         IServiceScopeFactory scopeFactory,
         IAgentConversationStore store,
@@ -57,6 +58,14 @@ internal sealed partial class AgentAnswerLauncher
         TimeProvider timeProvider,
         ILogger<AgentAnswerLauncher> logger)
     {
+        ArgumentNullException.ThrowIfNull(scopeFactory);
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(signals);
+        ArgumentNullException.ThrowIfNull(languages);
+        ArgumentNullException.ThrowIfNull(lifetime);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(logger);
+
         this.scopeFactory = scopeFactory;
         this.store = store;
         this.signals = signals;

@@ -10,6 +10,7 @@ using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Signals;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -19,6 +20,8 @@ namespace MailFathom.AI.UnitTests.AgentConversations;
 public sealed class SteeredChatClientTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly FakeTimeProvider clock = new(Now);
 
     private readonly AgentConversationId conversation = AgentConversationId.New();
 
@@ -33,7 +36,7 @@ public sealed class SteeredChatClientTests : IAsyncDisposable
     /// <summary>Arranges a model that answers every call and records what each one was sent.</summary>
     public SteeredChatClientTests()
     {
-        this.signals = new ClientSignals([new RecordingClientSignalChannel()], TimeProvider.System);
+        this.signals = new ClientSignals([new RecordingClientSignalChannel()], this.clock);
         this.inner
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -70,6 +73,21 @@ public sealed class SteeredChatClientTests : IAsyncDisposable
             this.sent.Select(static messages => messages.Select(static message => message.Text).ToArray()));
     }
 
+    /// <summary>Releasing the steering releases nothing beneath it, so the run's budgeted client is left for its owner to release asynchronously.</summary>
+    [Fact]
+    public void Dispose_TheSteering_LeavesTheClientBeneathItUnreleased()
+    {
+        // Arrange
+        using var journal = this.Journal();
+        var client = new SteeredChatClient(this.inner, journal, SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        client.Dispose();
+
+        // Assert
+        this.inner.DidNotReceive().Dispose();
+    }
+
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
@@ -89,5 +107,5 @@ public sealed class SteeredChatClientTests : IAsyncDisposable
         this.store,
         this.signals,
         Substitute.For<IUserLanguages>(),
-        TimeProvider.System);
+        this.clock);
 }

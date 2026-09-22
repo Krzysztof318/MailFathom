@@ -54,4 +54,12 @@ internal sealed class SteeredChatClient : DelegatingChatClient
 
         return await base.GetResponseAsync([.. messages, .. this.instructions], options, cancellationToken);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Releases nothing, because it owns nothing: the client beneath it is the run's budgeted one, whose owner releases
+    /// it asynchronously so the spend it still holds is charged, and a synchronous release cascading into it from here
+    /// would be refused rather than charged.
+    /// </remarks>
+    protected override void Dispose(bool disposing) => base.Dispose(disposing: false);
 }
