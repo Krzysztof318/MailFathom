@@ -122,6 +122,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             this.plan,
             this.logger,
             (model, attemptToken) => this.AskAsync(model, brief.Language, messages, tools, journal, runLedger, attemptToken),
+            () => !tools.HasProposed,
             cancellationToken);
 
         await tools.DeclareSearchedAsync(cancellationToken);

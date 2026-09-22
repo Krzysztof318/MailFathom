@@ -95,6 +95,9 @@ internal sealed class AgentConversationTools
     /// <summary>Gets every source the run has shown the model, in the order it was first shown.</summary>
     internal IReadOnlyList<PresentationCitation> Cited => [.. this.cited.Values];
 
+    /// <summary>Gets whether a proposal is on record from this run, which no later model may be asked to answer beside.</summary>
+    internal bool HasProposed { get; private set; }
+
     /// <summary>Creates the tools the person's grant allows.</summary>
     /// <returns>The reading tools where the grant reads mail, and the proposing tools where it also drafts and sends.</returns>
     internal IReadOnlyList<AITool> Create()
@@ -141,7 +144,7 @@ internal sealed class AgentConversationTools
     {
         await this.ReportAsync(AgentActivity.ReadingThread, cancellationToken);
 
-        if (await this.ReadConversationAsync(messageId, cancellationToken) is not { } messages)
+        if (await this.ReadConversationAsync(messageId, cancellationToken) is not { Count: > 0 } messages)
         {
             return "No message with that id is readable here.";
         }
@@ -192,12 +195,12 @@ internal sealed class AgentConversationTools
     {
         await this.ReportAsync(AgentActivity.ReadingCalendar, cancellationToken);
 
-        if (!DateTimeOffset.TryParse(from, CultureInfo.InvariantCulture, DateTimeStyles.None, out var opens)
-            || !DateTimeOffset.TryParse(until, CultureInfo.InvariantCulture, DateTimeStyles.None, out var closes)
+        if (!TryParseInstant(from, out var opens)
+            || !TryParseInstant(until, out var closes)
             || closes <= opens
             || closes - opens > MaximumCalendarWindow)
         {
-            return $"Give two ISO 8601 instants, the second later than the first and at most {MaximumCalendarWindow.TotalDays} days after it.";
+            return $"Give two ISO 8601 instants with an offset, the second later than the first and at most {MaximumCalendarWindow.TotalDays} days after it.";
         }
 
         var events = await this.readers.Calendar.ReadWindowAsync(opens, closes, origin: null, MaximumAgendaItems, cancellationToken) ?? [];
@@ -208,6 +211,16 @@ internal sealed class AgentConversationTools
         return events.Count is 0
             ? "Nothing is on the calendar in that window."
             : await this.egressGuard.GuardAsync(SensitiveContentEgressPoint.ChatPrompt, string.Join('\n', lines), cancellationToken);
+    }
+
+    /// <summary>Reads an instant only where it states its offset, so none is silently read against this server's own time zone.</summary>
+    private static bool TryParseInstant(string text, out DateTimeOffset instant)
+    {
+        instant = default;
+
+        return DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var stated)
+            && stated.Kind is not DateTimeKind.Unspecified
+            && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out instant);
     }
 
     [Description("Reads the person's tasks.")]
@@ -258,6 +271,7 @@ internal sealed class AgentConversationTools
         var block = new DraftBlock(PresentationEvidence.Unsupported(PresentationFreshness.Unknown), addressed, titled, written, DraftDisposition.Composed);
 
         await this.WriteAsync(this.journal.ProposeAsync(block, new AgentMessageSending(sender[0].Value, addressed, titled, written), cancellationToken));
+        this.HasProposed = true;
 
         return "Proposed. Nothing was sent; the person reviews the draft and decides.";
     }
@@ -319,6 +333,7 @@ internal sealed class AgentConversationTools
             DraftDisposition.Composed);
 
         await this.WriteAsync(this.journal.ProposeAsync(block, new AgentResponseSending(answeredId, responseAct, addressed, written), cancellationToken));
+        this.HasProposed = true;
 
         return "Proposed. Nothing was sent; the person reviews the draft and decides.";
     }

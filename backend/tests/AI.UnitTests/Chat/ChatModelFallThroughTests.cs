@@ -102,6 +102,33 @@ public sealed class ChatModelFallThroughTests
         Assert.Equal(["answering"], asked);
     }
 
+    /// <summary>An attempt that left something durable behind is not followed by a second model whose answer would stand beside it.</summary>
+    [Fact]
+    public async Task RunAsync_AnAttemptThatForbidsAnother_IsRaisedWithoutAskingTheFallback()
+    {
+        // Arrange
+        var asked = new List<string>();
+        using var logs = new RecordingLoggerProvider();
+        var logger = logs.CreateLogger("chat");
+
+        // Act
+        var raised = await Assert.ThrowsAsync<ChatGenerationFailedException>(() => ChatModelFallThrough.RunAsync<string>(
+            PlanWithFallback(),
+            logger,
+            (model, _) =>
+            {
+                asked.Add(model.Endpoint.Alias);
+
+                throw new ChatGenerationFailedException(model.Endpoint.Alias, ChatGenerationFailure.RateLimited);
+            },
+            static () => false,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(ChatGenerationFailure.RateLimited, raised.Failure);
+        Assert.Equal(["answering"], asked);
+    }
+
     /// <summary>The fallback's own failure is what reaches the caller, because that is the model the call ended on.</summary>
     [Fact]
     public async Task RunAsync_NeitherModelAnswering_RaisesTheFallbacksOwnFailure()

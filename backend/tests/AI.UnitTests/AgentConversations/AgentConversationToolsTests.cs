@@ -47,6 +47,8 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
     private readonly AgentAnswerJournal journal;
 
+    private AgentConversationTools tools = null!;
+
     /// <summary>Arranges a store that accepts every write and records it.</summary>
     public AgentConversationToolsTests()
     {
@@ -127,6 +129,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.Equal(
             ("primary", "ada@example.org", "Quote", "Thank you, we accept."),
             (sending.Account, Assert.Single(sending.Recipients).Address, sending.Subject.Value, sending.Body.Value));
+        Assert.True(this.tools.HasProposed);
     }
 
     /// <summary>An account the person does not read is refused back to the model and nothing is proposed.</summary>
@@ -149,6 +152,25 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
 
         // Assert
         Assert.Empty(this.written.OfType<AgentActionProposed>());
+        Assert.False(this.tools.HasProposed);
+    }
+
+    /// <summary>An instant that states no offset is refused back to the model rather than read against this server's own time zone.</summary>
+    [Theory]
+    [InlineData("2026-09-22T09:00:00", "2026-09-23T09:00:00Z")]
+    [InlineData("2026-09-22T09:00:00+02:00", "2026-09-23T09:00:00")]
+    public async Task ReadCalendar_AnInstantWithoutAnOffset_IsRefusedWithoutReadingTheCalendar(string from, string until)
+    {
+        // Arrange
+        var tool = this.ToolNamed("read_calendar", MailFathomPermission.MailRead);
+
+        // Act
+        var answer = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["from"] = from, ["until"] = until }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.StartsWith("Give two ISO 8601 instants with an offset", answer?.ToString(), StringComparison.Ordinal);
     }
 
     /// <inheritdoc />
@@ -159,10 +181,14 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         return this.signals.DisposeAsync();
     }
 
-    private AIFunction ToolNamed(string name, params MailFathomPermission[] granted) =>
-        Assert.IsType<AIFunction>(
-            Assert.Single(this.Tools(granted).Create(), tool => tool.Name == name),
+    private AIFunction ToolNamed(string name, params MailFathomPermission[] granted)
+    {
+        this.tools = this.Tools(granted);
+
+        return Assert.IsType<AIFunction>(
+            Assert.Single(this.tools.Create(), tool => tool.Name == name),
             exactMatch: false);
+    }
 
     private AgentConversationTools Tools(params MailFathomPermission[] granted)
     {
