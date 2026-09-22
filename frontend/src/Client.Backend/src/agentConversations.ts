@@ -131,7 +131,8 @@ export interface AgentMessagePosted {
 }
 
 /**
- * Lists this person's conversations, newest activity first.
+ * Lists this person's conversations, the ones not archived before the archived ones and each group newest activity
+ * first.
  *
  * @param session The address to reach and the finished header value to present.
  * @param transport How the request goes out.

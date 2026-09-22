@@ -330,14 +330,16 @@ export function AgentSpace({
 
         setUnarchived(refused[0] ?? null);
 
+        // A conversation that changed lists leaves the selection, which only ever holds rows the reader can see picked.
+        const moved = doneOrGone(conversations, answers);
+        setSelected((before) => before.filter((conversation) => !moved.includes(conversation)));
+
         // A conversation put away leaves the front and the tabs, as the design draws it; it is still read from the
         // archive section, which opens it again like any other. One the deployment no longer holds leaves them too, as
         // it does when deleting it finds it gone. Restoring one opens nothing.
         if (archived) {
-            const put = doneOrGone(conversations, answers);
-
-            setOpen((before) => before.filter((conversation) => !put.includes(conversation)));
-            setCurrent((now) => (now !== null && put.includes(now) ? null : now));
+            setOpen((before) => before.filter((conversation) => !moved.includes(conversation)));
+            setCurrent((now) => (now !== null && moved.includes(now) ? null : now));
         }
 
         setRevision((before) => before + 1);

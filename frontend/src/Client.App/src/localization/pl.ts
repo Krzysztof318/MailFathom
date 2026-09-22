@@ -68,7 +68,7 @@ export const pl: Catalogue = {
         'Wdrożenie odpowiedziało w sposób, którego ten klient nie potrafi odczytać, więc nie wiadomo, czy rozmowa została usunięta.',
     'agent.notArchived.unauthenticated':
         'Sesja wygasła, zanim archiwum się zmieniło. Zaloguj się ponownie i spróbuj jeszcze raz.',
-    'agent.notArchived.unauthorized': 'To konto nie ma uprawnień do archiwizowania rozmów z agentem.',
+    'agent.notArchived.unauthorized': 'To konto nie ma uprawnień do zmieniania archiwum rozmów z agentem.',
     'agent.notArchived.unavailable':
         'Nie udało się połączyć z wdrożeniem, więc archiwum się nie zmieniło. Spróbuj ponownie.',
     'agent.notArchived.unreadable':

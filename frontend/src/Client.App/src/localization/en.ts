@@ -69,7 +69,7 @@ export const en = {
     'agent.notDeleted.unreadable':
         'The deployment answered in a way this client cannot read, so it is not known whether the conversation was deleted.',
     'agent.notArchived.unauthenticated': 'The session ended before the archive changed. Sign in again and try again.',
-    'agent.notArchived.unauthorized': 'This account is not allowed to archive conversations with the agent.',
+    'agent.notArchived.unauthorized': 'This account is not allowed to change what is archived with the agent.',
     'agent.notArchived.unavailable': 'The deployment could not be reached, so the archive did not change. Try again.',
     'agent.notArchived.unreadable':
         'The deployment answered in a way this client cannot read, so it is not known whether the archive changed.',

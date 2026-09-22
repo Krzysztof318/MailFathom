@@ -627,6 +627,23 @@ describe('AgentSpace', () => {
         expect(screen.queryByRole('toolbar')).toBeNull();
     });
 
+    it('drops a conversation archived from its own menu out of the selection', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        fireEvent.keyDown(await screen.findByRole('option', { name: /How many bays were confirmed/ }), {
+            key: 'ContextMenu',
+        });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Select conversations' }));
+        fireEvent.click(screen.getByRole('option', { name: /What is waiting on me today/ }));
+
+        expect(within(screen.getByRole('toolbar')).getByText('2 selected')).toBeTruthy();
+
+        fireEvent.keyDown(screen.getByRole('option', { name: /How many bays were confirmed/ }), { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        expect(await within(screen.getByRole('toolbar')).findByText('1 selected')).toBeTruthy();
+    });
+
     it('says why the archive did not change', async () => {
         const { transport } = deploymentAnswering();
         screenOf((request) =>
