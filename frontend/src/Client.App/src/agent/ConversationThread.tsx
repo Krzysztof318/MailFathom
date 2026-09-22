@@ -7,7 +7,7 @@ import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AgentAnswer, AnswerScope } from './AgentAnswer';
-import type { ThreadTurn } from './conversationThread';
+import type { ThreadTurn } from './threadTurns';
 import { usePinnedToBottom } from './usePinnedToBottom';
 
 const readFailures: Readonly<Record<ClientFailureReason, MessageKey>> = {

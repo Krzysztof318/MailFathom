@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AgentConversationEntry, AnswerBlock } from '@mailfathom/client-backend';
-import { answerInFlight, threadOf } from './conversationThread';
+import { answerInFlight, threadOf } from './threadTurns';
 
 // The fold never reads inside a block, so the one a newer service would write stands in for any of them.
 const block: AnswerBlock = { named: 'somethingNew', type: null };

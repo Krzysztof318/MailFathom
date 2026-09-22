@@ -23,7 +23,7 @@ import { AgentComposer } from './AgentComposer';
 import { ConversationHistory } from './ConversationHistory';
 import { ConversationTabs } from './ConversationTabs';
 import { ConversationThread } from './ConversationThread';
-import { answerInFlight, threadOf } from './conversationThread';
+import { answerInFlight, threadOf } from './threadTurns';
 import { newIdentifier } from './newIdentifier';
 import { useConversationHistory } from './useConversationHistory';
 import { useFollowedConversation } from './useFollowedConversation';
