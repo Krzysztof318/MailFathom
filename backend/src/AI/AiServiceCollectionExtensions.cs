@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.AgentConversations;
 using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.CalendarEvents;
 using MailFathom.AI.Chat;
@@ -20,6 +21,7 @@ using MailFathom.AI.Retrieval;
 using MailFathom.AI.Search;
 using MailFathom.AI.ThreadStates;
 using MailFathom.Application.Access;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Application.Chat;
@@ -444,6 +446,26 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IDayLayoutPlanner, DayLayoutAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the Agent: the composition that answers a person in a conversation, reading their mail, calendar, and tasks and proposing what to do.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection.</returns>
+    /// <remarks>
+    /// Behind the chat declaration like every other agent, so an instance that declared no endpoint registers no composer
+    /// and its runs end as failed before anything is spent. Scoped, because a run executes on a scope of its own under
+    /// the principal of the person who asked, and every use case its tools reach reads that principal.
+    /// </remarks>
+    public static IServiceCollection AddAgentConversationAgent(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<AgentConversationReaders>();
+        services.AddScoped<IAgentAnswerComposer, AgentConversationAgent>();
 
         return services;
     }

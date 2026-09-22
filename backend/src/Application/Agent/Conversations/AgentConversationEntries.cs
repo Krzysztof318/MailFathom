@@ -167,6 +167,7 @@ public sealed record AgentBlockComposed(AgentMessageId MessageId, PresentationBl
 /// <summary>The answer offers the person something to do, which nothing does until they say so.</summary>
 /// <param name="MessageId">The answer being composed.</param>
 /// <param name="Block">The block presenting the offer, which is one the person acts on.</param>
+/// <param name="Act">What accepting the offer carries out, stated exactly enough that nothing has to be asked again.</param>
 /// <remarks>
 /// <para>
 /// <strong>A proposal is a block and is addressed by its place.</strong> The catalogue already says which types a
@@ -179,16 +180,25 @@ public sealed record AgentBlockComposed(AgentMessageId MessageId, PresentationBl
 /// It records the offer and never the carrying out of one. What an accepted action then did belongs to whatever
 /// performs it, and reaches this record only as the state the proposal ends in.
 /// </para>
+/// <para>
+/// <strong>The act travels with the block rather than being read back out of it.</strong> A block says what a person
+/// needs to see, and an act says what is done — which account a message leaves from, which message a reply answers.
+/// Keeping both on the one entry is what makes accepting the offer perform exactly what was offered.
+/// </para>
 /// </remarks>
-/// <exception cref="ArgumentNullException">Thrown when <paramref name="Block" /> is <see langword="null" />.</exception>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Block" /> or <paramref name="Act" /> is <see langword="null" />.</exception>
 /// <exception cref="ArgumentException">Thrown when the block is one a person only reads, which is composed rather than proposed.</exception>
-public sealed record AgentActionProposed(AgentMessageId MessageId, PresentationBlock Block) : AgentConversationEntry
+public sealed record AgentActionProposed(AgentMessageId MessageId, PresentationBlock Block, AgentProposedAct Act)
+    : AgentConversationEntry
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "proposal";
 
     /// <summary>Gets the block presenting the offer.</summary>
     public PresentationBlock Block { get; } = Requirement.Actionable(Block, nameof(Block));
+
+    /// <summary>Gets what accepting the offer carries out.</summary>
+    public AgentProposedAct Act { get; } = Act ?? throw new ArgumentNullException(nameof(Act));
 
     /// <inheritdoc />
     [JsonIgnore]

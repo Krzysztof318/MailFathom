@@ -106,6 +106,13 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// </remarks>
     public ChatCapabilityModelOptions DayLayout { get; set; } = new();
 
+    /// <summary>Gets or sets which declared model answers a person in a conversation with the Agent.</summary>
+    /// <remarks>
+    /// A reference and nothing else, for the reason the day's is: what decides whether the Agent answers is a person
+    /// asking it something, and an instance that declared no chat endpoint says so in the conversation it was asked in.
+    /// </remarks>
+    public ChatCapabilityModelOptions Agent { get; set; } = new();
+
     /// <summary>Gets or sets whether an opened contact is read into a note about where the correspondence with them stands.</summary>
     /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and on is the default for the reason reply drafting is — the block itself says why, and what turning it off leaves is the contact page every deployment drew before this existed.</remarks>
     public ContactRelationshipOptions ContactRelationship { get; set; } = new();
@@ -179,6 +186,7 @@ internal sealed class ChatModelOptions : IValidatableObject
         ChatCapability.BodyCleanup => this.BodyCleanup.Model,
         ChatCapability.CalendarEventExtraction => this.CalendarEventExtraction.Model,
         ChatCapability.DayLayout => this.DayLayout.Model,
+        ChatCapability.Agent => this.Agent.Model,
         _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, "The section declares no model reference for this capability."),
     };
 

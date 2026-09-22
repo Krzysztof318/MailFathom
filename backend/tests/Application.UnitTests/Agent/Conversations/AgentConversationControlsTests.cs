@@ -207,40 +207,21 @@ public sealed class AgentConversationControlsTests
         Assert.Empty(await this.PublishedAsync(signals, channel));
     }
 
-    /// <summary>A person accepts or declines, and never records a proposal as failed or as pending — those are what carrying it out reports.</summary>
-    [Theory]
-    [InlineData(AgentProposalState.Pending)]
-    [InlineData(AgentProposalState.Failed)]
-    public async Task AnswerProposalAsync_AStateThatIsNotAPersonsAnswer_IsRefused(AgentProposalState decision)
-    {
-        // Arrange
-        await using var signals = this.Signals(out _);
-
-        // Act and assert
-        await Assert.ThrowsAsync<ArgumentException>(() => this.Controls(signals).AnswerProposalAsync(
-            Conversation,
-            SyntheticUser.Deployment,
-            proposedAt: 4,
-            decision,
-            TestContext.Current.CancellationToken));
-    }
-
     /// <summary>An answer to a proposal belongs to no run, so it is announced naming the conversation alone.</summary>
     [Fact]
-    public async Task AnswerProposalAsync_AnAcceptanceTheStoreRecords_AnnouncesTheConversationWithNoRun()
+    public async Task DeclineProposalAsync_ADeclineTheStoreRecords_AnnouncesTheConversationWithNoRun()
     {
         // Arrange
         await using var signals = this.Signals(out var channel);
         this.store
-            .TryResolveProposalAsync(Conversation, SyntheticUser.Deployment, 4, AgentProposalState.Accepted, Now, Arg.Any<CancellationToken>())
+            .TryResolveProposalAsync(Conversation, SyntheticUser.Deployment, 4, AgentProposalState.Declined, Now, Arg.Any<CancellationToken>())
             .Returns(9L);
 
         // Act
-        var place = await this.Controls(signals).AnswerProposalAsync(
+        var place = await this.Controls(signals).DeclineProposalAsync(
             Conversation,
             SyntheticUser.Deployment,
             proposedAt: 4,
-            AgentProposalState.Accepted,
             TestContext.Current.CancellationToken);
         var announced = await this.PublishedAsync(signals, channel);
 

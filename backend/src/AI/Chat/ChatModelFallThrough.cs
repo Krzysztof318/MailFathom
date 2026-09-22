@@ -33,15 +33,37 @@ internal static class ChatModelFallThrough
     /// <returns>What the model that answered produced.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown with the last model's own failure when no model of the chain answered.</exception>
+    public static Task<TResult> RunAsync<TResult>(
+        ChatGenerationPlan plan,
+        ILogger logger,
+        Func<ChatGenerationPlan, CancellationToken, Task<TResult>> attempt,
+        CancellationToken cancellationToken) =>
+        RunAsync(plan, logger, attempt, static () => true, cancellationToken);
+
+    /// <summary>Runs the attempt against each model of the chain until one answers, while what a failed attempt left behind still permits another.</summary>
+    /// <typeparam name="TResult">What one attempt produces.</typeparam>
+    /// <param name="plan">The plan naming the model to ask and the fallback behind it.</param>
+    /// <param name="logger">Where a fall-through is recorded, so an operator sees that the second model answered.</param>
+    /// <param name="attempt">Asks one model, raising <see cref="ChatGenerationFailedException" /> where it could not answer.</param>
+    /// <param name="mayFallThrough">
+    /// Asked after an attempt fails, and <see langword="false" /> where that attempt already wrote something durable a
+    /// second model's answer would stand beside; the failure is then raised rather than handed to the fallback.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>What the model that answered produced.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ChatGenerationFailedException">Thrown with the last model's own failure when no model of the chain answered, or with the failure after which no other model was permitted.</exception>
     public static async Task<TResult> RunAsync<TResult>(
         ChatGenerationPlan plan,
         ILogger logger,
         Func<ChatGenerationPlan, CancellationToken, Task<TResult>> attempt,
+        Func<bool> mayFallThrough,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(attempt);
+        ArgumentNullException.ThrowIfNull(mayFallThrough);
 
         foreach (var candidate in plan.Chain)
         {
@@ -50,7 +72,7 @@ internal static class ChatModelFallThrough
                 return await attempt(candidate, cancellationToken);
             }
             catch (ChatGenerationFailedException failure)
-                when (candidate.Fallback is { } fallback && IsWorthAnotherModel(failure))
+                when (candidate.Fallback is { } fallback && IsWorthAnotherModel(failure) && mayFallThrough())
             {
                 ChatProviderEvents.LogFallingThroughToFallback(
                     logger,

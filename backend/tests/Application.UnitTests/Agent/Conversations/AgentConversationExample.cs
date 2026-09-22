@@ -5,6 +5,7 @@
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.UnitTests.Discovery.Presentation;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.UnitTests.Agent.Conversations;
 
@@ -48,4 +49,20 @@ internal static class AgentConversationExample
     /// <returns>The block.</returns>
     internal static PresentationBlock Actionable() =>
         PresentationPlanExample.EveryBlock().First(block => block.Type.Actionable);
+
+    /// <summary>What accepting an offer would carry out: a message to one reserved address.</summary>
+    /// <returns>The act.</returns>
+    internal static AgentProposedAct Act()
+    {
+        if (!EmailAddress.TryCreate("Ada", "ada@northwind.example", out var recipient))
+        {
+            throw new InvalidOperationException("The example recipient is a valid address.");
+        }
+
+        return new AgentMessageSending(
+            "work",
+            [recipient],
+            PresentationText.Create("The quote"),
+            PresentationText.Create("Thank you, we accept."));
+    }
 }

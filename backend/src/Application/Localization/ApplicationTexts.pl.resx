@@ -20,4 +20,25 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   <data name="AgentRunStoppedNote" xml:space="preserve">
     <value>Zatrzymano. To, co już dotarło, zostaje — powiedz, od czego mam kontynuować.</value>
   </data>
+  <data name="AgentStatusReadingQuestion" xml:space="preserve">
+    <value>Czytam pytanie</value>
+  </data>
+  <data name="AgentStatusSearchingMail" xml:space="preserve">
+    <value>Przeszukuję pocztę</value>
+  </data>
+  <data name="AgentStatusReadingThread" xml:space="preserve">
+    <value>Czytam wątek</value>
+  </data>
+  <data name="AgentStatusReadingCalendar" xml:space="preserve">
+    <value>Czytam kalendarz</value>
+  </data>
+  <data name="AgentStatusReadingTasks" xml:space="preserve">
+    <value>Czytam zadania</value>
+  </data>
+  <data name="AgentStatusPreparingProposal" xml:space="preserve">
+    <value>Przygotowuję propozycję</value>
+  </data>
+  <data name="AgentStatusComposingAnswer" xml:space="preserve">
+    <value>Piszę odpowiedź</value>
+  </data>
 </root>

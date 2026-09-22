@@ -6,6 +6,7 @@ using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Presentation.Blocks;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
@@ -778,7 +779,19 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             SuggestedActionKind.OpenThread,
             PresentationText.Create("The thread has the figure in it."),
             SuggestedActionImpact.ReadsOnly,
-            requiresConfirmation: true));
+            requiresConfirmation: true),
+        new AgentMessageSending(
+            "primary",
+            [Recipient()],
+            PresentationText.Create("The quote"),
+            PresentationText.Create("Thank you, we accept.")));
+
+    private static EmailAddress Recipient()
+    {
+        return EmailAddress.TryCreate(displayName: null, "ada@northwind.example", out var recipient)
+            ? recipient
+            : throw new InvalidOperationException("The example recipient is a valid address.");
+    }
 
     private static Task<int> CountEntriesOfAsync(
         OrchestratedMailFathomServices host,

@@ -752,6 +752,7 @@ its own. Every one of them may, and each takes the same two keys as `Chat:MainMo
 | Reference | The work it routes |
 | --- | --- |
 | `Chat:MailAnswering:Model` | Answering a question about the mailbox |
+| `Chat:Agent:Model` | Composing the Agent's answer in a conversation, and the proposals it offers the person |
 | `Chat:DiscoveryPlanning:Model` | Reading a Discover request into the searches that would answer it |
 | `Chat:DiscoveryComposition:Model` | Composing what a Discover run found into its answer |
 | `Chat:Enrichment:Model` | [Deriving an arriving message into a list row's marks](#message-enrichment--chatenrichment) |

@@ -58,4 +58,7 @@ public enum ChatCapability
 
     /// <summary>Arranging one person's day around what is already committed during it.</summary>
     DayLayout = 12,
+
+    /// <summary>Answering a person in a conversation with the Agent, reading their mail, calendar, and tasks and proposing what to do.</summary>
+    Agent = 13,
 }

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit.v3.mtp-v2" />
 
@@ -21,6 +22,8 @@
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\RecordingLoggerFactory.cs" Link="RecordingLoggerFactory.cs" />
     <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
+    <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
+    <Compile Include="..\shared\RecordingClientSignalChannel.cs" Link="RecordingClientSignalChannel.cs" />
     <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are
          built once and linked into each suite that has one. -->
     <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />

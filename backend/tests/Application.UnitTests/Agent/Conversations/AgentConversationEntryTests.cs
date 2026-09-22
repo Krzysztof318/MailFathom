@@ -33,7 +33,7 @@ public sealed class AgentConversationEntryTests
         var message = AgentMessageId.New();
 
         // Act, Assert
-        Assert.Throws<ArgumentException>(() => new AgentActionProposed(message, AgentConversationExample.Reading()));
+        Assert.Throws<ArgumentException>(() => new AgentActionProposed(message, AgentConversationExample.Reading(), AgentConversationExample.Act()));
     }
 
     /// <summary>A turn says something, and the struct default is what saying nothing looks like at compile time.</summary>
@@ -139,7 +139,7 @@ public sealed class AgentConversationEntryTests
         [
             new AgentStatusReported(message, PresentationText.Create("reading the attachments")),
             new AgentBlockComposed(message, AgentConversationExample.Reading()),
-            new AgentActionProposed(message, AgentConversationExample.Actionable()),
+            new AgentActionProposed(message, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentAnswerEnded(message, AgentAnswerOutcome.Completed),
         ];
 
