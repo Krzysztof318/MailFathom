@@ -172,7 +172,10 @@ public sealed class MailboxMutationConvergerTests
             maxMutationsPerPass: 1,
             localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
             states: states);
-        var carried = await context.LeaveOutstandingAsync(DeleteRequest(uid: 55U), record => record);
+        var carried = await context.LeaveOutstandingAsync(
+            DeleteRequest(uid: 55U),
+            record => record,
+            MailboxMutationLocalChange.AlreadyCommitted);
         var erasure = await context.LeaveOutstandingAsync(DeleteRequest(uid: 56U), record => record, MailboxMutationLocalChange.Erasure);
         states.Store(
             erasure.StoredEmailId,

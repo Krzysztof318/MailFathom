@@ -55,7 +55,7 @@ public sealed record AuthoredMailDeletionResult(
         MailboxMutationLifecycle lifecycle) =>
         new(MailDeletionOutcome.Recorded, recordId, lifecycle);
 
-    /// <summary>Reports a delete committed to a held account's stored state as a move into its trash.</summary>
+    /// <summary>Reports a delete committed to the stored state of an account holding or restoring its mailbox, as a move into its trash.</summary>
     /// <param name="recordId">The delete a restoring account's source is still owed, or <see langword="null" /> where none was written.</param>
     /// <param name="lifecycle">Where that record stands, supplied exactly where one was written.</param>
     /// <returns>The result.</returns>

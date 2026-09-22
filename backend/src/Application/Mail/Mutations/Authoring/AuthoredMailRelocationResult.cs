@@ -67,7 +67,7 @@ public sealed record AuthoredMailRelocationResult(
         MailboxMutationLifecycle lifecycle) =>
         new(MailRelocationOutcome.Recorded, destination, recordId, lifecycle);
 
-    /// <summary>Reports a move committed to a held account's stored state.</summary>
+    /// <summary>Reports a move committed to the stored state of an account holding or restoring its mailbox.</summary>
     /// <param name="destination">The folder the move named.</param>
     /// <param name="recordId">The record a restoring account's source is still owed, or <see langword="null" /> where none was written.</param>
     /// <param name="lifecycle">Where that record stands, supplied exactly where one was written.</param>
