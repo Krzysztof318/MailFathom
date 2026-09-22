@@ -119,6 +119,11 @@ export function useFollowedConversation(
                     const held = before.conversation === conversation && before.answered ? before : null;
                     const known = new Set(held?.entries.map((entry) => entry.sequence));
 
+                    // A silent poll that brought nothing keeps what is drawn, so nothing re-measures or moves for it.
+                    if (held !== null && held.failure === null && arrived.every((entry) => known.has(entry.sequence))) {
+                        return held;
+                    }
+
                     return {
                         conversation,
                         entries: [...(held?.entries ?? []), ...arrived.filter((entry) => !known.has(entry.sequence))],

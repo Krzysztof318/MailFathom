@@ -412,6 +412,27 @@ describe('stopAgentRun', () => {
         expect(answered).toEqual({ outcome: 'read', value: undefined });
         expect(requests[0]).toMatchObject({ method: 'DELETE', path: `${base}/${conversation}/runs/${question}` });
     });
+
+    it('reads an answer that had already ended as missing', async () => {
+        const answered = await stopAgentRun(session, answering({ status: 404, body: '' }), conversation, question);
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'missing' } });
+    });
+});
+
+describe('every Agent operation', () => {
+    const unreachable: MailFathomTransport = () => Promise.reject(new Error('down'));
+
+    it.each([
+        ['listing', () => listAgentConversations(session, unreachable)],
+        ['reading', () => readAgentConversation(session, unreachable, conversation, 0)],
+        ['asking', () => askAgent(session, unreachable, conversation, question, 'How many bays?')],
+        ['steering', () => steerAgentRun(session, unreachable, conversation, question, question, 'Shorter.')],
+        ['stopping', () => stopAgentRun(session, unreachable, conversation, question)],
+        ['deleting', () => deleteAgentConversation(session, unreachable, conversation)],
+    ])('reports a deployment it could not reach while %s', async (_, operation) => {
+        expect(await operation()).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
 });
 
 describe('deleteAgentConversation', () => {

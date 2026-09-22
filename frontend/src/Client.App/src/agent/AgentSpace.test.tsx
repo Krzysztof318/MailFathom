@@ -159,6 +159,20 @@ describe('AgentSpace', () => {
         expect(document.activeElement).toBe(tabs[0]);
     });
 
+    it('puts focus in the field when closing a tab takes the strip with it', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        await opened('How many bays were confirmed');
+        await opened('What is waiting on me today');
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Close What is waiting on me today' }));
+
+        expect(screen.queryByRole('tablist')).toBeNull();
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Tell the agent what to do' }));
+        });
+    });
+
     it('lets go of a conversation the deployment no longer holds', async () => {
         const { transport } = deploymentAnswering();
         screenOf((request) =>

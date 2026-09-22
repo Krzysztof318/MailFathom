@@ -61,7 +61,7 @@ export function AgentAnswer({ answer, settledThrough }: { readonly answer: Answe
 
             {answer.blocks.length === 0 && answer.ending === null ? (
                 <p className="flex items-center gap-2 text-md text-muted">
-                    <Icon name="autorenew" className="size-4 text-accent-deep" />
+                    <Icon name="autorenew" className="size-4 animate-spin text-accent-deep" />
                     {translate('agent.working')}
                 </p>
             ) : null}

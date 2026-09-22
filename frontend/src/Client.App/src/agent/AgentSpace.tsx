@@ -98,6 +98,7 @@ export function AgentSpace({
     const [historyShown, setHistoryShown] = useState(true);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [following, setFollowing] = useState(0);
+    const [composerFocusAsked, setComposerFocusAsked] = useState(0);
 
     const asked = useRef<HTMLDialogElement>(null);
     const drawer = useRef<HTMLDialogElement>(null);
@@ -157,6 +158,11 @@ export function AgentSpace({
         const remaining = open.filter((held) => held !== conversation);
 
         setOpen(remaining);
+
+        // The strip goes with its second-last tab, and focus with it, so the field takes it.
+        if (remaining.length < 2) {
+            setComposerFocusAsked((before) => before + 1);
+        }
 
         if (current === conversation) {
             setCurrent(remaining.at(-1) ?? null);
@@ -356,6 +362,7 @@ export function AgentSpace({
                         running={inFlight !== null}
                         offersStarters={current === null}
                         notSent={unsent === null ? null : translate(notSent[unsent])}
+                        focusAsked={composerFocusAsked}
                         onSend={send}
                         onCancel={cancel}
                     />

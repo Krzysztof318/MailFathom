@@ -53,11 +53,15 @@ export function ConversationTabs({
     }
 
     // Focus goes where the screen goes after the close — the last conversation still held where the one in front was
-    // put down, else the one in front — so it is never left on a tab that is no longer there.
+    // put down, else the one in front — so it is never left on a tab that is no longer there. Where one conversation is
+    // left the strip itself goes, and the screen places focus instead.
     function close(conversation: string): void {
         const remaining = open.filter((held) => held.id !== conversation);
 
-        focusOn(current === conversation ? (remaining.at(-1)?.id ?? null) : current);
+        if (remaining.length > 1) {
+            focusOn(current === conversation ? (remaining.at(-1)?.id ?? null) : current);
+        }
+
         onClose(conversation);
     }
 

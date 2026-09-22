@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -20,17 +20,20 @@ const starters: readonly MessageKey[] = ['agent.starter.day', 'agent.starter.sli
  *
  * @param onSend Sends what was typed, answering whether it went, which is what clears the field.
  * @param notSent Why the last send did not go, already in the reader's language, and `null` where it went.
+ * @param focusAsked Changed by the screen when what held focus went away, which puts focus in the field.
  */
 export function AgentComposer({
     running,
     offersStarters,
     notSent,
+    focusAsked,
     onSend,
     onCancel,
 }: {
     readonly running: boolean;
     readonly offersStarters: boolean;
     readonly notSent: string | null;
+    readonly focusAsked: number;
     readonly onSend: (text: string) => Promise<boolean>;
     readonly onCancel: () => void;
 }) {
@@ -38,6 +41,13 @@ export function AgentComposer({
     const field = useId();
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
+    const input = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (focusAsked > 0) {
+            input.current?.focus();
+        }
+    }, [focusAsked]);
 
     async function send(written: string): Promise<void> {
         const question = written.trim();
@@ -88,6 +98,7 @@ export function AgentComposer({
                 </label>
 
                 <input
+                    ref={input}
                     id={field}
                     value={text}
                     autoComplete="off"

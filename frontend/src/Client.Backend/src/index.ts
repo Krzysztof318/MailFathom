@@ -119,6 +119,8 @@ export {
     type DiscoveryRunSpend,
 } from './discoveryRun';
 export {
+    agentConversationRoute,
+    agentConversationsRoute,
     askAgent,
     deleteAgentConversation,
     listAgentConversations,
