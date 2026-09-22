@@ -1258,6 +1258,10 @@ public static class ServiceCollectionExtensions
         // so a protocol request resolves nothing over the network before it has been decided whether it may write.
         services.AddScoped<IAuthoredMailboxTargetReader, AuthoredMailboxTargetReader>();
         services.AddScoped<ILocalEmailStateStore, LocalEmailStateStore>();
+
+        // The held account's copy act, beside the submission that chooses it: it writes the second stored message a
+        // copy produces, which is why it holds the stores a message is written through rather than only the state store.
+        services.AddScoped<LocalMailCopier>();
         services.AddScoped<MailboxChangeSubmission>();
         services.AddScoped<MailFlagChangeRecorder>();
 

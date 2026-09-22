@@ -1805,6 +1805,23 @@ What it costs an operator is worth knowing before a rule starts filing mail:
 - An export or an erasure request reaches both, because both are ordinary rows that any selection over sender,
   recipient, subject, or content reaches. Neither hides behind the other's identity.
 
+**On an account whose mailbox MailFathom holds, the same two rows are written without a server having anything to do
+with it.** There is no `UID COPY` and no forward pass to discover its result, so the copy is made where the rule's
+decision is committed: the message's raw MIME is read and **placed as a content object of its own before that
+transaction opens**, because an object store is not part of it and a payload placed inside one could not be rolled
+back, and the transaction then writes the second row, points it at that object, and files it into the local folder.
+The copy carries the copied message's `\Seen`, its `\Flagged`, and its keywords, holds no occurrence — no server holds
+it, so there is nothing for `(account, folder, UIDVALIDITY, UID)` to name — and is stamped as already evaluated, which
+is the local counterpart of the withholding above: a rule copying into a folder it also matches on must not meet its
+own copy. The account's stored-content total counts the copy, because a copy is a second payload rather than a second
+name for one.
+
+Two things follow from the object being placed first. A transaction that does not commit — a destination whose local
+folder is gone, a message already in the destination, a concurrent write the retry policy re-runs — leaves an object
+nothing points at, which is the state
+[the sweep](email-content.md#an-object-nothing-points-at-is-reclaimed) already exists for; nothing else has to. And the
+object is written once per copy, so a message two rules copy costs two payloads, exactly as it does on a server.
+
 One limit follows from where the placement comes from. The arrival is withheld from rule evaluation only where the
 destination folder answered with `COPYUID`; on a server advertising no `UIDPLUS` the copy still happens and is still
 never repeated, but the arrival reaches rule evaluation as an ordinary discovery, because nothing joins it to the record

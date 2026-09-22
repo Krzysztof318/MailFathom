@@ -363,8 +363,10 @@ public sealed class SpamActionRecorder
         SpamActionOutcome? refusal = submitted.Outcome switch
         {
             MailboxChangeSubmissionOutcome.MessageMissing => SpamActionOutcome.OccurrenceMissing,
-            MailboxChangeSubmissionOutcome.DestinationMissing or MailboxChangeSubmissionOutcome.NotAvailableLocally =>
-                SpamActionOutcome.DestinationUnresolved,
+            MailboxChangeSubmissionOutcome.DestinationMissing => SpamActionOutcome.DestinationUnresolved,
+
+            // SourceContentMissing is a copy's alone, and a verdict asks for a read and a move, so no outcome here is
+            // one this recorder can receive.
             _ => null,
         };
 

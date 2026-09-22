@@ -5,6 +5,7 @@
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
@@ -13,6 +14,7 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Rules.Evaluation;
 
@@ -196,6 +198,7 @@ public sealed class MailRuleEvaluationPass
             {
                 var evaluatedAt = this.timeProvider.GetUtcNow();
                 var destinations = await this.ResolveDestinationsAsync(account, outcome, cancellationToken);
+                var copies = await this.PrepareCopiesAsync(account, outcome, cancellationToken);
                 var applied = new List<AppliedMailboxChange>();
 
                 await this.commitPolicy.CommitAsync(
@@ -214,6 +217,7 @@ public sealed class MailRuleEvaluationPass
                             outcome,
                             boundRuleSet.Trigger,
                             destinations,
+                            copies,
                             applied,
                             attemptCancellationToken);
                     },
@@ -319,6 +323,7 @@ public sealed class MailRuleEvaluationPass
 
         var outcome = await this.EvaluateBatchAsync(boundRuleSet, batch, cancellationToken);
         var destinations = await this.ResolveDestinationsAsync(run.Account, outcome, cancellationToken);
+        var copies = await this.PrepareCopiesAsync(run.Account, outcome, cancellationToken);
         var reachedTheEnd = batch.Count < this.options.BatchSize;
         var recordedAt = this.timeProvider.GetUtcNow();
 
@@ -350,6 +355,7 @@ public sealed class MailRuleEvaluationPass
                     outcome,
                     boundRuleSet.Trigger,
                     destinations,
+                    copies,
                     applied,
                     attemptCancellationToken);
 
@@ -381,6 +387,7 @@ public sealed class MailRuleEvaluationPass
         MailRuleEvaluationBatch outcome,
         MailRuleExecutionTrigger trigger,
         MailboxDestinations destinations,
+        PreparedLocalCopies copies,
         List<AppliedMailboxChange> applied,
         CancellationToken cancellationToken)
     {
@@ -401,6 +408,7 @@ public sealed class MailRuleEvaluationPass
                     plan,
                     revision,
                     destinations,
+                    copies,
                     cancellationToken);
 
             outcome.ActionsRecorded(recording);
@@ -416,6 +424,29 @@ public sealed class MailRuleEvaluationPass
         }
 
         await this.executionStore.AppendAsync(session, executions, cancellationToken);
+    }
+
+    /// <summary>Places the payload of every copy this batch's matching rules ask for, before the transaction opens.</summary>
+    /// <remarks>
+    /// A copy on a held account is a second stored message carrying a payload of its own, and a payload is placed with
+    /// no transaction open across the placement — so it happens here, beside the destinations and for the same reason.
+    /// An account that is not held places nothing, which is every account until somebody holds one. A copy is named once
+    /// per action rather than once per message, because two rules copying one email produce two stored messages.
+    /// </remarks>
+    private Task<PreparedLocalCopies> PrepareCopiesAsync(
+        MailAccountId account,
+        MailRuleEvaluationBatch outcome,
+        CancellationToken cancellationToken)
+    {
+        StoredEmailId[] copied =
+        [
+            .. outcome.EvaluatedEmails
+                .SelectMany(evaluated => evaluated.Evaluation.ActionPlan.Actions
+                    .Where(planned => planned.Action.Mutation == MailboxMutation.Copy)
+                    .Select(_ => evaluated.Candidate.StoredEmailId)),
+        ];
+
+        return this.actionRecorder.PrepareCopiesAsync(account, copied, cancellationToken);
     }
 
     /// <summary>Finds every folder this batch's matching rules file into, before the transaction that records them opens.</summary>

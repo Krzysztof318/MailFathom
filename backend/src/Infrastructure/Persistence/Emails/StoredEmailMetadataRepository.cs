@@ -180,7 +180,7 @@ internal sealed class StoredEmailMetadataRepository(
     }
 
     /// <inheritdoc />
-    public async Task<StoredEmailId?> StoreFiledEmailAsync(
+    public Task<StoredEmailId?> StoreFiledEmailAsync(
         IPersistenceSession session,
         MailAccountId account,
         MailFolderResolutionId binding,
@@ -188,6 +188,99 @@ internal sealed class StoredEmailMetadataRepository(
         long sizeOctets,
         AppendedMailFlags flags,
         OutgoingEmailId? filedFrom,
+        CancellationToken cancellationToken) =>
+        this.StoreWithoutOccurrenceAsync(
+            session,
+            account,
+            binding,
+            extractedMetadata,
+            sizeOctets,
+            (entity, storedAt) =>
+            {
+                entity.IsRemotelySeen = flags.IsSeen;
+                entity.IsRemotelyDraft = flags.IsDraft;
+                entity.FiledFromOutgoingEmailId = filedFrom?.Value;
+
+                // A draft is stamped as evaluated because nothing arrived: a rule conditioned on incoming mail must not fire
+                // on the person's own draft. A sent copy is left unstamped like every other copy filed from an outgoing record,
+                // which the rule queue and the derivations already recognise by that record.
+                entity.RulesEvaluatedAt = filedFrom is null ? storedAt : null;
+            },
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StoredEmailId?> StoreLocalCopyAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailFolderResolutionId binding,
+        ExtractedEmailMetadata? extractedMetadata,
+        long sizeOctets,
+        CopiedMailFlags flags,
+        CancellationToken cancellationToken) =>
+        this.StoreWithoutOccurrenceAsync(
+            session,
+            account,
+            binding,
+            extractedMetadata,
+            sizeOctets,
+            (entity, storedAt) =>
+            {
+                entity.IsRemotelySeen = flags.IsSeen;
+                entity.IsRemotelyFlagged = flags.IsFlagged;
+                entity.RemoteKeywords = [.. flags.Keywords.Values];
+
+                // Stamped for the reason the port states: the copy is this deployment's own act rather than an arrival,
+                // and a rule meeting its own copy would copy it again.
+                entity.RulesEvaluatedAt = storedAt;
+            },
+            cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
+        MailAccountId account,
+        IReadOnlyCollection<string> internetMessageIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(internetMessageIds);
+
+        if (internetMessageIds.Count == 0)
+        {
+            return new Dictionary<string, StoredEmailId>(StringComparer.Ordinal);
+        }
+
+        var accountValue = account.Value;
+
+        var filedCopies = await readContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.MailboxAccountId == accountValue
+                && email.InternetMessageId != null
+                && internetMessageIds.Contains(email.InternetMessageId)
+                && email.FiledFromOutgoingEmailId != null
+                && email.UidValidity == null
+                && email.ContentAvailability == StoredEmailContentAvailability.Available)
+            .OrderBy(email => email.Id)
+            .Select(email => new { InternetMessageId = email.InternetMessageId!, email.Id })
+            .ToListAsync(cancellationToken);
+
+        return filedCopies
+            .GroupBy(copy => copy.InternetMessageId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => StoredEmailId.Create(group.First().Id), StringComparer.Ordinal);
+    }
+
+    /// <summary>Stores one message MailFathom wrote itself, which holds a folder binding and no occurrence.</summary>
+    /// <remarks>
+    /// The two such messages — a copy filed of a draft or a send, and the second message a held copy produces — differ
+    /// only in the flags they carry and in what says whose act they were, which is what <paramref name="stamp" /> writes.
+    /// Everything else is one statement: the row is written as a synchronized one is, with its search document and its
+    /// conversation placed in the same session, so it is found and threaded exactly as a message a server returned.
+    /// </remarks>
+    private async Task<StoredEmailId?> StoreWithoutOccurrenceAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailFolderResolutionId binding,
+        ExtractedEmailMetadata? extractedMetadata,
+        long sizeOctets,
+        Action<StoredEmailEntity, DateTimeOffset> stamp,
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -207,16 +300,10 @@ internal sealed class StoredEmailMetadataRepository(
             StoredAt = storedAt,
             SizeOctets = sizeOctets,
             ContentAvailability = StoredEmailContentAvailability.Available,
-            IsRemotelySeen = flags.IsSeen,
-            IsRemotelyDraft = flags.IsDraft,
             RemoteFlagsObservedAt = storedAt,
-            FiledFromOutgoingEmailId = filedFrom?.Value,
-
-            // A draft is stamped as evaluated because nothing arrived: a rule conditioned on incoming mail must not fire
-            // on the person's own draft. A sent copy is left unstamped like every other copy filed from an outgoing record,
-            // which the rule queue and the derivations already recognise by that record.
-            RulesEvaluatedAt = filedFrom is null ? storedAt : null,
         };
+
+        stamp(entity, storedAt);
 
         sessionContext.StoredEmails.Add(entity);
 
@@ -250,38 +337,6 @@ internal sealed class StoredEmailMetadataRepository(
             cancellationToken);
 
         return StoredEmailId.Create(entity.Id);
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
-        MailAccountId account,
-        IReadOnlyCollection<string> internetMessageIds,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(internetMessageIds);
-
-        if (internetMessageIds.Count == 0)
-        {
-            return new Dictionary<string, StoredEmailId>(StringComparer.Ordinal);
-        }
-
-        var accountValue = account.Value;
-
-        var filedCopies = await readContext.StoredEmails
-            .AsNoTracking()
-            .Where(email => email.MailboxAccountId == accountValue
-                && email.InternetMessageId != null
-                && internetMessageIds.Contains(email.InternetMessageId)
-                && email.FiledFromOutgoingEmailId != null
-                && email.UidValidity == null
-                && email.ContentAvailability == StoredEmailContentAvailability.Available)
-            .OrderBy(email => email.Id)
-            .Select(email => new { InternetMessageId = email.InternetMessageId!, email.Id })
-            .ToListAsync(cancellationToken);
-
-        return filedCopies
-            .GroupBy(copy => copy.InternetMessageId, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => StoredEmailId.Create(group.First().Id), StringComparer.Ordinal);
     }
 
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>

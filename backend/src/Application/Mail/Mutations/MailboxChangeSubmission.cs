@@ -33,6 +33,12 @@ namespace MailFathom.Application.Mail.Mutations;
 /// routes keep acting on it and the cascade runs only once the window has passed.
 /// </para>
 /// <para>
+/// A copy is the one local change that takes two phases, because it creates a second stored message with a payload of
+/// its own and a payload is placed with no transaction open across the placement. The caller places one through
+/// <see cref="PrepareCopiesAsync" /> before it opens its transaction and hands it back in, which is the same shape the
+/// destination folders already take and for the same reason.
+/// </para>
+/// <para>
 /// The phase is read inside the caller's transaction rather than before it, so a change and the phase it was judged
 /// under commit together.
 /// </para>
@@ -42,6 +48,7 @@ public sealed class MailboxChangeSubmission
     private readonly ILocalMailFolderStore localFolders;
     private readonly IMailboxMutationRecordStore records;
     private readonly ILocalEmailStateStore states;
+    private readonly LocalMailCopier copier;
     private readonly IMailboxMutationAuditSettingsReader auditSettings;
     private readonly IMailboxMutationAuditEntryStore auditEntries;
     private readonly ClientSignals signals;
@@ -51,6 +58,7 @@ public sealed class MailboxChangeSubmission
     /// <param name="localFolders">Answers the account's custody phase and the local folders a held account keeps.</param>
     /// <param name="records">Opens the durable record a change on a mirrored account, and an erasure on a held one, is carried by.</param>
     /// <param name="states">Reads and writes the stored state a local change commits to.</param>
+    /// <param name="copier">Places and writes the second stored message a local copy produces.</param>
     /// <param name="auditSettings">Answers whether the account keeps an audit trail.</param>
     /// <param name="auditEntries">Appends a local change's audit entry in the change's own transaction.</param>
     /// <param name="signals">Announces a local change to the clients watching the account.</param>
@@ -60,6 +68,7 @@ public sealed class MailboxChangeSubmission
         ILocalMailFolderStore localFolders,
         IMailboxMutationRecordStore records,
         ILocalEmailStateStore states,
+        LocalMailCopier copier,
         IMailboxMutationAuditSettingsReader auditSettings,
         IMailboxMutationAuditEntryStore auditEntries,
         ClientSignals signals,
@@ -68,6 +77,7 @@ public sealed class MailboxChangeSubmission
         ArgumentNullException.ThrowIfNull(localFolders);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(states);
+        ArgumentNullException.ThrowIfNull(copier);
         ArgumentNullException.ThrowIfNull(auditSettings);
         ArgumentNullException.ThrowIfNull(auditEntries);
         ArgumentNullException.ThrowIfNull(signals);
@@ -76,6 +86,7 @@ public sealed class MailboxChangeSubmission
         this.localFolders = localFolders;
         this.records = records;
         this.states = states;
+        this.copier = copier;
         this.auditSettings = auditSettings;
         this.auditEntries = auditEntries;
         this.signals = signals;
@@ -101,7 +112,78 @@ public sealed class MailboxChangeSubmission
         MailboxDestination? destination,
         DateTimeOffset? heldUntil,
         CancellationToken cancellationToken) =>
-        this.SubmitAsync(session, request, destination, heldUntil, refusesMoveIntoCurrentFolder: false, cancellationToken);
+        this.SubmitAsync(session, request, destination, heldUntil, preparedCopy: null, cancellationToken);
+
+    /// <summary>Records or commits one change, inside the caller's transaction, with the copy a held account would need.</summary>
+    /// <param name="session">The transaction the change commits in.</param>
+    /// <param name="request">The change asked for.</param>
+    /// <param name="destination">Where a relocation or a copy files the message, resolved before the transaction opened; <see langword="null" /> for every other change.</param>
+    /// <param name="heldUntil">How long a written record waits before a convergence pass may take it in hand.</param>
+    /// <param name="preparedCopy">The payload a held copy was placed with, from <see cref="PrepareCopiesAsync" />; <see langword="null" /> for every other change and for an account that is not held.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The record written, the local change committed, or why neither happened.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A caller hands the copy in rather than the submission placing one, because placing a payload must not happen with
+    /// a transaction open across it and this is called inside one. Handing in nothing is what a caller that could not
+    /// place one has, and a copy then answers <see cref="MailboxChangeSubmissionOutcome.SourceContentMissing" /> rather
+    /// than committing a row naming a payload that was never placed.
+    /// </remarks>
+    public Task<SubmittedMailboxChange> SubmitAsync(
+        IPersistenceSession session,
+        MailboxMutationRequest request,
+        MailboxDestination? destination,
+        DateTimeOffset? heldUntil,
+        PreparedLocalCopy? preparedCopy,
+        CancellationToken cancellationToken) =>
+        this.SubmitAsync(
+            session,
+            request,
+            destination,
+            heldUntil,
+            refusesMoveIntoCurrentFolder: false,
+            preparedCopy,
+            cancellationToken);
+
+    /// <summary>Places the payload of every copy a batch asks for, before the transaction that commits them opens.</summary>
+    /// <param name="account">The account the batch acts on.</param>
+    /// <param name="sources">The message each planned copy duplicates, one entry per copy, which may name one message twice.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The placed copies, or none at all where the account is not held.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sources" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The phase is read here as well as inside the transaction, and the two readings do different work: this one
+    /// decides whether anything is worth placing, and the one inside decides what is committed. An account that stops
+    /// being held in between has copies placed for it that nothing commits, which is the orphaned object the content
+    /// reclamation pass takes; the reverse ordering would be a copy the transaction cannot make.
+    /// </remarks>
+    public async Task<PreparedLocalCopies> PrepareCopiesAsync(
+        MailAccountId account,
+        IReadOnlyCollection<StoredEmailId> sources,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        if (sources.Count == 0
+            || await this.localFolders.ReadAsync(account, cancellationToken) is not { Phase: MailAccountCustodyPhase.Held })
+        {
+            return PreparedLocalCopies.None;
+        }
+
+        var placed = new Dictionary<StoredEmailId, IReadOnlyList<PreparedLocalCopy>>();
+
+        foreach (var source in sources)
+        {
+            if (await this.copier.PrepareAsync(account, source, cancellationToken) is not { } copy)
+            {
+                continue;
+            }
+
+            placed[source] = placed.TryGetValue(source, out var already) ? [.. already, copy] : [copy];
+        }
+
+        return new PreparedLocalCopies(placed);
+    }
 
     /// <summary>Records or commits a move a person asked for, answering one into the folder the message is in as already there.</summary>
     /// <param name="session">The transaction the move commits in.</param>
@@ -121,7 +203,14 @@ public sealed class MailboxChangeSubmission
         MailboxMutationRequest request,
         MailboxDestination destination,
         CancellationToken cancellationToken) =>
-        this.SubmitAsync(session, request, destination, heldUntil: null, refusesMoveIntoCurrentFolder: true, cancellationToken);
+        this.SubmitAsync(
+            session,
+            request,
+            destination,
+            heldUntil: null,
+            refusesMoveIntoCurrentFolder: true,
+            preparedCopy: null,
+            cancellationToken);
 
     private async Task<SubmittedMailboxChange> SubmitAsync(
         IPersistenceSession session,
@@ -129,6 +218,7 @@ public sealed class MailboxChangeSubmission
         MailboxDestination? destination,
         DateTimeOffset? heldUntil,
         bool refusesMoveIntoCurrentFolder,
+        PreparedLocalCopy? preparedCopy,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -158,7 +248,15 @@ public sealed class MailboxChangeSubmission
             return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.MessageMissing);
         }
 
-        return await this.CommitLocallyAsync(session, request, destination, heldUntil, holding, state, cancellationToken);
+        return await this.CommitLocallyAsync(
+            session,
+            request,
+            destination,
+            heldUntil,
+            holding,
+            state,
+            preparedCopy,
+            cancellationToken);
     }
 
     /// <summary>Runs a held erasure whose window has passed, removing the message and everything derived from it.</summary>
@@ -270,17 +368,10 @@ public sealed class MailboxChangeSubmission
         DateTimeOffset? heldUntil,
         LocalMailFolderHolding holding,
         LocalEmailState state,
+        PreparedLocalCopy? preparedCopy,
         CancellationToken cancellationToken)
     {
         var mutation = request.Mutation;
-
-        if (mutation == MailboxMutation.Copy)
-        {
-            // ponytail: a local copy is a second stored message with its own payload under ADR 0008 and ADR 0017, and
-            // the payload has to be placed before the transaction that writes its row — which a rule's batch
-            // transaction, already open here, cannot do. Refused until copy becomes a two-phase act of its own.
-            return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.NotAvailableLocally);
-        }
 
         if (mutation == MailboxMutation.SetSeen || mutation == MailboxMutation.SetFlagged
             || mutation == MailboxMutation.AddKeywords || mutation == MailboxMutation.RemoveKeywords
@@ -333,7 +424,60 @@ public sealed class MailboxChangeSubmission
             return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
         }
 
+        // A copy answers both refusals above exactly as a move does, which is why it is asked after them rather than
+        // before: filing a second message into the folder it is already in, or into a folder the account does not
+        // have, is the same nothing either way.
+        if (mutation == MailboxMutation.Copy)
+        {
+            return preparedCopy is null
+                ? SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.SourceContentMissing)
+                : await this.CommitCopyAsync(session, request, state, target.Id, preparedCopy, cancellationToken);
+        }
+
         return await this.CommitAsync(session, request, state, state with { Folder = target.Id }, cancellationToken);
+    }
+
+    /// <summary>Writes the second stored message a copy produces, from the payload placed before this transaction.</summary>
+    /// <remarks>
+    /// <para>
+    /// The audit entry names the copied message and the folder it was copied into, exactly as a move's does, because the
+    /// act the trail records is the one somebody asked for rather than the row it produced. What is announced is the
+    /// copy: a client told about the copied message would re-read a message that has not changed.
+    /// </para>
+    /// <para>
+    /// It is appended after the copy is written rather than before it, which is where a move's differs. A local act's
+    /// entry is always a performed change, and this is the one local act that can decline to write anything while its
+    /// caller commits the transaction anyway — a rule records the refusal and carries on — so auditing first would
+    /// leave the trail permanently stating a copy that produced no row.
+    /// </para>
+    /// </remarks>
+    private async Task<SubmittedMailboxChange> CommitCopyAsync(
+        IPersistenceSession session,
+        MailboxMutationRequest request,
+        LocalEmailState state,
+        LocalMailFolderId target,
+        PreparedLocalCopy preparedCopy,
+        CancellationToken cancellationToken)
+    {
+        var copied = await this.copier.CommitAsync(
+            session,
+            preparedCopy,
+            state.SourceFolder.Id,
+            target,
+            new CopiedMailFlags(state.IsSeen, state.IsFlagged, state.Keywords),
+            cancellationToken);
+
+        // Nothing written means the copied message's own binding went while this ran, which is the message going rather
+        // than the destination: answering for the destination would send a rule's author to correct a name that is right.
+        if (copied is null)
+        {
+            return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.MessageMissing);
+        }
+
+        await this.AuditAsync(session, request, state, cancellationToken);
+
+        return SubmittedMailboxChange.Applied(
+            new AppliedMailboxChange(request.Account, state.SourceFolder.Alias, copied.Value, Flags: null));
     }
 
     private async Task<SubmittedMailboxChange> CommitAsync(
@@ -343,21 +487,7 @@ public sealed class MailboxChangeSubmission
         LocalEmailState after,
         CancellationToken cancellationToken)
     {
-        var now = this.timeProvider.GetUtcNow();
-
-        if (this.auditSettings.GetAuditSettings(request.Occurrence.AccountId).IsEnabled)
-        {
-            await this.auditEntries.AppendAsync(
-                session,
-                MailboxMutationAuditEntry.OfLocalAct(
-                    this.MintAuditEntryId(now),
-                    MailboxMutationRecordId.Create(Guid.CreateVersion7(now)),
-                    request,
-                    before.SourceFolder,
-                    now),
-                cancellationToken);
-        }
-
+        await this.AuditAsync(session, request, before, cancellationToken);
         await this.states.WriteAsync(session, request.Account, request.StoredEmailId, after, cancellationToken);
 
         var flags = request.Mutation == MailboxMutation.SetSeen || request.Mutation == MailboxMutation.SetFlagged
@@ -366,6 +496,31 @@ public sealed class MailboxChangeSubmission
 
         return SubmittedMailboxChange.Applied(
             new AppliedMailboxChange(request.Account, before.SourceFolder.Alias, request.StoredEmailId, flags));
+    }
+
+    /// <summary>Appends the audit entry one local act owes, where the account keeps a trail.</summary>
+    private async Task AuditAsync(
+        IPersistenceSession session,
+        MailboxMutationRequest request,
+        LocalEmailState before,
+        CancellationToken cancellationToken)
+    {
+        if (!this.auditSettings.GetAuditSettings(request.Occurrence.AccountId).IsEnabled)
+        {
+            return;
+        }
+
+        var now = this.timeProvider.GetUtcNow();
+
+        await this.auditEntries.AppendAsync(
+            session,
+            MailboxMutationAuditEntry.OfLocalAct(
+                this.MintAuditEntryId(now),
+                MailboxMutationRecordId.Create(Guid.CreateVersion7(now)),
+                request,
+                before.SourceFolder,
+                now),
+            cancellationToken);
     }
 
     private MailboxMutationAuditEntryId MintAuditEntryId(DateTimeOffset now) =>
@@ -393,8 +548,12 @@ public enum MailboxChangeSubmissionOutcome
     /// <summary>The message is already in the destination, so nothing was written.</summary>
     AlreadyInDestination = 4,
 
-    /// <summary>The change is one a held account cannot commit locally yet.</summary>
-    NotAvailableLocally = 5,
+    /// <summary>The held account stores no payload for the message a copy would duplicate.</summary>
+    /// <remarks>
+    /// A copy is the one change that needs the message itself rather than only what is recorded about it, so it is the
+    /// one a storage ceiling's deferral or an unreadable payload can refuse while every other change still commits.
+    /// </remarks>
+    SourceContentMissing = 5,
 }
 
 /// <summary>The answer one submitted change produced.</summary>

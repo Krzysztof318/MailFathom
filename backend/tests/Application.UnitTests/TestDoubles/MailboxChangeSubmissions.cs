@@ -26,6 +26,7 @@ internal static class MailboxChangeSubmissions
         IMailboxMutationRecordStore records,
         ILocalMailFolderStore? localFolders = null,
         ILocalEmailStateStore? states = null,
+        LocalMailCopier? copier = null,
         IMailboxMutationAuditEntryStore? auditEntries = null,
         IMailboxMutationAuditSettingsReader? auditSettings = null,
         ClientSignals? signals = null,
@@ -39,10 +40,13 @@ internal static class MailboxChangeSubmissions
             settings.GetAuditSettings(Arg.Any<MailAccountId>()).Returns(MailboxMutationAuditSettings.Disabled);
         }
 
+        var folders = localFolders ?? Substitute.For<ILocalMailFolderStore>();
+
         return new MailboxChangeSubmission(
-            localFolders ?? Substitute.For<ILocalMailFolderStore>(),
+            folders,
             records,
             states ?? Substitute.For<ILocalEmailStateStore>(),
+            copier ?? LocalMailCopiers.Over(folders),
             settings,
             auditEntries ?? Substitute.For<IMailboxMutationAuditEntryStore>(),
             signals ?? ClientSignalPublishers.ReachingNobody,

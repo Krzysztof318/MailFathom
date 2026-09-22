@@ -1872,7 +1872,9 @@ created; a destination with neither is `destination-not-found`, and a message al
 `already-in-destination`. A delete moves the message into the local trash, which a person can move it back out of. A
 delete of a message already in the trash is the one act still `recorded`: it erases the message and everything derived
 from it, so it is held for the same window as every other delete and can be withdrawn through the same route until the
-window passes. A copy is not offered on a held account.
+window passes. This surface names no copy at all, on a held account or any other: a rule is the only thing here that
+copies a message, and [what it produces on a held account](../features/mail-rules.md#when-a-change-cannot-be-made) is a
+second stored message rather than a record this route would have to report on.
 
 **Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
 flag misdescribes mail the user can still find; a move puts the mail somewhere else, and on a server without `MOVE` it

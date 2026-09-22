@@ -52,6 +52,31 @@ public sealed class MailRuleActionPlanTests
         Assert.Equal(["file-invoices"], plan.WithheldRuleNames);
     }
 
+    /// <summary>A copy is a fate like any other, so a plan carries at most one and the second rule is named as withheld.</summary>
+    /// <remarks>
+    /// On a held account a copy writes a second stored message from a payload placed before the batch's transaction,
+    /// one payload per honored copy. A plan carrying two copies of one message would be a plan a caller could answer
+    /// with one payload for both rows, which is the sharing
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+    /// refuses. This is where that cannot happen.
+    /// </remarks>
+    [Fact]
+    public void Compose_TwoRulesCopyingOneEmail_HonorsOneAndWithholdsTheOther()
+    {
+        // Arrange
+        var keeping = RuleNamed("keep-a-copy", MailRuleAction.Copy(MailFolderReference.ToAlias(Archive)));
+        var backing = RuleNamed("back-it-up", MailRuleAction.Copy(MailFolderReference.ToAlias(Backup)));
+
+        // Act
+        var plan = MailRuleActionPlan.Compose([keeping, backing]);
+
+        // Assert
+        var honored = Assert.Single(plan.Actions);
+        Assert.Equal("keep-a-copy", honored.RuleName);
+        Assert.Equal(MailboxMutation.Copy, honored.Action.Mutation);
+        Assert.Equal(["back-it-up"], plan.WithheldRuleNames);
+    }
+
     /// <summary>A rule naming a deletion leaves no room for anything a later rule asks for on the same message.</summary>
     [Fact]
     public void Compose_ADeletionFollowedByAFiling_WithholdsTheFiling()

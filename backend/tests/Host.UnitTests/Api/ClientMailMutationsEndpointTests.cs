@@ -732,6 +732,7 @@ public sealed class ClientMailMutationsEndpointTests
             localFolders,
             this.records,
             states,
+            LocalMailCopiers.Over(localFolders),
             auditSettings,
             Substitute.For<IMailboxMutationAuditEntryStore>(),
             ClientSignalPublishers.ReachingNobody,

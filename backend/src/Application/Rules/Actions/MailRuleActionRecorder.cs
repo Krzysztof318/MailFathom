@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -79,6 +80,7 @@ public sealed class MailRuleActionRecorder
     /// <param name="plan">What the matching rules together ask for.</param>
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
     /// <param name="destinations">Where the folders this batch's actions name currently are, resolved before the transaction opened.</param>
+    /// <param name="copies">The payloads this batch's held copies were placed with, placed before the transaction opened.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
     /// <returns>Every action a record was opened for, with the record that carries it, or a held account committed, with none; every action nothing was done for; and the committed changes, which the caller hands to <see cref="Announce" /> once its transaction has committed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -90,11 +92,13 @@ public sealed class MailRuleActionRecorder
         MailRuleActionPlan plan,
         MailRuleSetRevision revision,
         MailboxDestinations destinations,
+        PreparedLocalCopies copies,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(destinations);
+        ArgumentNullException.ThrowIfNull(copies);
 
         if (!revision.IsSpecified)
         {
@@ -119,6 +123,13 @@ public sealed class MailRuleActionRecorder
         var failures = new List<MailRuleActionFailure>();
         var recorded = new List<RecordedMailRuleAction>();
         var applied = new List<AppliedMailboxChange>();
+
+        // Which placed copy a copy action takes is decided by how many this email's plan has already submitted, rather
+        // than by the action's identity: every copy of one message carries the same payload, so they are interchangeable.
+        // Counting from zero here rather than across the batch is what makes it survive the retry the commit policy runs,
+        // which calls this again from the start of the same plan.
+        var placedCopies = copies.Of(storedEmailId);
+        var takenCopies = 0;
 
         foreach (var planned in plan.Actions)
         {
@@ -149,6 +160,9 @@ public sealed class MailRuleActionRecorder
                 request,
                 planned.Action.Destination is { } named ? destinations.Find(named).Destination : null,
                 heldUntil: null,
+                request.Mutation == MailboxMutation.Copy && takenCopies < placedCopies.Count
+                    ? placedCopies[takenCopies++]
+                    : null,
                 cancellationToken);
 
             if (submitted.Change is { } change)
@@ -181,6 +195,22 @@ public sealed class MailRuleActionRecorder
         return new MailRuleActionRecording(recorded, failures) { Applied = applied };
     }
 
+    /// <summary>Places the payload of every copy a batch asks for, before the transaction that records them opens.</summary>
+    /// <param name="account">The account the batch acts on.</param>
+    /// <param name="sources">The email each planned copy duplicates, one entry per copy action.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The placed copies, or none at all where the account is not held.</returns>
+    /// <remarks>
+    /// It is handed on to the submission rather than performed here, for the reason <see cref="Announce" /> is: the
+    /// choice of executor is the submission's, so a rule pass asks the recorder it already talks to instead of gaining
+    /// a second collaborator to ask about the same account.
+    /// </remarks>
+    public Task<PreparedLocalCopies> PrepareCopiesAsync(
+        MailAccountId account,
+        IReadOnlyCollection<StoredEmailId> sources,
+        CancellationToken cancellationToken) =>
+        this.submission.PrepareCopiesAsync(account, sources, cancellationToken);
+
     /// <summary>Tells the clients watching each account about the changes a held account committed.</summary>
     /// <param name="applied">What the batch committed, once its transaction has.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="applied" /> is <see langword="null" />.</exception>
@@ -198,7 +228,7 @@ public sealed class MailRuleActionRecorder
     private static MailRuleActionFailureReason RefusalOf(MailboxChangeSubmissionOutcome outcome) => outcome switch
     {
         MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.LocalDestinationFolderMissing,
-        MailboxChangeSubmissionOutcome.NotAvailableLocally => MailRuleActionFailureReason.ActionNotAvailableOnHeldAccount,
+        MailboxChangeSubmissionOutcome.SourceContentMissing => MailRuleActionFailureReason.EmailContentNotStored,
         MailboxChangeSubmissionOutcome.MessageMissing => MailRuleActionFailureReason.EmailNoLongerStored,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "The outcome wrote something, so it is not a refusal."),
     };

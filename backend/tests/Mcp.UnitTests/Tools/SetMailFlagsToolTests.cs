@@ -398,6 +398,7 @@ public sealed class SetMailFlagsToolTests
                 localFolders,
                 records,
                 states,
+                LocalMailCopiers.Over(localFolders),
                 auditSettings,
                 Substitute.For<IMailboxMutationAuditEntryStore>(),
                 ClientSignalPublishers.ReachingNobody,
