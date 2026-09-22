@@ -257,8 +257,9 @@ one of them puts a message back onto somebody's mail server and the other leaves
 occurrence it will ever write.
 
 A source that accepted the append and named nowhere it put the copy — a server advertising no RFC 4315 `UIDPLUS` — is
-the same unknown outcome and is settled the same way. Such a source is refused the switch *on*, so this is reached only
-by a server that lost the capability between the two halves.
+the same unknown outcome and is settled the same way. Such a source is not refused the switch *on* — what it advertises
+cannot be known before a connection is open — it is simply never drained, so this is reached only by a server that lost
+the capability between the two halves.
 
 ### What it costs, and how to watch it
 
