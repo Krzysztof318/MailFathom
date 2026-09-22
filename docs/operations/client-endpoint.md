@@ -3399,7 +3399,13 @@ Content-Type: application/json
 ```
 
 Each entry is handed over as the record states it — its `entry` discriminator and its members under their stored
-names — beside the place it was written at, so the order a client draws is the database's. `composing` says an answer
+names — beside the place it was written at, so the order a client draws is the database's. **What is handed over is the
+visible history only.** The record also holds what a run did on the way to an answer — each tool it called and what
+the tool returned, what its first call was charged — and every summary taken when the conversation outgrew
+`MailAnswering:MaxConversationContextTokens`; those are read by the service and never by a client. They share the one
+order, so the places a client receives can have gaps where they stand, and a read skips them in the statement itself:
+its limit counts visible entries, a cursor never lands on a technical one, and an empty page with nothing following
+means the client is caught up. `composing` says an answer
 is still being written, and `moreFollows` says more is written than one read returns, at most 250; the client reads
 again from the last place it was given. The listing returns at most 100 conversations, the one that moved last first.
 
@@ -3423,8 +3429,9 @@ Location: /api/client/agent/conversations/0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d
 The question and the opening of the answer to it — the run — are written together, and the run's identifier is the
 answer's. A repeated `messageId` answers with what the first post wrote. `scope` is `Mailbox` with no subject, or
 `Thread`, `CalendarEvent`, or `DiscoveryRun` naming the one it was asked about, and may be left out. A question asked
-while an answer is still being composed is `409`, and so is one into a full conversation — 5 000 entries, the last two
-of which are kept for an answer's ending and the agent's note after a stop, so a running answer can always be stopped —
+while an answer is still being composed is `409`, and so is one into a full conversation — 5 000 visible entries, or
+50 000 entries of the whole record, the last two of each kept for an answer's ending and the agent's note after a stop,
+so a running answer can always be stopped —
 and one that would start a conversation for a person already holding 1 000, where deleting one makes room; an empty or
 over-long text, an empty identifier, or a scope naming no subject is `400`.
 
@@ -3470,7 +3477,7 @@ and `mailfathom.mail.send`, and `mailfathom.mail.read` as well for an answer to 
 recorded. Declining carries nothing out. `DELETE /api/client/agent/conversations/{conversationId}` removes
 the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
 
-**Every write is announced as `run.advanced`** over [the signal channel](#the-signal-channel), naming the conversation,
+**Every visible write is announced as `run.advanced`** over [the signal channel](#the-signal-channel), naming the conversation,
 the run where the write belongs to one, and the place reached — never the question, a block, a status line, or a
 title. A client reads the conversation from its cursor when it hears one, on mount, and after every reconnect, so a
 client with no channel loses latency rather than any of the conversation.

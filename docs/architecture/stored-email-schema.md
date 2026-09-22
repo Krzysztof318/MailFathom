@@ -1352,8 +1352,13 @@ differs is that a conversation outlives the run that answered into it: a Discove
 swept minutes later, while a conversation is somebody's history of asking.
 
 An entry is the record and a turn is a reading of it. A question, the opening of an answer, a status line, a citation,
-a composed block, an offer, an answer's ending, and an answer to an offer are eight kinds of entry, and the turns a
-screen draws are folded out of them in order rather than stored. That is what makes the cursor read one query: a client
+a composed block, an offer, an answer's ending, and an answer to an offer are the eight kinds of the **visible history**,
+and the turns a screen draws are folded out of them in order rather than stored. Four more kinds make up the
+**technical history** beside it: a tool the run called, what the tool returned, what the run's first call sent and was
+charged, and a compaction — the summary a turn sends in place of everything up to a place, with the proposals still
+pending carried beside it. Compaction is append-only: a summary is an added entry, the next one folds in the one before
+it, and nothing it covers is removed, so a person reads every message however many summaries were taken. Both histories
+share one order. That is what makes the cursor read one query: a client
 holding a place asks for everything past it and gets exactly the entries it has not seen, whichever turn each belongs
 to.
 
@@ -1365,6 +1370,7 @@ to.
 | `StartedAt` | When the conversation was opened |
 | `LastActivityAt` | When anything was last written into it. It is what a person's history is ordered by, which is why it trails the user in the index rather than sitting in one of its own |
 | `Sequence` | The place the last entry was written at. It is advanced inside the statement that writes the next one, so the number is the database's rather than one a replica counted — and the row lock that advance takes is what serializes the two writers a conversation genuinely has, a person typing while a run composes |
+| `VisibleEntryCount` | How many entries of the visible history the conversation holds. Advanced by the same statement as `Sequence`, only for a visible entry, so the ceiling a person meets counts what they can read and a run's tool traffic never fills a conversation sooner |
 | `ComposingMessageId` | Which answer is being composed, and null where none is. It is what refuses a second answer opening while one is open, and what refuses a part of an answer arriving after that answer has ended — both as conditions on this row rather than as a check some replica performs and then acts on |
 
 | `agent_conversation_entries` column | What it records |
@@ -1372,6 +1378,7 @@ to.
 | `ConversationId`, `Sequence`, together the primary key | Which conversation this belongs to and the place it holds in it, counted from one. The place comes from the column above, so the composite key makes a gap and a repeat both impossible |
 | `Kind` | The entry contract's own published name for this kind of entry, at most 64 characters, for the reason `discovery_run_events` carries one |
 | `Payload` | The entry itself as `json`, written by its own serialization contract. `json` rather than `jsonb` for the reason stated there: an entry is a polymorphic document whose discriminator is read nowhere but first, and `jsonb` reorders the keys of everything it holds |
+| `Visible` | Whether the entry belongs to the visible history. Stored beside the payload rather than derived from `Kind`, so a read of the visible history filters in the statement — its limit counts only what a person reads — and a build that does not know a newer kind still reads the right history |
 | `AnsweredProposalAt` | Which offer this entry answers, as that offer's own place, and null on every other kind. An offer is addressed by where it was made rather than by the turn it belongs to, which is what lets the same offer be made twice and answered differently each time |
 | `ProposalState` | Where that offer now stands, by name, and null on every other kind. It is a column rather than only a field of the payload so the statement recording an answer can read what the last one said without deserializing anything |
 | `WrittenAt` | When the entry was written |
@@ -1394,8 +1401,9 @@ everything said in one.
 cascade's own lookup as well. `ix_agent_conversation_entries_answered` over `(ConversationId, AnsweredProposalAt)` is
 partial over the rows where that column is not null, because answers to offers are a small minority of what a
 conversation holds and an index over all of them would be rewritten on every block a run composes to serve a query only
-a press makes. The bounds are a conversation's entry count, refused in the same statement that would write past it and
-keeping its last two places for an answer's ending and the agent's note after a stop, the title's length, how many
+a press makes. The bounds are a conversation's entry counts — 5 000 of the visible history and 50 000 of the whole
+record, both refused in the same statement that would write past either and each keeping its last two places for an
+answer's ending and the agent's note after a stop — the title's length, how many
 entries one read returns, how many conversations one listing returns, and how many conversations one person may hold —
 1 000, counted in the statement that would start another, over the history index above.
 

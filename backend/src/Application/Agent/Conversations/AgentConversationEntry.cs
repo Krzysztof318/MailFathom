@@ -39,6 +39,10 @@ namespace MailFathom.Application.Agent.Conversations;
 [JsonDerivedType(typeof(AgentActionProposed), AgentActionProposed.Kind)]
 [JsonDerivedType(typeof(AgentAnswerEnded), AgentAnswerEnded.Kind)]
 [JsonDerivedType(typeof(AgentProposalResolved), AgentProposalResolved.Kind)]
+[JsonDerivedType(typeof(AgentToolCalled), AgentToolCalled.Kind)]
+[JsonDerivedType(typeof(AgentToolAnswered), AgentToolAnswered.Kind)]
+[JsonDerivedType(typeof(AgentModelCharged), AgentModelCharged.Kind)]
+[JsonDerivedType(typeof(AgentConversationCompacted), AgentConversationCompacted.Kind)]
 public abstract record AgentConversationEntry
 {
     private protected AgentConversationEntry()
@@ -79,6 +83,15 @@ public abstract record AgentConversationEntry
     /// </remarks>
     [JsonIgnore]
     public abstract string EntryName { get; }
+
+    /// <summary>Gets which of the conversation's two readings this entry belongs to.</summary>
+    /// <remarks>
+    /// Abstract rather than defaulted, so a kind added to the hierarchy cannot be declared without saying whether a
+    /// person is shown it. Overridden with <see cref="JsonIgnoreAttribute" /> repeated, for the reason
+    /// <see cref="EntryName" /> states.
+    /// </remarks>
+    [JsonIgnore]
+    public abstract AgentConversationHistory History { get; }
 
     /// <summary>Gets the answer this entry is part of, and <see langword="null" /> where it belongs to no answer being composed.</summary>
     /// <remarks>

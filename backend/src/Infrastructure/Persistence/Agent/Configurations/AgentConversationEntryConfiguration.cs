@@ -51,6 +51,8 @@ internal sealed class AgentConversationEntryConfiguration : IEntityTypeConfigura
             .HasColumnName(AgentConversationEntryEntity.PayloadColumnName)
             .HasColumnType("json")
             .IsRequired();
+        entity.Property(written => written.Visible)
+            .HasColumnName(AgentConversationEntryEntity.VisibleColumnName);
         entity.Property(written => written.AnsweredProposalAt)
             .HasColumnName(AgentConversationEntryEntity.AnsweredProposalAtColumnName);
         entity.Property(written => written.ProposalState)

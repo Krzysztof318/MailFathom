@@ -51,6 +51,10 @@ public sealed record AgentMessageWritten(
     /// <inheritdoc />
     [JsonIgnore]
     public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
 }
 
 /// <summary>The agent's answer opens, and from here until it ends everything the run composes is written into it.</summary>
@@ -69,6 +73,10 @@ public sealed record AgentAnswerStarted(AgentMessageId MessageId) : AgentConvers
     /// <inheritdoc />
     [JsonIgnore]
     public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -104,6 +112,10 @@ public sealed record AgentStatusReported(AgentMessageId MessageId, PresentationT
 
     /// <inheritdoc />
     [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
+
+    /// <inheritdoc />
+    [JsonIgnore]
     public override AgentMessageId? ComposedInto => this.MessageId;
 }
 
@@ -133,6 +145,10 @@ public sealed record AgentCitationDeclared(AgentMessageId MessageId, Presentatio
 
     /// <inheritdoc />
     [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
+
+    /// <inheritdoc />
+    [JsonIgnore]
     public override AgentMessageId? ComposedInto => this.MessageId;
 }
 
@@ -158,6 +174,10 @@ public sealed record AgentBlockComposed(AgentMessageId MessageId, PresentationBl
     /// <inheritdoc />
     [JsonIgnore]
     public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -206,6 +226,10 @@ public sealed record AgentActionProposed(AgentMessageId MessageId, PresentationB
 
     /// <inheritdoc />
     [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
+
+    /// <inheritdoc />
+    [JsonIgnore]
     public override AgentMessageId? ComposedInto => this.MessageId;
 }
 
@@ -229,6 +253,10 @@ public sealed record AgentAnswerEnded(AgentMessageId MessageId, AgentAnswerOutco
     /// <inheritdoc />
     [JsonIgnore]
     public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -269,6 +297,195 @@ public sealed record AgentProposalResolved(long ProposedAt, AgentProposalState S
     /// <inheritdoc />
     [JsonIgnore]
     public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Visible;
+}
+
+/// <summary>The model asked for a tool while composing an answer, and this is what it asked for.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="CallId">What the model named the call, which the tool's answer is written against.</param>
+/// <param name="ToolName">The tool it asked for.</param>
+/// <param name="Arguments">The arguments it passed, as the JSON document the model sent.</param>
+/// <remarks>
+/// <para>
+/// <strong>It belongs to the technical history alone.</strong> A person sees what a run did through its status line and
+/// what it composed; the call itself was written to compose the model's next input, and it is recorded so that input can
+/// be rebuilt from the record rather than inferred from it. Together with <see cref="AgentToolAnswered" /> it is every
+/// step a run's tool loop took, in the order it took them.
+/// </para>
+/// <para>
+/// The arguments are the model's own and routinely name a thread, a person, or a search a person asked for, so they are
+/// sensitive exactly as the rest of the record is.
+/// </para>
+/// </remarks>
+/// <exception cref="ArgumentException">Thrown when <paramref name="CallId" /> or <paramref name="ToolName" /> is empty.</exception>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Arguments" /> is <see langword="null" />.</exception>
+public sealed record AgentToolCalled(AgentMessageId MessageId, string CallId, string ToolName, string Arguments)
+    : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "toolCall";
+
+    /// <summary>Gets what the model named the call.</summary>
+    public string CallId { get; } = Requirement.Named(CallId, nameof(CallId));
+
+    /// <summary>Gets the tool the model asked for.</summary>
+    public string ToolName { get; } = Requirement.Named(ToolName, nameof(ToolName));
+
+    /// <summary>Gets the arguments the model passed, as it sent them.</summary>
+    public string Arguments { get; } = Arguments ?? throw new ArgumentNullException(nameof(Arguments));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Technical;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>A tool answered a call the model made, and this is what the model was handed back.</summary>
+/// <param name="MessageId">The answer being composed.</param>
+/// <param name="CallId">The call this answers, as the model named it.</param>
+/// <param name="Result">What the tool returned, as the document the model was sent.</param>
+/// <remarks>
+/// Technical alone, for the reason <see cref="AgentToolCalled" /> is. A tool's answer quotes the person's mail, calendar,
+/// and tasks as the model read them, so it is the most mail-derived entry the record holds — and it is written here,
+/// with the conversation, precisely so that it goes wherever the conversation goes and nowhere else.
+/// </remarks>
+/// <exception cref="ArgumentException">Thrown when <paramref name="CallId" /> is empty.</exception>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Result" /> is <see langword="null" />.</exception>
+public sealed record AgentToolAnswered(AgentMessageId MessageId, string CallId, string Result) : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "toolResult";
+
+    /// <summary>Gets the call this answers.</summary>
+    public string CallId { get; } = Requirement.Named(CallId, nameof(CallId));
+
+    /// <summary>Gets what the tool returned.</summary>
+    public string Result { get; } = Result ?? throw new ArgumentNullException(nameof(Result));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Technical;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>What the first call of a run sent and what the provider charged for it.</summary>
+/// <param name="MessageId">The answer whose run made the call.</param>
+/// <param name="SentCharacters">How many characters of text the call sent.</param>
+/// <param name="InputTokens">How many input tokens the provider reported charging for them.</param>
+/// <remarks>
+/// <para>
+/// This is what the budget a turn is measured against is corrected from. A conversation's size is estimated in
+/// characters, because that is what can be counted before anything is sent, and converted into tokens at the rate the
+/// last turn was actually charged — so the estimate follows whatever model the deployment is running without this
+/// repository keeping a tokenizer for anybody's model.
+/// </para>
+/// <para>
+/// Only the first call is recorded, because it is the one whose input is the conversation itself: every later call of
+/// the same run adds the run's own tool traffic, which says nothing about how the next turn's history will be charged.
+/// A provider that reports no usage leaves no entry, and the estimate keeps the rate it had.
+/// </para>
+/// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when either count is not positive.</exception>
+public sealed record AgentModelCharged(AgentMessageId MessageId, long SentCharacters, long InputTokens)
+    : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "charge";
+
+    /// <summary>Gets how many characters of text the call sent.</summary>
+    public long SentCharacters { get; } = Requirement.Counted(SentCharacters, nameof(SentCharacters));
+
+    /// <summary>Gets how many input tokens the provider charged for them.</summary>
+    public long InputTokens { get; } = Requirement.Counted(InputTokens, nameof(InputTokens));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Technical;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
+}
+
+/// <summary>What came earlier in the conversation was summarised, and this is the summary sent in its place from now on.</summary>
+/// <param name="MessageId">The answer whose turn the compaction was taken for.</param>
+/// <param name="Through">The last place the summary stands in for: everything from the conversation's beginning up to and including it.</param>
+/// <param name="Summary">The summary the compaction produced, which already folds in the summary before it.</param>
+/// <param name="Carried">The places of the proposals still pending when the compaction ran, which a turn carries verbatim beside the summary rather than inside it.</param>
+/// <remarks>
+/// <para>
+/// <strong>A compaction adds and never replaces.</strong> Nothing the summary covers is removed, rewritten, or
+/// overwritten — not the turns, not the tool traffic under them, and not the summary before this one — so what was said
+/// stays recoverable whatever a summariser made of it. The record of a long conversation reads as the whole conversation
+/// plus every summary taken over it, in the order both happened, and the row this is written as states when it ran.
+/// </para>
+/// <para>
+/// <strong>Which summary a turn was sent is read from the order.</strong> A turn is composed from the newest compaction
+/// written before its answer opened, followed by every turn written after the place that compaction covers; the answer
+/// named here is the one whose turn first used it. So a turn's model input can be rebuilt from the record alone, and two
+/// turns no compaction separates send the same leading part byte for byte — which is what a provider's prompt cache is
+/// keyed on.
+/// </para>
+/// <para>
+/// A proposal still pending is live work a summary could not be accepted from, so it is carried beside the summary
+/// rather than folded into it, and the places carried are recorded here so every turn this compaction serves carries the
+/// same ones.
+/// </para>
+/// </remarks>
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="Through" /> is not a written place, or when a carried place is not one the summary covers.</exception>
+/// <exception cref="ArgumentException">Thrown when <paramref name="Summary" /> is empty.</exception>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="Carried" /> is <see langword="null" />.</exception>
+public sealed record AgentConversationCompacted(
+    AgentMessageId MessageId,
+    long Through,
+    string Summary,
+    IReadOnlyList<long> Carried)
+    : AgentConversationEntry
+{
+    /// <summary>The value the type discriminator carries on the wire.</summary>
+    public const string Kind = "compaction";
+
+    /// <summary>Gets the last place the summary stands in for.</summary>
+    public long Through { get; } = Requirement.Written(Through, nameof(Through));
+
+    /// <summary>Gets the summary sent in place of everything up to <see cref="Through" />.</summary>
+    public string Summary { get; } = Requirement.Named(Summary, nameof(Summary));
+
+    /// <summary>Gets the places of the proposals carried verbatim beside the summary.</summary>
+    public IReadOnlyList<long> Carried { get; } = Requirement.Covered(Carried, Through, nameof(Carried));
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override string EntryName => Kind;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentConversationHistory History => AgentConversationHistory.Technical;
+
+    /// <inheritdoc />
+    [JsonIgnore]
+    public override AgentMessageId? ComposedInto => this.MessageId;
 }
 
 /// <summary>The checks the entries above share, kept here so each states its rule once.</summary>
@@ -326,6 +543,30 @@ file static class Requirement
                 parameter,
                 proposedAt,
                 "A proposal is answered at the place it was written, which is counted from one.");
+
+    internal static string Named(string value, string parameter) =>
+        string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A technical entry names what it records.", parameter)
+            : value;
+
+    internal static long Counted(long count, string parameter) =>
+        count > 0
+            ? count
+            : throw new ArgumentOutOfRangeException(parameter, count, "A charge is recorded for a call that sent something and was charged for it.");
+
+    internal static IReadOnlyList<long> Covered(IReadOnlyList<long> carried, long through, string parameter)
+    {
+        ArgumentNullException.ThrowIfNull(carried, parameter);
+
+        if (carried.Any(place => place <= 0 || place > through))
+        {
+            throw new ArgumentOutOfRangeException(
+                parameter,
+                "A carried proposal is one the summary covers, so its place lies between the beginning and the last place covered.");
+        }
+
+        return carried;
+    }
 
     internal static AgentProposalState Resolved(AgentProposalState state, string parameter)
     {

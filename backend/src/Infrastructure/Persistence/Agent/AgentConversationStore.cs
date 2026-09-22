@@ -47,9 +47,13 @@ namespace MailFathom.Infrastructure.Persistence.Agent;
 [RequiresIntegrationCoverage]
 internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAgentConversationStore
 {
-    /// <summary>The last place anything but an answer's ending, or the agent's note after a stop, may take.</summary>
+    /// <summary>The last visible place anything but an answer's ending, or the agent's note after a stop, may take.</summary>
     private const long MostOrdinaryEntries =
         AgentConversationBounds.MaximumEntries - AgentConversationBounds.PlacesKeptForAnEnding;
+
+    /// <summary>The last place in the record anything but an answer's ending, or the agent's note after a stop, may take.</summary>
+    private const long MostOrdinaryRecordedEntries =
+        AgentConversationBounds.MaximumRecordedEntries - AgentConversationBounds.PlacesKeptForAnEnding;
 
     /// <summary>Starts a conversation, and says nothing happened where one already stands under that identifier.</summary>
     /// <remarks>
@@ -100,6 +104,12 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// executing.
     /// </para>
     /// <para>
+    /// Full is judged against two counters the same statement advances. Every entry counts against the record's own
+    /// ceiling; an entry of the visible history counts against the ceiling a person meets as well, and a technical one
+    /// does not — so a run's tool traffic and a compaction's summary never make a conversation full sooner for the person
+    /// working in it. The entry says which it is, and the row stores that beside the payload for the reading statement.
+    /// </para>
+    /// <para>
     /// The last places are kept for an answer's ending and the agent's note after a stop: every other entry stops
     /// <see cref="AgentConversationBounds.PlacesKeptForAnEnding" /> short of the ceiling, so an answer being composed
     /// when a conversation fills can still be ended, whether by its run or by a person stopping it. A refused ending
@@ -110,6 +120,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         WITH advanced AS (
             UPDATE "{AgentConversationEntity.TableName}" c
             SET "{AgentConversationEntity.SequenceColumnName}" = c."{AgentConversationEntity.SequenceColumnName}" + 1,
+                "{AgentConversationEntity.VisibleEntryCountColumnName}" = c."{AgentConversationEntity.VisibleEntryCountColumnName}" + CASE WHEN @visible THEN 1 ELSE 0 END,
                 "{AgentConversationEntity.LastActivityAtColumnName}" = @now,
                 "{AgentConversationEntity.ComposingMessageIdColumnName}" = CASE
                     WHEN @opensTheAnswer THEN @opensMessageId
@@ -117,14 +128,15 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
                     ELSE c."{AgentConversationEntity.ComposingMessageIdColumnName}" END
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < CASE WHEN @takesAKeptPlace THEN @mostEntries ELSE @mostOrdinaryEntries END
+              AND c."{AgentConversationEntity.SequenceColumnName}" < CASE WHEN @takesAKeptPlace THEN @mostRecordedEntries ELSE @mostOrdinaryRecordedEntries END
+              AND (NOT @visible OR c."{AgentConversationEntity.VisibleEntryCountColumnName}" < CASE WHEN @takesAKeptPlace THEN @mostEntries ELSE @mostOrdinaryEntries END)
               AND (NOT @opensTheAnswer OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" IS NULL)
               AND (@composedInto IS NULL OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" = @composedInto)
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
         )
         INSERT INTO "{AgentConversationEntryEntity.TableName}"
-            ("{AgentConversationEntryEntity.ConversationIdColumnName}", "{AgentConversationEntryEntity.SequenceColumnName}", "{AgentConversationEntryEntity.KindColumnName}", "{AgentConversationEntryEntity.PayloadColumnName}", "{AgentConversationEntryEntity.WrittenAtColumnName}")
-        SELECT a.conversation, a.place, @kind, CAST(@payload AS json), @now
+            ("{AgentConversationEntryEntity.ConversationIdColumnName}", "{AgentConversationEntryEntity.SequenceColumnName}", "{AgentConversationEntryEntity.KindColumnName}", "{AgentConversationEntryEntity.PayloadColumnName}", "{AgentConversationEntryEntity.VisibleColumnName}", "{AgentConversationEntryEntity.WrittenAtColumnName}")
+        SELECT a.conversation, a.place, @kind, CAST(@payload AS json), @visible, @now
         FROM advanced a
         RETURNING "{AgentConversationEntryEntity.SequenceColumnName}";
         """;
@@ -149,7 +161,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         FOR UPDATE;
         """;
 
-    /// <summary>Holds this person's conversation while a message of theirs is posted into it, and says what it is composing and where it stands.</summary>
+    /// <summary>Holds this person's conversation while a message of theirs is posted into it, and says what it is composing and how far each of its counters has reached.</summary>
     /// <remarks>
     /// Taken first and in the same transaction as the writes that follow, for the reason
     /// <see cref="HoldConversationStatement" /> gives: a post decides from what the conversation is composing, and two
@@ -157,7 +169,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// one answer for a conversation that is somebody else's and one that never existed.
     /// </remarks>
     private const string HoldForPostingStatement = $"""
-        SELECT "{AgentConversationEntity.ComposingMessageIdColumnName}", "{AgentConversationEntity.SequenceColumnName}"
+        SELECT "{AgentConversationEntity.ComposingMessageIdColumnName}", "{AgentConversationEntity.SequenceColumnName}", "{AgentConversationEntity.VisibleEntryCountColumnName}"
         FROM "{AgentConversationEntity.TableName}"
         WHERE "{AgentConversationEntity.IdColumnName}" = @id
           AND "{AgentConversationEntity.UserIdColumnName}" = @userId
@@ -221,19 +233,21 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         advanced AS (
             UPDATE "{AgentConversationEntity.TableName}" c
             SET "{AgentConversationEntity.SequenceColumnName}" = c."{AgentConversationEntity.SequenceColumnName}" + 1,
+                "{AgentConversationEntity.VisibleEntryCountColumnName}" = c."{AgentConversationEntity.VisibleEntryCountColumnName}" + 1,
                 "{AgentConversationEntity.LastActivityAtColumnName}" = @now
             FROM standing s
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostOrdinaryEntries
+              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostOrdinaryRecordedEntries
+              AND c."{AgentConversationEntity.VisibleEntryCountColumnName}" < @mostOrdinaryEntries
               AND s.offered
               AND ((s.stands IS NULL AND @state IN (@accepted, @declined))
                    OR (s.stands = @accepted AND @state = @failed))
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
         )
         INSERT INTO "{AgentConversationEntryEntity.TableName}"
-            ("{AgentConversationEntryEntity.ConversationIdColumnName}", "{AgentConversationEntryEntity.SequenceColumnName}", "{AgentConversationEntryEntity.KindColumnName}", "{AgentConversationEntryEntity.PayloadColumnName}", "{AgentConversationEntryEntity.AnsweredProposalAtColumnName}", "{AgentConversationEntryEntity.ProposalStateColumnName}", "{AgentConversationEntryEntity.WrittenAtColumnName}")
-        SELECT a.conversation, a.place, @kind, CAST(@payload AS json), @proposedAt, @state, @now
+            ("{AgentConversationEntryEntity.ConversationIdColumnName}", "{AgentConversationEntryEntity.SequenceColumnName}", "{AgentConversationEntryEntity.KindColumnName}", "{AgentConversationEntryEntity.PayloadColumnName}", "{AgentConversationEntryEntity.VisibleColumnName}", "{AgentConversationEntryEntity.AnsweredProposalAtColumnName}", "{AgentConversationEntryEntity.ProposalStateColumnName}", "{AgentConversationEntryEntity.WrittenAtColumnName}")
+        SELECT a.conversation, a.place, @kind, CAST(@payload AS json), TRUE, @proposedAt, @state, @now
         FROM advanced a
         RETURNING "{AgentConversationEntryEntity.SequenceColumnName}";
         """;
@@ -257,6 +271,12 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// statement derives its place, so the row is the only place a conversation's order is recorded and the caller
     /// stamps it back onto what it read.
     /// </para>
+    /// <para>
+    /// A read of the visible history passes over the technical rows inside the statement rather than after it, so the
+    /// limit counts visible entries: a page is short only where the history is, and it never ends on a place a person is
+    /// not shown — which is what keeps a cursor over the shared order from being handed a technical entry or stranded
+    /// behind a run of them.
+    /// </para>
     /// </remarks>
     private const string ReadConversationStatement = $"""
         SELECT c."{AgentConversationEntity.TitleColumnName}",
@@ -272,6 +292,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
               AND w."{AgentConversationEntryEntity.SequenceColumnName}" > CASE
                   WHEN @afterSequence > c."{AgentConversationEntity.SequenceColumnName}" THEN 0
                   ELSE @afterSequence END
+              AND (@technical OR w."{AgentConversationEntryEntity.VisibleColumnName}")
             ORDER BY w."{AgentConversationEntryEntity.SequenceColumnName}"
             LIMIT @readLimit) e ON TRUE
         WHERE c."{AgentConversationEntity.IdColumnName}" = @id AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
@@ -449,6 +470,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         command.Parameters.AddWithValue("declined", AgentProposalState.Declined.ToString());
         command.Parameters.AddWithValue("failed", AgentProposalState.Failed.ToString());
         command.Parameters.AddWithValue("mostOrdinaryEntries", MostOrdinaryEntries);
+        command.Parameters.AddWithValue("mostOrdinaryRecordedEntries", MostOrdinaryRecordedEntries);
 
         var place = await command.ExecuteScalarAsync(cancellationToken) as long?;
 
@@ -461,10 +483,16 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     public async Task<AgentConversationReading?> ReadAsync(
         AgentConversationId id,
         UserId user,
+        AgentConversationHistory history,
         long afterSequence,
         int limit,
         CancellationToken cancellationToken)
     {
+        if (!Enum.IsDefined(history))
+        {
+            throw new ArgumentOutOfRangeException(nameof(history), history, "A read returns one of the conversation's two declared readings.");
+        }
+
         ArgumentOutOfRangeException.ThrowIfNegative(afterSequence);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, AgentConversationBounds.MaximumEntriesPerRead);
@@ -473,6 +501,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         command.Parameters.AddWithValue("id", id.Value);
         command.Parameters.AddWithValue("userId", user.Value);
         command.Parameters.AddWithValue("afterSequence", afterSequence);
+        command.Parameters.AddWithValue("technical", history is AgentConversationHistory.Technical);
 
         // One more than the page holds, so that whether a following one exists is observed rather than counted.
         command.Parameters.AddWithValue("readLimit", limit + 1);
@@ -610,9 +639,12 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         command.Parameters.AddWithValue("endsTheAnswer", entry.EndsTheAnswer);
         command.Parameters.Add(Identity("opensMessageId", entry is AgentAnswerStarted started ? started.MessageId : null));
         command.Parameters.Add(Identity("composedInto", entry.ComposedInto));
+        command.Parameters.AddWithValue("visible", entry.History is AgentConversationHistory.Visible);
         command.Parameters.AddWithValue("takesAKeptPlace", takesAKeptPlace);
         command.Parameters.AddWithValue("mostEntries", (long)AgentConversationBounds.MaximumEntries);
         command.Parameters.AddWithValue("mostOrdinaryEntries", MostOrdinaryEntries);
+        command.Parameters.AddWithValue("mostRecordedEntries", (long)AgentConversationBounds.MaximumRecordedEntries);
+        command.Parameters.AddWithValue("mostOrdinaryRecordedEntries", MostOrdinaryRecordedEntries);
 
         return await command.ExecuteScalarAsync(cancellationToken) as long?;
     }
@@ -674,7 +706,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         AgentConversationEntry[] entries = steering ? [message] : [message, new AgentAnswerStarted(answer)];
 
-        if (held.Reached + entries.Length > MostOrdinaryEntries)
+        if (held.Visible + entries.Length > MostOrdinaryEntries || held.Reached + entries.Length > MostOrdinaryRecordedEntries)
         {
             return AgentMessagePosting.Refused(AgentMessagePostingOutcome.ConversationFull);
         }
@@ -713,7 +745,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         return (reader.GetBoolean(0), reader.GetBoolean(1), reader.GetBoolean(2));
     }
 
-    private static async Task<(AgentMessageId? Composing, long Reached)?> HoldForPostingAsync(
+    private static async Task<(AgentMessageId? Composing, long Reached, long Visible)?> HoldForPostingAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction posting,
         AgentConversationId id,
@@ -735,7 +767,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
             ? (AgentMessageId?)null
             : AgentMessageId.Create(reader.GetGuid(0));
 
-        return (composing, reader.GetInt64(1));
+        return (composing, reader.GetInt64(1), reader.GetInt64(2));
     }
 
     private static async Task<(long WrittenAt, AgentMessageId? Opened)?> FindPostedAsync(

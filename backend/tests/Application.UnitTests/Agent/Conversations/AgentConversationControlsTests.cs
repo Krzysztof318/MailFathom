@@ -192,7 +192,7 @@ public sealed class AgentConversationControlsTests
             .StopAsync(Conversation, SyntheticUser.Deployment, Run, Arg.Any<AgentMessageWritten>(), Now, Arg.Any<CancellationToken>())
             .Returns((long?)null);
         this.store
-            .ReadAsync(Conversation, SyntheticUser.Deployment, 0, 1, Arg.Any<CancellationToken>())
+            .ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Visible, 0, 1, Arg.Any<CancellationToken>())
             .Returns(conversationIsTheirs ? new AgentConversationReading(null, Now, false, [], false) : null);
 
         // Act

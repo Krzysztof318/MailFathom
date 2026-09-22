@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Emails.Search;
 
 namespace MailFathom.Host.Configuration.Answering;
@@ -81,6 +82,17 @@ internal sealed class MailAnsweringOptions : IValidatableObject
     [Range(1, 1_000)]
     public int MaxCitations { get; set; } = 20;
 
+    /// <summary>Gets or sets the greatest number of tokens one turn of an Agent conversation may send before its earlier part is compacted.</summary>
+    /// <remarks>
+    /// One number for the whole deployment rather than one per person or per conversation, and not read from the model:
+    /// a provider's own window is what a call would be refused at, while this is what the deployment has decided to
+    /// spend per turn. A conversation that outgrows it has its oldest turns summarised, and the turn sends the summary
+    /// in their place; nothing a person reads back changes. Raise it on a model with a larger window and a price that
+    /// allows it.
+    /// </remarks>
+    [Range(AgentContextBudget.MinimumTokens, AgentContextBudget.MaximumTokens)]
+    public int MaxConversationContextTokens { get; set; } = AgentContextBudget.DefaultTokens;
+
     /// <summary>Gets or sets how long one period lasts before what was spent in it is forgotten.</summary>
     /// <remarks>
     /// An hour by default rather than a day, because a ceiling an operator only meets once a day is one they meet after
@@ -128,6 +140,15 @@ internal sealed class MailAnsweringOptions : IValidatableObject
             yield return new ValidationResult(
                 $"MailAnswering declares MaxRetrievedCharactersPerRun of {this.MaxRetrievedCharactersPerRun}, below the MaxCharactersPerPassage of {this.MaxCharactersPerPassage}, so no lookup could hand over even one passage.",
                 [nameof(this.MaxRetrievedCharactersPerRun)]);
+        }
+
+        // A turn sends at most the conversation budget on its first call, which the run's own ceiling then counts, so a
+        // budget above that ceiling composes turns whose later calls the run is bound to refuse.
+        if (this.MaxConversationContextTokens > this.MaxTokensPerRun)
+        {
+            yield return new ValidationResult(
+                $"MailAnswering declares MaxConversationContextTokens of {this.MaxConversationContextTokens}, above the MaxTokensPerRun of {this.MaxTokensPerRun}, so a long Agent conversation would send more in one call than its whole run may spend.",
+                [nameof(this.MaxConversationContextTokens)]);
         }
 
         if (this.AggregatePeriod <= TimeSpan.Zero)

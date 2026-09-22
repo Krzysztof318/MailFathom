@@ -297,6 +297,31 @@ public sealed class AgentConversationTests
         Assert.Throws<ArgumentException>(() => Compose(entries));
     }
 
+    /// <summary>What a run did on the way to its answer and every summary taken of the conversation are the technical history, which the reading a person sees passes over.</summary>
+    [Fact]
+    public void Compose_ToolTrafficAndACompactionAmongTheTurns_ReadsOnlyTheTurns()
+    {
+        // Arrange
+        var asked = AgentMessageId.New();
+        var answered = AgentMessageId.New();
+        var entries = AgentConversationExample.Written(
+            AgentConversationExample.Question(asked, "Where did we land on the price?"),
+            new AgentAnswerStarted(answered),
+            new AgentConversationCompacted(answered, Through: 1, "They asked about the price.", Carried: []),
+            new AgentToolCalled(answered, "call-1", "search_mail", "{}"),
+            new AgentToolAnswered(answered, "call-1", "[]"),
+            new AgentModelCharged(answered, SentCharacters: 900, InputTokens: 250),
+            new AgentBlockComposed(answered, AgentConversationExample.Reading()),
+            new AgentAnswerEnded(answered, AgentAnswerOutcome.Completed));
+
+        // Act
+        var conversation = Compose(entries);
+
+        // Assert
+        Assert.Equal([asked, answered], conversation.Messages.Select(static message => message.Id));
+        Assert.Equal(AgentAnswerOutcome.Completed, conversation.Messages[^1].Outcome);
+    }
+
     private static AgentConversation Compose(IReadOnlyList<AgentConversationEntry> entries) =>
         AgentConversation.Compose(AgentConversationExample.Conversation, "The price thread", StartedAt, entries);
 }

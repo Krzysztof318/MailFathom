@@ -83,7 +83,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             await composing.TrySetTitleAsync(conversation, UserId.Create(user), PresentationText.Create("The price thread"), cancellationToken);
 
             // Act
-            var read = await reading.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
+            var read = await reading.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 50, cancellationToken);
 
             // Assert
             Assert.NotNull(read);
@@ -137,9 +137,9 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             await store.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
 
             // Act
-            var tail = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 2, limit: 50, cancellationToken);
-            var unreached = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 99, limit: 50, cancellationToken);
-            var somebodyElses = await store.ReadAsync(conversation, UserId.Create(Guid.NewGuid()), afterSequence: 0, limit: 50, cancellationToken);
+            var tail = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 2, limit: 50, cancellationToken);
+            var unreached = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 99, limit: 50, cancellationToken);
+            var somebodyElses = await store.ReadAsync(conversation, UserId.Create(Guid.NewGuid()), AgentConversationHistory.Visible, afterSequence: 0, limit: 50, cancellationToken);
 
             // Assert
             Assert.Equal([3L], tail?.Entries.Select(written => written.Sequence));
@@ -178,14 +178,56 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             }
 
             // Act
-            var page = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 2, cancellationToken);
-            var rest = await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 2, limit: 10, cancellationToken);
+            var page = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 2, cancellationToken);
+            var rest = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 2, limit: 10, cancellationToken);
 
             // Assert
             Assert.Equal([1L, 2L], page?.Entries.Select(written => written.Sequence));
             Assert.True(page?.MoreFollows);
             Assert.Equal([3L, 4L, 5L], rest?.Entries.Select(written => written.Sequence));
             Assert.False(rest?.MoreFollows);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+        }
+    }
+
+    /// <summary>A read of the visible history passes over the technical entries in the statement itself, so its limit counts what a person sees and its cursor never stalls behind a run's tool traffic.</summary>
+    [Fact]
+    public async Task ReadAsync_TechnicalEntriesAmongTheVisibleOnes_AreReadOnlyByTheTechnicalReading()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var conversation = await StartedAsync(store, user, cancellationToken);
+            var answer = AgentMessageId.New();
+
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentAnswerStarted(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentToolCalled(answer, "call-1", "search_mail", "{}"), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentToolAnswered(answer, "call-1", "[]"), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), Composed(answer), Instant, cancellationToken);
+            await store.AppendAsync(conversation, UserId.Create(user), new AgentModelCharged(answer, 900, 250), Instant, cancellationToken);
+
+            // Act
+            var first = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 2, cancellationToken);
+            var after = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 4, limit: 2, cancellationToken);
+            var technical = await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Technical, afterSequence: 0, limit: 10, cancellationToken);
+
+            // Assert
+            Assert.Equal([1L, 4L], first?.Entries.Select(written => written.Sequence));
+            Assert.False(first?.MoreFollows);
+            Assert.Empty(after?.Entries ?? [new AgentAnswerStarted(answer)]);
+            Assert.False(after?.MoreFollows);
+            Assert.Equal([1L, 2L, 3L, 4L, 5L], technical?.Entries.Select(written => written.Sequence));
+            Assert.IsType<AgentToolCalled>(technical?.Entries[1]);
         }
         finally
         {
@@ -233,7 +275,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.Equal(AgentConversationBounds.MaximumEntries, noted);
             Assert.Null(pastTheEnd);
 
-            var tail = await store.ReadAsync(conversation, person, afterSequence: lastOrdinaryPlace, limit: 10, cancellationToken);
+            var tail = await store.ReadAsync(conversation, person, AgentConversationHistory.Visible, afterSequence: lastOrdinaryPlace, limit: 10, cancellationToken);
             Assert.NotNull(tail);
             Assert.False(tail.Composing);
             Assert.Equal([AgentAnswerEnded.Kind, AgentMessageWritten.Kind], tail.Entries.Select(written => written.EntryName));
@@ -286,7 +328,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.Null(refused);
             Assert.Equal(4L, note);
 
-            var read = await composing.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 50, cancellationToken);
+            var read = await composing.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 50, cancellationToken);
             Assert.False(read?.Composing);
             Assert.Equal(
                 [AgentAnswerStarted.Kind, AgentBlockComposed.Kind, AgentAnswerEnded.Kind, AgentMessageWritten.Kind],
@@ -472,7 +514,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.Equal((AgentMessagePostingOutcome.Written, 6L), (askedAfter.Outcome, askedAfter.Reached));
             Assert.Equal(AgentMessagePostingOutcome.NoSuchConversation, askedAsSomebodyElse.Outcome);
 
-            var read = await store.ReadAsync(conversation, person, afterSequence: 0, limit: 50, cancellationToken);
+            var read = await store.ReadAsync(conversation, person, AgentConversationHistory.Visible, afterSequence: 0, limit: 50, cancellationToken);
             Assert.NotNull(read);
             Assert.True(read.Composing);
             Assert.Equal(5, AgentConversation.Compose(conversation, read.Title, read.StartedAt, read.Entries).Messages.Count);
@@ -681,8 +723,8 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             Assert.False(removedSomebodyElses);
             Assert.True(removed);
             Assert.Equal(0, await CountEntriesOfAsync(host, newer, cancellationToken));
-            Assert.Null(await store.ReadAsync(newer, UserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
-            Assert.NotNull(await store.ReadAsync(theirs, UserId.Create(somebodyElse), afterSequence: 0, limit: 10, cancellationToken));
+            Assert.Null(await store.ReadAsync(newer, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 10, cancellationToken));
+            Assert.NotNull(await store.ReadAsync(theirs, UserId.Create(somebodyElse), AgentConversationHistory.Visible, afterSequence: 0, limit: 10, cancellationToken));
         }
         finally
         {
@@ -716,7 +758,7 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
 
             // Assert
             Assert.False(startedTwice);
-            Assert.Null(await store.ReadAsync(conversation, UserId.Create(user), afterSequence: 0, limit: 10, cancellationToken));
+            Assert.Null(await store.ReadAsync(conversation, UserId.Create(user), AgentConversationHistory.Visible, afterSequence: 0, limit: 10, cancellationToken));
             Assert.Equal(0, await CountEntriesOfAsync(host, conversation, cancellationToken));
         }
         finally

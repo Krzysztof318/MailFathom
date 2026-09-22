@@ -57,6 +57,9 @@ internal sealed class AgentConversationEntity
     /// <summary>The column holding how far the conversation's order has reached, named here for the same reason the table is.</summary>
     internal const string SequenceColumnName = "Sequence";
 
+    /// <summary>The column holding how many entries of the visible history the conversation holds, named here for the same reason the table is.</summary>
+    internal const string VisibleEntryCountColumnName = "VisibleEntryCount";
+
     /// <summary>The column naming the answer currently being composed, named here for the same reason the table is.</summary>
     internal const string ComposingMessageIdColumnName = "ComposingMessageId";
 
@@ -80,8 +83,17 @@ internal sealed class AgentConversationEntity
     public DateTimeOffset LastActivityAt { get; set; }
 
     /// <summary>Gets or sets how far the conversation's order has reached, which is also how many entries it holds.</summary>
-    /// <remarks>Advanced inside the statement that writes an entry, which is what makes the place a row is written at the database's decision and what holds the conversation to its ceiling.</remarks>
+    /// <remarks>Advanced inside the statement that writes an entry, which is what makes the place a row is written at the database's decision and what holds the record to its ceiling.</remarks>
     public long Sequence { get; set; }
+
+    /// <summary>Gets or sets how many of the conversation's entries belong to the visible history.</summary>
+    /// <remarks>
+    /// The second counter beside <see cref="Sequence" />, advanced by the same statement only when the entry it writes is
+    /// one a person reads back. It is what holds a conversation to the ceiling a person meets, so the technical history
+    /// a run writes underneath — its tool traffic, its charges, its summaries — never shortens what a person can keep
+    /// working in.
+    /// </remarks>
+    public long VisibleEntryCount { get; set; }
 
     /// <summary>Gets or sets the answer a run is composing into, and <see langword="null" /> while none is being composed.</summary>
     /// <remarks>

@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Agent.Answering;
+
 namespace MailFathom.Application.Retrieval.AskMail;
 
 /// <summary>Every ceiling one question about the mailbox is subject to, from what a lookup hands over to what a period may spend.</summary>
@@ -9,12 +11,13 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <param name="Run">What one run may send, call, and consume.</param>
 /// <param name="Period">What the runs of one period may add up to.</param>
 /// <param name="Answer">How much of a run's outcome one response publishes.</param>
+/// <param name="Context">What one turn of an Agent conversation may send before its earlier part is compacted.</param>
 /// <remarks>
 /// <para>
-/// The four are declared together because an operator reads them together — they are one decision about how much
-/// answering costs and how much mail leaves — and they are separate values because they are enforced in four places:
-/// where the passages are built, where a provider call is about to be made, where a question is admitted, and where a
-/// response is written. A composition root maps the declaration onto this and registers the parts; nothing downstream
+/// The five are declared together because an operator reads them together — they are one decision about how much
+/// answering costs and how much mail leaves — and they are separate values because they are enforced in five places:
+/// where the passages are built, where a provider call is about to be made, where a question is admitted, where a
+/// response is written, and where an Agent turn is composed from the conversation before it. A composition root maps the declaration onto this and registers the parts; nothing downstream
 /// resolves the whole.
 /// </para>
 /// <para>
@@ -27,12 +30,14 @@ public sealed record MailAnsweringBudget(
     EmailKnowledgeBounds Retrieval,
     MailAnsweringRunBounds Run,
     MailAnsweringPeriodBounds Period,
-    MailAnswerBounds Answer)
+    MailAnswerBounds Answer,
+    AgentContextBudget Context)
 {
     /// <summary>Gets the budget a deployment that states none receives.</summary>
     public static MailAnsweringBudget Default { get; } = new(
         EmailKnowledgeBounds.Default,
         MailAnsweringRunBounds.Default,
         MailAnsweringPeriodBounds.Default,
-        MailAnswerBounds.Default);
+        MailAnswerBounds.Default,
+        AgentContextBudget.Default);
 }

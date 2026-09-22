@@ -1154,6 +1154,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped(provider => new AgentAnswering(
             provider.GetRequiredService<IAgentConversationStore>(),
             provider.GetService<IAgentAnswerComposer>(),
+            provider.GetService<IAgentConversationSummarizer>(),
+            answeringBudget.Context,
             provider.GetRequiredService<IMailAnsweringSpendLedger>(),
             provider.GetRequiredService<ClientSignals>(),
             provider.GetRequiredService<IUserLanguages>(),

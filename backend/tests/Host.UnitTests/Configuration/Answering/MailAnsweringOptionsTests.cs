@@ -105,6 +105,34 @@ public sealed class MailAnsweringOptionsTests
         Assert.Contains(errors, error => error.Contains(nameof(settings.MaxProviderCallsPerRun), StringComparison.Ordinal));
     }
 
+    /// <summary>A turn budget too small to hold a summary and a question together would compact on every turn and never fit.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AConversationBudgetBelowTheLeastATurnNeeds_IsReported()
+    {
+        // Arrange
+        var settings = new MailAnsweringOptions { MaxConversationContextTokens = 999 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(settings.MaxConversationContextTokens), StringComparison.Ordinal));
+    }
+
+    /// <summary>A turn allowed to send more than its run may spend would be refused by its own run on every later call.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AConversationBudgetAboveTheRunCeiling_IsReported()
+    {
+        // Arrange
+        var settings = new MailAnsweringOptions { MaxTokensPerRun = 50_000, MaxConversationContextTokens = 64_000 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("above the MaxTokensPerRun of 50000", StringComparison.Ordinal));
+    }
+
     /// <summary>The cross-field rule lives in Validate, and the same call has to reach it or half the rules would be skipped.</summary>
     [Fact]
     public void FindConfigurationErrors_AContradictionOnlyValidateFinds_IsReportedByTheSameCall()

@@ -141,7 +141,7 @@ public sealed class AgentProposalAcceptanceTests : IAsyncDisposable
     public async Task AcceptAsync_APlaceHoldingNoProposal_RecordsAndCarriesOutNothing()
     {
         // Arrange
-        this.store.ReadAsync(Conversation, SyntheticUser.Deployment, ProposedAt - 1, 1, Arg.Any<CancellationToken>())
+        this.store.ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Visible, ProposedAt - 1, 1, Arg.Any<CancellationToken>())
             .Returns(new AgentConversationReading(
                 Title: null,
                 Now,
@@ -167,7 +167,7 @@ public sealed class AgentProposalAcceptanceTests : IAsyncDisposable
             : permissions);
 
     private void ProposalStands() =>
-        this.store.ReadAsync(Conversation, SyntheticUser.Deployment, ProposedAt - 1, 1, Arg.Any<CancellationToken>())
+        this.store.ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Visible, ProposedAt - 1, 1, Arg.Any<CancellationToken>())
             .Returns(new AgentConversationReading(
                 Title: null,
                 Now,

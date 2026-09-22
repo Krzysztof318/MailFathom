@@ -206,7 +206,8 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             this.healthRecorder,
             this.loggerFactory.CreateLogger<ResilientChatClient>());
         await using var budgetedClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
-        using var steeredClient = new SteeredChatClient(budgetedClient, journal, this.egressGuard);
+        using var recordedClient = new RecordedChatClient(budgetedClient, journal);
+        using var steeredClient = new SteeredChatClient(recordedClient, journal, this.egressGuard);
 
         var agent = AgentConversationComposition.Compose(steeredClient, model, language, tools.Create(), this.instructionEnvelope, this.loggerFactory);
         var response = await agent.RunAsync(ChatConversationMapping.ToProviderConversation(guarded), session: null, options: null, cancellationToken);

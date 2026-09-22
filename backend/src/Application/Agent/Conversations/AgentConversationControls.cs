@@ -175,7 +175,7 @@ public sealed class AgentConversationControls
 
         if (noted is null)
         {
-            var held = await this.store.ReadAsync(conversation, user, afterSequence: 0, limit: 1, cancellationToken);
+            var held = await this.store.ReadAsync(conversation, user, AgentConversationHistory.Visible, afterSequence: 0, limit: 1, cancellationToken);
 
             return held is null ? AgentRunStopping.NoSuchConversation : AgentRunStopping.NotRunning;
         }

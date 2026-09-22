@@ -161,6 +161,49 @@ public sealed class AgentAnswerJournal : IDisposable
         return written;
     }
 
+    /// <summary>Records a tool the model asked for, so the input its next call is composed from can be rebuilt from the record.</summary>
+    /// <param name="callId">What the model named the call.</param>
+    /// <param name="toolName">The tool it asked for.</param>
+    /// <param name="arguments">The arguments, as the model sent them.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the call was recorded; <see langword="false" /> when the answer is no longer being composed.</returns>
+    public Task<bool> RecordToolCallAsync(string callId, string toolName, string arguments, CancellationToken cancellationToken) =>
+        this.WriteAsync(new AgentToolCalled(this.answer, callId, toolName, arguments), cancellationToken);
+
+    /// <summary>Records what a tool handed back to the model.</summary>
+    /// <param name="callId">The call it answers.</param>
+    /// <param name="result">What the model was sent.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the answer was recorded; <see langword="false" /> when the answer is no longer being composed.</returns>
+    public Task<bool> RecordToolResultAsync(string callId, string result, CancellationToken cancellationToken) =>
+        this.WriteAsync(new AgentToolAnswered(this.answer, callId, result), cancellationToken);
+
+    /// <summary>Records what the run's first call sent and was charged, which the next turn's budget is measured by.</summary>
+    /// <param name="sentCharacters">How many characters of text the call sent.</param>
+    /// <param name="inputTokens">How many input tokens the provider charged for them.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the charge was recorded; <see langword="false" /> when the answer is no longer being composed.</returns>
+    public Task<bool> RecordChargeAsync(long sentCharacters, long inputTokens, CancellationToken cancellationToken) =>
+        this.WriteAsync(new AgentModelCharged(this.answer, sentCharacters, inputTokens), cancellationToken);
+
+    /// <summary>Records a compaction taken for this answer's turn, which every later turn is composed from until the next one.</summary>
+    /// <param name="compaction">What the compaction covers, the summary it produced, and the proposals carried beside it.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the compaction was recorded; <see langword="false" /> when the answer is no longer being composed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compaction" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the compaction was taken for another answer.</exception>
+    public Task<bool> RecordCompactionAsync(AgentConversationCompacted compaction, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(compaction);
+
+        if (compaction.MessageId != this.answer)
+        {
+            throw new ArgumentException("A compaction is recorded by the answer whose turn it was taken for.", nameof(compaction));
+        }
+
+        return this.WriteAsync(compaction, cancellationToken);
+    }
+
     /// <summary>Reads what the person added to the answer since the last read, and meets a stop recorded meanwhile.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The person's instructions in the order they wrote them, and empty where they added nothing.</returns>
@@ -179,6 +222,7 @@ public sealed class AgentAnswerJournal : IDisposable
             reading = await this.store.ReadAsync(
                 this.conversation,
                 this.user,
+                AgentConversationHistory.Visible,
                 this.readUpTo,
                 AgentConversationBounds.MaximumEntriesPerRead,
                 cancellationToken);
@@ -246,7 +290,12 @@ public sealed class AgentAnswerJournal : IDisposable
             return false;
         }
 
-        this.signals.Publish(ClientSignal.AgentConversationAdvanced(this.user, this.conversation, this.answer, reached));
+        // A technical entry is one no screen draws, so telling a screen the conversation moved would only make it read
+        // again and find nothing new.
+        if (entry.History is AgentConversationHistory.Visible)
+        {
+            this.signals.Publish(ClientSignal.AgentConversationAdvanced(this.user, this.conversation, this.answer, reached));
+        }
 
         return true;
     }

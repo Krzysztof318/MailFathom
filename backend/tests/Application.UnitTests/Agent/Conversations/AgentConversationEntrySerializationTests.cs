@@ -35,6 +35,10 @@ public sealed class AgentConversationEntrySerializationTests
             new AgentActionProposed(message, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentAnswerEnded(message, AgentAnswerOutcome.Stopped),
             new AgentProposalResolved(3, AgentProposalState.Accepted),
+            new AgentToolCalled(message, "call-1", "search_mail", "{\"query\":\"price\"}"),
+            new AgentToolAnswered(message, "call-1", "[]"),
+            new AgentModelCharged(message, SentCharacters: 4_000, InputTokens: 1_100),
+            new AgentConversationCompacted(message, Through: 6, "They agreed on the price.", Carried: [6]),
         ];
 
         // Act
