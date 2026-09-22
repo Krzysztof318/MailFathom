@@ -21,4 +21,32 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <value>Stopped. What arrived so far stays — tell me where to pick it up.</value>
     <comment>The agent's own note written into a conversation when the person stops the answer being composed.</comment>
   </data>
+  <data name="AgentStatusReadingQuestion" xml:space="preserve">
+    <value>Reading the question</value>
+    <comment>The status line an Agent answer shows before it has looked anything up.</comment>
+  </data>
+  <data name="AgentStatusSearchingMail" xml:space="preserve">
+    <value>Searching the mail</value>
+    <comment>The status line while the Agent searches the person's mail.</comment>
+  </data>
+  <data name="AgentStatusReadingThread" xml:space="preserve">
+    <value>Reading the conversation</value>
+    <comment>The status line while the Agent reads one thread of mail.</comment>
+  </data>
+  <data name="AgentStatusReadingCalendar" xml:space="preserve">
+    <value>Reading the calendar</value>
+    <comment>The status line while the Agent reads the person's calendar.</comment>
+  </data>
+  <data name="AgentStatusReadingTasks" xml:space="preserve">
+    <value>Reading the tasks</value>
+    <comment>The status line while the Agent reads the person's tasks.</comment>
+  </data>
+  <data name="AgentStatusPreparingProposal" xml:space="preserve">
+    <value>Preparing a proposal</value>
+    <comment>The status line while the Agent composes something the person will be asked to approve.</comment>
+  </data>
+  <data name="AgentStatusComposingAnswer" xml:space="preserve">
+    <value>Writing the answer</value>
+    <comment>The status line while the Agent writes the answer itself.</comment>
+  </data>
 </root>

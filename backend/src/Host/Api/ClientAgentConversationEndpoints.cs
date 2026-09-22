@@ -4,6 +4,8 @@
 
 using System.Globalization;
 using System.Text.Json;
+using MailFathom.Application.Access;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Mailboxes;
@@ -230,21 +232,31 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="request">The question, its identifier, and what it was asked about.</param>
     /// <param name="scopeResolver">Names the acting user, who is whose conversation it is.</param>
     /// <param name="controls">Writes the question, opens its answer, and announces both.</param>
+    /// <param name="principals">Names the caller the transport admitted, whom the answer is composed under.</param>
+    /// <param name="launcher">Composes the answer past this request.</param>
+    /// <param name="timeProvider">Stamps the instant the question was asked at, which the answer is anchored to.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns><c>202</c> naming the message, the run answering it, and the place the conversation stands at; <c>400</c> naming what was wrong with the request; <c>404</c> where the conversation is somebody else's; <c>409</c> where an answer is still being composed or the conversation is full; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
     /// <remarks>
     /// The message's identifier is the client's, so a post retried over a dropped connection answers with what the first
-    /// one wrote — the same run and the same place — rather than writing the question twice.
+    /// one wrote — the same run and the same place — rather than writing the question twice, and the answer is started
+    /// only by the post that wrote it.
     /// </remarks>
     internal static async Task<Results<Accepted<ClientAgentMessageResponse>, NotFound, ProblemHttpResult>> Ask(
         [FromRoute] Guid conversationId,
         [FromBody] ClientAgentMessageRequest? request,
         [FromServices] MailboxScopeResolver scopeResolver,
         [FromServices] AgentConversationControls controls,
+        [FromServices] IAuthorizedPrincipalSource principals,
+        [FromServices] AgentAnswerLauncher launcher,
+        [FromServices] TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(controls);
+        ArgumentNullException.ThrowIfNull(principals);
+        ArgumentNullException.ThrowIfNull(launcher);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         AgentConversationId conversation;
         AgentMessageId message;
@@ -264,7 +276,20 @@ internal static class ClientAgentConversationEndpoints
                 + $"{PresentationText.MaxLength}-character bound, and names a declared scope with the object it narrows to.");
         }
 
+        if (principals.Current is not { } caller)
+        {
+            return Refuse("A question is asked by a caller this deployment admitted.");
+        }
+
+        var askedAt = timeProvider.GetUtcNow();
         var posting = await controls.AskAsync(conversation, scopeResolver.User, message, text, scope, cancellationToken);
+
+        if (posting is { Outcome: AgentMessagePostingOutcome.Written, Answer: { } answer })
+        {
+            _ = launcher.Start(
+                new AgentQuestion(conversation, scopeResolver.User, text, scope, answer, posting.Reached, askedAt),
+                caller);
+        }
 
         return Answered(conversation, message, posting);
     }
@@ -363,13 +388,15 @@ internal static class ClientAgentConversationEndpoints
     /// <param name="proposedAt">The place the proposal was written at.</param>
     /// <param name="request">The decision.</param>
     /// <param name="scopeResolver">Names the acting user, whose proposal it has to be.</param>
-    /// <param name="controls">Records the decision and announces it.</param>
+    /// <param name="controls">Records a decline and announces it.</param>
+    /// <param name="acceptance">Records an acceptance and carries out exactly the act that was proposed.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><c>200</c> naming the place the decision was written at; <c>400</c> for a decision that is neither accepted nor declined; <c>409</c> where there is no proposal at that place this person can answer that way — none offered, not theirs, or already answered; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>200</c> naming the place the last answer to the proposal was written at; <c>400</c> for a decision that is neither accepted nor declined; <c>409</c> where there is no proposal at that place this person can answer that way — none offered, not theirs, or already answered; or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>, or, on accepting, every grant the proposed act needs.</returns>
     /// <remarks>
-    /// Accepting executes nothing: it is what permits the composition to carry the proposal out. The refusals are one
-    /// answer, so a proposal answered twice at once is answered once and the second press is told it was already
-    /// decided, and a conversation belonging to somebody else reads as one holding no such proposal.
+    /// Accepting carries the act out, under the accepting caller's own grant, before this route answers: an act this
+    /// deployment refuses — a recipient a governor refuses, an account no longer served — ends the proposal as failed,
+    /// which the conversation shows. The refusals are one answer, so a proposal answered twice at once is answered once
+    /// and carried out once, and a conversation belonging to somebody else reads as one holding no such proposal.
     /// </remarks>
     internal static async Task<Results<Ok<ClientAgentProposalAnswerResponse>, ProblemHttpResult>> AnswerProposal(
         [FromRoute] Guid conversationId,
@@ -377,10 +404,12 @@ internal static class ClientAgentConversationEndpoints
         [FromBody] ClientAgentProposalAnswerRequest? request,
         [FromServices] MailboxScopeResolver scopeResolver,
         [FromServices] AgentConversationControls controls,
+        [FromServices] AgentProposalAcceptance acceptance,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(controls);
+        ArgumentNullException.ThrowIfNull(acceptance);
 
         AgentProposalState? decision = request?.Decision switch
         {
@@ -397,12 +426,10 @@ internal static class ClientAgentConversationEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var answered = await controls.AnswerProposalAsync(
-            AgentConversationId.Create(conversationId),
-            scopeResolver.User,
-            proposedAt,
-            decided,
-            cancellationToken);
+        var conversation = AgentConversationId.Create(conversationId);
+        var answered = decided is AgentProposalState.Accepted
+            ? await acceptance.AcceptAsync(conversation, scopeResolver.User, proposedAt, cancellationToken)
+            : await controls.DeclineProposalAsync(conversation, scopeResolver.User, proposedAt, cancellationToken);
 
         return answered is { } place
             ? TypedResults.Ok(new ClientAgentProposalAnswerResponse(place))

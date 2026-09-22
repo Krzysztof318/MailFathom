@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Localization;
 using MailFathom.Application.Signals;
@@ -10,7 +11,7 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Agent.Conversations;
 
-/// <summary>What a person does to a conversation: ask, steer the answer being composed, stop it, and answer a proposal.</summary>
+/// <summary>What a person does to a conversation: ask, steer the answer being composed, stop it, and decline a proposal.</summary>
 /// <remarks>
 /// <para>
 /// Each of these writes into the conversation and then says so over the signal channel, naming the conversation, the
@@ -27,8 +28,8 @@ namespace MailFathom.Application.Agent.Conversations;
 /// when spending most needs stopping.
 /// </para>
 /// <para>
-/// Nothing here carries out a proposal. Accepting one records that a person said yes, which is what permits the
-/// composition to carry it out; the act itself is never this class's.
+/// Nothing here carries out a proposal, so accepting one is not here either: an acceptance is recorded by
+/// <see cref="AgentProposalAcceptance" /> together with carrying the act out, and never apart from it.
 /// </para>
 /// </remarks>
 public sealed class AgentConversationControls
@@ -184,35 +185,27 @@ public sealed class AgentConversationControls
         return AgentRunStopping.Stopped;
     }
 
-    /// <summary>Records that a person accepted or declined a proposal the agent made.</summary>
+    /// <summary>Records that a person declined a proposal the agent made.</summary>
     /// <param name="conversation">The conversation holding the proposal.</param>
     /// <param name="user">The person answering.</param>
     /// <param name="proposedAt">The place the proposal was written at, which is what names it.</param>
-    /// <param name="decision">Accepted or declined, which are the two answers a person gives.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The place the answer was written at, or <see langword="null" /> when it was not this person's to give from where the proposal stands.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="decision" /> is neither accepted nor declined.</exception>
     /// <remarks>
-    /// Accepting executes nothing. It is what permits the composition to carry the proposal out, and what that then did
-    /// reaches the record only as the state the proposal ends in — which is why failing is not a person's answer.
+    /// Declining is the only answer recorded here. Accepting is <see cref="AgentProposalAcceptance" />'s,
+    /// because an acceptance is never recorded apart from carrying the act out.
     /// </remarks>
-    public async Task<long?> AnswerProposalAsync(
+    public async Task<long?> DeclineProposalAsync(
         AgentConversationId conversation,
         UserId user,
         long proposedAt,
-        AgentProposalState decision,
         CancellationToken cancellationToken)
     {
-        if (decision is not (AgentProposalState.Accepted or AgentProposalState.Declined))
-        {
-            throw new ArgumentException("A person accepts or declines a proposal; nothing else is theirs to record.", nameof(decision));
-        }
-
         var answered = await this.store.TryResolveProposalAsync(
             conversation,
             user,
             proposedAt,
-            decision,
+            AgentProposalState.Declined,
             this.timeProvider.GetUtcNow(),
             cancellationToken);
 

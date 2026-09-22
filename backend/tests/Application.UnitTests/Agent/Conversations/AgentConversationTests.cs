@@ -82,7 +82,7 @@ public sealed class AgentConversationTests
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
-            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
 
         // Act
         var conversation = Compose(entries);
@@ -174,7 +174,7 @@ public sealed class AgentConversationTests
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
-            new AgentActionProposed(answered, AgentConversationExample.Actionable()));
+            new AgentActionProposed(answered, AgentConversationExample.Actionable(), AgentConversationExample.Act()));
 
         // Act
         var conversation = Compose(entries);
@@ -193,7 +193,7 @@ public sealed class AgentConversationTests
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
-            new AgentActionProposed(answered, AgentConversationExample.Actionable()),
+            new AgentActionProposed(answered, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentProposalResolved(2, AgentProposalState.Accepted),
             new AgentProposalResolved(2, AgentProposalState.Failed));
 
@@ -214,10 +214,10 @@ public sealed class AgentConversationTests
         var again = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
-            new AgentActionProposed(answered, AgentConversationExample.Actionable()),
+            new AgentActionProposed(answered, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentProposalResolved(2, AgentProposalState.Declined),
             new AgentAnswerStarted(again),
-            new AgentActionProposed(again, AgentConversationExample.Actionable()),
+            new AgentActionProposed(again, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentProposalResolved(5, AgentProposalState.Accepted));
 
         // Act
@@ -238,7 +238,7 @@ public sealed class AgentConversationTests
         var entries = AgentConversationExample.Written(
             new AgentAnswerStarted(answered),
             new AgentCitationDeclared(answered, PresentationPlanExample.Citations()[0]),
-            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
 
         // Act
         var conversation = Compose(entries);
@@ -267,7 +267,7 @@ public sealed class AgentConversationTests
         // Arrange
         var answered = AgentMessageId.New();
         var entries = AgentConversationExample.Written(
-            new AgentBlockComposed(answered, AgentConversationExample.Reading()));
+            new AgentBlockComposed(answered, AgentConversationExample.Reading(), AgentConversationExample.Act()));
 
         // Act, Assert
         Assert.Throws<ArgumentException>(() => Compose(entries));

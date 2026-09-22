@@ -997,6 +997,7 @@ internal static class HostComposition
             builder.Services.AddChatProviderAdapter();
             builder.Services.AddMailAnsweringAgent();
             builder.Services.AddDiscoveryRunAgents();
+            builder.Services.AddAgentConversationAgent();
 
             // Beside them and behind one more decision, because this is the only one of the three an operator can
             // decline while keeping the endpoint. Registered or not registered is the whole of the switch: the search
@@ -1585,6 +1586,8 @@ internal static class HostComposition
             // Behind the client endpoint's switch because the routes that start and read a run are, and a singleton
             // because it holds nothing per request — the scope a run executes on is made per run rather than inherited.
             builder.Services.AddSingleton<DiscoveryRunLauncher>();
+            // The same for an answer the Agent composes, which is reached over the same switch.
+            builder.Services.AddSingleton<AgentAnswerLauncher>();
         }
 
         // A separate callback from the listener binding below, and outside its condition, because the two decide different

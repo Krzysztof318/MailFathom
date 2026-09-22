@@ -32,7 +32,7 @@ public sealed class AgentConversationEntrySerializationTests
             new AgentStatusReported(message, PresentationText.Create("reading the attachments")),
             new AgentCitationDeclared(message, PresentationPlanExample.Citations()[0]),
             new AgentBlockComposed(message, AgentConversationExample.Reading()),
-            new AgentActionProposed(message, AgentConversationExample.Actionable()),
+            new AgentActionProposed(message, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentAnswerEnded(message, AgentAnswerOutcome.Stopped),
             new AgentProposalResolved(3, AgentProposalState.Accepted),
         ];
@@ -67,7 +67,7 @@ public sealed class AgentConversationEntrySerializationTests
             new AgentStatusReported(message, PresentationText.Create("reading the attachments")),
             new AgentCitationDeclared(message, PresentationPlanExample.Citations()[0]),
             new AgentBlockComposed(message, AgentConversationExample.Reading()),
-            new AgentActionProposed(message, AgentConversationExample.Actionable()),
+            new AgentActionProposed(message, AgentConversationExample.Actionable(), AgentConversationExample.Act()),
             new AgentAnswerEnded(message, AgentAnswerOutcome.Completed),
         ];
 

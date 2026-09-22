@@ -8,6 +8,7 @@ using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar;
@@ -1143,6 +1144,19 @@ public static class ServiceCollectionExtensions
         // What a person does to a conversation, beside the store it writes through: it holds nothing between calls
         // either, and a stop has to reach a run executing anywhere, which it does through the store rather than here.
         services.AddSingleton<AgentConversationControls>();
+        // Scoped, because an acceptance carries the act out through the drafting and sending use cases under the
+        // accepting caller's principal, and a run composes under the principal of the person who asked — both of which
+        // are the scope's. The composer is resolved optionally for the reason the Discover run's are: a deployment that
+        // declared no chat endpoint has none, and its runs have to reach the refusal rather than fail to resolve.
+        services.AddScoped<AgentActPerformer>();
+        services.AddScoped<AgentProposalAcceptance>();
+        services.AddScoped(provider => new AgentAnswering(
+            provider.GetRequiredService<IAgentConversationStore>(),
+            provider.GetService<IAgentAnswerComposer>(),
+            provider.GetRequiredService<IMailAnsweringSpendLedger>(),
+            provider.GetRequiredService<ClientSignals>(),
+            provider.GetRequiredService<IUserLanguages>(),
+            provider.GetRequiredService<TimeProvider>()));
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one
