@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { AgentConversationSummary, ClientFailureReason } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { onlySelected, withToggled } from '../contextMenu/rowSelection';
@@ -72,6 +72,8 @@ export function ConversationHistory({
     const [reached, setReached] = useState<string | null>(null);
     const [archiveOpen, setArchiveOpen] = useState(false);
     const rows = useRef(new Map<string, HTMLLIElement>());
+    const archiveSection = useRef<HTMLButtonElement>(null);
+    const lastFocused = useRef<Element | null>(null);
 
     const { conversations, reading, failure } = history;
     const working = conversations.filter((summary) => !summary.archived);
@@ -83,6 +85,21 @@ export function ConversationHistory({
     const listed = (conversation: string | null): conversation is string =>
         walkable.some((summary) => summary.id === conversation);
     const focusable = listed(reached) ? reached : listed(open) ? open : (walkable[0]?.id ?? null);
+
+    // A row that leaves the list while it holds focus — archived, restored into the other list, or deleted — takes focus
+    // with it and no event says so, which would leave a keyboard reader on the page's body. Focus goes to the history's
+    // own tab stop instead, and only where nothing else has taken it since.
+    useEffect(() => {
+        const left = lastFocused.current;
+        const takenSince = document.activeElement !== null && document.activeElement !== document.body;
+        if (left === null || left.isConnected || takenSince) {
+            return;
+        }
+
+        lastFocused.current = null;
+        const tabStop = focusable === null ? undefined : rows.current.get(focusable);
+        (tabStop ?? archiveSection.current)?.focus();
+    });
 
     function focusOn(conversation: string | null): void {
         if (conversation !== null) {
@@ -151,7 +168,12 @@ export function ConversationHistory({
     }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-3.5">
+        <div
+            className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-3.5"
+            onFocus={(event) => {
+                lastFocused.current = event.target;
+            }}
+        >
             <div className="flex items-center gap-2.25 px-0.5 pb-1">
                 <h2 className="text-xs tracking-widest text-muted uppercase">{translate('agent.history')}</h2>
 
@@ -183,6 +205,7 @@ export function ConversationHistory({
             {archived.length > 0 ? (
                 <>
                     <button
+                        ref={archiveSection}
                         type="button"
                         aria-expanded={archiveOpen}
                         aria-label={translate(archiveOpen ? 'agent.hideArchived' : 'agent.showArchived')}

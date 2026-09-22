@@ -11,6 +11,7 @@ import {
     steerAgentRun,
     stopAgentRun,
     type ClientFailureReason,
+    type ClientResult,
     type ClientSession,
     type MailFathomTransport,
     type RunFollowingSchedule,
@@ -71,6 +72,15 @@ const notArchived: Readonly<Record<Exclude<ClientFailureReason, 'missing'>, Mess
 // no longer there is answered by the history, which reads again after every write and no longer lists it.
 function refusedUnlessGone(reason: ClientFailureReason): reason is Exclude<ClientFailureReason, 'missing'> {
     return reason !== 'missing';
+}
+
+// The conversations a write leaves out of the tabs: the ones it reached, and the ones the deployment no longer holds.
+function doneOrGone(conversations: readonly string[], answers: readonly ClientResult<void>[]): readonly string[] {
+    return conversations.filter((_, at) => {
+        const answered = answers[at];
+
+        return answered !== undefined && (answered.outcome === 'read' || answered.failure.reason === 'missing');
+    });
 }
 
 // What the chip says, by what was handed over. Exhaustive by its own type, so a kind a space learns to hand over does
@@ -287,11 +297,7 @@ export function AgentSpace({
                 ? [answered.failure.reason]
                 : [],
         );
-        const gone = conversations.filter((_, at) => {
-            const answered = answers[at];
-
-            return answered !== undefined && (answered.outcome === 'read' || answered.failure.reason === 'missing');
-        });
+        const gone = doneOrGone(conversations, answers);
 
         setUndeleted(refused[0] ?? null);
 
@@ -325,9 +331,10 @@ export function AgentSpace({
         setUnarchived(refused[0] ?? null);
 
         // A conversation put away leaves the front and the tabs, as the design draws it; it is still read from the
-        // archive section, which opens it again like any other. Restoring one opens nothing.
+        // archive section, which opens it again like any other. One the deployment no longer holds leaves them too, as
+        // it does when deleting it finds it gone. Restoring one opens nothing.
         if (archived) {
-            const put = conversations.filter((_, at) => answers[at]?.outcome === 'read');
+            const put = doneOrGone(conversations, answers);
 
             setOpen((before) => before.filter((conversation) => !put.includes(conversation)));
             setCurrent((now) => (now !== null && put.includes(now) ? null : now));

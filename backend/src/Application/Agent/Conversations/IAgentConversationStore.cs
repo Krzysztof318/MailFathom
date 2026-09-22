@@ -234,7 +234,7 @@ public interface IAgentConversationStore
         int limit,
         CancellationToken cancellationToken);
 
-    /// <summary>Lists a person's conversations, the one that moved most recently first.</summary>
+    /// <summary>Lists a person's conversations, the ones not archived before the archived ones.</summary>
     /// <param name="user">Whose history to read.</param>
     /// <param name="limit">The greatest number to return, at most <see cref="AgentConversationBounds.MaximumConversationsPerListing" />.</param>
     /// <param name="cancellationToken">Cancels the read.</param>

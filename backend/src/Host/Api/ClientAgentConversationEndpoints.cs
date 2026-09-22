@@ -146,7 +146,7 @@ internal static class ClientAgentConversationEndpoints
             id.Value.ToString("D", CultureInfo.InvariantCulture),
             StringComparison.Ordinal);
 
-    /// <summary>Lists the signed-in person's conversations, the one that moved most recently first.</summary>
+    /// <summary>Lists the signed-in person's conversations, the ones not archived before the archived ones and each group the one that moved most recently first.</summary>
     /// <param name="scopeResolver">Names the acting user, whose history this is.</param>
     /// <param name="store">Where conversations are held.</param>
     /// <param name="cancellationToken">Cancels the read.</param>

@@ -534,6 +534,56 @@ describe('AgentSpace', () => {
         });
     });
 
+    it('keeps focus in the history when the row that held it is archived out of the list', async () => {
+        const { transport } = deploymentAnswering();
+        const archived = new Set<string>();
+        screenOf((request) => {
+            if (request.method === 'PUT') {
+                archived.add(agent.answeredConversationId);
+            }
+
+            if (request.method === 'GET' && request.path === conversations) {
+                const listed = agent.agentHistory.conversations.map((line) =>
+                    archived.has(line.id) ? { ...line, archived: true } : line,
+                );
+
+                return Promise.resolve({ status: 200, body: JSON.stringify({ conversations: listed }), headers: {} });
+            }
+
+            return transport(request);
+        });
+
+        const row = await screen.findByRole('option', { name: /How many bays were confirmed/ });
+        row.focus();
+        fireEvent.keyDown(row, { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole('option', { name: /How many bays were confirmed/ })).toBeNull();
+        });
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('option', { name: /What is waiting on me today/ }));
+        });
+    });
+
+    it('puts down a conversation the deployment no longer holds when archiving it finds it gone', async () => {
+        const { transport } = deploymentAnswering();
+        screenOf((request) =>
+            request.method === 'PUT' ? Promise.resolve({ status: 404, body: '', headers: {} }) : transport(request),
+        );
+
+        await opened('How many bays were confirmed');
+        fireEvent.keyDown(screen.getByRole('option', { name: /How many bays were confirmed/ }), { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(
+                screen.getByRole('option', { name: /How many bays were confirmed/ }).getAttribute('aria-current'),
+            ).toBeNull();
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it('offers restoring rather than archiving on an archived conversation', async () => {
         const { transport, asked } = deploymentAnswering();
         screenOf(transport);
