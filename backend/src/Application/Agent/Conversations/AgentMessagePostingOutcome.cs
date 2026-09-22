@@ -28,4 +28,7 @@ public enum AgentMessagePostingOutcome
 
     /// <summary>The conversation holds as many entries as one may.</summary>
     ConversationFull = 5,
+
+    /// <summary>A question would start a conversation for a person who already holds as many as one may, which is answered by deleting one.</summary>
+    TooManyConversations = 6,
 }

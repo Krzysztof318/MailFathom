@@ -432,6 +432,50 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         }
     }
 
+    /// <summary>A person at the ceiling on conversations can start no other, and can still ask into every one they hold.</summary>
+    /// <remarks>
+    /// The identifier of a new conversation is the client's, so the ceiling is the one thing that stops a grant from
+    /// growing the table by asking under fresh identifiers. It has to refuse the start without refusing a question
+    /// into a conversation that already stands, which is the half a count taken in the wrong place would get wrong.
+    /// </remarks>
+    [Fact]
+    public async Task AskAsync_ForAPersonAtTheCeilingOnConversations_StartsNoOtherAndStillAnswersInOneTheyHold()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var person = UserId.Create(user);
+            var held = AgentConversationId.New();
+            await store.TryStartAsync(held, person, Instant, cancellationToken);
+
+            for (var started = 1; started < AgentConversationBounds.MaximumConversations; started++)
+            {
+                await store.TryStartAsync(AgentConversationId.New(), person, Instant, cancellationToken);
+            }
+
+            // Act
+            var startedPastTheCeiling = await store.TryStartAsync(AgentConversationId.New(), person, Instant, cancellationToken);
+            var askedAfresh = await store.AskAsync(AgentConversationId.New(), person, Question(), AgentMessageId.New(), Instant, cancellationToken);
+            var askedInOneHeld = await store.AskAsync(held, person, Question(), AgentMessageId.New(), Instant, cancellationToken);
+
+            // Assert
+            Assert.False(startedPastTheCeiling);
+            Assert.Equal(AgentMessagePostingOutcome.TooManyConversations, askedAfresh.Outcome);
+            Assert.Equal(AgentMessagePostingOutcome.Written, askedInOneHeld.Outcome);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+        }
+    }
+
     /// <summary>An offer several callers accept at once is accepted once, because accepting is what permits the act.</summary>
     /// <remarks>
     /// The whole reason where a proposal stands is read inside the statement that moves it. A read followed by a write

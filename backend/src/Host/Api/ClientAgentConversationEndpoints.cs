@@ -427,6 +427,8 @@ internal static class ClientAgentConversationEndpoints
                 "An answer is still being composed in this conversation. Steer it or stop it before asking again."),
             (_, _, AgentMessagePostingOutcome.NoAnswerInProgress) => Conflict(
                 "That answer is no longer being composed, so there is nothing to steer. Ask a new question instead."),
+            (_, _, AgentMessagePostingOutcome.TooManyConversations) => Conflict(
+                "This person already holds as many conversations as one may. Delete one before starting another."),
             _ => Conflict("This conversation is full. Start another one."),
         };
 

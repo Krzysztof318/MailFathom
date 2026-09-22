@@ -53,12 +53,32 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// dropped connection rather than a collision: the identifier was generated for this conversation, so the row that
     /// is already there is the same conversation and reporting it as started again would be the honest answer were it
     /// not indistinguishable from starting a second one.
+    /// <para>
+    /// A person already holding <see cref="AgentConversationBounds.MaximumConversations" /> starts nothing, and the
+    /// statement says so apart from a conversation that already stood, so a question into one they hold is unaffected.
+    /// The count is not serialized against another start by the same person, so two arriving together at the ceiling can
+    /// both be admitted: it bounds growth rather than counting exactly, which is all a ceiling against a flood needs.
+    /// </para>
     /// </remarks>
     private const string StartConversationStatement = $"""
-        INSERT INTO "{AgentConversationEntity.TableName}"
-            ("{AgentConversationEntity.IdColumnName}", "{AgentConversationEntity.UserIdColumnName}", "{AgentConversationEntity.StartedAtColumnName}", "{AgentConversationEntity.LastActivityAtColumnName}", "{AgentConversationEntity.SequenceColumnName}")
-        VALUES (@id, @userId, @now, @now, 0)
-        ON CONFLICT DO NOTHING;
+        WITH existing AS (
+            SELECT 1 FROM "{AgentConversationEntity.TableName}" WHERE "{AgentConversationEntity.IdColumnName}" = @id
+        ),
+        admitted AS (
+            SELECT count(*) < @mostConversations AS admitted
+            FROM "{AgentConversationEntity.TableName}"
+            WHERE "{AgentConversationEntity.UserIdColumnName}" = @userId
+        ),
+        started AS (
+            INSERT INTO "{AgentConversationEntity.TableName}"
+                ("{AgentConversationEntity.IdColumnName}", "{AgentConversationEntity.UserIdColumnName}", "{AgentConversationEntity.StartedAtColumnName}", "{AgentConversationEntity.LastActivityAtColumnName}", "{AgentConversationEntity.SequenceColumnName}")
+            SELECT @id, @userId, @now, @now, 0
+            FROM admitted
+            WHERE admitted.admitted AND NOT EXISTS (SELECT 1 FROM existing)
+            ON CONFLICT DO NOTHING
+            RETURNING 1
+        )
+        SELECT EXISTS (SELECT 1 FROM started), (SELECT admitted FROM admitted), EXISTS (SELECT 1 FROM existing);
         """;
 
     /// <summary>Writes one entry at the next place in its conversation, moving the answer being composed where the entry says so.</summary>
@@ -282,11 +302,8 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(StartConversationStatement);
-        command.Parameters.AddWithValue("id", id.Value);
-        command.Parameters.AddWithValue("userId", user.Value);
-        command.Parameters.AddWithValue("now", now.ToUniversalTime());
 
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        return (await StartAsync(command, id, user, now, cancellationToken)).Started;
     }
 
     /// <inheritdoc />
@@ -562,10 +579,11 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         if (!steering)
         {
             await using var start = new NpgsqlCommand(StartConversationStatement, connection, posting);
-            start.Parameters.AddWithValue("id", id.Value);
-            start.Parameters.AddWithValue("userId", user.Value);
-            start.Parameters.AddWithValue("now", now.ToUniversalTime());
-            await start.ExecuteNonQueryAsync(cancellationToken);
+
+            if (await StartAsync(start, id, user, now, cancellationToken) is { Started: false, Admitted: false, Existed: false })
+            {
+                return AgentMessagePosting.Refused(AgentMessagePostingOutcome.TooManyConversations);
+            }
         }
 
         if (await HoldForPostingAsync(connection, posting, id, user, cancellationToken) is not { } held)
@@ -616,6 +634,24 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         await posting.CommitAsync(cancellationToken);
 
         return new AgentMessagePosting(AgentMessagePostingOutcome.Written, reached, answer);
+    }
+
+    private static async Task<(bool Started, bool Admitted, bool Existed)> StartAsync(
+        NpgsqlCommand command,
+        AgentConversationId id,
+        UserId user,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        command.Parameters.AddWithValue("id", id.Value);
+        command.Parameters.AddWithValue("userId", user.Value);
+        command.Parameters.AddWithValue("now", now.ToUniversalTime());
+        command.Parameters.AddWithValue("mostConversations", (long)AgentConversationBounds.MaximumConversations);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+
+        return (reader.GetBoolean(0), reader.GetBoolean(1), reader.GetBoolean(2));
     }
 
     private static async Task<(AgentMessageId? Composing, long Reached)?> HoldForPostingAsync(

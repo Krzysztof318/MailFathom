@@ -41,7 +41,7 @@ public interface IAgentConversationStore
     /// <param name="user">Whose conversation it is, which is who may read, add to, and delete it.</param>
     /// <param name="now">The instant it was started, in UTC.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see langword="true" /> when the conversation was started; <see langword="false" /> when one already exists under that identifier.</returns>
+    /// <returns><see langword="true" /> when the conversation was started; <see langword="false" /> when one already exists under that identifier, or when this person already holds <see cref="AgentConversationBounds.MaximumConversations" />.</returns>
     Task<bool> TryStartAsync(
         AgentConversationId id,
         UserId user,
@@ -105,6 +105,11 @@ public interface IAgentConversationStore
     /// <strong>A question already in the conversation is not written twice.</strong> Its identifier is the client's, so
     /// a second post under it is the first one retried, and what comes back is what the first one wrote — the same
     /// answer and the same place — rather than a refusal the client could not tell from a real one.
+    /// </para>
+    /// <para>
+    /// A question that would start a conversation for a person already holding
+    /// <see cref="AgentConversationBounds.MaximumConversations" /> writes nothing and says
+    /// <see cref="AgentMessagePostingOutcome.TooManyConversations" />; a question into one they already hold is unaffected.
     /// </para>
     /// </remarks>
     Task<AgentMessagePosting> AskAsync(

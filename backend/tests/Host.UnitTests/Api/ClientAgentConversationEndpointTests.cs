@@ -105,6 +105,7 @@ public sealed class ClientAgentConversationEndpointTests
     [InlineData(AgentMessagePostingOutcome.NoSuchConversation, StatusCodes.Status404NotFound)]
     [InlineData(AgentMessagePostingOutcome.AnswerInProgress, StatusCodes.Status409Conflict)]
     [InlineData(AgentMessagePostingOutcome.ConversationFull, StatusCodes.Status409Conflict)]
+    [InlineData(AgentMessagePostingOutcome.TooManyConversations, StatusCodes.Status409Conflict)]
     public async Task Ask_AQuestionTheStoreRefuses_AnswersWithTheStatusOfTheRefusal(
         AgentMessagePostingOutcome outcome,
         int status)

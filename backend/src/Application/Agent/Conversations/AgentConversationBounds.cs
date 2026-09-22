@@ -32,6 +32,14 @@ public static class AgentConversationBounds
     /// </remarks>
     public const int MaximumEntriesPerRead = 250;
 
+    /// <summary>The greatest number of conversations one person may hold at once.</summary>
+    /// <remarks>
+    /// A client names a new conversation by an identifier of its own choosing, so without a ceiling one grant could grow
+    /// the table by asking under fresh identifiers indefinitely. Reaching it refuses a new conversation and nothing
+    /// else: every conversation already held stays readable and answerable, and deleting one makes room for the next.
+    /// </remarks>
+    public const int MaximumConversations = 1_000;
+
     /// <summary>The greatest number of conversations one listing may return.</summary>
     public const int MaximumConversationsPerListing = 100;
 }
