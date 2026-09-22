@@ -153,7 +153,7 @@ export function AnswerCanvas({
 }
 
 /** One block drawn by whatever this build registered for its type, and named where it registered nothing. */
-function DrawnBlock({
+export function DrawnBlock({
     block,
     renderers,
 }: {

@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
+import * as agent from '../../../../tests/fixtures/agent';
 import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
@@ -316,6 +317,52 @@ describe('fixtureAnswer', () => {
         const held = stated(answered(`/discovery/runs/${discovery.runId}`, { emptyCollections: true }));
 
         expect(held).toStrictEqual(discovery.runComposedNothing);
+    });
+
+    it('answers the Agent history with the corpus conversations, and with none where it is set to hold nothing', () => {
+        expect(stated(answered('/agent/conversations'))).toStrictEqual(agent.agentHistory);
+        expect(stated(answered('/agent/conversations', { emptyCollections: true }))['conversations']).toStrictEqual([]);
+    });
+
+    it('answers an Agent conversation from the cursor it was asked from rather than from its beginning', () => {
+        const route = `/agent/conversations/${agent.answeredConversationId}`;
+        const after = stated(answered(`${route}?since=4`))['entries'];
+
+        expect(stated(answered(route))['entries']).toStrictEqual(agent.answeredConversation.entries);
+        expect(after).toStrictEqual(agent.answeredConversation.entries.filter((entry) => entry.sequence > 4));
+    });
+
+    it('accepts a question into an Agent conversation as the answer it opened', () => {
+        const accepted = answered(
+            `/agent/conversations/${agent.answeredConversationId}/messages`,
+            {},
+            1,
+            'POST',
+            '{"messageId":"m","text":"anything"}',
+        );
+
+        expect(accepted.status).toBe(202);
+        expect(stated(accepted)['runId']).toBe(agent.answeredQuestionId);
+    });
+
+    it.each([
+        ['a stop', `/agent/conversations/${agent.composingConversationId}/runs/${agent.composingQuestionId}`],
+        ['a deletion', `/agent/conversations/${agent.answeredConversationId}`],
+    ])('answers %s over the Agent routes as done', (_, route) => {
+        expect(answered(route, {}, 1, 'DELETE').status).toBe(204);
+    });
+
+    it('accepts an instruction into the answer being composed as that answer', () => {
+        const steered = answered(
+            `/agent/conversations/${agent.composingConversationId}/runs/${agent.composingQuestionId}/messages`,
+            {},
+            1,
+            'POST',
+            '{"messageId":"m","text":"anything"}',
+        );
+
+        expect(steered.status).toBe(202);
+        expect(stated(steered)['runId']).toBe(agent.composingQuestionId);
     });
 
     it('answers every collection empty where the options ask for it', () => {

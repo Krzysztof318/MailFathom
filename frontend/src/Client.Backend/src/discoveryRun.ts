@@ -662,7 +662,8 @@ function named(value: unknown): string | null {
     return typeof value === 'string' && value.length <= longestEndpointName ? value : null;
 }
 
-function parseBlock(value: unknown): AnswerBlock | null {
+/** One block as the presentation catalogue writes it, which the Agent reads out of its conversation too. */
+export function parseBlock(value: unknown): AnswerBlock | null {
     const record = asRecord(value);
     if (record === null) {
         return null;

@@ -98,10 +98,12 @@ describe('App session', () => {
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
         // The drafting capability is beside it and is not one of them: it is published under the grant this credential
-        // does hold, it reads no mail, and what it answers is whether the composer may offer a draft at all.
+        // does hold, it reads no mail, and what it answers is whether the composer may offer a draft at all. Nor is the
+        // Agent's history, which is the conversations this person held under that same grant rather than their mail.
         await waitFor(() => {
             expect(routesAsked()).toEqual([
                 'https://mail.example.invalid/api/client/session',
+                'https://mail.example.invalid/api/client/agent/conversations',
                 'https://mail.example.invalid/api/client/replies/drafting',
             ]);
         });

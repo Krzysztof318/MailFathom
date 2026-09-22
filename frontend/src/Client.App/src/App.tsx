@@ -38,6 +38,7 @@ import {
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
+import { AgentSpace } from './agent/AgentSpace';
 import { DiscoverSpace } from './discover/DiscoverSpace';
 import { FolderTree } from './folders/FolderTree';
 import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
@@ -990,6 +991,20 @@ export function App({
                                                                                 // drawn here.
                                                                                 intent={intentField}
                                                                                 status={connectionSummary}
+                                                                                agent={
+                                                                                    session === null ||
+                                                                                    !asksMail ? null : (
+                                                                                        <AgentSpace
+                                                                                            session={session}
+                                                                                            transport={readMail}
+                                                                                            status={
+                                                                                                space === 'agent'
+                                                                                                    ? connectionSummary
+                                                                                                    : null
+                                                                                            }
+                                                                                        />
+                                                                                    )
+                                                                                }
                                                                                 discover={
                                                                                     session === null ||
                                                                                     !asksMail ? null : (

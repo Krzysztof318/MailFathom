@@ -18,6 +18,10 @@
 // `primarySymbol` what `primary` narrows to. `named` is the words alone, which is how the design draws the acts in
 // the head of a message beside its subject.
 //
+// `outlined` is a control drawn inside a rule of its own rather than on the surface it stands on, which is how the
+// design draws the control that shows the Agent's history beside the conversation; `outlinedSymbol` is what it narrows
+// to on a phone.
+//
 // `link` is a control drawn as words in the accent inside a sentence, which is how the design draws the help link at
 // the foot of the sign-in form.
 //
@@ -40,7 +44,9 @@ export type ControlShape =
     | 'selected'
     | 'selectedSymbol'
     | 'link'
-    | 'accentPill';
+    | 'accentPill'
+    | 'outlined'
+    | 'outlinedSymbol';
 
 export const controlShapes: Readonly<Record<ControlShape, string>> = {
     labelled: 'gap-1.75 rounded-lg px-2.75 py-1.75 text-base text-text-soft hover:bg-hover',
@@ -54,6 +60,8 @@ export const controlShapes: Readonly<Record<ControlShape, string>> = {
     link: 'rounded-sm text-accent hover:text-accent-strong',
     accentPill:
         'min-h-8.5 justify-center gap-1.75 rounded-4xl bg-accent px-3.25 text-base font-semibold text-on-accent',
+    outlined: 'gap-2 rounded-lg border border-line-strong px-3 py-1.75 text-base text-text-soft hover:bg-rail',
+    outlinedSymbol: 'size-9.5 justify-center rounded-lg border border-line-strong text-text-soft hover:bg-rail',
 };
 
 /** Whether a control of that shape carries its name as words, or as the name of the symbol alone. */
@@ -64,7 +72,8 @@ export function labelledShape(shape: ControlShape): boolean {
         shape === 'primary' ||
         shape === 'selected' ||
         shape === 'link' ||
-        shape === 'accentPill'
+        shape === 'accentPill' ||
+        shape === 'outlined'
     );
 }
 

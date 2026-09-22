@@ -9745,6 +9745,13 @@ FAKE_MAGICK
 # surface at all, and each one says why.
 client_answer_bindings() {
   cat <<'BINDINGS'
+agent.ts agentHistory GET /api/client/agent/conversations
+agent.ts current - -
+agent.ts answeredEntries - -
+agent.ts composingEntries - -
+agent.ts answeredConversation GET /api/client/agent/conversations/{conversationId}
+agent.ts composingConversation GET /api/client/agent/conversations/{conversationId}
+agent.ts messagePosted POST /api/client/agent/conversations/{conversationId}/messages
 calendar.ts calendarWindow GET /api/client/calendar
 calendar.ts placed - -
 calendar.ts emptyCalendarWindow GET /api/client/calendar

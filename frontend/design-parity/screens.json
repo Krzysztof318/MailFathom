@@ -362,6 +362,20 @@
       "compositions": ["telefon", "fold", "tablet", "desktop"]
     },
     {
+      "id": "agent",
+      "route": "/#/agent",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "log",
+            "name": "Conversation with the agent"
+          }
+        }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
       "id": "composer",
       "route": "/#/mail",
       "signIn": true,

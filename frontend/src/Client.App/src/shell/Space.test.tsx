@@ -20,6 +20,7 @@ const handedToTasks = 'The task list this space was handed.';
 const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedToDiscover = 'The answer this space was handed.';
+const handedToTheAgent = 'The conversation this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
 
@@ -52,6 +53,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                             mail={<p>{handedToMail}</p>}
                             tabs={<p>{handedTheTabs}</p>}
                             discover={<p>{handedToDiscover}</p>}
+                            agent={<p>{handedToTheAgent}</p>}
                             tasks={<p>{handedToTasks}</p>}
                             people={<p>{handedToPeople}</p>}
                             calendar={<p>{handedToTheCalendar}</p>}
@@ -128,6 +130,17 @@ describe('Space', () => {
         expect(screen.getByText(handedToDiscover)).toBeDefined();
         expect(within(screen.getByRole('main', { name: 'Discover' })).queryByText(/not built yet/)).toBeNull();
         expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    });
+
+    it('draws the Agent space it was handed, with neither of the frame’s two regions beneath it', () => {
+        render(inStrictMode('agent'));
+
+        const agent = screen.getByRole('main', { name: 'Agent' });
+
+        expect(within(agent).getByText(handedToTheAgent)).toBeDefined();
+        expect(within(agent).queryByText(/not built yet/)).toBeNull();
+        expect(within(agent).queryByText(handedTheIntent)).toBeNull();
+        expect(within(agent).queryByText(handedTheStatus)).toBeNull();
     });
 
     // The one space the two regions are not stood beneath: the design project draws the question field under this

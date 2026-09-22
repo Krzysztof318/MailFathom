@@ -12,6 +12,7 @@ import {
     type ClientRequest,
     type ClientResponse,
 } from '@mailfathom/client-backend';
+import * as agent from '../../../../tests/fixtures/agent';
 import * as calendar from '../../../../tests/fixtures/calendar';
 import * as changes from '../../../../tests/fixtures/changes';
 import * as contacts from '../../../../tests/fixtures/contacts';
@@ -355,6 +356,7 @@ function answerFor(
 
     return (
         discoveryAnswer(route, asked, request, options) ??
+        agentAnswer(route, asked, request, options) ??
         calendarAnswer(route, asked, request, options) ??
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??
@@ -495,6 +497,46 @@ function discoveryAnswer(
     return answering(
         options.emptyCollections ? discovery.runComposedNothing : discovery.runTail(Number(asked.get('since') ?? '0')),
     );
+}
+
+/**
+ * What the Agent's history, one conversation, and the four writes into one answer with.
+ *
+ * The composing conversation stays composing, which is the state the status line and Cancel are looked at in; a
+ * conversation this corpus does not name — the one a question just opened — reads as the answered one, so a question
+ * asked here arrives at an answer. A read past a cursor answers what was written after it, and every write is accepted
+ * without changing what is read afterwards.
+ */
+function agentAnswer(
+    route: string,
+    asked: URLSearchParams,
+    request: ClientRequest,
+    options: Readonly<FixtureDeploymentOptions>,
+): ClientResponse | null {
+    if (!route.startsWith('/agent/conversations')) {
+        return null;
+    }
+
+    if (route === '/agent/conversations') {
+        return answering(options.emptyCollections ? { conversations: [] } : agent.agentHistory);
+    }
+
+    if (request.method === 'POST') {
+        const run = route.includes('/runs/') ? agent.composingQuestionId : agent.answeredQuestionId;
+
+        return { ...answering(agent.messagePosted(run)), status: 202 };
+    }
+
+    if (request.method === 'DELETE') {
+        return { status: 204, body: '', headers: {} };
+    }
+
+    const conversation = route.startsWith(`/agent/conversations/${agent.composingConversationId}`)
+        ? agent.composingConversation
+        : agent.answeredConversation;
+    const since = Number(asked.get('since') ?? '0');
+
+    return answering({ ...conversation, entries: conversation.entries.filter((entry) => entry.sequence > since) });
 }
 
 /** The day the machine running this is on, as a calendar day is spelled, which is the day a task list is grouped by. */
