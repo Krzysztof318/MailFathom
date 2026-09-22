@@ -292,6 +292,31 @@ describe('AgentSpace', () => {
         expect((field as HTMLInputElement).value).toBe('How many bays?');
     });
 
+    it('keeps what was typed while a question was being sent', async () => {
+        const { transport } = deploymentAnswering();
+        let answer: () => void = () => undefined;
+        screenOf((request) =>
+            request.method === 'POST'
+                ? new Promise((resolve) => {
+                      answer = () => {
+                          void transport(request).then(resolve);
+                      };
+                  })
+                : transport(request),
+        );
+
+        const field = screen.getByRole('textbox', { name: 'Tell the agent what to do' });
+        fireEvent.change(field, { target: { value: 'How many bays?' } });
+        fireEvent.click(screen.getByRole('button', { name: /Send/ }));
+        fireEvent.change(field, { target: { value: 'And by when?' } });
+        answer();
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Send/ }).hasAttribute('disabled')).toBe(false);
+        });
+        expect((field as HTMLInputElement).value).toBe('And by when?');
+    });
+
     it('deletes a conversation only once the confirmation naming it is answered', async () => {
         const { transport, asked } = deploymentAnswering();
         screenOf(transport);

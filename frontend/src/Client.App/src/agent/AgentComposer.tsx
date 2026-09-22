@@ -60,8 +60,9 @@ export function AgentComposer({
         const sent = await onSend(question);
         setSending(false);
 
-        if (sent && written === text) {
-            setText('');
+        // Against the field as it stands when the send answers: anything typed while it was going is kept.
+        if (sent) {
+            setText((now) => (now === written ? '' : now));
         }
     }
 
