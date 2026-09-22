@@ -5996,6 +5996,16 @@
           },
           "requested": {
             "type": "string"
+          },
+          "restore": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailAccountRestoreStandingResponse"
+              }
+            ]
           }
         },
         "required": [
@@ -6003,7 +6013,8 @@
           "requested",
           "phase",
           "isSwitchPending",
-          "drain"
+          "drain",
+          "restore"
         ],
         "type": "object"
       },
@@ -6160,6 +6171,102 @@
           "version",
           "users",
           "declaration"
+        ],
+        "type": "object"
+      },
+      "MailAccountRestoreSettlementRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "record": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceHoldsTheCopy": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account",
+          "record",
+          "sourceHoldsTheCopy"
+        ],
+        "type": "object"
+      },
+      "MailAccountRestoreSettlementResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "record": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "wasSettled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account",
+          "record",
+          "wasSettled"
+        ],
+        "type": "object"
+      },
+      "MailAccountRestoreStandingResponse": {
+        "properties": {
+          "awaitingAppend": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "awaitingConfirmation": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "awaitingStateWrite": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unanswered": {
+            "items": {
+              "$ref": "#/components/schemas/MailAccountUnansweredAppendResponse"
+            },
+            "type": "array"
+          },
+          "unansweredAppends": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "awaitingAppend",
+          "awaitingStateWrite",
+          "unansweredAppends",
+          "awaitingConfirmation",
+          "unanswered"
         ],
         "type": "object"
       },
@@ -6333,6 +6440,27 @@
           "lastRun",
           "folders",
           "attachmentText"
+        ],
+        "type": "object"
+      },
+      "MailAccountUnansweredAppendResponse": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "record": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "folder",
+          "issuedAt"
         ],
         "type": "object"
       },
@@ -10506,6 +10634,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MailAccountCustodyResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/accounts/custody/restore/settle": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailAccountRestoreSettlementRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountRestoreSettlementResponse"
                 }
               }
             },

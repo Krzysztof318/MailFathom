@@ -183,7 +183,10 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         var summaries = await folder.FetchAsync(
             0,
             -1,
-            MessageSummaryItems.UniqueId | MessageSummaryItems.Flags | MessageSummaryItems.Envelope,
+            MessageSummaryItems.UniqueId
+                | MessageSummaryItems.Flags
+                | MessageSummaryItems.Envelope
+                | MessageSummaryItems.InternalDate,
             cancellationToken);
 
         await folder.CloseAsync(expunge: false, cancellationToken);
@@ -196,7 +199,9 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
                 .Select(summary => new ObservedEmail(
                     ImapUid.Create(summary.UniqueId.Id),
                     summary.Envelope?.Subject,
+                    summary.InternalDate,
                     summary.Flags?.HasFlag(MessageFlags.Seen) == true,
+                    summary.Flags?.HasFlag(MessageFlags.Answered) == true,
                     summary.Flags?.HasFlag(MessageFlags.Flagged) == true,
                     summary.Flags?.HasFlag(MessageFlags.Draft) == true,
                     summary.Keywords is { } keywords ? [.. keywords] : [])),

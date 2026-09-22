@@ -184,6 +184,9 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string MailAccountCustodySwitchPath = $"{Prefix}/accounts/custody/switch";
 
+    /// <summary>The route an unanswered restore append is settled on.</summary>
+    internal const string MailAccountRestoreSettlementPath = $"{Prefix}/accounts/custody/restore/settle";
+
     /// <summary>Where a deployment's contact book is listed and where a person is recorded in it.</summary>
     internal const string ContactsPath = $"{Prefix}/contacts";
 

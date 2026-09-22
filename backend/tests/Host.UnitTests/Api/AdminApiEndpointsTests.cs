@@ -161,6 +161,7 @@ public sealed class AdminApiEndpointsTests
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAccountCustodyEndpoints.CustodyRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountCustodyEndpoints.CustodyAppendSettlementRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailAccountCustodyEndpoints.CustodySwitchRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
@@ -292,6 +293,7 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"GET {prefix}{MailAccountCustodyEndpoints.CustodyRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{MailAccountCustodyEndpoints.CustodyAppendSettlementRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
                 $"POST {prefix}{MailAccountCustodyEndpoints.CustodySwitchRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
                 $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.StatusRoute} -> {MailFathomPermission.AdminRead.Name}",

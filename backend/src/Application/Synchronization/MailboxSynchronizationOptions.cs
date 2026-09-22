@@ -48,4 +48,12 @@ public sealed class MailboxSynchronizationOptions
     /// long one command's UID set is, which is what keeps a command inside what a server will accept on one line.
     /// </remarks>
     public int MaxDrainedEmailsPerCommand { get; set; } = 50;
+
+    /// <summary>Gets or sets how many messages one run of a restoring account puts back onto its source server.</summary>
+    /// <remarks>
+    /// The other direction of the same work, bounded for the same reason and separately because it costs a different
+    /// thing: a drained message is a UID in a command's set, while a restored one is a whole payload appended on its
+    /// own. One run takes this many in hand once and ends, and the next run takes the next lot.
+    /// </remarks>
+    public int MaxRestoredEmailsPerRun { get; set; } = 100;
 }

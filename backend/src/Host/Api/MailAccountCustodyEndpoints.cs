@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -24,14 +25,16 @@ namespace MailFathom.Host.Api;
 /// that arrives with a file.
 /// </para>
 /// <para>
-/// The read is published under <c>mailfathom.admin.read</c> and the switch under its own
-/// <c>mailfathom.admin.custody.write</c>. A grant of its own rather than the configuration writer's, because this is
-/// the only administrative act that ends with a mail server no longer holding a copy of the mailbox: a credential that
-/// may rewrite settings must not thereby be able to empty a source server.
+/// The read is published under <c>mailfathom.admin.read</c>, and both write routes — the switch, and the settlement of
+/// an append whose answer never came back — under the same <c>mailfathom.admin.custody.write</c>. A grant of its own
+/// rather than the configuration writer's, because these are the administrative acts that end with a mail server no
+/// longer holding a copy of the mailbox, or with a second copy in somebody's folder: a credential that may rewrite
+/// settings must not thereby be able to do either.
 /// </para>
 /// <para>
-/// Nothing on either route is derived from a message. The standing figures are counts, and a refusal names an account,
-/// a folder alias, or a replica — MailFathom's own words for things.
+/// Nothing on any of the three routes is derived from a message. The standing figures are counts, an append is named
+/// by a record identity, a folder alias and an instant, and a refusal names an account, a folder alias, or a replica —
+/// MailFathom's own words for things.
 /// </para>
 /// </remarks>
 internal static class MailAccountCustodyEndpoints
@@ -42,15 +45,18 @@ internal static class MailAccountCustodyEndpoints
     /// <summary>The route a switch is asked for on, relative to the administrative prefix.</summary>
     internal const string CustodySwitchRoute = "/accounts/custody/switch";
 
-    /// <summary>The greatest request body the switch reads before refusing it.</summary>
+    /// <summary>The route an unanswered restore append is settled on, relative to the administrative prefix.</summary>
+    internal const string CustodyAppendSettlementRoute = "/accounts/custody/restore/settle";
+
+    /// <summary>The greatest request body either write route reads before refusing it.</summary>
     /// <remarks>
-    /// The body names one account and one custody, so a few hundred bytes is the whole of anything it could mean.
-    /// Stated for the reason every administrative body states it: the server's own default is measured in tens of
-    /// megabytes.
+    /// One body names an account and a custody and the other an account, a record and a verdict, so a few hundred
+    /// bytes is the whole of anything either could mean. Stated for the reason every administrative body states it:
+    /// the server's own default is measured in tens of megabytes.
     /// </remarks>
     internal const int MaxCustodyRequestBytes = 4 * 1024;
 
-    /// <summary>Maps both custody routes into the administrative group, so they inherit its authorization.</summary>
+    /// <summary>Maps the three custody routes into the administrative group, so they inherit its authorization.</summary>
     /// <param name="api">The administrative route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
     internal static void MapMailAccountCustody(this RouteGroupBuilder api)
@@ -62,6 +68,9 @@ internal static class MailAccountCustodyEndpoints
         api.MapPost(CustodySwitchRoute, SwitchAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxCustodyRequestBytes))
             .RequirePermission(MailFathomPermission.AdminCustodyWrite);
+        api.MapPost(CustodyAppendSettlementRoute, SettleRestoreAppendAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxCustodyRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminCustodyWrite);
     }
 
     /// <summary>Reports which copy of one account's mailbox is the truth, and how far a switch under way has got.</summary>
@@ -69,6 +78,7 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="custody">Reads the account's custody.</param>
     /// <param name="drain">Reads how much of the source is still to be emptied.</param>
+    /// <param name="restore">Reads how much of the mailbox is still to be put back.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the state and the standing figures, <c>400</c> naming what was wrong with the request, or <c>409</c> where the account is served but has bound no folder yet.</returns>
     internal static async Task<Results<Ok<MailAccountCustodyResponse>, ProblemHttpResult>> ReadAsync(
@@ -76,11 +86,13 @@ internal static class MailAccountCustodyEndpoints
         [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailAccountCustodySwitch custody,
         [FromServices] MailboxDrainPass drain,
+        [FromServices] MailboxRestorePass restore,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(custody);
         ArgumentNullException.ThrowIfNull(drain);
+        ArgumentNullException.ThrowIfNull(restore);
 
         if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
@@ -94,6 +106,13 @@ internal static class MailAccountCustodyEndpoints
 
         var standing = await drain.ReadStandingAsync(servedAccount, cancellationToken);
 
+        // Only a restoring account is asked what it still owes its source, because the question is meaningless of any
+        // other and expensive to answer: every message a mirrored account holds carries an occurrence whose state has
+        // never been written down, so the same reading over one would report the whole mailbox as outstanding work.
+        var restoreStanding = state.Phase is MailAccountCustodyPhase.Restoring
+            ? await ReadRestoreStandingAsync(servedAccount, restore, cancellationToken)
+            : null;
+
         return TypedResults.Ok(new MailAccountCustodyResponse(
             servedAccount.Value,
             state.Requested.ToString(),
@@ -103,7 +122,30 @@ internal static class MailAccountCustodyEndpoints
                 standing.AwaitingDrain,
                 standing.HeldBackAboveSizeLimit,
                 standing.HeldBackAwaitingHeadroom,
-                standing.AwaitingSourceRemoval)));
+                standing.AwaitingSourceRemoval),
+            restoreStanding));
+    }
+
+    /// <summary>Reads what one restoring account still owes its source, counted and with each append named.</summary>
+    private static async Task<MailAccountRestoreStandingResponse> ReadRestoreStandingAsync(
+        MailAccountId account,
+        MailboxRestorePass restore,
+        CancellationToken cancellationToken)
+    {
+        var standing = await restore.ReadStandingAsync(account, cancellationToken);
+        var unanswered = await restore.ReadUnansweredAppendsAsync(account, cancellationToken);
+
+        return new MailAccountRestoreStandingResponse(
+            standing.AwaitingAppend,
+            standing.AwaitingStateWrite,
+            standing.UnansweredAppends,
+            standing.AwaitingConfirmation,
+            [
+                .. unanswered.Select(static append => new MailAccountUnansweredAppendResponse(
+                    append.Id.Value,
+                    append.SourceFolderAlias.Value,
+                    append.IssuedAt)),
+            ]);
     }
 
     /// <summary>Asks for one account's custody to become what the request names.</summary>
@@ -172,6 +214,47 @@ internal static class MailAccountCustodyEndpoints
             [.. outcome.Refusals.Select(refusal => refusal.Describe())]));
     }
 
+    /// <summary>Records what an operator found in the folder one unanswered restore append was issued against.</summary>
+    /// <param name="request">The account, the record, and what the folder holds.</param>
+    /// <param name="accounts">Reports whether this deployment serves the named account.</param>
+    /// <param name="settlement">Writes the verdict.</param>
+    /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
+    /// <returns><c>200</c> with whether the record was still standing, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <remarks>
+    /// A record nothing was standing for answers <c>200</c> with <c>false</c> rather than an error, because the
+    /// operator's question is whether the append is still outstanding and "somebody already settled it" is an answer
+    /// to it. That also makes the command safe to repeat.
+    /// </remarks>
+    internal static async Task<Results<Ok<MailAccountRestoreSettlementResponse>, ProblemHttpResult>> SettleRestoreAppendAsync(
+        [FromBody] MailAccountRestoreSettlementRequest? request,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
+        [FromServices] MailboxRestoreSettlement settlement,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(settlement);
+
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
+        {
+            return AdminAccountRequest.Refuse(request?.Account);
+        }
+
+        if (request?.Record is not { } record || record == Guid.Empty)
+        {
+            return TypedResults.Problem(
+                "The request named no append record. Name the record the account's custody reading reports.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var settled = await settlement.SettleAsync(
+            servedAccount,
+            new MailboxRestoreAppendId(record),
+            request.SourceHoldsTheCopy,
+            cancellationToken);
+
+        return TypedResults.Ok(new MailAccountRestoreSettlementResponse(servedAccount.Value, record, settled));
+    }
+
     /// <summary>States that the deployment serves the account but holds no record of it yet.</summary>
     /// <param name="account">The served account.</param>
     /// <returns>The refusal, which is a statement about the deployment rather than about the request.</returns>
@@ -212,12 +295,20 @@ internal sealed record MailAccountCustodySwitchRequest(string? Account, string? 
 /// <param name="Phase">Which copy is the truth at this moment.</param>
 /// <param name="IsSwitchPending">Whether the account is still moving towards what was asked for.</param>
 /// <param name="Drain">What the source still holds, counted.</param>
+/// <param name="Restore">What the mailbox still owes the source, or <see langword="null" /> for an account putting nothing back.</param>
+/// <remarks>
+/// The restore block is absent rather than zeroed off a restoring account, because the question is meaningless of any
+/// other and expensive to answer: every message a mirrored account holds carries an occurrence whose state has never
+/// been written down, so the same reading over one would report the whole mailbox as outstanding work. A reader takes
+/// its absence as "nothing is being put back", which is what a row of zeroes would otherwise have to be read as.
+/// </remarks>
 internal sealed record MailAccountCustodyResponse(
     string Account,
     string Requested,
     string Phase,
     bool IsSwitchPending,
-    MailAccountDrainStandingResponse Drain);
+    MailAccountDrainStandingResponse Drain,
+    MailAccountRestoreStandingResponse? Restore);
 
 /// <summary>What one held account's source still holds, counted rather than listed.</summary>
 /// <param name="AwaitingDrain">Messages whose occurrence still stands on the source.</param>
@@ -229,6 +320,45 @@ internal sealed record MailAccountDrainStandingResponse(
     int HeldBackAboveSizeLimit,
     int HeldBackAwaitingHeadroom,
     int AwaitingSourceRemoval);
+
+/// <summary>What one restoring account's mailbox still owes its source, counted rather than listed.</summary>
+/// <param name="AwaitingAppend">Messages the source no longer holds that have still to be put back.</param>
+/// <param name="AwaitingStateWrite">Messages whose stored state has still to be written onto the occurrence they keep.</param>
+/// <param name="UnansweredAppends">Appends whose answer never came back, each of which holds the account in <c>Restoring</c>.</param>
+/// <param name="AwaitingConfirmation">Appends the source answered in full whose occurrence the next pass has still to write, which need nobody.</param>
+/// <param name="Unanswered">The unanswered appends, named so an operator can settle them one at a time.</param>
+/// <remarks>
+/// The records are the one part of this answer that is a list rather than a count, and they carry a record identity, a
+/// folder alias, and an instant — MailFathom's own words for things. What an operator needs is which of their folders
+/// to look in and which record to settle, and neither is derived from the message.
+/// </remarks>
+internal sealed record MailAccountRestoreStandingResponse(
+    int AwaitingAppend,
+    int AwaitingStateWrite,
+    int UnansweredAppends,
+    int AwaitingConfirmation,
+    IReadOnlyList<MailAccountUnansweredAppendResponse> Unanswered);
+
+/// <summary>One append the restore issued whose answer never came back.</summary>
+/// <param name="Record">What the settling command names the record by.</param>
+/// <param name="Folder">MailFathom's own name for the folder the copy was appended into.</param>
+/// <param name="IssuedAt">When the command went out.</param>
+internal sealed record MailAccountUnansweredAppendResponse(
+    Guid Record,
+    string Folder,
+    DateTimeOffset IssuedAt);
+
+/// <summary>What an operator found in the folder one unanswered restore append was issued against.</summary>
+/// <param name="Account">The account, as the deployment's configuration names it.</param>
+/// <param name="Record">The record being settled, as the custody reading names it.</param>
+/// <param name="SourceHoldsTheCopy">Whether the folder holds the copy the append may have put there.</param>
+internal sealed record MailAccountRestoreSettlementRequest(string? Account, Guid? Record, bool SourceHoldsTheCopy);
+
+/// <summary>What settling one unanswered restore append did.</summary>
+/// <param name="Account">The account.</param>
+/// <param name="Record">The record named.</param>
+/// <param name="WasSettled">Whether the record was still standing, which is false where somebody had already settled it.</param>
+internal sealed record MailAccountRestoreSettlementResponse(string Account, Guid Record, bool WasSettled);
 
 /// <summary>What asking for a custody did.</summary>
 /// <param name="Account">The account.</param>

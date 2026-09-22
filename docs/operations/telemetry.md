@@ -980,6 +980,39 @@ replica's work, and a gauge per replica would invite a dashboard to sum four cop
 Nothing here is derived from a message. The dimensions are the account alias and a closed set of MailFathom's own
 words, and the values are counts — no UID, no folder path, no address, and no subject.
 
+### Putting a held account's mailbox back
+
+An account switched back to mirroring has its mailbox appended onto its source again, by its own synchronization runs,
+and that progress is as unreadable off the mail as the drain's is. These four counters carry `mailfathom.mail.account`
+and nothing else unless stated, and all four are additive.
+
+`mailfathom.mailbox.restore.appended` counts the messages put back onto the source and given the occurrence the server
+named, and `mailfathom.mailbox.restore.state_written` counts the messages the drain never reached whose held state — the
+move, the read, the star, the labels — was written down as the mutations the converger carries. Summed across replicas
+and read as a rate, the two are how fast a source is filling.
+
+`mailfathom.mailbox.restore.unanswered_appends` is the one to alert on, and it is the only counter here that names work
+for a person. It counts the appends this run left with an unknown outcome: the command went out and no answer naming
+where the copy went came back, so the folder may hold the copy and may not, and MailFathom refuses to issue a second
+one. Each holds the account in `Restoring` until an operator looks in the folder and settles the record with
+`mfctl account custody settle`. A non-zero reading that nobody acts on is an account that never finishes switching off.
+
+`mailfathom.mailbox.restore.failures` counts what the restore could not put back and breaks it down by
+`mailfathom.mailbox.restore.failure`, whose seven values are MailFathom's own names for it: the source was unavailable,
+the source refused the credential, the folder is no longer there, the stored payload could not be read, the folder the
+message goes back into is bound to nothing, MailFathom holds a keyword on the message that no authored change may name,
+or the pass could not classify it. One of those is raised by the half that writes held state onto messages the source
+still holds and by nothing else: the unwritable keyword. The unresolved folder is raised by three places rather than
+one — that same half, a whole folder of appends that never went out, and the confirmation of a placement an earlier
+pass recorded — so a non-zero count there is read as *some folder of this account binds to nothing* rather than as a
+statement about the state walk.
+
+Whether the next run takes the message again follows from what the pass recorded for it rather than from the value. A
+failure that recorded nothing leaves the message a candidate; one whose command went out is counted here *and* under
+the unanswered appends above, because both are true of it; and the unreadable payload and the unwritable keyword are
+neither — the first is recorded as a message the restore can never put back and the second is stamped as state that has
+been written, so neither is reached again and neither holds the phase open.
+
 ### Contact collection
 
 An account that [collects contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) writes personal data

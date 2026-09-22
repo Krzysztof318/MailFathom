@@ -20,8 +20,11 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </para>
 /// <para>
 /// The surface is closed to exactly the mutations MailFathom is permitted to perform. There is no method that sends,
-/// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
-/// <c>\Answered</c>. Permitting one of those later is a decision to reopen rather than a method to append, and this
+/// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that changes whether
+/// a message on the source counts as answered. <see cref="AppendRestoredAsync" /> does put <c>\Answered</c> onto a
+/// message, and it is not an exception to that: it states what the source itself last showed about a message
+/// MailFathom is handing back, rather than asserting anything new about one the source already holds. Permitting one
+/// of the others later is a decision to reopen rather than a method to append, and this
 /// surface is what a permitted mutation arrives on — <c>\Flagged</c> and the keywords did, because each is a change to
 /// one message and therefore the same kind of act as the four that were here first. What does not arrive here is an act
 /// of a different kind: folder creation is a port of its own for exactly that reason, so a caller able to file a message
@@ -49,10 +52,12 @@ namespace MailFathom.Application.Mail.Mutations;
 /// reads <see cref="IMailboxMutationJournal.Stage" /> and continues from there instead of starting over.
 /// </para>
 /// <para>
-/// Three operations take none, and each rests on a durable record of its own instead.
+/// Four operations take none, and each rests on a durable record of its own instead.
 /// <see cref="AppendAsync" /> and <see cref="WithdrawAppendedAsync" /> put a copy MailFathom composed into a folder and
 /// take it back again, and the outgoing or draft record the caller wrote before calling is what a resumed attempt
-/// reads. <see cref="ExpungeDrainedAsync" /> authors nothing at all: both its commands are idempotent against the UIDs
+/// reads; <see cref="AppendRestoredAsync" /> puts a held message back onto its source, and the restore's own append
+/// record is what says an unanswered one must not be issued again.
+/// <see cref="ExpungeDrainedAsync" /> authors nothing at all: both its commands are idempotent against the UIDs
 /// they name, and the row that selected each UID still carries the occurrence until the expunge is answered — so the
 /// durable record a journal would add is one the selecting state already holds, per message of a whole mailbox.
 /// </para>
@@ -304,6 +309,41 @@ public interface IMailboxWriteSession : IAsyncDisposable
     Task WithdrawAppendedAsync(
         ImapUidValidity uidValidity,
         ImapUid uid,
+        CancellationToken cancellationToken);
+
+    /// <summary>Puts a held message back into this session's folder when the account's custody returns to mirroring.</summary>
+    /// <param name="rawMime">The stored RFC 822 bytes to append, which are the bytes the source delivered when it was first stored.</param>
+    /// <param name="state">The flags and keywords MailFathom holds for the message, which the copy carries onto the source.</param>
+    /// <param name="internalDate">The arrival the stored message recorded, so a restored folder sorts as it did before.</param>
+    /// <param name="cancellationToken">Cancels the append.</param>
+    /// <returns>Where the folder put the copy, when the server named it.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="state" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the append within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// <para>
+    /// The fifth reopening of this surface, and the one act here that puts a message somebody else sent back where it
+    /// came from. It is a method of its own rather than a mode of <see cref="AppendAsync" /> because the two assert
+    /// different things: that one appends a copy MailFathom composed, carrying the two flags a composition establishes,
+    /// while this one appends mail MailFathom was holding and carries what the source last showed about it together
+    /// with what a person did to it while it was held. So this operation carries four system flags — <c>\Seen</c>,
+    /// <c>\Answered</c>, <c>\Flagged</c> and <c>\Draft</c> — and the keywords beside them, each of which MailFathom
+    /// observed per message and would otherwise lose on the way back. <c>\Deleted</c> is the one it does not carry,
+    /// because it is a request that the folder stop holding the message rather than an observation about it.
+    /// </para>
+    /// <para>
+    /// It is never repeated on the caller's behalf, for the reason <see cref="AppendAsync" /> is not: an <c>APPEND</c>
+    /// issued twice is a second message in the user's folder. The durable record the restore writes before calling is
+    /// what a resumed attempt reads, and a record whose answer never arrived is reported to an operator rather than
+    /// issued again. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </para>
+    /// </remarks>
+    Task<RemoteEmailPlacement> AppendRestoredAsync(
+        ReadOnlyMemory<byte> rawMime,
+        RestoredEmailState state,
+        DateTimeOffset internalDate,
         CancellationToken cancellationToken);
 
     /// <summary>Reports whether this source can be drained at all, which is whether it advertises <c>UIDPLUS</c>.</summary>

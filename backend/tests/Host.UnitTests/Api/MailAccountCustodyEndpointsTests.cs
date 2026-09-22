@@ -13,8 +13,11 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -26,7 +29,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
 
-/// <summary>Covers the two routes an account's custody is read from and changed on.</summary>
+/// <summary>Covers the three routes an account's custody is read from, changed on, and has its appends settled on.</summary>
 /// <remarks>
 /// What is asserted here is what a caller is answered rather than what the switch decided, which
 /// <c>MailAccountCustodySwitchTests</c> holds. The status separating the two kinds of negative answer is the whole of
@@ -69,6 +72,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             custody,
             drain,
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -82,6 +86,83 @@ public sealed class MailAccountCustodyEndpointsTests
         Assert.Equal(7, state.Drain.AwaitingSourceRemoval);
     }
 
+    /// <summary>
+    /// The counts an operator acts on, and the records they act with: a count of unanswered appends with no record
+    /// named beside it is a number nobody can settle, which is the shape this route exists to avoid.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ARestoringAccount_AnswersWhatItOwesItsSourceAndNamesEachUnansweredAppend()
+    {
+        // Arrange
+        var custody = SwitchOver(CustodyStoreHolding(
+            new MailAccountCustodyState(MailAccountCustody.MirrorSource, MailAccountCustodyPhase.Restoring)));
+        var unanswered = new MailboxRestoreAppend(
+            MailboxRestoreAppendId.New(),
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            MailFolderAlias.Create("archive"),
+            MailFolderResolutionGeneration.First,
+            Moment);
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.ReadAsync(
+            Account.Value,
+            CatalogServing(Account),
+            custody,
+            DrainOver(),
+            RestoreOver(
+                new MailboxRestoreStanding(
+                    AwaitingAppend: 318,
+                    AwaitingStateWrite: 12,
+                    UnansweredAppends: 1,
+                    AwaitingConfirmation: 2),
+                unanswered),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var restore = Assert.IsType<Ok<MailAccountCustodyResponse>>(answer.Result).Value!.Restore;
+        Assert.NotNull(restore);
+        Assert.Equal(318, restore.AwaitingAppend);
+        Assert.Equal(12, restore.AwaitingStateWrite);
+        Assert.Equal(1, restore.UnansweredAppends);
+        Assert.Equal(2, restore.AwaitingConfirmation);
+
+        var named = Assert.Single(restore.Unanswered);
+        Assert.Equal(unanswered.Id.Value, named.Record);
+        Assert.Equal("ARCHIVE", named.Folder);
+        Assert.Equal(Moment, named.IssuedAt);
+    }
+
+    /// <summary>
+    /// The standing query counts a whole mailbox, and an account that is not restoring owes none of it — so the block
+    /// is absent rather than zero, and the query never runs for the accounts a deployment mostly holds.
+    /// </summary>
+    [Theory]
+    [InlineData(MailAccountCustodyPhase.Mirrored)]
+    [InlineData(MailAccountCustodyPhase.Held)]
+    public async Task ReadAsync_AnAccountThatIsNotRestoring_AnswersNoRestoreBlockAndAsksTheStoreNothing(
+        MailAccountCustodyPhase phase)
+    {
+        // Arrange
+        var custody = SwitchOver(CustodyStoreHolding(
+            new MailAccountCustodyState(MailAccountCustody.HoldMailbox, phase)));
+        var store = Substitute.For<IMailboxRestoreStore>();
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.ReadAsync(
+            Account.Value,
+            CatalogServing(Account),
+            custody,
+            DrainOver(),
+            RestoreOver(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.IsType<Ok<MailAccountCustodyResponse>>(answer.Result).Value!.Restore);
+        await store.DidNotReceiveWithAnyArgs().ReadStandingAsync(
+            Arg.Any<MailAccountId>(),
+            TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task ReadAsync_AnAccountThisDeploymentDoesNotServe_IsRefusedAsARequestToCorrect()
     {
@@ -91,6 +172,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             SwitchOver(CustodyStoreHolding(MailAccountCustodyState.Mirrored)),
             DrainOver(),
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -112,6 +194,7 @@ public sealed class MailAccountCustodyEndpointsTests
             CatalogServing(Account),
             SwitchOver(CustodyStoreHoldingNothing()),
             DrainOver(),
+            RestoreOver(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -289,6 +372,141 @@ public sealed class MailAccountCustodyEndpointsTests
             Substitute.For<IMailboxMutationRecordStore>(),
             Substitute.For<IEmailContentStore>(),
             Substitute.For<IEmailContentRepairRequestStore>(),
+            Substitute.For<IMailboxWriteSessionFactory>(),
+            Substitute.For<IMailFolderResolutionStore>(),
+            Substitute.For<IMailTransportSecurityPolicyReader>(),
+            Substitute.For<IMailFolderMappingReader>(),
+            CommitPolicy(),
+            new MailboxSynchronizationOptions(),
+            new FakeTimeProvider(Moment));
+    }
+
+    /// <summary>
+    /// The settlement acts on an account rather than on a record identity alone, so a name this deployment does not
+    /// serve has to be refused before anything is written — the record identity would otherwise be the whole of what
+    /// decides which deployment's mailbox an operator's verdict reaches.
+    /// </summary>
+    [Fact]
+    public async Task SettleRestoreAppendAsync_AccountThisDeploymentDoesNotServe_RefusesAndSettlesNothing()
+    {
+        // Arrange
+        var store = Substitute.For<IMailboxRestoreStore>();
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.SettleRestoreAppendAsync(
+            new MailAccountRestoreSettlementRequest("elsewhere", Guid.CreateVersion7(), SourceHoldsTheCopy: true),
+            CatalogServing(Account),
+            SettlementOver(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        await store.DidNotReceiveWithAnyArgs()
+            .SettleAppendAsync(default!, default, default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The record is what the verdict is about, and an empty or absent one would reach the store as a value that
+    /// matches nothing and be reported back as a record somebody had already settled.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettleRestoreAppendAsync_RequestNamesNoRecord_RefusesAndSettlesNothing(bool empty)
+    {
+        // Arrange
+        var store = Substitute.For<IMailboxRestoreStore>();
+        var request = empty
+            ? new MailAccountRestoreSettlementRequest(Account.Value, Guid.Empty, SourceHoldsTheCopy: false)
+            : null;
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.SettleRestoreAppendAsync(
+            request,
+            CatalogServing(Account),
+            SettlementOver(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        await store.DidNotReceiveWithAnyArgs()
+            .SettleAppendAsync(default!, default, default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A record nobody is standing for answers <c>200</c> with <c>false</c> rather than an error, because the
+    /// operator's question is whether the append is still outstanding — which is what makes the command safe to repeat.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SettleRestoreAppendAsync_OperatorNamedARecord_CarriesTheirVerdictAndReportsWhetherItWasStanding(
+        bool wasStanding)
+    {
+        // Arrange
+        var store = Substitute.For<IMailboxRestoreStore>();
+        store.SettleAppendAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailboxRestoreAppendId>(),
+                Arg.Any<bool>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(wasStanding));
+
+        var record = Guid.CreateVersion7();
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.SettleRestoreAppendAsync(
+            new MailAccountRestoreSettlementRequest(Account.Value, record, SourceHoldsTheCopy: true),
+            CatalogServing(Account),
+            SettlementOver(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var settled = Assert.IsType<Ok<MailAccountRestoreSettlementResponse>>(answer.Result).Value;
+        Assert.NotNull(settled);
+        Assert.Equal(Account.Value, settled.Account);
+        Assert.Equal(record, settled.Record);
+        Assert.Equal(wasStanding, settled.WasSettled);
+        await store.Received(1).SettleAppendAsync(
+            Arg.Any<IPersistenceSession>(),
+            Account,
+            new MailboxRestoreAppendId(record),
+            true,
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static MailboxRestoreSettlement SettlementOver(IMailboxRestoreStore store) => new(
+        store,
+        CommitPolicy(),
+        AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminCustodyWrite),
+        new FakeTimeProvider(Moment));
+
+    private static MailboxRestorePass RestoreOver(
+        MailboxRestoreStanding? standing = null,
+        params MailboxRestoreAppend[] unanswered)
+    {
+        var store = Substitute.For<IMailboxRestoreStore>();
+        store.ReadStandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(standing ?? MailboxRestoreStanding.Nothing));
+        store.ReadUnansweredAppendsAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<MailboxRestoreAppend>>(unanswered));
+
+        return RestoreOver(store);
+    }
+
+    private static MailboxRestorePass RestoreOver(IMailboxRestoreStore store)
+    {
+        return new MailboxRestorePass(
+            Substitute.For<IMailAccountCustodyStore>(),
+            store,
+            Substitute.For<IMailboxDrainStore>(),
+            Substitute.For<IMailboxMutationRecordStore>(),
+            Substitute.For<IEmailContentStore>(),
             Substitute.For<IMailboxWriteSessionFactory>(),
             Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailTransportSecurityPolicyReader>(),

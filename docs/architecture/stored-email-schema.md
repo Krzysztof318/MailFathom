@@ -376,6 +376,45 @@ was erased. What it is for is a UID to name in a `UID EXPUNGE`, and the record i
 records the expunge as done. A record whose folder reports another `UIDVALIDITY` is abandoned without a command
 reaching the source, on the same reasoning the drain's own batches are.
 
+## What an append the source never answered leaves behind
+
+Switching a held account back to mirroring appends its mailbox onto the source again, and `APPEND` is the one command
+of that mode that may never be issued twice: a second one is a second message in somebody's folder rather than a repeat
+of the first. So a row is written here and committed **before** the command goes out, and
+deleted once the occurrence the source named has been written onto the message. Nothing appends that message again
+while the row stands, whatever state it is in.
+
+The answer comes from a mail server and the occurrence is written to PostgreSQL, so the two cannot commit together,
+and the row therefore has two standing states. One carries the placement the source named: the append is fully
+answered and the next pass writes the occurrence and deletes the row. One carries no placement: the outcome is
+genuinely unknown, and only a person looking in the folder can settle it. Only the second is reported to an operator.
+
+| Column of `mailbox_restore_appends` | What it records |
+|---|---|
+| `Id` | The record's identity, a version 7 UUID MailFathom mints, and what an operator settles the record by |
+| `MailboxAccountId` | The account the append belongs to, as text, so the reading is per account exactly as every other pass is |
+| `StoredEmailId` | The message the append carried, a foreign key onto `stored_emails` that cascades. `ix_mailbox_restore_appends_email` is unique over it, so one message has one such record however many passes reach it at once — which is the constraint the whole safety rests on rather than a reading somebody remembered to take |
+| `FolderAlias` | MailFathom's own name for the folder the copy was appended into, which is what an operator is told to look in |
+| `IssuedAt` | When the command went out. `ix_mailbox_restore_appends_unanswered` is `(MailboxAccountId, IssuedAt)` filtered on `SettledAt IS NULL`, which is the reading an operator's view answers from, oldest first |
+| `AppendedUidValidity` | The `UIDVALIDITY` the source named for the folder it put the copy in, and null until it answers. Written on its own, by an update on the primary key, between a fully answered `APPEND` and the occurrence that answer justifies — which is what turns a process that ended between the two into work the next pass finishes |
+| `AppendedUid` | The UID the source named inside that folder, absent exactly where `AppendedUidValidity` is |
+| `SettledAt` | When the copy's fate stopped being open, and null while it still is. An operator stamps it by declaring the copy to be on the source, which keeps the row for good because the message has no occurrence to write and the row is the only thing stopping a second copy; a verdict of *not there* deletes it instead, and the next pass appends the message as it would any other. MailFathom stamps it itself in one case — a message whose stored payload cannot be served, which has no bytes to append and never will — so that it stops being counted as outstanding rather than holding the phase open for ever |
+
+The row carries nothing from the message but where its copy went: a stored identity, a folder alias, a placement, and
+two instants. Beside it
+`mailbox_accounts.RestoreStatePosition` is the account-level cursor the other half of the restore walks — the messages
+the drain never reached, whose held state has still to be written onto the occurrence they keep. It is one nullable
+`uuid` on the account rather than a stamp per message, because a per-message column would need a filtered index on the
+largest table in the schema and every mirrored deployment would carry it for nothing.
+
+`mailbox_accounts.RestoreGeneration` names which restore of that account is the current one. Every entry into
+`Restoring` advances it, in the same conditional statement that writes the phase, and nothing ever clears it. It is
+what the mutation records written by the other half of the restore are asked for by: a record's identity is the
+occurrence, the requester and the mutation together, a completed record is kept for good, and a message nobody moved
+has the same occurrence one hold-and-restore cycle later — so a requester naming only the mechanism would let the first
+cycle's finished records answer the second, which would then carry none of the second hold's read, star, label, or move
+state and end the phase saying it had.
+
 ## Where a delete left a message flagged
 
 `mailbox_flagged_deletes` holds one row per occurrence a `FlagDeleted` delete left on its server, written in the

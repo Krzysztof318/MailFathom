@@ -31,6 +31,7 @@ using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
@@ -124,6 +125,9 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly MailboxDrainTelemetry Drain =
         new(NullLogger<MailboxDrainTelemetry>.Instance);
 
+    private static readonly MailboxRestoreTelemetry Restore =
+        new(NullLogger<MailboxRestoreTelemetry>.Instance);
+
     private static readonly MailboxMutationAuditTelemetry MutationAudit =
         new(NullLogger<MailboxMutationAuditTelemetry>.Instance);
 
@@ -165,6 +169,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(MailboxContentVolumeTelemetry),
         typeof(MailboxConvergenceTelemetry),
         typeof(MailboxDrainTelemetry),
+        typeof(MailboxRestoreTelemetry),
         typeof(MailboxMutationAuditTelemetry),
         typeof(MailboxMutationTelemetry),
         typeof(MailboxReadTelemetry),
@@ -637,6 +642,19 @@ public sealed class TelemetrySurfaceContractTests
                     [MailboxDrainFailure.SourceUnavailable] = 1,
                 },
                 AbandonedBatchCount: 1));
+
+        Restore.Report(
+            Account,
+            new MailboxRestoreReport(
+                AppendedCount: 1,
+                StateWrittenCount: 1,
+                UnansweredAppendCount: 1,
+                Failures: new Dictionary<MailboxRestoreFailure, int>
+                {
+                    [MailboxRestoreFailure.SourceUnavailable] = 1,
+                },
+                Pause: MailboxRestorePause.None,
+                EndedTheRestore: true));
     }
 
     private static void DriveDelivery()

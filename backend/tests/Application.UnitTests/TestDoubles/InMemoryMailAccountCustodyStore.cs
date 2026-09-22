@@ -62,7 +62,11 @@ internal sealed class InMemoryMailAccountCustodyStore : IMailAccountCustodyStore
             return Task.FromResult(false);
         }
 
-        this.states[account.Value] = current with { Phase = moveTo };
+        // Entering Restoring names the restore, exactly as the real store's own move statement does. A fake that left
+        // the generation where it was would hand every cycle one identity and hide the defect this models.
+        this.states[account.Value] = moveTo is MailAccountCustodyPhase.Restoring
+            ? current with { Phase = moveTo, RestoreGeneration = current.RestoreGeneration + 1 }
+            : current with { Phase = moveTo };
 
         return Task.FromResult(true);
     }

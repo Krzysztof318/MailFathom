@@ -48,6 +48,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
@@ -239,6 +240,13 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IMailboxDrainStore>());
         services.AddSingleton(Substitute.For<IMailboxDrainTelemetry>());
         services.AddScoped<MailboxDrainPass>();
+
+        // The restore stage follows the drain in the same scope and is composed here for the same reason: a stage the
+        // supervisor cannot resolve fails inside the catch that isolates one account's run, so it would be logged and
+        // never noticed. No account these tests configure is restoring, so the pass is a read that issues nothing.
+        services.AddSingleton(Substitute.For<IMailboxRestoreStore>());
+        services.AddSingleton(Substitute.For<IMailboxRestoreTelemetry>());
+        services.AddScoped<MailboxRestorePass>();
         // The converger erases a held account's due deletes through the submission. No account these tests configure is
         // held, so the substituted state store is composed and never asked.
         services.AddSingleton(Substitute.For<ILocalEmailStateStore>());

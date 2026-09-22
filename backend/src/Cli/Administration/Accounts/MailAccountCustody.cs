@@ -19,12 +19,14 @@ internal sealed record MailAccountCustodySwitchRequest(
 /// <param name="Phase">Which copy is the truth at this moment.</param>
 /// <param name="IsSwitchPending">Whether the account is still moving towards what was asked for.</param>
 /// <param name="Drain">What the source still holds, counted.</param>
+/// <param name="Restore">What the mailbox still owes the source, counted, with the appends an operator has to settle.</param>
 internal sealed record MailAccountCustodyState(
     [property: JsonPropertyName("account")] string? Account,
     [property: JsonPropertyName("requested")] string? Requested,
     [property: JsonPropertyName("phase")] string? Phase,
     [property: JsonPropertyName("isSwitchPending")] bool IsSwitchPending,
-    [property: JsonPropertyName("drain")] MailAccountDrainStanding? Drain);
+    [property: JsonPropertyName("drain")] MailAccountDrainStanding? Drain,
+    [property: JsonPropertyName("restore")] MailAccountRestoreStanding? Restore);
 
 /// <summary>What one held account's source still holds, counted rather than listed.</summary>
 /// <param name="AwaitingDrain">Messages whose occurrence still stands on the source.</param>
@@ -36,6 +38,46 @@ internal sealed record MailAccountDrainStanding(
     [property: JsonPropertyName("heldBackAboveSizeLimit")] int HeldBackAboveSizeLimit,
     [property: JsonPropertyName("heldBackAwaitingHeadroom")] int HeldBackAwaitingHeadroom,
     [property: JsonPropertyName("awaitingSourceRemoval")] int AwaitingSourceRemoval);
+
+/// <summary>What one restoring account's mailbox still owes its source, counted rather than listed.</summary>
+/// <param name="AwaitingAppend">Messages the source no longer holds that have still to be put back.</param>
+/// <param name="AwaitingStateWrite">Messages whose stored state has still to be written onto the occurrence they keep.</param>
+/// <param name="UnansweredAppends">Appends whose answer never came back, each of which holds the account in Restoring.</param>
+/// <param name="AwaitingConfirmation">Appends the source answered in full whose occurrence the next run has still to write.</param>
+/// <param name="Unanswered">The unanswered appends, named so an operator can settle them one at a time.</param>
+internal sealed record MailAccountRestoreStanding(
+    [property: JsonPropertyName("awaitingAppend")] int AwaitingAppend,
+    [property: JsonPropertyName("awaitingStateWrite")] int AwaitingStateWrite,
+    [property: JsonPropertyName("unansweredAppends")] int UnansweredAppends,
+    [property: JsonPropertyName("awaitingConfirmation")] int AwaitingConfirmation,
+    [property: JsonPropertyName("unanswered")] IReadOnlyList<MailAccountUnansweredAppend>? Unanswered);
+
+/// <summary>One append the restore issued whose answer never came back.</summary>
+/// <param name="Record">What the settling command names the record by.</param>
+/// <param name="Folder">MailFathom's own name for the folder the copy was appended into.</param>
+/// <param name="IssuedAt">When the command went out.</param>
+internal sealed record MailAccountUnansweredAppend(
+    [property: JsonPropertyName("record")] Guid Record,
+    [property: JsonPropertyName("folder")] string? Folder,
+    [property: JsonPropertyName("issuedAt")] DateTimeOffset IssuedAt);
+
+/// <summary>What an operator found in the folder one unanswered restore append was issued against.</summary>
+/// <param name="Account">The account, as the deployment's configuration names it.</param>
+/// <param name="Record">The record being settled.</param>
+/// <param name="SourceHoldsTheCopy">Whether the folder holds the copy the append may have put there.</param>
+internal sealed record MailAccountRestoreSettlementRequest(
+    [property: JsonPropertyName("account")] string Account,
+    [property: JsonPropertyName("record")] Guid Record,
+    [property: JsonPropertyName("sourceHoldsTheCopy")] bool SourceHoldsTheCopy);
+
+/// <summary>What settling one unanswered restore append did.</summary>
+/// <param name="Account">The account.</param>
+/// <param name="Record">The record named.</param>
+/// <param name="WasSettled">Whether the record was still standing, which is false where somebody had already settled it.</param>
+internal sealed record MailAccountRestoreSettlementOutcome(
+    [property: JsonPropertyName("account")] string? Account,
+    [property: JsonPropertyName("record")] Guid Record,
+    [property: JsonPropertyName("wasSettled")] bool WasSettled);
 
 /// <summary>What asking for a custody did.</summary>
 /// <param name="Account">The account.</param>

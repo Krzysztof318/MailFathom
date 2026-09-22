@@ -425,6 +425,17 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(1, 10000)]
     public int MaxDrainedEmailsPerRun { get; set; } = 200;
 
+    /// <summary>Gets or sets how many messages one run of an account switching off puts back onto its source server.</summary>
+    /// <remarks>
+    /// The restore runs at the end of a synchronization run, beside the drain and on the same terms: a run puts this
+    /// many back once and ends, and the next run takes the next lot. The two halves of the pass share it, and the
+    /// state written onto messages the source still holds is spent first, because those cost no mail-server round trip
+    /// at all. Raising it fills a source sooner and lengthens each run of that account. It bounds a run at nothing
+    /// unless the account is restoring, because no other account has anything to put back.
+    /// </remarks>
+    [Range(1, 10000)]
+    public int MaxRestoredEmailsPerRun { get; set; } = 100;
+
     /// <summary>Gets or sets how many UIDs one <c>UID STORE</c> and <c>UID EXPUNGE</c> pair names.</summary>
     /// <remarks>
     /// A separate bound from the one above because it bounds a different thing: not how much work a run does, but how
@@ -557,7 +568,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         UnknownOutcomeGrace = this.UnknownMutationOutcomeGrace,
     };
 
-    /// <summary>Reads the seven keys one synchronization run is bounded by.</summary>
+    /// <summary>Reads the eight keys one synchronization run is bounded by.</summary>
     /// <returns>The bounds the run stops at.</returns>
     internal MailboxSynchronizationOptions ToSynchronizationOptions() => new()
     {
@@ -568,6 +579,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         MaxContentBytesPerRun = this.MaxContentBytesPerRun,
         MaxDrainedEmailsPerRun = this.MaxDrainedEmailsPerRun,
         MaxDrainedEmailsPerCommand = this.MaxDrainedEmailsPerCommand,
+        MaxRestoredEmailsPerRun = this.MaxRestoredEmailsPerRun,
     };
 
     /// <summary>Reads the four keys a MIME walk is bounded by, and whether it verifies a signature for itself.</summary>

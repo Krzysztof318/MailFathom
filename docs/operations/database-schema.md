@@ -368,6 +368,19 @@ account, which is what the previous build erased — would mark the deletes an a
 erasures and destroy exactly the local copies their own `LocalDisposition` asked to keep. That is the defect the column
 exists to remove, so the migration leaves the default alone.
 
+**`AddMailboxRestoreAppends` asks a restoring account's rollout to be short.** It creates an empty table and adds two
+columns to `mailbox_accounts` — `RestoreStatePosition`, nullable with no default, and `RestoreGeneration`, an integer
+defaulting to zero — so it is a catalog change on a table of any size and an older build reads none of the three. What
+such a build does write is the custody phase, and it writes it without either column. Both omissions cost the same
+thing and cost it silently. A switch out of `Restoring` performed by a replica of the previous build leaves the walk
+position where the restore left it, so a later restore of that account resumes from it and never revisits the mail
+below it; and a switch *into* `Restoring` performed by one leaves the generation where it was, so that restore asks for
+its records under a name an earlier restore of the same account already used and finds the earlier one's completed
+records standing in place of its own. So a mailbox restored to its source is restored by a deployment whose replicas
+are all on this release. Nothing is lost by the columns being there, and no mail is at risk: what goes unwritten is the
+read, the star, the labels, and the move somebody gave a message while the account was held, which MailFathom still
+holds and which a support request can put back.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
