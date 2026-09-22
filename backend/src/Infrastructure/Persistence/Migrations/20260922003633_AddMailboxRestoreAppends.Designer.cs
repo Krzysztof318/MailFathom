@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260921221706_AddMailboxRestoreAppends")]
+    [Migration("20260922003633_AddMailboxRestoreAppends")]
     partial class AddMailboxRestoreAppends
     {
         /// <inheritdoc />
@@ -2425,6 +2425,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<long?>("AppendedUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("AppendedUidValidity")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("FolderAlias")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -2444,7 +2450,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("StoredEmailId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("PK_mailbox_restore_appends");
 
                     b.HasIndex("StoredEmailId")
                         .IsUnique()

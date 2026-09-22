@@ -29,4 +29,13 @@ public enum MailboxRestoreFailure
 
     /// <summary>Anything else the attempt ended in, which the next ordinary run attempts again.</summary>
     SomethingElse = 5,
+
+    /// <summary>MailFathom holds a keyword on the message that no authored change may name.</summary>
+    /// <remarks>
+    /// The stored form keeps whatever a server reported, and an authored one has to be an IMAP atom — so a keyword
+    /// MailFathom observed can be one it may not write back. The message's other state is written down and its
+    /// keywords are not, which leaves the labels in MailFathom and off the source; correcting the keyword on the
+    /// message is what an operator does about it.
+    /// </remarks>
+    KeywordsUnwritable = 6,
 }

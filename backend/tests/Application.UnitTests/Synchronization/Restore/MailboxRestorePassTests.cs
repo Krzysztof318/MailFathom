@@ -513,6 +513,118 @@ public sealed class MailboxRestorePassTests
         Assert.True(standing.IsOutstanding);
     }
 
+    /// <summary>
+    /// The state walk keeps one forward-only position per account, so a candidate it steps over is one nothing ever
+    /// comes back for — the account would leave the phase with that message's state never written to its source.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_FolderAStateCandidateGoesIntoIsBoundToNothing_LeavesTheWalkStandingAtIt()
+    {
+        // Arrange
+        var unresolved = StillOnTheSource(Inbox, Unbound);
+        var behind = StillOnTheSource(Inbox, Inbox.Alias);
+        var context = new RestoreContext(Restoring).AwaitingStateWriteOf(unresolved, behind);
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(context.Store.StateWritten);
+        Assert.Equal(0, context.Store.StatePosition);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.FolderUnresolved]);
+        Assert.False(report.EndedTheRestore);
+    }
+
+    /// <summary>
+    /// A keyword a server reported can be one no authored change may name, and raising over it would leave every
+    /// later message of the account unreachable behind a walk that can never take its next step.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_MessageCarriesAKeywordNoChangeMayName_WritesItsOtherStateAndOpensNoKeywordRecord()
+    {
+        // Arrange
+        var candidate = StillOnTheSource(Inbox, Inbox.Alias, seen: true, keywords: ["\\Answered"]);
+        var context = new RestoreContext(Restoring).AwaitingStateWriteOf(candidate);
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.StateWrittenCount);
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.KeywordsUnwritable]);
+        Assert.Contains(candidate.Email, context.Store.StateWritten);
+        Assert.DoesNotContain(
+            context.Mutations.OpenedRequests,
+            request => request.Mutation == MailboxMutation.SetKeywords);
+        Assert.Contains(context.Mutations.OpenedRequests, request => request.Mutation == MailboxMutation.SetSeen);
+    }
+
+    /// <summary>
+    /// A payload that cannot be served has no bytes to append and no later pass can produce any, so counting it as
+    /// outstanding for ever would hold the account in the phase with nothing an operator could settle.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_StoredPayloadCannotBeServed_RecordsTheMessageAsOneTheRestoreCannotPutBack()
+    {
+        // Arrange
+        var candidate = Drained(Inbox.Alias);
+        var context = new RestoreContext(Restoring).AwaitingAppendOf(candidate).WithNoStoredPayload();
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.Failures[MailboxRestoreFailure.ContentUnreadable]);
+        Assert.Equal([candidate.Email], context.Store.Unrestorable);
+        Assert.Equal(0, report.UnansweredAppendCount);
+        Assert.True(report.EndedTheRestore);
+    }
+
+    /// <summary>
+    /// The answer to an append and the occurrence it justifies cannot commit together, so a pass that ended between
+    /// the two has to be finished rather than turned into an append an operator goes and looks for.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_AnEarlierPassRecordedAPlacementItNeverCarried_WritesTheOccurrenceWithoutAppendingAgain()
+    {
+        // Arrange
+        var candidate = Drained(Inbox.Alias);
+        var context = new RestoreContext(Restoring).WithPlacementRecordedFor(candidate);
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.AppendedCount);
+        Assert.Empty(context.AppendedStates);
+        Assert.Equal(
+            EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(9), ImapUid.Create(91)),
+            Assert.Single(context.Store.ConfirmedOccurrences));
+        Assert.True(report.EndedTheRestore);
+    }
+
+    /// <summary>
+    /// <c>\Answered</c> and <c>\Draft</c> are observations MailFathom records per message, so a copy put back
+    /// without them asserts less about the message than the source stated before the drain took it off.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_MessageWasAnsweredAndHeldAsADraft_PutsBothFlagsBackOnTheCopy()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingAppendOf(Drained(Inbox.Alias, seen: true, answered: true, draft: true));
+
+        // Act
+        await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var appended = Assert.Single(context.AppendedStates);
+        Assert.True(appended.IsSeen);
+        Assert.True(appended.IsAnswered);
+        Assert.True(appended.IsDraft);
+        Assert.False(appended.IsFlagged);
+    }
+
     private static MailAccountCustodyState Held { get; } =
         new(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Held);
 
@@ -522,11 +634,13 @@ public sealed class MailboxRestorePassTests
     private static MailboxRestoreCandidate Drained(
         MailFolderAlias folder,
         bool seen = false,
+        bool answered = false,
         bool flagged = false,
+        bool draft = false,
         IEnumerable<string>? keywords = null) => new(
         StoredEmailId.Create(Guid.CreateVersion7()),
         folder,
-        new RestoredEmailState(seen, flagged, RemoteEmailKeywords.Create(keywords)),
+        new RestoredEmailState(seen, answered, flagged, draft, RemoteEmailKeywords.Create(keywords)),
         ArrivedAt);
 
     private static MailboxRestoredStateCandidate StillOnTheSource(
@@ -539,7 +653,7 @@ public sealed class MailboxRestorePassTests
         EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(1), ImapUid.Create(11)),
         folder,
         destination,
-        new RestoredEmailState(seen, flagged, RemoteEmailKeywords.Create(keywords)));
+        new RestoredEmailState(seen, IsAnswered: false, flagged, IsDraft: false, RemoteEmailKeywords.Create(keywords)));
 
     private sealed class RestoreContext
     {
@@ -678,6 +792,21 @@ public sealed class MailboxRestorePassTests
                 MailboxSourceRemovalId.New(),
                 EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(31)),
                 Inbox));
+
+            return this;
+        }
+
+        /// <summary>Leaves behind what a pass that ended between a fully answered append and its occurrence leaves.</summary>
+        internal RestoreContext WithPlacementRecordedFor(MailboxRestoreCandidate candidate)
+        {
+            this.Store.WithPlacementRecordedFor(
+                new MailboxRestoreAppend(
+                    MailboxRestoreAppendId.New(),
+                    candidate.Email,
+                    candidate.SourceFolderAlias,
+                    RunInstant),
+                ImapUidValidity.Create(9),
+                ImapUid.Create(91));
 
             return this;
         }

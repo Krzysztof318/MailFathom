@@ -10,6 +10,7 @@ namespace MailFathom.IntegrationTests.Mailbox;
 /// <param name="Uid">The remote identifier within the folder's current UIDVALIDITY.</param>
 /// <param name="Subject">The subject the envelope carries, which is how a test recognizes the message it seeded.</param>
 /// <param name="IsSeen">Whether the server currently holds the <c>\Seen</c> flag for the message.</param>
+/// <param name="IsAnswered">Whether the server currently holds the <c>\Answered</c> flag for the message.</param>
 /// <param name="IsFlagged">Whether the server currently holds the <c>\Flagged</c> flag for the message.</param>
 /// <param name="IsDraft">Whether the server currently holds the <c>\Draft</c> flag for the message.</param>
 /// <param name="Keywords">
@@ -20,6 +21,7 @@ internal sealed record ObservedEmail(
     ImapUid Uid,
     string? Subject,
     bool IsSeen,
+    bool IsAnswered,
     bool IsFlagged,
     bool IsDraft,
     IReadOnlyList<string> Keywords);

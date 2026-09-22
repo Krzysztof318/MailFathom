@@ -5998,7 +5998,14 @@
             "type": "string"
           },
           "restore": {
-            "$ref": "#/components/schemas/MailAccountRestoreStandingResponse"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailAccountRestoreStandingResponse"
+              }
+            ]
           }
         },
         "required": [

@@ -35,10 +35,11 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
 
         var accountValue = account.Value;
 
-        // Oldest first, over the same filtered index the drain reads the other side of: a message with no occurrence
-        // is one the drain took off the source, which is exactly what the restore puts back. A message any append
-        // record names is out of the answer whether that record is settled or standing, because in both cases the
-        // source may already hold the copy.
+        // Oldest first. A message with no occurrence is one the drain took off the source, which is exactly what the
+        // restore puts back, and a message any append record names is out of the answer whether that record is settled
+        // or standing, because in both cases the source may already hold the copy. No index serves the null test —
+        // the drain's filtered index covers the occurrence being present rather than absent — so this is the account's
+        // own rows scanned once per pass, which is what the run's budget already bounds.
         var rows = await readContext.StoredEmails
             .AsNoTracking()
             .Where(email => email.MailboxAccountId == accountValue
@@ -57,7 +58,9 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                         .FirstOrDefault(),
                 email.MailFolder.Alias,
                 email.IsRemotelySeen,
+                email.IsRemotelyAnswered,
                 email.IsRemotelyFlagged,
+                email.IsRemotelyDraft,
                 email.RemoteKeywords,
                 email.ReceivedAt,
                 email.SentAt,
@@ -100,7 +103,9 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                         .Select(folder => folder.SourceFolderAlias)
                         .FirstOrDefault(),
                 email.IsRemotelySeen,
+                email.IsRemotelyAnswered,
                 email.IsRemotelyFlagged,
+                email.IsRemotelyDraft,
                 email.RemoteKeywords))
             .ToArrayAsync(cancellationToken);
 
@@ -112,7 +117,6 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         IPersistenceSession session,
         MailAccountId account,
         StoredEmailId email,
-        DateTimeOffset writtenAt,
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -130,24 +134,40 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
     }
 
     /// <inheritdoc />
-    public async Task WriteAppendAsync(
+    public Task<bool> WriteAppendAsync(
         IPersistenceSession session,
         MailAccountId account,
         MailboxRestoreAppend record,
+        CancellationToken cancellationToken) =>
+        this.StageRecordAsync(session, account, record, settledAt: null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> RecordUnrestorableAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailboxRestoreAppend record,
+        DateTimeOffset settledAt,
+        CancellationToken cancellationToken) =>
+        this.StageRecordAsync(session, account, record, settledAt, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RecordPlacementAsync(
+        IPersistenceSession session,
+        MailboxRestoreAppendId record,
+        ImapUidValidity uidValidity,
+        ImapUid uid,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(record);
-
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var recordValue = record.Value;
 
-        writeContext.MailboxRestoreAppends.Add(new MailboxRestoreAppendEntity
-        {
-            Id = record.Id.Value,
-            MailboxAccountId = account.Value,
-            StoredEmailId = record.Email.Value,
-            FolderAlias = record.SourceFolderAlias.Value,
-            IssuedAt = record.IssuedAt,
-        });
+        await writeContext.MailboxRestoreAppends
+            .Where(append => append.Id == recordValue)
+            .ExecuteUpdateAsync(
+                update => update
+                    .SetProperty(append => append.AppendedUidValidity, (uint?)uidValidity.Value)
+                    .SetProperty(append => append.AppendedUid, (uint?)uid.Value),
+                cancellationToken);
     }
 
     /// <inheritdoc />
@@ -181,6 +201,36 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
             .ExecuteDeleteAsync(cancellationToken);
 
         return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailboxRestoreConfirmation>> ReadConfirmableAppendsAsync(
+        MailAccountId account,
+        int maximumRecords,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumRecords, 1);
+
+        var accountValue = account.Value;
+
+        var rows = await readContext.MailboxRestoreAppends
+            .AsNoTracking()
+            .Where(append => append.MailboxAccountId == accountValue
+                && append.SettledAt == null
+                && append.AppendedUidValidity != null)
+            .OrderBy(append => append.IssuedAt)
+            .ThenBy(append => append.Id)
+            .Take(maximumRecords)
+            .Select(append => new ConfirmableRow(
+                append.Id,
+                append.StoredEmailId,
+                append.FolderAlias,
+                append.IssuedAt,
+                append.AppendedUidValidity!.Value,
+                append.AppendedUid!.Value))
+            .ToArrayAsync(cancellationToken);
+
+        return [.. rows.Select(static row => row.ToConfirmation())];
     }
 
     /// <inheritdoc />
@@ -246,8 +296,10 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         return await readContext.LocalMailFolders
             .AsNoTracking()
             .CountAsync(
+                // Erased or not: what pauses the restore is mail with no source folder to go back into, and an
+                // erasure that left messages bound to the folder has left exactly that. Reading only the live folders
+                // would let the restore append those messages nowhere and end the phase over them.
                 folder => folder.MailboxAccountId == accountValue
-                    && folder.ErasedAt == null
                     && folder.SourceFolderAlias == null
                     && readContext.StoredEmails.Any(email => email.LocalMailFolderId == folder.Id),
                 cancellationToken);
@@ -286,6 +338,44 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         return new MailboxRestoreStanding(awaitingAppend, awaitingStateWrite, unanswered);
     }
 
+    /// <summary>Stages one record for a message nothing has a record for yet.</summary>
+    /// <remarks>
+    /// The read is what makes this safe to commit under the optimistic retry policy: a replay whose first attempt in
+    /// fact landed, and a pass on another replica that reached the message first, both find the row and stage nothing.
+    /// It reads through the write context rather than the scoped one, so the answer is the transaction's own.
+    /// </remarks>
+    private async Task<bool> StageRecordAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailboxRestoreAppend record,
+        DateTimeOffset? settledAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var email = record.Email.Value;
+
+        if (await writeContext.MailboxRestoreAppends.AnyAsync(
+                append => append.StoredEmailId == email,
+                cancellationToken))
+        {
+            return false;
+        }
+
+        writeContext.MailboxRestoreAppends.Add(new MailboxRestoreAppendEntity
+        {
+            Id = record.Id.Value,
+            MailboxAccountId = account.Value,
+            StoredEmailId = email,
+            FolderAlias = record.SourceFolderAlias.Value,
+            IssuedAt = record.IssuedAt,
+            SettledAt = settledAt,
+        });
+
+        return true;
+    }
+
     /// <summary>Reads how far the state walk has got, which is <see langword="null" /> before it has taken a step.</summary>
     private Task<Guid?> ReadStatePositionAsync(string account, CancellationToken cancellationToken) =>
         readContext.MailboxAccounts
@@ -295,15 +385,22 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
             .SingleOrDefaultAsync(cancellationToken);
 
     /// <summary>Builds the state the append or the records carry, from the columns a held account writes them to.</summary>
-    private static RestoredEmailState StateOf(bool isSeen, bool isFlagged, string[] keywords) =>
-        new(isSeen, isFlagged, RemoteEmailKeywords.Create(keywords));
+    private static RestoredEmailState StateOf(
+        bool isSeen,
+        bool isAnswered,
+        bool isFlagged,
+        bool isDraft,
+        string[] keywords) =>
+        new(isSeen, isAnswered, isFlagged, isDraft, RemoteEmailKeywords.Create(keywords));
 
     private sealed record CandidateRow(
         Guid Id,
         string? LocalSourceAlias,
         string OccurrenceAlias,
         bool IsSeen,
+        bool IsAnswered,
         bool IsFlagged,
+        bool IsDraft,
         string[] Keywords,
         DateTimeOffset? ReceivedAt,
         DateTimeOffset? SentAt,
@@ -319,7 +416,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         internal MailboxRestoreCandidate ToCandidate() => new(
             StoredEmailId.Create(this.Id),
             MailFolderAlias.Create(this.LocalSourceAlias ?? this.OccurrenceAlias),
-            StateOf(this.IsSeen, this.IsFlagged, this.Keywords),
+            StateOf(this.IsSeen, this.IsAnswered, this.IsFlagged, this.IsDraft, this.Keywords),
             this.ReceivedAt ?? this.SentAt ?? this.StoredAt);
     }
 
@@ -333,7 +430,9 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         string? HierarchyDelimiter,
         string? LocalSourceAlias,
         bool IsSeen,
+        bool IsAnswered,
         bool IsFlagged,
+        bool IsDraft,
         string[] Keywords)
     {
         internal MailboxRestoredStateCandidate ToCandidate(MailAccountId account)
@@ -352,8 +451,26 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                     ImapUid.Create(this.Uid)),
                 folder,
                 MailFolderAlias.Create(this.LocalSourceAlias ?? this.Alias),
-                StateOf(this.IsSeen, this.IsFlagged, this.Keywords));
+                StateOf(this.IsSeen, this.IsAnswered, this.IsFlagged, this.IsDraft, this.Keywords));
         }
+    }
+
+    private sealed record ConfirmableRow(
+        Guid Id,
+        Guid Email,
+        string FolderAlias,
+        DateTimeOffset IssuedAt,
+        uint UidValidity,
+        uint Uid)
+    {
+        internal MailboxRestoreConfirmation ToConfirmation() => new(
+            new MailboxRestoreAppend(
+                new MailboxRestoreAppendId(this.Id),
+                StoredEmailId.Create(this.Email),
+                MailFolderAlias.Create(this.FolderAlias),
+                this.IssuedAt),
+            ImapUidValidity.Create(this.UidValidity),
+            ImapUid.Create(this.Uid));
     }
 
     private sealed record AppendRow(Guid Id, Guid Email, string FolderAlias, DateTimeOffset IssuedAt)

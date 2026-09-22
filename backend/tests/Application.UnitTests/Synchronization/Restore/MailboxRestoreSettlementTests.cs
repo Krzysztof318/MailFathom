@@ -120,7 +120,12 @@ public sealed class MailboxRestoreSettlementTests
                 .AwaitingAppendOf(new MailboxRestoreCandidate(
                     email,
                     MailFolderAlias.Create("inbox"),
-                    new RestoredEmailState(IsSeen: false, IsFlagged: false, RemoteEmailKeywords.None),
+                    new RestoredEmailState(
+                        IsSeen: false,
+                        IsAnswered: false,
+                        IsFlagged: false,
+                        IsDraft: false,
+                        RemoteEmailKeywords.None),
                     Now))
                 .WithAppendStandingFor(this.Standing);
 

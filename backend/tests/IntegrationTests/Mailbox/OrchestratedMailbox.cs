@@ -197,6 +197,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
                     ImapUid.Create(summary.UniqueId.Id),
                     summary.Envelope?.Subject,
                     summary.Flags?.HasFlag(MessageFlags.Seen) == true,
+                    summary.Flags?.HasFlag(MessageFlags.Answered) == true,
                     summary.Flags?.HasFlag(MessageFlags.Flagged) == true,
                     summary.Flags?.HasFlag(MessageFlags.Draft) == true,
                     summary.Keywords is { } keywords ? [.. keywords] : [])),

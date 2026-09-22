@@ -39,10 +39,25 @@ internal sealed class MailboxRestoreAppendEntity
     /// <summary>Gets or sets when the command went out, which is how long an unanswered record has been standing.</summary>
     public DateTimeOffset IssuedAt { get; set; }
 
-    /// <summary>Gets or sets when an operator declared the copy to be on the source, and <see langword="null" /> while nobody has.</summary>
+    /// <summary>Gets or sets the UIDVALIDITY the source named for the copy, and <see langword="null" /> until it answers.</summary>
     /// <remarks>
-    /// The one column that tells an append whose outcome is unknown from one whose outcome an operator established.
-    /// A settled row no longer holds the account in its phase and still keeps the message from being appended again.
+    /// Written on its own, between a fully answered <c>APPEND</c> and the occurrence that answer justifies, because
+    /// those two cannot commit together: one comes from a mail server and the other is written here. A row carrying
+    /// it is an append whose outcome is completely known and whose occurrence the next pass writes, which is a
+    /// different thing from a row carrying neither — that one is an outcome nobody knows.
+    /// </remarks>
+    public uint? AppendedUidValidity { get; set; }
+
+    /// <summary>Gets or sets the UID the source named inside that folder, absent exactly where <see cref="AppendedUidValidity" /> is.</summary>
+    public uint? AppendedUid { get; set; }
+
+    /// <summary>Gets or sets when the copy's fate stopped being open, and <see langword="null" /> while it still is.</summary>
+    /// <remarks>
+    /// The one column that tells an append still holding the account in its phase from one that has stopped. An
+    /// operator sets it by declaring the copy to be on the source; the restore sets it itself for a message whose
+    /// stored payload cannot be served, which has no bytes to append and never will. Either way the row stays for the
+    /// life of the message, because the message has no occurrence and the row is the only thing saying its copy may
+    /// already be on the source.
     /// </remarks>
     public DateTimeOffset? SettledAt { get; set; }
 }

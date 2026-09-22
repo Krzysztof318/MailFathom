@@ -30,6 +30,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     StoredEmailId = table.Column<Guid>(type: "uuid", nullable: false),
                     FolderAlias = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     IssuedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    AppendedUidValidity = table.Column<long>(type: "bigint", nullable: true),
+                    AppendedUid = table.Column<long>(type: "bigint", nullable: true),
                     SettledAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>

@@ -653,7 +653,7 @@ public sealed class TelemetrySurfaceContractTests
                 {
                     [MailboxRestoreFailure.SourceUnavailable] = 1,
                 },
-                Pause: MailboxRestorePause.LocalFolderWithoutMapping,
+                Pause: MailboxRestorePause.None,
                 EndedTheRestore: true));
     }
 

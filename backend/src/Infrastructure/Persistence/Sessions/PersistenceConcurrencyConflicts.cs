@@ -202,6 +202,16 @@ internal static class PersistenceConcurrencyConflicts
     /// violates the occurrence index. The retry re-reads, finds the delete settled by the winner, and records nothing.
     /// </para>
     /// <para>
+    /// The next two are the one append record a restoring message may carry, and they are one shape rather than two:
+    /// the record's identity is minted before the commit is entered, so a replay after a transient failure whose
+    /// commit in fact landed reaches its own primary key, and a pass on another replica reaching the same message
+    /// reaches the per-message index. The write resolves from a fresh read, so the retry finds the standing record and
+    /// stages nothing — which is what makes a lost race answer "somebody else has this message in hand" rather than
+    /// charging a provider failure against every remaining message in the folder. An <c>APPEND</c> is the one command
+    /// of the held-mailbox mode that may never go out twice, so the loser of this race must never be the one that
+    /// issues it.
+    /// </para>
+    /// <para>
     /// The last is one imported calendar entry offered twice at once — a double click, a second tab, a client retrying
     /// after a dropped answer. Each import reads which of the file's identifiers this calendar already holds inside its
     /// own transaction, so both read nothing and both insert, and the loser violates the partial index. That index's
@@ -219,6 +229,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.MailFolderBindingUniqueIndexName
                 or PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailboxMutationIdentityUniqueIndexName
+                or PersistenceConstraintNames.MailboxRestoreAppendEmailUniqueIndexName
+                or PersistenceConstraintNames.MailboxRestoreAppendPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailboxMutationAuditEntryMutationUniqueIndexName
                 or PersistenceConstraintNames.EmbeddingProfileFingerprintUniqueIndexName
                 or PersistenceConstraintNames.EmbeddingProfileLifecycleUniqueIndexName

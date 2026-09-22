@@ -22,9 +22,11 @@ namespace MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
 /// table exists to prevent.
 /// </para>
 /// <para>
-/// What it holds is a message identity, a folder alias, and two instants. No path, no UID, and nothing derived from
-/// the message, because what an operator needs from it is which of their folders to look in and which record to
-/// settle.
+/// What it holds is a message identity, a folder alias, two instants, and the placement the source named. No path and
+/// nothing else derived from the message, because what an operator needs from it is which of their folders to look in
+/// and which record to settle. The placement is there for the pass rather than for them: an answer from a mail server
+/// and the occurrence it justifies cannot commit together, so recording it is what turns a shutdown between the two
+/// into work the next pass finishes rather than an append an operator has to establish by hand.
 /// </para>
 /// </remarks>
 internal sealed class MailboxRestoreAppendConfiguration : IEntityTypeConfiguration<MailboxRestoreAppendEntity>
@@ -36,7 +38,8 @@ internal sealed class MailboxRestoreAppendConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<MailboxRestoreAppendEntity> entity)
     {
         entity.ToTable("mailbox_restore_appends");
-        entity.HasKey(append => append.Id);
+        entity.HasKey(append => append.Id)
+            .HasName(PersistenceConstraintNames.MailboxRestoreAppendPrimaryKeyConstraintName);
         entity.Property(append => append.Id).ValueGeneratedNever();
         entity.Property(append => append.MailboxAccountId).HasMaxLength(128);
         entity.Property(append => append.FolderAlias).HasMaxLength(128);

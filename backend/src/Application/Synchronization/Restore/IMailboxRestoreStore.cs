@@ -47,10 +47,17 @@ public interface IMailboxRestoreStore
     /// <returns>The messages, oldest first, bounded by what was asked for.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumCandidates" /> is not positive.</exception>
     /// <remarks>
+    /// <para>
     /// These are the messages the drain never reached, so the source still holds them where it always did — with
-    /// whatever flags it last had, since the source's own values stopped being observed at the switch on. A message the
-    /// restore appended is not among them: the append carried its state, and the confirmation that wrote its occurrence
-    /// stamped it as settled in the same transaction.
+    /// whatever flags it last had, since the source's own values stopped being observed at the switch on.
+    /// </para>
+    /// <para>
+    /// A message the restore appended can re-enter this walk, and deliberately so. The walk's position is one cursor
+    /// per account rather than a stamp per message, so a confirmation cannot mark its own message written without
+    /// moving the cursor past every message between — which would silently skip their state. What the cursor costs
+    /// instead is bounded and harmless: a message whose identity sorts after the cursor has records opened for the
+    /// state its own <c>APPEND</c> already carried, and the converger writes what the source is already showing.
+    /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxRestoredStateCandidate>> ReadStateCandidatesAsync(
         MailAccountId account,
@@ -60,20 +67,19 @@ public interface IMailboxRestoreStore
     /// <summary>Records that one message's local state has been written down as mutations for the converger to carry.</summary>
     /// <param name="session">The transaction the stamp commits in, which is the one the records were written in.</param>
     /// <param name="account">The account the message is stored for.</param>
-    /// <param name="email">The message.</param>
-    /// <param name="writtenAt">When the records were written.</param>
+    /// <param name="email">The message the walk has reached.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes once the stamp is staged in the session.</returns>
     /// <remarks>
     /// The stamp and the records are one transaction, because the stamp is the whole of what stops the next pass
     /// writing a second set of them. A crash before the commit leaves the message unstamped and the records unwritten,
-    /// which is the state the pass is already able to start from.
+    /// which is the state the pass is already able to start from. It carries no instant: what it records is how far
+    /// the walk has got, which is the message's own identity and nothing about when.
     /// </remarks>
     Task RecordStateWrittenAsync(
         IPersistenceSession session,
         MailAccountId account,
         StoredEmailId email,
-        DateTimeOffset writtenAt,
         CancellationToken cancellationToken);
 
     /// <summary>Writes down that an append is about to be issued for one message.</summary>
@@ -81,13 +87,64 @@ public interface IMailboxRestoreStore
     /// <param name="account">The account whose mailbox the copy goes back into.</param>
     /// <param name="record">The record to write.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes once the record is staged in the session.</returns>
+    /// <returns><see langword="true" /> when this caller is the one that took the message in hand.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="record" /> is <see langword="null" />.</exception>
-    /// <remarks>It commits before the command goes out, which is the whole of what stops a second copy.</remarks>
-    Task WriteAppendAsync(
+    /// <remarks>
+    /// <para>It commits before the command goes out, which is the whole of what stops a second copy.</para>
+    /// <para>
+    /// It resolves from a fresh read rather than inserting unconditionally, because the caller commits it under the
+    /// optimistic retry policy and that policy's contract is a write that means the same thing on a replay. A record
+    /// already standing for the message answers <see langword="false" />: either a commit whose answer was lost in
+    /// fact landed, or a pass on another replica reached the message first, and in both readings an <c>APPEND</c>
+    /// from this caller would be the second one.
+    /// </para>
+    /// </remarks>
+    Task<bool> WriteAppendAsync(
         IPersistenceSession session,
         MailAccountId account,
         MailboxRestoreAppend record,
+        CancellationToken cancellationToken);
+
+    /// <summary>Writes down the placement the source named, on the record the append was issued under.</summary>
+    /// <param name="session">The transaction the placement commits in.</param>
+    /// <param name="record">The record the append was issued under.</param>
+    /// <param name="uidValidity">The UIDVALIDITY the source named.</param>
+    /// <param name="uid">The UID the source named.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes once the placement is staged in the session.</returns>
+    /// <remarks>
+    /// An update by primary key and nothing else, which is what makes it the narrowest write between a fully answered
+    /// <c>APPEND</c> and the occurrence that answer justifies. Carrying the occurrence onto the message can lose a
+    /// race against synchronization and needs the message's own row; this cannot lose anything, so a record that
+    /// carries a placement is one the next pass finishes on its own rather than one an operator has to establish.
+    /// </remarks>
+    Task RecordPlacementAsync(
+        IPersistenceSession session,
+        MailboxRestoreAppendId record,
+        ImapUidValidity uidValidity,
+        ImapUid uid,
+        CancellationToken cancellationToken);
+
+    /// <summary>Writes down that the restore can never put one message back, so it stops being counted as outstanding.</summary>
+    /// <param name="session">The transaction the record commits in.</param>
+    /// <param name="account">The account the message is stored for.</param>
+    /// <param name="record">The record to write, which is settled from the moment it exists.</param>
+    /// <param name="settledAt">When the restore established that the message cannot go back.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns><see langword="true" /> when this caller is the one that wrote it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="record" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A message whose stored payload cannot be served has no bytes to append and no later pass can produce any, so
+    /// leaving it a candidate would count it as outstanding on every pass and hold the account in
+    /// <c>Restoring</c> for ever, with no record for an operator to settle. Recorded as settled it stops being
+    /// counted, the phase can end, and the source simply never gets that message back — which is what the pass
+    /// reports as <see cref="MailboxRestoreFailure.ContentUnreadable" /> and what an operator reads in the log.
+    /// </remarks>
+    Task<bool> RecordUnrestorableAsync(
+        IPersistenceSession session,
+        MailAccountId account,
+        MailboxRestoreAppend record,
+        DateTimeOffset settledAt,
         CancellationToken cancellationToken);
 
     /// <summary>Writes the occurrence the source named onto the message and deletes the record that stood for the append.</summary>
@@ -116,6 +173,22 @@ public interface IMailboxRestoreStore
         IPersistenceSession session,
         MailboxRestoreAppend record,
         EmailOccurrenceId occurrence,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the appends of one account the source has answered in full and nothing has yet carried.</summary>
+    /// <param name="account">The account.</param>
+    /// <param name="maximumRecords">The most records to read, which is a ceiling rather than a page.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The placements, oldest first, bounded by what was asked for.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumRecords" /> is not positive.</exception>
+    /// <remarks>
+    /// Ordinarily empty, because the pass that recorded a placement carries it in the same run. What it returns is
+    /// what a pass that ended between the two left behind, and finishing that is the difference between a message
+    /// whose occurrence was known all along and one an operator has to go and look for.
+    /// </remarks>
+    Task<IReadOnlyList<MailboxRestoreConfirmation>> ReadConfirmableAppendsAsync(
+        MailAccountId account,
+        int maximumRecords,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the appends of one account whose answer never came back.</summary>

@@ -54,7 +54,7 @@ internal static class MailAccountCustodyEndpoints
     /// </remarks>
     internal const int MaxCustodyRequestBytes = 4 * 1024;
 
-    /// <summary>Maps both custody routes into the administrative group, so they inherit its authorization.</summary>
+    /// <summary>Maps the three custody routes into the administrative group, so they inherit its authorization.</summary>
     /// <param name="api">The administrative route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
     internal static void MapMailAccountCustody(this RouteGroupBuilder api)
@@ -107,13 +107,9 @@ internal static class MailAccountCustodyEndpoints
         // Only a restoring account is asked what it still owes its source, because the question is meaningless of any
         // other and expensive to answer: every message a mirrored account holds carries an occurrence whose state has
         // never been written down, so the same reading over one would report the whole mailbox as outstanding work.
-        var restoring = state.Phase is MailAccountCustodyPhase.Restoring;
-        var restoreStanding = restoring
-            ? await restore.ReadStandingAsync(servedAccount, cancellationToken)
-            : MailboxRestoreStanding.Nothing;
-        var unanswered = restoring
-            ? await restore.ReadUnansweredAppendsAsync(servedAccount, cancellationToken)
-            : [];
+        var restoreStanding = state.Phase is MailAccountCustodyPhase.Restoring
+            ? await ReadRestoreStandingAsync(servedAccount, restore, cancellationToken)
+            : null;
 
         return TypedResults.Ok(new MailAccountCustodyResponse(
             servedAccount.Value,
@@ -125,16 +121,28 @@ internal static class MailAccountCustodyEndpoints
                 standing.HeldBackAboveSizeLimit,
                 standing.HeldBackAwaitingHeadroom,
                 standing.AwaitingSourceRemoval),
-            new MailAccountRestoreStandingResponse(
-                restoreStanding.AwaitingAppend,
-                restoreStanding.AwaitingStateWrite,
-                restoreStanding.UnansweredAppends,
-                [
-                    .. unanswered.Select(static append => new MailAccountUnansweredAppendResponse(
-                        append.Id.Value,
-                        append.SourceFolderAlias.Value,
-                        append.IssuedAt)),
-                ])));
+            restoreStanding));
+    }
+
+    /// <summary>Reads what one restoring account still owes its source, counted and with each append named.</summary>
+    private static async Task<MailAccountRestoreStandingResponse> ReadRestoreStandingAsync(
+        MailAccountId account,
+        MailboxRestorePass restore,
+        CancellationToken cancellationToken)
+    {
+        var standing = await restore.ReadStandingAsync(account, cancellationToken);
+        var unanswered = await restore.ReadUnansweredAppendsAsync(account, cancellationToken);
+
+        return new MailAccountRestoreStandingResponse(
+            standing.AwaitingAppend,
+            standing.AwaitingStateWrite,
+            standing.UnansweredAppends,
+            [
+                .. unanswered.Select(static append => new MailAccountUnansweredAppendResponse(
+                    append.Id.Value,
+                    append.SourceFolderAlias.Value,
+                    append.IssuedAt)),
+            ]);
     }
 
     /// <summary>Asks for one account's custody to become what the request names.</summary>
@@ -284,14 +292,20 @@ internal sealed record MailAccountCustodySwitchRequest(string? Account, string? 
 /// <param name="Phase">Which copy is the truth at this moment.</param>
 /// <param name="IsSwitchPending">Whether the account is still moving towards what was asked for.</param>
 /// <param name="Drain">What the source still holds, counted.</param>
-/// <param name="Restore">What the mailbox still owes the source, counted, with the appends an operator has to settle.</param>
+/// <param name="Restore">What the mailbox still owes the source, or <see langword="null" /> for an account putting nothing back.</param>
+/// <remarks>
+/// The restore block is absent rather than zeroed off a restoring account, because the question is meaningless of any
+/// other and expensive to answer: every message a mirrored account holds carries an occurrence whose state has never
+/// been written down, so the same reading over one would report the whole mailbox as outstanding work. A reader takes
+/// its absence as "nothing is being put back", which is what a row of zeroes would otherwise have to be read as.
+/// </remarks>
 internal sealed record MailAccountCustodyResponse(
     string Account,
     string Requested,
     string Phase,
     bool IsSwitchPending,
     MailAccountDrainStandingResponse Drain,
-    MailAccountRestoreStandingResponse Restore);
+    MailAccountRestoreStandingResponse? Restore);
 
 /// <summary>What one held account's source still holds, counted rather than listed.</summary>
 /// <param name="AwaitingDrain">Messages whose occurrence still stands on the source.</param>

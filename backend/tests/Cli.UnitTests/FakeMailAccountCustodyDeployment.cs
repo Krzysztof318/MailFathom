@@ -47,6 +47,10 @@ internal static class FakeMailAccountCustodyDeployment
     /// <param name="phase">Which copy of the mailbox is the truth.</param>
     /// <param name="isSwitchPending">Whether the account is still moving towards what was asked for.</param>
     /// <returns>The response body.</returns>
+    /// <remarks>
+    /// The restore block is written as <c>null</c> rather than left out, because that is what a deployment sends for
+    /// an account putting nothing back: the key is in the contract and its value is the absence.
+    /// </remarks>
     internal static string Held(
         string requested = "HoldMailbox",
         string phase = "Held",
@@ -55,7 +59,8 @@ internal static class FakeMailAccountCustodyDeployment
            {"account":"work","requested":"{{{requested}}}","phase":"{{{phase}}}",
             "isSwitchPending":{{{(isSwitchPending ? "true" : "false")}}},
             "drain":{"awaitingDrain":4812,"heldBackAboveSizeLimit":3,
-                     "heldBackAwaitingHeadroom":0,"awaitingSourceRemoval":7}}
+                     "heldBackAwaitingHeadroom":0,"awaitingSourceRemoval":7},
+            "restore":null}
            """;
 
     /// <summary>Writes the body reading a restoring account's custody answers with.</summary>

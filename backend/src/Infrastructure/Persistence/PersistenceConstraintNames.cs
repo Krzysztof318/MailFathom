@@ -304,6 +304,9 @@ internal static class PersistenceConstraintNames
     /// <summary>The order a restoring account's unanswered appends are read in.</summary>
     internal const string MailboxRestoreAppendUnansweredIndexName = "ix_mailbox_restore_appends_unanswered";
 
+    /// <summary>The identity of one append record, which a replay of the write that minted it reaches again.</summary>
+    internal const string MailboxRestoreAppendPrimaryKeyConstraintName = "PK_mailbox_restore_appends";
+
     /// <summary>The constraint that keeps one audit entry per mutation ending, whatever a repeated append attempts.</summary>
     internal const string MailboxMutationAuditEntryMutationUniqueIndexName =
         "ix_mailbox_mutation_audit_entries_mutation";

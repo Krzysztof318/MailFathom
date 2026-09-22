@@ -134,6 +134,11 @@ public sealed class MailboxRestorePass
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels the pass.</exception>
     /// <remarks>
     /// <para>
+    /// A placement an earlier pass recorded and never carried is finished first, before any budget is spent. It costs
+    /// nothing on an ordinary run — the pass that records a placement carries it in the same run — and doing it first
+    /// is what keeps a shutdown between the two from reaching an operator as an append to establish by hand.
+    /// </para>
+    /// <para>
     /// The state records are written before the appends because they cost no mail server round trip at all: they are
     /// rows the converger picks up on its own schedule, so spending the budget on them first is what keeps a mailbox of
     /// years from starving the half that finishes quickest.
@@ -164,6 +169,8 @@ public sealed class MailboxRestorePass
         var transportSecurityPolicy = this.transportSecurity.GetPolicy(account);
         var tally = new RestoreTally();
         var budget = this.options.MaxRestoredEmailsPerRun;
+
+        await this.CarryAnsweredPlacementsAsync(account, tally, cancellationToken);
 
         budget -= await this.WriteStoredStateOntoOccurrencesAsync(account, tally, budget, cancellationToken);
 
@@ -226,11 +233,23 @@ public sealed class MailboxRestorePass
             {
                 tally.Failed(MailboxRestoreFailure.FolderUnresolved);
 
-                continue;
+                // The walk's position is one cursor per account, so stamping the next candidate would move it past
+                // this one and nothing would ever come back for it. The walk stops here instead and resumes at the
+                // same message once the alias binds — which is the run's own folder resolution, one interval later.
+                break;
+            }
+
+            var keywords = AuthoredMailKeywords.TryCreate(candidate.State.Keywords.Values, out var authored)
+                ? authored
+                : null;
+
+            if (keywords is null)
+            {
+                tally.Failed(MailboxRestoreFailure.KeywordsUnwritable);
             }
 
             await this.commitPolicy.CommitAsync(
-                (session, token) => this.OpenStateRecordsAsync(session, account, candidate, destination, token),
+                (session, token) => this.OpenStateRecordsAsync(session, account, candidate, destination, keywords, token),
                 cancellationToken);
 
             tally.StateWritten();
@@ -241,11 +260,18 @@ public sealed class MailboxRestorePass
     }
 
     /// <summary>Opens every record one message owes, and stamps the message as owing none afterwards.</summary>
+    /// <remarks>
+    /// A message whose stored keywords are not all writable opens no keyword record at all, rather than one naming the
+    /// empty set: the empty set is what clearing every keyword asks for, and clearing the source's labels is the one
+    /// outcome worse than leaving them as they are. Refusing the whole message would be worse still, because the walk
+    /// would stop at it and the account could never leave the phase.
+    /// </remarks>
     private async Task OpenStateRecordsAsync(
         IPersistenceSession session,
         MailAccountId account,
         MailboxRestoredStateCandidate candidate,
         MailFolderResolution? destination,
+        AuthoredMailKeywords? keywords,
         CancellationToken cancellationToken)
     {
         var requester = MailboxMutationRequester.Command(RestoreRequesterIdentity);
@@ -271,22 +297,16 @@ public sealed class MailboxRestorePass
             heldUntil: null,
             cancellationToken);
 
-        await this.mutations.OpenAsync(
-            session,
-            MailboxMutationRequest.SetKeywords(
-                candidate.Email,
-                candidate.Occurrence,
-                requester,
-                AuthoredMailKeywords.Create(candidate.State.Keywords.Values)),
-            heldUntil: null,
-            cancellationToken);
+        if (keywords is not null)
+        {
+            await this.mutations.OpenAsync(
+                session,
+                MailboxMutationRequest.SetKeywords(candidate.Email, candidate.Occurrence, requester, keywords),
+                heldUntil: null,
+                cancellationToken);
+        }
 
-        await this.store.RecordStateWrittenAsync(
-            session,
-            account,
-            candidate.Email,
-            this.timeProvider.GetUtcNow(),
-            cancellationToken);
+        await this.store.RecordStateWrittenAsync(session, account, candidate.Email, cancellationToken);
     }
 
     /// <summary>Appends back every message this pass takes in hand, one folder's session at a time.</summary>
@@ -342,6 +362,8 @@ public sealed class MailboxRestorePass
         RestoreTally tally,
         CancellationToken cancellationToken)
     {
+        var accountedFor = 0;
+
         try
         {
             await using var session = await this.writeSessions.OpenForWritingAsync(
@@ -355,6 +377,8 @@ public sealed class MailboxRestorePass
                 cancellationToken.ThrowIfCancellationRequested();
 
                 await this.AppendOneAsync(session, account, folder, candidate, tally, cancellationToken);
+
+                accountedFor++;
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -363,7 +387,10 @@ public sealed class MailboxRestorePass
         }
         catch (Exception failure)
         {
-            tally.Failed(Classify(failure), candidates.Count);
+            // Only the messages this session never reached, plus the one it was on. Charging the whole folder would
+            // count a message that was appended and confirmed as a failure too, and the counts are the only reading
+            // an operator has of how far a restore has got.
+            tally.Failed(Classify(failure), candidates.Count - accountedFor);
         }
     }
 
@@ -386,22 +413,36 @@ public sealed class MailboxRestorePass
     {
         var stored = await this.content.FindStoredContentAsync(candidate.Email, cancellationToken);
 
-        if (stored is null || stored.RawMime.IsEmpty)
-        {
-            tally.Failed(MailboxRestoreFailure.ContentUnreadable);
-
-            return;
-        }
-
         var record = new MailboxRestoreAppend(
             MailboxRestoreAppendId.New(),
             candidate.Email,
             folder.Alias,
             this.timeProvider.GetUtcNow());
 
-        await this.commitPolicy.CommitAsync(
+        if (stored is null || stored.RawMime.IsEmpty)
+        {
+            // No bytes to append, and no later pass can produce any. Recorded as settled from the moment it exists,
+            // so the message stops being counted as outstanding and the account can leave the phase; what the source
+            // never gets back is reported here and in the log rather than left holding the restore open for ever.
+            await this.commitPolicy.CommitAsync(
+                (persistence, token) => this.store.RecordUnrestorableAsync(
+                    persistence, account, record, this.timeProvider.GetUtcNow(), token),
+                cancellationToken);
+
+            tally.Failed(MailboxRestoreFailure.ContentUnreadable);
+
+            return;
+        }
+
+        var takenInHand = await this.commitPolicy.CommitAsync(
             (persistence, token) => this.store.WriteAppendAsync(persistence, account, record, token),
             cancellationToken);
+
+        if (!takenInHand)
+        {
+            // A record already stands for this message, so an APPEND from here would be the second one.
+            return;
+        }
 
         RemoteEmailPlacement placement;
 
@@ -436,14 +477,70 @@ public sealed class MailboxRestorePass
             return;
         }
 
+        // The narrowest write there is between a fully answered command and the occurrence it justifies: an update by
+        // primary key, which nothing races. Once it has committed, a shutdown or a transient failure before the carry
+        // is work the next pass finishes rather than an append an operator has to go and establish.
+        await this.commitPolicy.CommitAsync(
+            (persistence, token) => this.store.RecordPlacementAsync(persistence, record.Id, uidValidity, uid, token),
+            cancellationToken);
+
+        await this.CarryPlacementAsync(
+            account,
+            folder,
+            new MailboxRestoreConfirmation(record, uidValidity, uid),
+            tally,
+            cancellationToken);
+    }
+
+    /// <summary>Finishes every append the source answered in full that an earlier pass never carried.</summary>
+    /// <remarks>
+    /// Ordinarily reads nothing. What it finds is what a pass that ended between recording a placement and writing the
+    /// occurrence left behind, and finishing it costs one transaction where leaving it would cost an operator a folder
+    /// to go and look in.
+    /// </remarks>
+    private async Task CarryAnsweredPlacementsAsync(
+        MailAccountId account,
+        RestoreTally tally,
+        CancellationToken cancellationToken)
+    {
+        var confirmations = await this.store.ReadConfirmableAppendsAsync(
+            account,
+            MaximumReportedUnansweredAppends,
+            cancellationToken);
+
+        foreach (var confirmation in confirmations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var alias = confirmation.Record.SourceFolderAlias;
+
+            if (await this.resolutions.GetCurrentResolutionAsync(account, alias, cancellationToken) is not { } folder)
+            {
+                tally.Failed(MailboxRestoreFailure.FolderUnresolved);
+
+                continue;
+            }
+
+            await this.CarryPlacementAsync(account, folder, confirmation, tally, cancellationToken);
+        }
+    }
+
+    /// <summary>Writes the occurrence a recorded placement names onto the message, and deletes the record under it.</summary>
+    private async Task CarryPlacementAsync(
+        MailAccountId account,
+        MailFolderResolution folder,
+        MailboxRestoreConfirmation confirmation,
+        RestoreTally tally,
+        CancellationToken cancellationToken)
+    {
         var occurrence = EmailOccurrenceId.Create(
             account,
             folder.Id,
-            uidValidity,
-            uid);
+            confirmation.UidValidity,
+            confirmation.Uid);
 
         var confirmed = await this.commitPolicy.CommitAsync(
-            (persistence, token) => this.store.ConfirmAppendAsync(persistence, record, occurrence, token),
+            (persistence, token) => this.store.ConfirmAppendAsync(persistence, confirmation.Record, occurrence, token),
             cancellationToken);
 
         if (confirmed)
@@ -453,9 +550,9 @@ public sealed class MailboxRestorePass
             return;
         }
 
-        // Something else holds the occurrence the source just named, which on a restoring account means
-        // synchronization met the appended copy as an arrival and stored it beside the message it is a copy of. The
-        // record stays standing, because what is now true is that the message may be on the source twice.
+        // Something else holds the occurrence the source named, which on a restoring account means synchronization met
+        // the appended copy as an arrival and stored it beside the message it is a copy of. The record stays standing,
+        // because what is now true is that the message may be on the source twice.
         tally.LeftUnanswered();
     }
 

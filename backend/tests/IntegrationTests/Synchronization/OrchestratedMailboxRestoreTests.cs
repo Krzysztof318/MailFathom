@@ -86,12 +86,22 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
                 {
                     await session.AppendRestoredAsync(
                         MimeOf(readSubject),
-                        new RestoredEmailState(IsSeen: true, IsFlagged: true, RemoteEmailKeywords.Create(["$Label1"])),
+                        new RestoredEmailState(
+                            IsSeen: true,
+                            IsAnswered: true,
+                            IsFlagged: true,
+                            IsDraft: false,
+                            RemoteEmailKeywords.Create(["$Label1"])),
                         ArrivedAt,
                         token),
                     await session.AppendRestoredAsync(
                         MimeOf(unreadSubject),
-                        new RestoredEmailState(IsSeen: false, IsFlagged: false, RemoteEmailKeywords.None),
+                        new RestoredEmailState(
+                            IsSeen: false,
+                            IsAnswered: false,
+                            IsFlagged: false,
+                            IsDraft: false,
+                            RemoteEmailKeywords.None),
                         ArrivedAt,
                         token),
                 };
@@ -109,15 +119,15 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
 
         var read = Assert.Single(restored, email => email.Subject == readSubject);
         Assert.True(read.IsSeen);
+        Assert.True(read.IsAnswered);
         Assert.True(read.IsFlagged);
         Assert.Contains("$Label1", read.Keywords);
 
         var unread = Assert.Single(restored, email => email.Subject == unreadSubject);
         Assert.False(unread.IsSeen);
+        Assert.False(unread.IsAnswered);
         Assert.False(unread.IsFlagged);
         Assert.Empty(unread.Keywords);
-
-        await mailbox.DeleteFolderAsync(folderName, cancellationToken);
     }
 
     /// <summary>Composes the payload the content store would serve, which is what the append carries byte for byte.</summary>

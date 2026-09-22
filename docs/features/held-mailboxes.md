@@ -63,6 +63,7 @@ $ mfctl account custody show --account personal
 Account:   personal
 Requested: MirrorSource
 Phase:     Restoring
+A switch is under way; the account's own runs are carrying it.
 Awaiting drain:          0
 Held back, above limit:  0
 Held back, no headroom:  0
@@ -70,7 +71,14 @@ Awaiting source removal: 0
 Awaiting append:         318
 Awaiting state write:    12
 Unanswered appends:      1
+
+These appends were issued and never answered. The account stays in Restoring until each is settled;
+open the folder, look for the message, and run 'account custody settle --account personal --record <id> --found|--missing'.
+  0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04  archive  issued 2026-09-15 11:00:00Z
 ```
+
+Nothing about the restore is printed for an account that is putting nothing back, which is every account outside
+`Restoring`: the counts would all be a reading the question does not apply to.
 
 `Requested` is what was asked for and `Phase` is how far the work has got. They differ while a switch is under way,
 which is a period rather than an instant: the account's own runs carry it.

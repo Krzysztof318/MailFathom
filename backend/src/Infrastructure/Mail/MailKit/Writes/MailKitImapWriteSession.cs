@@ -429,13 +429,17 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                 using var storedMime = RawMimeStream.Open(rawMime);
                 using var message = await MimeMessage.LoadAsync(storedMime, attemptToken);
 
+                // A folder that will not keep keywords between sessions takes the APPEND without them rather than
+                // refusing it. Refusing is right for a STORE, where the cost is a label an operator can be told
+                // about; here the cost would be the message itself never going back, on every pass, with the account
+                // held in its phase for ever — and MailFathom still holds the labels either way.
+                var keywords = this.FolderKeeps(openFolder, state.Keywords.Values)
+                    ? state.Keywords.Values
+                    : [];
+
                 scope.CommandIssued("APPEND");
                 var appendedUid = await openFolder.AppendAsync(
-                    new AppendRequest(
-                        message,
-                        MessageFlagsOf(state),
-                        state.Keywords.Values,
-                        internalDate),
+                    new AppendRequest(message, MessageFlagsOf(state), keywords, internalDate),
                     attemptToken);
 
                 return PlacementOfAppend(openFolder, appendedUid);
@@ -579,13 +583,13 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
 
     private MailAccountId SessionAccountId => this.lease.AccountId;
 
-    /// <summary>Turns the two flags a filed copy may carry into the flag set the protocol takes.</summary>
-    /// <summary>Reads the system flags a restored copy carries, which are the two a held message can have moved.</summary>
+    /// <summary>Reads the system flags a restored copy carries, which are the four MailFathom observed per message.</summary>
     /// <remarks>
-    /// <c>\Draft</c> is deliberately absent, being an assertion about a message being composed rather than one about
-    /// mail somebody received, and <c>\Answered</c> and <c>\Deleted</c> are flags MailFathom never writes. The
-    /// keywords travel beside these on the same <c>APPEND</c>, so one command puts the message back exactly as
-    /// MailFathom held it.
+    /// <c>\Deleted</c> is the one omission, and it is omitted because it is not an observation about the message: it
+    /// asks the folder to stop holding it, so carrying it here would hand the source a copy and a request to expunge
+    /// that copy in one command. The other four are values MailFathom records per message and would otherwise be lost
+    /// on the way back. The keywords travel beside these on the same <c>APPEND</c>, so one command puts the message
+    /// back as MailFathom held it.
     /// </remarks>
     private static MessageFlags MessageFlagsOf(RestoredEmailState state)
     {
@@ -596,14 +600,25 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             messageFlags |= MessageFlags.Seen;
         }
 
+        if (state.IsAnswered)
+        {
+            messageFlags |= MessageFlags.Answered;
+        }
+
         if (state.IsFlagged)
         {
             messageFlags |= MessageFlags.Flagged;
         }
 
+        if (state.IsDraft)
+        {
+            messageFlags |= MessageFlags.Draft;
+        }
+
         return messageFlags;
     }
 
+    /// <summary>Turns the two flags a filed copy may carry into the flag set the protocol takes.</summary>
     private static MessageFlags MessageFlagsOf(AppendedMailFlags flags)
     {
         var messageFlags = MessageFlags.None;
@@ -724,12 +739,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         IReadOnlyList<string> keywords,
         MailboxMutation mutation)
     {
-        if (keywords.Count == 0 || openFolder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
-        {
-            return;
-        }
-
-        if (keywords.All(keyword => openFolder.PermanentKeywords.Contains(keyword, StringComparer.OrdinalIgnoreCase)))
+        if (this.FolderKeeps(openFolder, keywords))
         {
             return;
         }
@@ -740,6 +750,17 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             mutation.Name,
             PermanentKeywordsCapabilityName);
     }
+
+    /// <summary>Reports whether a folder would still be showing these keywords the next time anybody selects it.</summary>
+    /// <remarks>
+    /// The predicate behind the refusal above, separated because the restore asks the same question and answers it
+    /// differently: it drops the keywords and puts the message back, where a mutation refuses. Naming none reads as
+    /// <see langword="true" />, so clearing every keyword is never what a folder's capability stops.
+    /// </remarks>
+    private bool FolderKeeps(IMailFolder openFolder, IReadOnlyList<string> keywords) =>
+        keywords.Count == 0
+        || openFolder.PermanentFlags.HasFlag(MessageFlags.UserDefined)
+        || keywords.All(keyword => openFolder.PermanentKeywords.Contains(keyword, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Reads where a <c>COPYUID</c> response says the destination folder put the email.</summary>
     /// <remarks>

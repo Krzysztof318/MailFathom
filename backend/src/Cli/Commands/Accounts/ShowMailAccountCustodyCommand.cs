@@ -95,7 +95,7 @@ internal static class ShowMailAccountCustodyCommand
                 CultureInfo.InvariantCulture,
                 $"Unanswered appends:      {restore.UnansweredAppends}"));
 
-            WriteUnansweredAppends(context, restore.Unanswered ?? []);
+            WriteUnansweredAppends(context, state.Account ?? account, restore.Unanswered ?? []);
         }
 
         return CliExitCode.Success;
@@ -109,6 +109,7 @@ internal static class ShowMailAccountCustodyCommand
     /// </remarks>
     private static void WriteUnansweredAppends(
         CliContext context,
+        string account,
         IReadOnlyList<MailAccountUnansweredAppend> unanswered)
     {
         if (unanswered.Count == 0)
@@ -119,8 +120,9 @@ internal static class ShowMailAccountCustodyCommand
         context.Console.WriteLine(string.Empty);
         context.Console.WriteLine(
             "These appends were issued and never answered. The account stays in Restoring until each is settled;");
-        context.Console.WriteLine(
-            "open the folder, look for the message, and run 'account custody settle --record <id> --found|--missing'.");
+        context.Console.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"open the folder, look for the message, and run 'account custody settle --account {ConsoleSafeText.Sanitize(account)} --record <id> --found|--missing'."));
 
         foreach (var append in unanswered)
         {
