@@ -23,6 +23,9 @@ export function ConversationRow({
     open,
     selected,
     selecting,
+    focusable,
+    attach,
+    onReached,
     onOpen,
     onToggle,
     onPress,
@@ -33,6 +36,12 @@ export function ConversationRow({
 
     /** Whether a selection is being held, which turns a plain press into picking the row out. */
     readonly selecting: boolean;
+
+    /** Whether this row is the one the keyboard is on, which is the list's roving tab stop. */
+    readonly focusable: boolean;
+
+    readonly attach: (row: HTMLLIElement | null) => void;
+    readonly onReached: () => void;
 
     readonly onOpen: () => void;
     readonly onToggle: () => void;
@@ -69,11 +78,13 @@ export function ConversationRow({
             role="option"
             aria-selected={selected}
             aria-current={open ? 'true' : undefined}
-            tabIndex={0}
+            ref={attach}
+            tabIndex={focusable ? 0 : -1}
             className={`flex cursor-pointer flex-col gap-0.5 rounded-lg border-s-3 py-2.25 pe-2.75 ps-2.25 ${
                 open || selected ? 'border-s-accent bg-accent-soft' : 'border-s-transparent hover:bg-hover'
             }`}
             onKeyDown={pressed}
+            onFocus={onReached}
             onContextMenu={press.onContextMenu}
             onPointerDown={press.onPointerDown}
             onPointerMove={press.onPointerMove}

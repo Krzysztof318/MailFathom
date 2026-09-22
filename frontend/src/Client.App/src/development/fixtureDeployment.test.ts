@@ -345,6 +345,19 @@ describe('fixtureAnswer', () => {
         expect(stated(accepted)['runId']).toBe(agent.answeredQuestionId);
     });
 
+    it('accepts an instruction into the answer being composed as that answer', () => {
+        const steered = answered(
+            `/agent/conversations/${agent.composingConversationId}/runs/${agent.composingQuestionId}/messages`,
+            {},
+            1,
+            'POST',
+            '{"messageId":"m","text":"anything"}',
+        );
+
+        expect(steered.status).toBe(202);
+        expect(stated(steered)['runId']).toBe(agent.composingQuestionId);
+    });
+
     it('answers every collection empty where the options ask for it', () => {
         const empty = { emptyCollections: true };
 

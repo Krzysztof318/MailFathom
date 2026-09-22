@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useState } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import type { AgentConversationSummary, ClientFailureReason } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { onlySelected, withToggled } from '../contextMenu/rowSelection';
@@ -62,7 +62,45 @@ export function ConversationHistory({
         readonly opener: HTMLElement | null;
     } | null>(null);
 
+    const [reached, setReached] = useState<string | null>(null);
+    const rows = useRef(new Map<string, HTMLLIElement>());
+
     const { conversations, reading, failure } = history;
+
+    // One row is in the tab order, as in every list here: the one the keyboard last reached, else the one open, else
+    // the first — so reaching the history is one stop and the arrow keys walk it.
+    const listed = (conversation: string | null): conversation is string =>
+        conversations.some((summary) => summary.id === conversation);
+    const focusable = listed(reached) ? reached : listed(open) ? open : (conversations[0]?.id ?? null);
+
+    function focusOn(conversation: string | null): void {
+        if (conversation !== null) {
+            setReached(conversation);
+            rows.current.get(conversation)?.focus();
+        }
+    }
+
+    function walked(event: KeyboardEvent<HTMLUListElement>): void {
+        const at = conversations.findIndex((summary) => summary.id === focusable);
+        const to: Readonly<Record<string, number>> = {
+            ArrowDown: Math.min(at + 1, conversations.length - 1),
+            ArrowUp: Math.max(at - 1, 0),
+            Home: 0,
+            End: conversations.length - 1,
+        };
+        const reachedAt = to[event.key];
+
+        if (reachedAt !== undefined) {
+            event.preventDefault();
+            focusOn(conversations[reachedAt]?.id ?? null);
+        }
+    }
+
+    // The bar that held focus goes with the selection, so focus is put on the list before it does.
+    function clearSelection(): void {
+        focusOn(focusable);
+        onSelected([]);
+    }
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-3.5">
@@ -81,9 +119,7 @@ export function ConversationHistory({
             {selected.length > 0 ? (
                 <ConversationSelectionBar
                     count={selected.length}
-                    onClear={() => {
-                        onSelected([]);
-                    }}
+                    onClear={clearSelection}
                     onAskDeletion={() => {
                         onAskDeletion(selected);
                     }}
@@ -96,6 +132,7 @@ export function ConversationHistory({
                     aria-label={translate('agent.conversations')}
                     aria-multiselectable={true}
                     className="flex flex-col gap-px"
+                    onKeyDown={walked}
                 >
                     {conversations.map((conversation) => (
                         <ConversationRow
@@ -104,6 +141,17 @@ export function ConversationHistory({
                             open={conversation.id === open}
                             selected={selected.includes(conversation.id)}
                             selecting={selected.length > 0}
+                            focusable={conversation.id === focusable}
+                            attach={(row) => {
+                                if (row === null) {
+                                    rows.current.delete(conversation.id);
+                                } else {
+                                    rows.current.set(conversation.id, row);
+                                }
+                            }}
+                            onReached={() => {
+                                setReached(conversation.id);
+                            }}
                             onOpen={() => {
                                 onOpen(conversation.id);
                             }}

@@ -113,6 +113,52 @@ describe('AgentSpace', () => {
         ]);
     });
 
+    it('puts one conversation in the tab order and walks the history with the arrow keys', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        const history = await screen.findByRole('listbox', { name: 'Conversations with the agent' });
+        const [first, second] = within(history).getAllByRole('option');
+
+        expect(
+            within(history)
+                .getAllByRole('option')
+                .map((row) => row.tabIndex),
+        ).toEqual([0, -1]);
+
+        fireEvent.keyDown(first ?? history, { key: 'ArrowDown' });
+
+        expect(document.activeElement).toBe(second);
+        expect(second?.tabIndex).toBe(0);
+    });
+
+    it('puts focus back on the history when the selection is put down', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        const row = await screen.findByRole('option', { name: /How many bays were confirmed/ });
+        fireEvent.keyDown(row, { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Select conversations' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel selection' }));
+
+        expect(screen.queryByRole('toolbar')).toBeNull();
+        expect(document.activeElement?.getAttribute('role')).toBe('option');
+    });
+
+    it('draws the conversations held open as tabs the arrow keys walk', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        await opened('How many bays were confirmed');
+        await opened('What is waiting on me today');
+
+        const strip = await screen.findByRole('tablist', { name: 'Open conversations' });
+        const tabs = within(strip).getAllByRole('tab');
+
+        expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+
+        fireEvent.keyDown(tabs[1] ?? strip, { key: 'ArrowLeft' });
+
+        expect(document.activeElement).toBe(tabs[0]);
+    });
+
     it('draws a conversation it opened as the question and the answer it was given', async () => {
         screenOf(deploymentAnswering().transport);
 

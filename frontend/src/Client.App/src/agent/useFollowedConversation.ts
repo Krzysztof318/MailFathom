@@ -39,12 +39,18 @@ export interface FollowedConversation {
     readonly settledThrough: number;
 }
 
-const nothingFollowed: FollowedConversation = {
+/** What is held, and whether any read of it has answered — which is what tells a first read from a later one. */
+interface HeldConversation extends FollowedConversation {
+    readonly answered: boolean;
+}
+
+const nothingFollowed: HeldConversation = {
     conversation: null,
     entries: [],
     failure: null,
     reading: false,
     settledThrough: 0,
+    answered: false,
 };
 
 /**
@@ -61,7 +67,7 @@ export function useFollowedConversation(
     schedule: RunFollowingSchedule,
 ): FollowedConversation {
     const changes = useSignalledChanges();
-    const [followed, setFollowed] = useState<FollowedConversation>(nothingFollowed);
+    const [followed, setFollowed] = useState<HeldConversation>(nothingFollowed);
 
     // The cursor of the conversation in front, which the next follower starts from. Held beside the state rather than
     // read out of it, because it is the effect's input rather than something the screen draws.
@@ -107,7 +113,7 @@ export function useFollowedConversation(
                 cursor.current = { conversation, through: Math.max(cursor.current.through, through) };
 
                 setFollowed((before) => {
-                    const held = before.conversation === conversation ? before : null;
+                    const held = before.conversation === conversation && before.answered ? before : null;
                     const known = new Set(held?.entries.map((entry) => entry.sequence));
 
                     return {
@@ -116,6 +122,7 @@ export function useFollowedConversation(
                         failure: null,
                         reading: false,
                         settledThrough: held === null ? through : held.settledThrough,
+                        answered: true,
                     };
                 });
             },

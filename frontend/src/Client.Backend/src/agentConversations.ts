@@ -36,6 +36,14 @@ const longestTitle = 1024;
 const longestText = 64 * 1024;
 const longestWriteAnswer = 4 * 1024;
 
+// A hundred summaries, each an identifier, a title and two instants, with room to spare — so a listing that is not one
+// is refused before it is read.
+const longestListing = 256 * 1024;
+
+// One page of a conversation: entries are mostly a status line or a block, and a page of them is sized the way a
+// Discover run's whole answer is, with a question's full text on top.
+const longestPage = 768 * 1024;
+
 /** One conversation as the history lists it. */
 export interface AgentConversationSummary {
     readonly id: string;
@@ -124,6 +132,7 @@ export function listAgentConversations(
             method: 'GET',
             path: routeFor(session, agentConversationsRoute),
             headers: headersFor(session),
+            longestAnswer: longestListing,
         });
 
         if (response === null) {
@@ -160,6 +169,7 @@ export function readAgentConversation(
             method: 'GET',
             path: since > 0 ? `${path}?since=${String(since)}` : path,
             headers: headersFor(session),
+            longestAnswer: longestPage,
         });
 
         if (response === null) {

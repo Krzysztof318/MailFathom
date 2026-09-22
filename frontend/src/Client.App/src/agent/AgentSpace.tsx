@@ -169,9 +169,11 @@ export function AgentSpace({
 
         setUnsent(null);
 
+        // Read against what the screen shows now rather than when the question was sent, so a conversation opened
+        // while the new one was being posted stays in front and the new one joins the tabs behind it.
         if (current === null) {
-            setCurrent(conversation);
-            setOpen((before) => [...before, conversation]);
+            setCurrent((now) => now ?? conversation);
+            setOpen((before) => (before.includes(conversation) ? before : [...before, conversation]));
         }
 
         setFollowing((before) => before + 1);
@@ -221,9 +223,7 @@ export function AgentSpace({
         setSelected((before) => before.filter((conversation) => !gone.includes(conversation)));
         setOpen((before) => before.filter((conversation) => !gone.includes(conversation)));
 
-        if (current !== null && gone.includes(current)) {
-            setCurrent(null);
-        }
+        setCurrent((now) => (now !== null && gone.includes(now) ? null : now));
 
         setRevision((before) => before + 1);
     }

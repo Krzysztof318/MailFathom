@@ -168,6 +168,16 @@ describe('readAgentConversation', () => {
                     entryOf(5, { entry: 'proposal', messageId: question, block: answerBlock, act: {} }),
                     entryOf(6, { entry: 'answerEnded', messageId: question, outcome: 'Stopped' }),
                     entryOf(7, { entry: 'resolution', proposedAt: 5, state: 'Declined' }),
+                    entryOf(8, {
+                        entry: 'citation',
+                        messageId: question,
+                        citation: {
+                            id: 'c-1',
+                            target: { kind: 'email', email: 'email-1' },
+                            label: 'The confirmation',
+                            medium: 'Written',
+                        },
+                    }),
                 ]),
             }),
             conversation,
@@ -189,6 +199,12 @@ describe('readAgentConversation', () => {
             { kind: 'proposal', sequence: 5, run: question, block: { type: 'answer' } },
             { kind: 'answerEnded', sequence: 6, run: question, outcome: 'stopped' },
             { kind: 'resolution', sequence: 7, proposedAt: 5, state: 'declined' },
+            {
+                kind: 'citation',
+                sequence: 8,
+                run: question,
+                source: { id: 'c-1', target: { kind: 'email', email: 'email-1' }, label: 'The confirmation' },
+            },
         ]);
     });
 
@@ -259,6 +275,20 @@ describe('readAgentConversation', () => {
             answering({
                 status: 200,
                 body: pageOf([entryOf(1, { entry: 'message', messageId: question, author: 'Robot', text: 'x' })]),
+            }),
+            conversation,
+            0,
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
+    it('refuses a citation whose source does not read', async () => {
+        const answered = await readAgentConversation(
+            session,
+            answering({
+                status: 200,
+                body: pageOf([entryOf(1, { entry: 'citation', messageId: question, citation: { id: 'c-1' } })]),
             }),
             conversation,
             0,

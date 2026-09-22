@@ -40,6 +40,7 @@ function gapBelow(element: HTMLElement): number {
 export function usePinnedToBottom(content: unknown, following: number): PinnedToBottom {
     const scroller = useRef<HTMLDivElement | null>(null);
     const released = useRef(false);
+    const lastTop = useRef(0);
 
     useEffect(() => {
         released.current = false;
@@ -85,9 +86,22 @@ export function usePinnedToBottom(content: unknown, following: number): PinnedTo
     const onScroll = useCallback((): void => {
         const element = scroller.current;
 
-        if (element !== null && gapBelow(element) < releasedPast) {
-            released.current = false;
+        if (element === null) {
+            return;
         }
+
+        // Only the reader moves the thread upwards: what this hook scrolls goes down, and what arrives leaves the top
+        // where it was. So an upward scroll past the threshold releases it however it was made — a dragged scrollbar
+        // included, which no wheel or touch event announces.
+        const gap = gapBelow(element);
+
+        if (gap < releasedPast) {
+            released.current = false;
+        } else if (element.scrollTop < lastTop.current) {
+            released.current = true;
+        }
+
+        lastTop.current = element.scrollTop;
     }, []);
 
     const onGesture = useCallback((): void => {
