@@ -221,7 +221,7 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// The one statement here that is written rather than composed, and the reason is the shape of a bounded delete
+    /// The two statements here that are written rather than composed, and the reason is the shape of a bounded delete
     /// over a whole generation. A limit needs rows chosen, and choosing them by any column would sort every vector the
     /// generation still holds on every batch — quadratic over the run that empties a mailbox's worth of them. Selecting
     /// by <c>ctid</c> lets PostgreSQL stop at the limit while reading the profile's own index, so a batch costs what a
@@ -235,9 +235,10 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     /// PostgreSQL evaluates it once for the statement rather than per row.
     /// </para>
     /// <para>
-    /// The Agent's history vectors of the same generation go first, whole and under the same re-check. They are one
-    /// person's conversations rather than a mailbox, so a batch has nothing to bound, and counting them into what the
-    /// call removed keeps the upkeep calling until both tables hold nothing of the generation.
+    /// The Agent's history vectors of the same generation go first, a batch at a time under the same re-check and by the
+    /// same <c>ctid</c> shape, since a deployment serving several people holds all of their conversations in one table.
+    /// A call that removed any of them removes no mail vector, so one call is one batch, and the upkeep keeps calling
+    /// until both tables hold nothing of the generation.
     /// </para>
     /// </remarks>
     public async Task<int> RemoveVectorsAsync(
@@ -252,14 +253,26 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
         var supersededProfileId = profileId.Value;
         var supersededState = nameof(EmbeddingProfileLifecycleState.Superseded);
 
-        var conversationVectors = await sessionContext.AgentConversationEmbeddings
-            .Where(vector => vector.EmbeddingProfileId == supersededProfileId)
-            .Where(_ => sessionContext.EmbeddingProfiles.Any(generation =>
-                generation.Id == supersededProfileId
-                && generation.LifecycleState == EmbeddingProfileLifecycleState.Superseded))
-            .ExecuteDeleteAsync(cancellationToken);
+        var conversationVectors = await sessionContext.Database.ExecuteSqlAsync(
+            $"""
+             DELETE FROM agent_conversation_embeddings
+             WHERE ctid IN (
+                 SELECT vector.ctid FROM agent_conversation_embeddings AS vector
+                 WHERE vector."EmbeddingProfileId" = {supersededProfileId}
+                   AND EXISTS (
+                       SELECT 1 FROM embedding_profiles AS generation
+                       WHERE generation."Id" = {supersededProfileId}
+                         AND generation."LifecycleState" = {supersededState})
+                 LIMIT {batchSize})
+             """,
+            cancellationToken);
 
-        return conversationVectors + await sessionContext.Database.ExecuteSqlAsync(
+        if (conversationVectors > 0)
+        {
+            return conversationVectors;
+        }
+
+        return await sessionContext.Database.ExecuteSqlAsync(
             $"""
              DELETE FROM email_embeddings
              WHERE ctid IN (

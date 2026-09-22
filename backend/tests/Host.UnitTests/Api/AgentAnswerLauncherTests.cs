@@ -5,7 +5,11 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -92,8 +96,40 @@ public sealed class AgentAnswerLauncherTests
         Assert.Contains("its ending could not be written", this.logger.Messages[1], StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A turn that could not be embedded after its answer was delivered is written down as that, not as an answer that
+    /// failed, and carries none of the question.
+    /// </summary>
+    [Fact]
+    public async Task EmbedTurnAsync_TheHistoryCannotBeRead_WritesDownALostTurnRatherThanAFailedAnswer()
+    {
+        // Arrange
+        this.store
+            .ReadAsync(Question.Conversation, Question.User, AgentConversationHistory.Visible, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<AgentConversationReading?>(new InvalidOperationException("the record could not be read")));
+
+        // Act
+        await this.Launcher().EmbedTurnAsync(this.Embedding(), Question);
+
+        // Assert
+        var written = Assert.Single(this.logger.Messages);
+        Assert.Contains("could not be embedded", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("had no name for", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("supplier", written, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AuthorizedPrincipal Caller =>
         AuthorizedPrincipal.CallerActingFor(SyntheticUser.Deployment, "test-caller", [MailFathomPermission.MailAsk]);
+
+    private AgentConversationEmbedding Embedding() =>
+        new(
+            this.store,
+            new ActiveEmbeddingSpace(
+                Substitute.For<IActiveEmbeddingProfileReader>(),
+                Substitute.For<IAiProviderHealthReader>(),
+                new FakeTimeProvider(Now),
+                textEmbeddingGenerator: null),
+            Substitute.For<IAgentConversationSearchIndex>());
 
     private AgentAnswerLauncher Launcher()
     {

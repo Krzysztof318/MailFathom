@@ -1168,7 +1168,6 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IAgentConversationStore>(),
             provider.GetService<IAgentAnswerComposer>(),
             provider.GetService<IAgentConversationSummarizer>(),
-            provider.GetRequiredService<AgentConversationEmbedding>(),
             answeringBudget.Context,
             provider.GetRequiredService<IMailAnsweringSpendLedger>(),
             provider.GetRequiredService<ClientSignals>(),
