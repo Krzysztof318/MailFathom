@@ -105,6 +105,43 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.DoesNotContain(names, static name => name.StartsWith("propose_", StringComparison.Ordinal));
     }
 
+    /// <summary>A grant that reads, drafts, and sends is offered both proposing tools, answering a message it read among them.</summary>
+    [Fact]
+    public void Create_AGrantThatReadsAndSends_OffersBothProposingTools()
+    {
+        // Act
+        var names = this.Tools(MailFathomPermission.MailRead, MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend)
+            .Create()
+            .Select(static tool => tool.Name)
+            .Where(static name => name.StartsWith("propose_", StringComparison.Ordinal));
+
+        // Assert
+        Assert.Equal(["propose_message", "propose_reply"], names);
+    }
+
+    /// <summary>A recipient list the model left out is refused back to it, and nothing is proposed.</summary>
+    [Fact]
+    public async Task ProposeMessage_NoRecipients_IsRefusedAndProposesNothing()
+    {
+        // Arrange
+        var tool = this.ToolNamed("propose_message", MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend);
+
+        // Act
+        var answer = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["account"] = "primary",
+                ["recipients"] = null,
+                ["subject"] = "Quote",
+                ["body"] = "Thank you, we accept.",
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.StartsWith("Give at least one valid address", answer?.ToString(), StringComparison.Ordinal);
+        Assert.Empty(this.written.OfType<AgentActionProposed>());
+    }
+
     /// <summary>Proposing a message writes the proposal and the exact act accepting it would carry out, and sends nothing.</summary>
     [Fact]
     public async Task ProposeMessage_AValidMessage_WritesTheProposalCarryingExactlyThatAct()

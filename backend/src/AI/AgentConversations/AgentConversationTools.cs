@@ -261,7 +261,8 @@ internal sealed class AgentConversationTools
             return $"Name one of these accounts: {string.Join(", ", this.accounts.Select(static known => known.Value))}.";
         }
 
-        if (AddressesOf(recipients) is not { } addressed
+        if (recipients is null
+            || AddressesOf(recipients) is not { } addressed
             || !PresentationText.TryCreate(subject, out var titled)
             || !PresentationText.TryCreate(body, out var written))
         {
