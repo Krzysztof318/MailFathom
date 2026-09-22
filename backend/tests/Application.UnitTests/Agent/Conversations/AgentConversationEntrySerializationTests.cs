@@ -180,6 +180,39 @@ public sealed class AgentConversationEntrySerializationTests
         Assert.Equal(thread.Value, read.Scope?.Subject);
     }
 
+    [Fact]
+    public void Serialize_AnEndingSuggestingFollowUps_ReadsThemBackInOrder()
+    {
+        // Arrange
+        var entry = new AgentAnswerEnded(
+            AgentMessageId.New(),
+            AgentAnswerOutcome.Completed,
+            [PresentationText.Create("Draft a reply to Anna"), PresentationText.Create("Show me the sources")]);
+
+        // Act
+        var read = Assert.IsType<AgentAnswerEnded>(RoundTrip(entry));
+
+        // Assert
+        Assert.Equal(entry.FollowUps, read.FollowUps);
+    }
+
+    /// <summary>An ending written before an answer could suggest anything carries no such member, and is still read.</summary>
+    [Fact]
+    public void Deserialize_AnEndingWrittenWithoutFollowUps_ReadsAsHavingSuggestedNone()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+        var written = $$"""{"entry":"answerEnded","messageId":"{{message.Value}}","outcome":"Completed"}""";
+
+        // Act
+        var read = Assert.IsType<AgentAnswerEnded>(
+            JsonSerializer.Deserialize(written, AgentConversationEntryJsonContext.Default.AgentConversationEntry));
+
+        // Assert
+        Assert.Equal(AgentAnswerOutcome.Completed, read.Outcome);
+        Assert.Empty(read.FollowUps);
+    }
+
     /// <summary>The store stamps a place onto an entry it has just read, through the base type it holds it as.</summary>
     /// <remarks>
     /// A place is derived where the row is written, so an entry is serialized before there is one to serialize and the

@@ -34,6 +34,8 @@ const mostEntriesPerRead = 250;
 const longestIdentifier = 128;
 const longestTitle = 1024;
 const longestText = 64 * 1024;
+const mostFollowUps = 3;
+const longestFollowUp = 120;
 const longestWriteAnswer = 4 * 1024;
 
 // A hundred summaries, each an identifier, a title and two instants, with room to spare — so a listing that is not one
@@ -92,6 +94,9 @@ export type AgentConversationEntry =
           readonly sequence: number;
           readonly run: string;
           readonly outcome: AgentAnswerOutcome;
+
+          /** What the agent suggests asking next, each posted as it reads when pressed; empty where it suggested none. */
+          readonly followUps: readonly string[];
       }
     | {
           readonly kind: 'resolution';
@@ -465,15 +470,19 @@ function parseEntry(value: unknown): AgentConversationEntry | null {
             return run === null || block === null ? null : { kind: entry['entry'], sequence, run, block };
         }
 
-        case 'answerEnded':
-            return run === null
+        case 'answerEnded': {
+            const followUps = parseFollowUps(entry['followUps']);
+
+            return run === null || followUps === null
                 ? null
                 : {
                       kind: 'answerEnded',
                       sequence,
                       run,
                       outcome: outcomes[String(entry['outcome'])] ?? 'failed',
+                      followUps,
                   };
+        }
 
         case 'resolution': {
             const proposedAt = entry['proposedAt'];
@@ -504,6 +513,30 @@ interface WireScope {
 
 function wireScopeOf(scope: AgentMessageScope): WireScope {
     return { kind: wireScopeKinds[scope.kind], subject: scope.subject };
+}
+
+/**
+ * The questions an ending suggests asking next, empty where it carries none, and `null` where what arrived is not what
+ * the service writes: at most three lines of at most 120 characters each.
+ */
+function parseFollowUps(value: unknown): readonly string[] | null {
+    if (value === undefined || value === null) {
+        return [];
+    }
+
+    if (!Array.isArray(value) || value.length > mostFollowUps) {
+        return null;
+    }
+
+    const followUps = value.filter(
+        (followUp): followUp is string =>
+            typeof followUp === 'string' &&
+            followUp.trim().length > 0 &&
+            followUp.length <= longestFollowUp &&
+            !/\p{Cc}/u.test(followUp),
+    );
+
+    return followUps.length === value.length ? followUps : null;
 }
 
 /** The scope a question carries, `null` where it carries none, and `undefined` where what arrived is not one. */

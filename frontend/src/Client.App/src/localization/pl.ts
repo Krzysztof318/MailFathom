@@ -90,6 +90,8 @@ export const pl: Catalogue = {
     'agent.readFailed.missing': 'Tej rozmowy już nie ma. Zacznij nową albo otwórz inną z historii.',
     'agent.starters': 'Zacznij od',
     'agent.askStarter': 'Zapytaj agenta: {question}',
+    'agent.proposedNext': 'Co dalej',
+    'agent.askFollowUp': 'Poproś agenta: {question}',
     'agent.starter.day': 'Zaplanuj mój dzień',
     'agent.starter.slipped': 'Co umknęło w tym tygodniu?',
     'agent.starter.cases': 'Stan otwartych spraw',

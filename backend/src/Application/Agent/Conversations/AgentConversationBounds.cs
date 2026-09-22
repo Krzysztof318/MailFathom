@@ -16,6 +16,14 @@ public static class AgentConversationBounds
     /// <remarks>A line in a history list rather than a summary of the conversation, and the agent composes it from the first question.</remarks>
     public const int MaximumTitleLength = 120;
 
+    /// <summary>The most questions an answer may suggest asking next.</summary>
+    /// <remarks>They are drawn as one row under the answer, and a row longer than three stops reading as a suggestion.</remarks>
+    public const int MaximumFollowUps = 3;
+
+    /// <summary>The longest question an answer may suggest asking next.</summary>
+    /// <remarks>A suggestion is pressed rather than read, so it is one short line that asks in full what it says.</remarks>
+    public const int MaximumFollowUpLength = 120;
+
     /// <summary>The greatest number of entries of the visible history one conversation may hold.</summary>
     /// <remarks>
     /// <para>

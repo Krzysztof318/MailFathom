@@ -385,6 +385,7 @@ export function AgentSpace({
                         status={inFlight === null ? undefined : inFlight.status}
                         settledThrough={followed.settledThrough}
                         following={following}
+                        onAsk={send}
                     />
 
                     {undeleted === null ? null : (

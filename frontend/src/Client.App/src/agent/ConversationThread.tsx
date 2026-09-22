@@ -7,7 +7,8 @@ import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AgentAnswer, AnswerScope } from './AgentAnswer';
-import type { ThreadTurn } from './threadTurns';
+import { ProposedNext } from './ProposedNext';
+import { proposedNext, type ThreadTurn } from './threadTurns';
 import { usePinnedToBottom } from './usePinnedToBottom';
 
 const readFailures: Readonly<Record<ClientFailureReason, MessageKey>> = {
@@ -27,6 +28,7 @@ const readFailures: Readonly<Record<ClientFailureReason, MessageKey>> = {
  * @param settledThrough What was already there when the conversation was opened, which draws without animating in.
  * @param following Changed whenever the reader asks something or opens a conversation, which pins the thread to its
  * bottom again.
+ * @param onAsk Asks a question the last answer suggested, exactly as sending it from the field would.
  */
 export function ConversationThread({
     turns,
@@ -35,6 +37,7 @@ export function ConversationThread({
     status,
     settledThrough,
     following,
+    onAsk,
 }: {
     readonly turns: readonly ThreadTurn[];
     readonly reading: boolean;
@@ -42,9 +45,11 @@ export function ConversationThread({
     readonly status: string | null | undefined;
     readonly settledThrough: number;
     readonly following: number;
+    readonly onAsk: (question: string) => Promise<unknown>;
 }) {
     const { translate } = useLocalization();
     const { attachScroller, onScroll, onGesture } = usePinnedToBottom(turns, following);
+    const next = proposedNext(turns);
 
     return (
         <div
@@ -112,6 +117,10 @@ export function ConversationThread({
                             {status ?? translate('agent.statusFallback')}
                         </span>
                     </p>
+                )}
+
+                {next === null ? null : (
+                    <ProposedNext followUps={next.questions} arriving={next.sequence > settledThrough} onAsk={onAsk} />
                 )}
             </div>
         </div>

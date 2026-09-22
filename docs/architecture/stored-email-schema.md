@@ -1353,7 +1353,9 @@ swept minutes later, while a conversation is somebody's history of asking.
 
 An entry is the record and a turn is a reading of it. A question, the opening of an answer, a status line, a citation,
 a composed block, an offer, an answer's ending, and an answer to an offer are the eight kinds of the **visible history**,
-and the turns a screen draws are folded out of them in order rather than stored. Four more kinds make up the
+and the turns a screen draws are folded out of them in order rather than stored. The ending of an answer that completed
+also carries what the agent suggests asking next, as a member of that entry rather than a kind of its own, so a build
+that predates it reads the ending and passes over the member. Four more kinds make up the
 **technical history** beside it: a tool the run called, what the tool returned, what the run's first call sent and was
 charged, and a compaction — the summary a turn sends in place of everything up to a place, with the proposals still
 pending carried beside it. Compaction is append-only: a summary is an added entry, the next one folds in the one before

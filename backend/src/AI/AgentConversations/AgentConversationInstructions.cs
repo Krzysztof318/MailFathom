@@ -4,6 +4,7 @@
 
 using System.Collections.Frozen;
 using System.Globalization;
+using MailFathom.Application.Agent.Conversations;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.AgentConversations;
@@ -54,6 +55,11 @@ internal static class AgentConversationInstructions
         Nothing you propose happens until the person accepts it. The proposing tools place a draft in front of them and
         send nothing, so never say that a message was sent, saved, or scheduled; say that you proposed it. Propose only
         what the person asked for or clearly needs, and one proposal per act.
+
+        When a next question naturally follows from your answer, suggest up to
+        {AgentConversationBounds.MaximumFollowUps} with suggest_follow_ups before you answer: each short, in {language},
+        on the subject the person asked about, and written as they would ask it of you. A suggestion is a question and
+        never an act — pressing one only asks it. Suggest none where nothing naturally follows.
 
         When the person asks where a conversation stands, show its state with the tool made for it and refer to what
         it shows. That reading was already made and is shared with everyone who reads the mailbox, so never rewrite,

@@ -236,19 +236,37 @@ public sealed record AgentActionProposed(AgentMessageId MessageId, PresentationB
 /// <summary>The answer stopped being composed, and this says how.</summary>
 /// <param name="MessageId">The answer that has ended.</param>
 /// <param name="Outcome">How it stopped.</param>
+/// <param name="FollowUps">The questions the agent suggests asking next, and <see langword="null" /> or empty where it suggested none.</param>
 /// <remarks>
+/// <para>
 /// Recorded rather than inferred from nothing further arriving, because a conversation read later has no other way to
 /// tell an answer that finished from one whose replica went away mid-run. Nothing it composed is removed or rolled back
 /// by any of the three outcomes: what arrived stays, and the record says what happened to the rest.
+/// </para>
+/// <para>
+/// <strong>The suggested follow-ups ride on the ending rather than in an entry of their own.</strong> They belong to
+/// an answer that finished, so they exist exactly when this does and never before it; and a member an older build does
+/// not know is one it reads past, where a kind it does not know is a row it cannot read at all — which is what a
+/// rolling upgrade would hand it. Each is text and never an act: pressing one asks it as a question, and nothing else.
+/// </para>
 /// </remarks>
-/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="Outcome" /> is not a declared member.</exception>
-public sealed record AgentAnswerEnded(AgentMessageId MessageId, AgentAnswerOutcome Outcome) : AgentConversationEntry
+/// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="Outcome" /> is not a declared member, or when more follow-ups are suggested than an answer may carry.</exception>
+/// <exception cref="ArgumentException">Thrown when an answer that did not complete suggests follow-ups, or when one is empty, longer than a line allows, or more than one line.</exception>
+public sealed record AgentAnswerEnded(
+    AgentMessageId MessageId,
+    AgentAnswerOutcome Outcome,
+    IReadOnlyList<PresentationText>? FollowUps = null)
+    : AgentConversationEntry
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "answerEnded";
 
     /// <summary>Gets how the answer stopped being composed.</summary>
     public AgentAnswerOutcome Outcome { get; } = Requirement.Declared(Outcome, nameof(Outcome));
+
+    /// <summary>Gets the questions the agent suggests asking next, in the order it suggested them, and empty where it suggested none.</summary>
+    /// <remarks>An ending written before an answer could suggest anything carries no member at all, and reads as having suggested none.</remarks>
+    public IReadOnlyList<PresentationText> FollowUps { get; } = Requirement.Suggested(FollowUps, Outcome, nameof(FollowUps));
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -535,6 +553,39 @@ file static class Requirement
         Enum.IsDefined(outcome)
             ? outcome
             : throw new ArgumentOutOfRangeException(parameter, outcome, "An answer ends in a declared outcome.");
+
+    internal static IReadOnlyList<PresentationText> Suggested(
+        IReadOnlyList<PresentationText>? followUps,
+        AgentAnswerOutcome outcome,
+        string parameter)
+    {
+        if (followUps is null or [])
+        {
+            return [];
+        }
+
+        if (outcome is not AgentAnswerOutcome.Completed)
+        {
+            throw new ArgumentException("Only an answer that completed suggests what to ask next.", parameter);
+        }
+
+        if (followUps.Count > AgentConversationBounds.MaximumFollowUps)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameter,
+                followUps.Count,
+                $"An answer suggests at most {AgentConversationBounds.MaximumFollowUps} follow-ups.");
+        }
+
+        if (!followUps.All(AgentFollowUps.IsAskable))
+        {
+            throw new ArgumentException(
+                $"A follow-up is one line of at most {AgentConversationBounds.MaximumFollowUpLength} characters.",
+                parameter);
+        }
+
+        return followUps;
+    }
 
     internal static long Written(long proposedAt, string parameter) =>
         proposedAt > 0

@@ -92,6 +92,8 @@ export const en = {
         'This conversation is no longer there. Start a new one or open another from the history.',
     'agent.starters': 'Start with',
     'agent.askStarter': 'Ask the agent: {question}',
+    'agent.proposedNext': 'Proposed next',
+    'agent.askFollowUp': 'Ask the agent to: {question}',
     'agent.starter.day': 'Plan my day',
     'agent.starter.slipped': 'What slipped this week?',
     'agent.starter.cases': 'Status of open cases',

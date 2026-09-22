@@ -152,14 +152,17 @@ public sealed class AgentAnswerJournal : IDisposable
     /// <param name="outcome">How it ended.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns><see langword="true" /> when the ending was written; <see langword="false" /> when the answer had already ended.</returns>
-    public async Task<bool> EndAsync(AgentAnswerOutcome outcome, CancellationToken cancellationToken)
-    {
-        var written = await this.WriteAsync(new AgentAnswerEnded(this.answer, outcome), cancellationToken);
+    public Task<bool> EndAsync(AgentAnswerOutcome outcome, CancellationToken cancellationToken) =>
+        this.WriteEndingAsync(new AgentAnswerEnded(this.answer, outcome), cancellationToken);
 
-        this.HasEnded |= written;
-
-        return written;
-    }
+    /// <summary>Ends the answer as completed, with the questions the agent suggests asking next.</summary>
+    /// <param name="followUps">The suggestions, and empty where the agent made none.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the ending was written; <see langword="false" /> when the answer had already ended.</returns>
+    /// <exception cref="ArgumentException">Thrown when a suggestion is not one an answer may carry.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more are suggested than an answer may carry.</exception>
+    public Task<bool> CompleteAsync(IReadOnlyList<PresentationText> followUps, CancellationToken cancellationToken) =>
+        this.WriteEndingAsync(new AgentAnswerEnded(this.answer, AgentAnswerOutcome.Completed, followUps), cancellationToken);
 
     /// <summary>Records a tool the model asked for, so the input its next call is composed from can be rebuilt from the record.</summary>
     /// <param name="callId">What the model named the call.</param>
@@ -272,6 +275,15 @@ public sealed class AgentAnswerJournal : IDisposable
         {
             throw new ArgumentException("A block names only sources the answer has already declared.", nameof(block));
         }
+    }
+
+    private async Task<bool> WriteEndingAsync(AgentAnswerEnded ending, CancellationToken cancellationToken)
+    {
+        var written = await this.WriteAsync(ending, cancellationToken);
+
+        this.HasEnded |= written;
+
+        return written;
     }
 
     private async Task<bool> WriteAsync(AgentConversationEntry entry, CancellationToken cancellationToken)
