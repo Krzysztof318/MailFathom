@@ -21,6 +21,7 @@ export function Space({
     mail,
     tabs,
     discover,
+    agent,
     tasks,
     people,
     calendar,
@@ -54,6 +55,15 @@ export function Space({
      * under is this file's own: the space in front gets them and no other does.
      */
     readonly discover: ReactNode;
+
+    /**
+     * The conversations with the agent and the one in front, which is the Agent space and nothing else.
+     *
+     * It is handed the connection and not the question field, because the design project draws a field of its own at
+     * its foot — the one the agent is told what to do in — and a second field under it would be two places to type a
+     * question into, one of which would send it somewhere else.
+     */
+    readonly agent: ReactNode;
 
     /** The task list and the day beside it, which is the Tasks space and nothing else. */
     readonly tasks: ReactNode;
@@ -115,6 +125,7 @@ export function Space({
                 const inFront = name === space;
                 const isMail = name === 'mail';
                 const isDiscover = name === 'discover';
+                const isAgent = name === 'agent';
                 const isTasks = name === 'tasks';
                 const isPeople = name === 'people';
 
@@ -125,7 +136,7 @@ export function Space({
 
                 // Which spaces compose their own height rather than scrolling a column of prose. Every built space
                 // does, and a placeholder does not — what it holds is a title and a sentence.
-                const composed = isMail || isDiscover || ownColumns !== null;
+                const composed = isMail || isDiscover || isAgent || ownColumns !== null;
 
                 return (
                     <main
@@ -152,6 +163,8 @@ export function Space({
                                followed survives a visit to the mail. Which of the frame's two regions it was handed is
                                decided where the address is known rather than here, for the prop's own reason. */
                             discover
+                        ) : isAgent ? (
+                            agent
                         ) : isMail ? (
                             /* The question and the connection are the two the frame composes for every space, so they
                                are handed to the one in front and to nothing else: two of either would be two live

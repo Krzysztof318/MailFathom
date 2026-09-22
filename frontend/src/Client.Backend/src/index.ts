@@ -118,6 +118,21 @@ export {
     type DiscoveryRunEvent,
     type DiscoveryRunSpend,
 } from './discoveryRun';
+export {
+    askAgent,
+    deleteAgentConversation,
+    listAgentConversations,
+    readAgentConversation,
+    steerAgentRun,
+    stopAgentRun,
+    type AgentAnswerOutcome,
+    type AgentConversationEntry,
+    type AgentConversationPage,
+    type AgentConversationSummary,
+    type AgentMessagePosted,
+    type AgentMessageScope,
+    type AgentProposalState,
+} from './agentConversations';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
 export type {
     AnswerConfidence,

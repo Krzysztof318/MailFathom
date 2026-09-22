@@ -40,7 +40,7 @@ describe('implementedSpaces', () => {
 
     // A space stops being a placeholder in the change that builds it, and this is the list the frame reads to decide
     // whether to draw the sentence saying there is nothing behind one.
-    it('names the five spaces that are screens rather than placeholders', () => {
-        expect([...implementedSpaces]).toStrictEqual(['discover', 'mail', 'tasks', 'calendar', 'people']);
+    it('names the six spaces that are screens rather than placeholders', () => {
+        expect([...implementedSpaces]).toStrictEqual(['discover', 'mail', 'agent', 'tasks', 'calendar', 'people']);
     });
 });
