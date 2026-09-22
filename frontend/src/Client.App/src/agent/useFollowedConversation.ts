@@ -58,6 +58,7 @@ const nothingFollowed: HeldConversation = {
  *
  * @param conversation The conversation, or `null` where the screen is drawing a new one nothing has been asked in.
  * @param revision Bumped by the screen after each write, so a follower that settled reads again from its cursor.
+ * @param onMissing Told when the deployment answers that it no longer holds the conversation, which the screen lets go.
  */
 export function useFollowedConversation(
     session: ClientSession | null,
@@ -65,6 +66,7 @@ export function useFollowedConversation(
     conversation: string | null,
     revision: number,
     schedule: RunFollowingSchedule,
+    onMissing: (conversation: string) => void,
 ): FollowedConversation {
     const changes = useSignalledChanges();
     const [followed, setFollowed] = useState<HeldConversation>(nothingFollowed);
@@ -103,6 +105,7 @@ export function useFollowedConversation(
 
                     if (reason === 'missing') {
                         stopFollowing();
+                        onMissing(conversation);
                     }
 
                     return;
@@ -141,7 +144,7 @@ export function useFollowedConversation(
             heard();
             following.close();
         };
-    }, [session, transport, conversation, revision, schedule, changes]);
+    }, [session, transport, conversation, revision, schedule, changes, onMissing]);
 
     if (conversation === null) {
         return nothingFollowed;

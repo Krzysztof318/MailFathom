@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     askAgent,
     deleteAgentConversation,
@@ -102,8 +102,23 @@ export function AgentSpace({
     const asked = useRef<HTMLDialogElement>(null);
     const drawer = useRef<HTMLDialogElement>(null);
 
+    // What the screen shows, read by a write that resolves after the reader may have moved on — so what it adopts and
+    // what it pins to the bottom is decided against the conversation in front then, not when it was sent.
+    const shown = useRef<string | null>(null);
+
+    useEffect(() => {
+        shown.current = current;
+    }, [current]);
+
+    // A conversation the deployment no longer holds is put down where it was held, and what is left is the empty state.
+    const letGo = useCallback((conversation: string): void => {
+        setOpen((before) => before.filter((held) => held !== conversation));
+        setCurrent((now) => (now === conversation ? null : now));
+        setRevision((before) => before + 1);
+    }, []);
+
     const history = useConversationHistory(session, transport, revision);
-    const followed = useFollowedConversation(session, transport, current, revision, schedule);
+    const followed = useFollowedConversation(session, transport, current, revision, schedule, letGo);
 
     // Folded once per arrival rather than per render, because the thread re-measures whenever the turns change.
     const turns = useMemo(() => threadOf(followed.entries), [followed.entries]);
@@ -167,16 +182,20 @@ export function AgentSpace({
             return false;
         }
 
-        setUnsent(null);
+        const inFront = shown.current === conversation || (current === null && shown.current === null);
 
-        // Read against what the screen shows now rather than when the question was sent, so a conversation opened
-        // while the new one was being posted stays in front and the new one joins the tabs behind it.
+        // A conversation opened while this one was being posted stays in front: a new one joins the tabs behind it,
+        // and only the conversation still being looked at is pinned to its bottom again.
         if (current === null) {
-            setCurrent((now) => now ?? conversation);
             setOpen((before) => (before.includes(conversation) ? before : [...before, conversation]));
         }
 
-        setFollowing((before) => before + 1);
+        if (inFront) {
+            setUnsent(null);
+            setCurrent(conversation);
+            setFollowing((before) => before + 1);
+        }
+
         setRevision((before) => before + 1);
 
         return true;

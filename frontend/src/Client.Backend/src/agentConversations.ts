@@ -503,9 +503,8 @@ function identifier(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 && value.length <= longestIdentifier ? value : null;
 }
 
-function instant(value: unknown): string | null {
-    return typeof value === 'string' && value.length > 0 && value.length <= longestIdentifier ? value : null;
-}
+/** An instant as the service wrote it, left as it arrived and bounded as an identifier is: it is only ever worded. */
+const instant = identifier;
 
 function isTitle(value: unknown): value is string | null | undefined {
     return value === undefined || value === null || (typeof value === 'string' && value.length <= longestTitle);

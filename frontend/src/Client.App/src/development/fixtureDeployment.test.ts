@@ -345,6 +345,13 @@ describe('fixtureAnswer', () => {
         expect(stated(accepted)['runId']).toBe(agent.answeredQuestionId);
     });
 
+    it.each([
+        ['a stop', `/agent/conversations/${agent.composingConversationId}/runs/${agent.composingQuestionId}`],
+        ['a deletion', `/agent/conversations/${agent.answeredConversationId}`],
+    ])('answers %s over the Agent routes as done', (_, route) => {
+        expect(answered(route, {}, 1, 'DELETE').status).toBe(204);
+    });
+
     it('accepts an instruction into the answer being composed as that answer', () => {
         const steered = answered(
             `/agent/conversations/${agent.composingConversationId}/runs/${agent.composingQuestionId}/messages`,

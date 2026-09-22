@@ -23,8 +23,8 @@ const conversations = 'https://mail.example.invalid/api/client/agent/conversatio
 // press causes.
 const neverPolls: RunFollowingSchedule = { wait: () => new Promise<void>(() => undefined) };
 
-// The history column is the wide composition's, and the setup answers every width query `false`, so the cases state
-// the wide window they are about and put the declared one back afterwards.
+// Every case here draws the wide, desktop composition — the history column and the tab strip are its — so every
+// `min-width` query answers `true`, and the declared stub is put back afterwards.
 const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
 beforeEach(() => {
@@ -157,6 +157,26 @@ describe('AgentSpace', () => {
         fireEvent.keyDown(tabs[1] ?? strip, { key: 'ArrowLeft' });
 
         expect(document.activeElement).toBe(tabs[0]);
+    });
+
+    it('lets go of a conversation the deployment no longer holds', async () => {
+        const { transport } = deploymentAnswering();
+        screenOf((request) =>
+            request.method === 'GET' && request.path.startsWith(`${conversations}/${agent.answeredConversationId}`)
+                ? Promise.resolve({ status: 404, body: '', headers: {} })
+                : transport(request),
+        );
+
+        const row = await screen.findByRole('option', { name: /How many bays were confirmed/ });
+        fireEvent.click(row);
+
+        expect(row.getAttribute('aria-current')).toBe('true');
+
+        await waitFor(() => {
+            expect(row.getAttribute('aria-current')).toBeNull();
+        });
+        expect(screen.getByText(/I can write a message, lay out your day/)).toBeDefined();
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('draws a conversation it opened as the question and the answer it was given', async () => {

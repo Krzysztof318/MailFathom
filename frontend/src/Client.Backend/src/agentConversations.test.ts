@@ -130,6 +130,15 @@ describe('listAgentConversations', () => {
         expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
     });
 
+    it.each([
+        ['a body that is not JSON', '<html>'],
+        ['a body that lists nothing', '{}'],
+    ])('refuses %s', async (_, body) => {
+        const answered = await listAgentConversations(session, answering({ status: 200, body }));
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
     it('reads a refused grant as the reason it failed', async () => {
         const answered = await listAgentConversations(session, answering({ status: 403, body: '' }));
 
@@ -279,6 +288,15 @@ describe('readAgentConversation', () => {
             conversation,
             0,
         );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
+    });
+
+    it.each([
+        ['a body that is not JSON', '<html>'],
+        ['a page that carries no entries', JSON.stringify({ composing: false, moreFollows: false })],
+    ])('refuses %s', async (_, body) => {
+        const answered = await readAgentConversation(session, answering({ status: 200, body }), conversation, 0);
 
         expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
     });
