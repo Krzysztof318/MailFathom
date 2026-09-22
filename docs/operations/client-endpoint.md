@@ -3518,13 +3518,13 @@ Content-Type: application/json
 ```
 
 The answer is `200` with the place the decision was written at, `400` for any decision but `accepted` or `declined`, and
-`409` where there is no proposal at that place this person can answer that way — none offered, or already decided and
-not failed —
+`409` where there is no proposal at that place this person can answer that way — none offered, or already decided —
 which is also what a second press gets, so an act is never carried out twice. Accepting is recorded first and the act
 carried out after it — a message sent, or an answer to a message sent, through the same drafting and sending a person
 composing it by hand goes through — and an act this deployment refuses ends the proposal as `failed`, which is what the
-conversation then shows. A `failed` proposal is accepted again the same way, which is how it is tried again; a
-declined or an accepted one is not. A caller whose grant does not carry every permission the act needs — `mailfathom.mail.drafts.write`
+conversation then shows. The one decided proposal that can still be answered is a `failed` one, and only by
+`accepted`, which is how it is tried again; declining a `failed` proposal is `409`, as is answering a declined or an
+accepted one either way. A caller whose grant does not carry every permission the act needs — `mailfathom.mail.drafts.write`
 and `mailfathom.mail.send`, and `mailfathom.mail.read` as well for an answer to a message — is `403` before anything is
 recorded. Declining carries nothing out. `DELETE /api/client/agent/conversations/{conversationId}` removes
 the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
