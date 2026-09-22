@@ -640,6 +640,14 @@ restoring account erases the record opened as one and carries the rest. A copy i
 either, whatever the copied message still holds: the second message it writes has never stood on the source, so it
 holds no occurrence and the restore appends it like any other message MailFathom alone holds.
 
+**A record opened beside a change already committed carries no withdrawal window, and nothing takes it back.** A
+window is the stretch in which a person may still stop a change, and there is nothing to stop here: the message has
+already moved in MailFathom's own store, and the record exists only so the source hears about it. Holding it would
+merely widen the stretch in which the two disagree, so it is due at once and the account's run is brought forward for
+it exactly as it is for a move. The row says it was opened that way, and a withdrawal leaves such a row exactly where
+it stands — cancelling it would undo nothing and would drop the only thing left to tell the source with, leaving a
+message trashed, read, or moved locally that the mailbox is never told about and no record is left to notice by.
+
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary
 synchronization run, so a change nothing brought that run forward for sits until the interval is out, and on an account

@@ -85,7 +85,7 @@ public sealed class MailFlagChangeRecorder
     /// <param name="change">What the caller asked for.</param>
     /// <param name="requester">The invocation asking, which is what decides whether asking again is the same request.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The record opened for each value, in the order the change states them, or no record where a held account applied the change.</returns>
+    /// <returns>The record opened for each value, in the order the change states them; no record where a held account applied the change; and, on a restoring account, the change applied beside the record each value whose message still stands on the source is carried by.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="AuthoredMailChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>

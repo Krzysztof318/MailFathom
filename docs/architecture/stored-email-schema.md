@@ -1061,13 +1061,18 @@ settles that delete, since the server goes on holding the message. `ix_mailbox_m
 `(MailFolderId, UidValidity, RecordedAt)`, filtered to completed `FlagDeleted` deletes that are neither settled nor seen
 removed, so it holds only what the next run of each folder is about to settle.
 
-`IsLocalErasure` says what the row was opened as rather than what it asks for, and it is true on exactly one kind of
-row: the delete of a message already in the local trash on an account holding its own mailbox, which erases MailFathom's
-copy once the person's withdrawal window has passed and reaches no server at all. It is written down rather than worked
-out from the account's phase, because the phase moves while a row waits — an account being restored to its source opens
-ordinary delete rows beside its local commits, and once it is held again both kinds are deletes against a trashed
-message. A convergence pass erases the marked rows and leaves the rest, so a delete whose `LocalDisposition` asked for
-the copy to be kept is carried or deferred rather than destroying it.
+`LocalChange` says what the row was opened to do to MailFathom's own copy rather than what it asks of a server, and it
+names one of three things. `None` is every row a mirrored account writes, and the row a restoring account writes for a
+message the drain has already taken off the source: nothing local happens, now or later. `Erasure` is the delete of a
+message already in the local trash on an account holding or restoring its own mailbox, which erases MailFathom's copy
+once the person's withdrawal window has passed and reaches no server at all. `AlreadyCommitted` is the row a restoring
+account opens beside a change it has just made to the stored message, which exists only to carry that change to the
+source. It is written down rather than worked out from the account's phase, because the phase moves while a row waits —
+once an account is held again all three kinds are deletes against a trashed message. A convergence pass erases the rows
+marked `Erasure` and leaves the rest, so a delete whose `LocalDisposition` asked for the copy to be kept is carried or
+deferred rather than destroying it; and a withdrawal cancels neither an `AlreadyCommitted` row nor anything past
+`Recorded`, because the change it names has happened and taking the row back would leave nothing to tell the source
+with.
 
 `DesiredSeenState`, `DesiredFlaggedState`, and `Keywords` are the other parameters, and each belongs to the mutations
 that take it: the two booleans carry the direction a flag change asked for, and `Keywords` is a `text[]` carrying the

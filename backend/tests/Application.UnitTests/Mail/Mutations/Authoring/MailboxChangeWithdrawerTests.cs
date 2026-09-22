@@ -236,6 +236,33 @@ public sealed class MailboxChangeWithdrawerTests
                 .Record.Id);
     }
 
+    /// <summary>
+    /// A restoring account's record is the receipt for a change already made to the stored message, so withdrawal
+    /// leaves it recorded: cancelling it would undo nothing and would drop the only thing left to tell the source with.
+    /// </summary>
+    [Fact]
+    public async Task WithdrawDeletesAsync_ADeleteAlreadyCommittedLocally_LeavesItRecordedForTheSource()
+    {
+        // Arrange
+        var carried = await this.OpenAsync(
+            DeleteRequestIn(Inbox, uid: 21),
+            localChange: MailboxMutationLocalChange.AlreadyCommitted);
+        var withdrawer = this.Withdrawer(AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDelete));
+
+        // Act
+        var withdrawn = await withdrawer.WithdrawDeletesAsync([carried.Id], TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(withdrawn);
+
+        Assert.Equal(carried.Id, entry.RecordId);
+        Assert.Equal(MailboxMutationLifecycle.Pending, entry.Lifecycle);
+        Assert.Equal(
+            carried.Id,
+            Assert.Single(await this.records.ReadOutstandingAsync(Account, 10, TestContext.Current.CancellationToken))
+                .Record.Id);
+    }
+
     /// <summary>Taking a delete back needs the deleting grant, which is the grant that authored it.</summary>
     [Fact]
     public async Task WithdrawDeletesAsync_ACallerHoldingOnlyTheFlagGrant_IsRefused()
@@ -283,12 +310,15 @@ public sealed class MailboxChangeWithdrawerTests
         ImapUid.Create(uid));
 
     /// <summary>Writes one record down, as an authoring use case would have, so a withdrawal has something to take back.</summary>
-    private Task<MailboxMutationRecord> OpenAsync(MailboxMutationRequest request, DateTimeOffset? heldUntil = null) =>
+    private Task<MailboxMutationRecord> OpenAsync(
+        MailboxMutationRequest request,
+        DateTimeOffset? heldUntil = null,
+        MailboxMutationLocalChange localChange = MailboxMutationLocalChange.None) =>
         this.records.OpenAsync(
             CommittingSession(),
             request,
             heldUntil,
-            erasesLocalCopy: false,
+            localChange,
             TestContext.Current.CancellationToken);
 
     private static IPersistenceSession CommittingSession()

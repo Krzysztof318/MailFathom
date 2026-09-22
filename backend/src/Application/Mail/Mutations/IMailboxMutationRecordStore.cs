@@ -30,7 +30,7 @@ public interface IMailboxMutationRecordStore
     /// <param name="session">The session the write joins.</param>
     /// <param name="request">The change that was asked for.</param>
     /// <param name="heldUntil">The instant before which no convergence pass may take the record in hand, or <see langword="null" /> where it may be taken at once.</param>
-    /// <param name="erasesLocalCopy">Whether the record erases MailFathom's own copy — the second delete of a message already in the local trash, on an account holding or restoring its mailbox — rather than naming a change a mail server is to be told about.</param>
+    /// <param name="localChange">What the record has to do with MailFathom's own copy: nothing, the erasure a second delete of a trashed message opens on an account holding or restoring its mailbox, or the change a restoring account has already committed and is opening this record to carry to the source.</param>
     /// <param name="cancellationToken">Cancels the write or the read that follows a losing insert.</param>
     /// <returns>The record for this request, whether this call created it or another one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
@@ -45,15 +45,17 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// <para>
     /// What the record is for is written down with it for the same reason, and read back as
-    /// <see cref="MailboxMutationRecord.IsLocalErasure" />: a record outlives the phase it was opened under, and the two
+    /// <see cref="MailboxMutationRecord.LocalChange" />: a record outlives the phase it was opened under, and the three
     /// kinds a held account can meet are told apart by what each was opened as rather than by what the account is now.
+    /// A record already existing under this identity keeps the value it was opened with rather than taking this call's,
+    /// exactly as it keeps its hold, because both say what was decided when the intent became durable.
     /// </para>
     /// </remarks>
     Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
-        bool erasesLocalCopy,
+        MailboxMutationLocalChange localChange,
         CancellationToken cancellationToken);
 
     /// <summary>Reports whether one local email has ever had a mutation of a given kind asked for by a given kind of requester.</summary>
@@ -250,7 +252,7 @@ public interface IMailboxMutationRecordStore
     /// <param name="account">The account whose mutations are read.</param>
     /// <param name="limit">The greatest number of records to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The outstanding records marked <see cref="MailboxMutationRecord.IsLocalErasure" />, oldest first, at most <paramref name="limit" /> of them.</returns>
+    /// <returns>The outstanding records opened as <see cref="MailboxMutationLocalChange.Erasure" />, oldest first, at most <paramref name="limit" /> of them.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     /// <remarks>
     /// The same answer as the unfiltered read, narrowed for a pass that can do only one kind of work: a held account

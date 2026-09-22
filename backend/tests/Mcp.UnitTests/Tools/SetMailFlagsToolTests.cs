@@ -426,7 +426,7 @@ public sealed class SetMailFlagsToolTests
             IPersistenceSession session,
             MailboxMutationRequest request,
             DateTimeOffset? heldUntil,
-            bool erasesLocalCopy,
+            MailboxMutationLocalChange localChange,
             CancellationToken cancellationToken)
         {
             this.openedRequests.Add(request);

@@ -460,7 +460,7 @@ public sealed class ClientMailMutationsEndpointTests
             Arg.Any<IPersistenceSession>(),
             Arg.Any<MailboxMutationRequest>(),
             RecordedAt + TimeSpan.FromSeconds(8) + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
-            Arg.Any<bool>(),
+            Arg.Any<MailboxMutationLocalChange>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -492,7 +492,7 @@ public sealed class ClientMailMutationsEndpointTests
             RecordedAt
                 + TimeSpan.FromSeconds(ClientPreferences.Unset.NotificationSeconds)
                 + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
-            Arg.Any<bool>(),
+            Arg.Any<MailboxMutationLocalChange>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -644,7 +644,7 @@ public sealed class ClientMailMutationsEndpointTests
             Arg.Any<IPersistenceSession>(),
             Arg.Any<MailboxMutationRequest>(),
             Arg.Any<DateTimeOffset?>(),
-            Arg.Any<bool>(),
+            Arg.Any<MailboxMutationLocalChange>(),
             Arg.Any<CancellationToken>())
         .Returns(call => Task.FromResult(new MailboxMutationRecord
         {

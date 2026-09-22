@@ -203,7 +203,7 @@ public sealed class MailboxChangeProgressReaderTests
         Substitute.For<IPersistenceSession>(),
         request,
         heldUntil: null,
-        erasesLocalCopy: false,
+        MailboxMutationLocalChange.None,
         TestContext.Current.CancellationToken);
 
     private MailboxChangeProgressReader Reader(AccessAuthorization? authorization = null)

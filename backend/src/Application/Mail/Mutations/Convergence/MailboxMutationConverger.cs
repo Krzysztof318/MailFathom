@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 
 namespace MailFathom.Application.Mail.Mutations.Convergence;
@@ -147,7 +148,7 @@ public sealed class MailboxMutationConverger
             // What the record was opened as decides this, never what the account is now. A restoring account opens
             // ordinary records beside its local commits, and a hold taken again while one is outstanding would
             // otherwise erase a local copy whose own disposition asked for it to be kept.
-            if (candidate.Record.IsLocalErasure)
+            if (candidate.Record.LocalChange is MailboxMutationLocalChange.Erasure)
             {
                 await this.EraseLocalCopyAsync(candidate, tally, cancellationToken);
 

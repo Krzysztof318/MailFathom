@@ -456,7 +456,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
                 session,
                 request,
                 heldUntil: null,
-                erasesLocalCopy: false,
+                localChange: MailboxMutationLocalChange.None,
                 token),
             cancellationToken);
 

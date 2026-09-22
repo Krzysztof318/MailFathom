@@ -43,7 +43,7 @@ internal sealed class MailboxMutationRecordStore(
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
-        bool erasesLocalCopy,
+        MailboxMutationLocalChange localChange,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -98,7 +98,7 @@ internal sealed class MailboxMutationRecordStore(
             // nothing about a change already begun.
             AuditTrailEnabled = auditSettingsReader.GetAuditSettings(request.Occurrence.AccountId).IsEnabled,
             Stage = MailboxMutationStage.Recorded,
-            IsLocalErasure = erasesLocalCopy,
+            LocalChange = localChange,
             RequiresSourceRemoval = false,
             AttemptCount = 0,
             HeldUntil = heldUntil,
@@ -227,7 +227,11 @@ internal sealed class MailboxMutationRecordStore(
 
         foreach (var entity in entities)
         {
-            if (entity.Stage is MailboxMutationStage.Recorded)
+            // The local change a restoring account already committed is not one withdrawal can take back, so its record
+            // is left where it stands exactly as a record the server has already heard about is. Cancelling it would
+            // undo nothing and would drop the only thing left to tell the source with.
+            if (entity.Stage is MailboxMutationStage.Recorded
+                && entity.LocalChange is not MailboxMutationLocalChange.AlreadyCommitted)
             {
                 entity.Stage = MailboxMutationStage.Cancelled;
                 entity.StageChangedAt = withdrawnAt;
@@ -379,7 +383,7 @@ internal sealed class MailboxMutationRecordStore(
             .Where(mutation => mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled &&
-                (!localErasuresOnly || mutation.IsLocalErasure) &&
+                (!localErasuresOnly || mutation.LocalChange == MailboxMutationLocalChange.Erasure) &&
 
                 // A record still inside its withdrawal window is not work this pass can do, so it is left out of the
                 // page rather than read and skipped — a page spent on records nothing may touch is a page the account's

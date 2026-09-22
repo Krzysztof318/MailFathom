@@ -170,17 +170,15 @@ public sealed class MailDeletionRecorder
         {
             this.submission.Announce(change);
 
-            // A restoring account moved the message into its local trash and opened the delete its source is still owed,
-            // which waits out the person's window exactly as a mirrored account's does before anything is raised for it.
+            // A restoring account moved the message into its local trash and opened the delete its source is still owed.
+            // That record carries no window whatever this call asked for — the message has already gone, so there is
+            // nothing left to change one's mind about — and it is therefore brought forward at once, as a move's is.
             if (submitted.Record is not { } carried)
             {
                 return AuthoredMailDeletionResult.Applied();
             }
 
-            if (heldUntil is null)
-            {
-                this.runSignal.BringForward(target.Occurrence.AccountId);
-            }
+            this.runSignal.BringForward(target.Occurrence.AccountId);
 
             return AuthoredMailDeletionResult.Applied(carried.Id, carried.Lifecycle);
         }

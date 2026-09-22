@@ -897,6 +897,29 @@ public sealed class MailboxMutationRecordTests
     }
 
     /// <summary>
+    /// A record a restoring account opened beside a change it had already committed is not withdrawable at the one
+    /// stage every other record is: there is nothing left to stop, and cancelling it would strand the stored message.
+    /// </summary>
+    [Theory]
+    [InlineData(MailboxMutationLocalChange.None, true)]
+    [InlineData(MailboxMutationLocalChange.Erasure, true)]
+    [InlineData(MailboxMutationLocalChange.AlreadyCommitted, false)]
+    public void IsWithdrawable_ARecordedChange_AnswersWhetherItHasAlreadyHappenedLocally(
+        MailboxMutationLocalChange localChange,
+        bool expected)
+    {
+        // Arrange
+        var record = CompletedRelocation() with
+        {
+            Stage = MailboxMutationStage.Recorded,
+            LocalChange = localChange,
+        };
+
+        // Assert
+        Assert.Equal(expected, record.IsWithdrawable);
+    }
+
+    /// <summary>
     /// A withdrawn record is the second stage nothing was ever issued for, which is what every provenance question
     /// rests on: a record that stopped before a command went out explains no flag, no keyword, and no disappearance.
     /// </summary>

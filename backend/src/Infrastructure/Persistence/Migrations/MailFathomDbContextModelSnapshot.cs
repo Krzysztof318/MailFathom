@@ -2293,14 +2293,18 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("HeldUntil")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsLocalErasure")
-                        .HasColumnType("boolean");
-
                     b.PrimitiveCollection<string[]>("Keywords")
                         .HasColumnType("text[]");
 
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
+
+                    b.Property<string>("LocalChange")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("None");
 
                     b.Property<string>("LocalDisposition")
                         .HasMaxLength(64)

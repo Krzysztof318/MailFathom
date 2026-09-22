@@ -9,24 +9,25 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddMailboxMutationLocalErasureFlag : Migration
+    public partial class AddMailboxMutationLocalChange : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "IsLocalErasure",
+            migrationBuilder.AddColumn<string>(
+                name: "LocalChange",
                 table: "mailbox_mutations",
-                type: "boolean",
+                type: "character varying(64)",
+                maxLength: 64,
                 nullable: false,
-                defaultValue: false);
+                defaultValue: "None");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "IsLocalErasure",
+                name: "LocalChange",
                 table: "mailbox_mutations");
         }
     }

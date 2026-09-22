@@ -325,9 +325,12 @@ public sealed class MailDeletionRecorderTests
         Assert.True(waiting.Token.IsCancellationRequested);
     }
 
-    /// <summary>The window is the person's way back, so a restoring account's delete waits it out before anything wakes the run for the record it left.</summary>
+    /// <summary>
+    /// A window asked for on a restoring account buys nothing, because the message has already moved into the local
+    /// trash: the record the source is owed carries no hold and the run is woken for it at once.
+    /// </summary>
     [Fact]
-    public async Task RecordAsync_ADeleteOnARestoringAccountCarryingAWindow_AppliesItAndLeavesTheAccountAsleep()
+    public async Task RecordAsync_ADeleteOnARestoringAccountCarryingAWindow_AppliesItAndStillOwesTheSourceAtOnce()
     {
         // Arrange
         var runSignal = new MailAccountRunSignal();
@@ -345,10 +348,8 @@ public sealed class MailDeletionRecorderTests
 
         Assert.Equal(MailDeletionOutcome.Applied, result.Outcome);
         Assert.NotNull(result.RecordId);
-        Assert.False(waiting.Token.IsCancellationRequested);
-        Assert.Equal(
-            RecordedAt + TimeSpan.FromSeconds(15),
-            this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+        Assert.True(waiting.Token.IsCancellationRequested);
+        Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
     }
 
     /// <summary>

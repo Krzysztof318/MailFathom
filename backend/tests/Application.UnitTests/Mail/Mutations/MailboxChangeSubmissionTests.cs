@@ -507,7 +507,7 @@ public sealed class MailboxChangeSubmissionTests
         // Arrange
         this.Store();
         this.records.AuditsMutations = true;
-        var record = await this.records.OpenAsync(this.session, DeleteRequest(), heldUntil: null, erasesLocalCopy: false, Token);
+        var record = await this.records.OpenAsync(this.session, DeleteRequest(), heldUntil: null, MailboxMutationLocalChange.None, Token);
 
         // Act
         var erased = await this.Submission().EraseAsync(this.session, record, Token);
@@ -606,7 +606,7 @@ public sealed class MailboxChangeSubmissionTests
         Assert.True(this.states.States[Email].IsSeen);
         Assert.Equal(MailboxMutation.SetSeen, Assert.Single(this.records.OpenedRequests).Mutation);
         Assert.Equal(Occurrence, submitted.Record!.Request.Occurrence);
-        Assert.False(submitted.Record.IsLocalErasure);
+        Assert.Equal(MailboxMutationLocalChange.AlreadyCommitted, submitted.Record.LocalChange);
     }
 
     /// <summary>The star is committed and carried on the same terms the read state is.</summary>
@@ -687,7 +687,7 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Equal(MailboxChangeSubmissionOutcome.Applied, submitted.Outcome);
         Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Trash), this.states.States[Email].Folder);
         Assert.Equal(MailboxMutation.Delete, Assert.Single(this.records.OpenedRequests).Mutation);
-        Assert.False(submitted.Record!.IsLocalErasure);
+        Assert.Equal(MailboxMutationLocalChange.AlreadyCommitted, submitted.Record!.LocalChange);
     }
 
     /// <summary>A message the drain has taken off the source has nothing to record against, so the local commit is the whole act.</summary>
@@ -754,7 +754,7 @@ public sealed class MailboxChangeSubmissionTests
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.Recorded, submitted.Outcome);
-        Assert.True(submitted.Record!.IsLocalErasure);
+        Assert.Equal(MailboxMutationLocalChange.Erasure, submitted.Record!.LocalChange);
         Assert.Contains(Email, this.states.States.Keys);
     }
 

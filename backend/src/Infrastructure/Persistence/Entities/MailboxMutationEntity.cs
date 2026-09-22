@@ -109,14 +109,15 @@ internal sealed class MailboxMutationEntity
     /// </remarks>
     public bool AuditTrailEnabled { get; set; }
 
-    /// <summary>Gets or sets whether the row was opened to erase MailFathom's own copy rather than to reach a mail server.</summary>
+    /// <summary>Gets or sets what the row was opened to do to MailFathom's own copy of the message.</summary>
     /// <remarks>
     /// Written once with the row and never rewritten, because it says what the record was opened as. A held account
-    /// opens one for a delete of a message already in its local trash, and a restoring account opens ordinary rows
-    /// beside its local commits; once the account is held again both are deletes against a trashed message, and only
-    /// this column says which of the two a convergence pass is holding.
+    /// opens an erasure for a delete of a message already in its local trash, a restoring account opens a row beside a
+    /// local commit it has already made, and a mirrored account opens one that touches the stored message not at all;
+    /// once the account is held again all three are deletes against a trashed message, and only this column says which
+    /// of them a convergence pass is holding or a withdrawal is being asked to cancel.
     /// </remarks>
-    public bool IsLocalErasure { get; set; }
+    public MailboxMutationLocalChange LocalChange { get; set; }
 
     public MailboxMutationStage Stage { get; set; }
 

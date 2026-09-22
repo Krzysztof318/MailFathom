@@ -252,7 +252,12 @@ public sealed class MailboxChangeSubmission
                 return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
             }
 
-            var record = await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: false, cancellationToken);
+            var record = await this.records.OpenAsync(
+                session,
+                request,
+                heldUntil,
+                MailboxMutationLocalChange.None,
+                cancellationToken);
 
             return SubmittedMailboxChange.Recorded(record);
         }
@@ -397,7 +402,7 @@ public sealed class MailboxChangeSubmission
                 : mutation == MailboxMutation.SetFlagged ? state with { IsFlagged = request.DesiredFlaggedState!.Value }
                 : state with { Keywords = KeywordsAfter(request, state.Keywords) };
 
-            return await this.CommitAsync(session, request, state, flagged, heldUntil, holding.Phase, cancellationToken);
+            return await this.CommitAsync(session, request, state, flagged, holding.Phase, cancellationToken);
         }
 
         // Every other change moves the message, so the hierarchy is saved with it: a save is what makes the commit
@@ -420,7 +425,12 @@ public sealed class MailboxChangeSubmission
                     return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
                 }
 
-                var record = await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: true, cancellationToken);
+                var record = await this.records.OpenAsync(
+                    session,
+                    request,
+                    heldUntil,
+                    MailboxMutationLocalChange.Erasure,
+                    cancellationToken);
 
                 return SubmittedMailboxChange.Recorded(record);
             }
@@ -432,7 +442,6 @@ public sealed class MailboxChangeSubmission
                 request,
                 state,
                 state with { Folder = trash.Id },
-                heldUntil,
                 holding.Phase,
                 cancellationToken);
         }
@@ -462,7 +471,6 @@ public sealed class MailboxChangeSubmission
             request,
             state,
             state with { Folder = target.Id },
-            heldUntil,
             holding.Phase,
             cancellationToken);
     }
@@ -517,18 +525,27 @@ public sealed class MailboxChangeSubmission
 
     /// <summary>Writes the change onto the stored message, and beside it the record a restoring account owes its source.</summary>
     /// <remarks>
+    /// <para>
     /// The record is opened in the same transaction as the commit, so a message acted on during the restore cannot end
     /// up committed locally with nothing to carry the act to the source — which is what would leave it arriving back in
     /// <see cref="MailAccountCustodyPhase.Mirrored" /> in the state the source last had. It is opened against the
     /// occurrence the requester resolved, because a restore appends only a message that holds none and therefore never
     /// moves the occurrence this request names.
+    /// </para>
+    /// <para>
+    /// It carries no hold, and that is the whole difference between it and the record a mirrored account opens for the
+    /// same request. A hold buys a person the stretch in which they may still change their mind, and there is nothing
+    /// here to change their mind about: the message has already moved. Holding it would only widen the stretch in which
+    /// the source is wrong, and it is opened as
+    /// <see cref="MailboxMutationLocalChange.AlreadyCommitted" /> so that withdrawal refuses it rather than cancelling
+    /// the only thing left to tell the source with.
+    /// </para>
     /// </remarks>
     private async Task<SubmittedMailboxChange> CommitAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
         LocalEmailState before,
         LocalEmailState after,
-        DateTimeOffset? heldUntil,
         MailAccountCustodyPhase phase,
         CancellationToken cancellationToken)
     {
@@ -536,7 +553,12 @@ public sealed class MailboxChangeSubmission
         await this.states.WriteAsync(session, request.Account, request.StoredEmailId, after, cancellationToken);
 
         var carried = phase == MailAccountCustodyPhase.Restoring && before.HoldsSourceOccurrence
-            ? await this.records.OpenAsync(session, request, heldUntil, erasesLocalCopy: false, cancellationToken)
+            ? await this.records.OpenAsync(
+                session,
+                request,
+                heldUntil: null,
+                MailboxMutationLocalChange.AlreadyCommitted,
+                cancellationToken)
             : null;
 
         var flags = request.Mutation == MailboxMutation.SetSeen || request.Mutation == MailboxMutation.SetFlagged

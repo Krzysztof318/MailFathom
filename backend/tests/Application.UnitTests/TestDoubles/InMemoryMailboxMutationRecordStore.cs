@@ -54,7 +54,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         IPersistenceSession session,
         MailboxMutationRequest request,
         DateTimeOffset? heldUntil,
-        bool erasesLocalCopy,
+        MailboxMutationLocalChange localChange,
         CancellationToken cancellationToken)
     {
         var identity = IdentityOf(request);
@@ -70,7 +70,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             Request = request,
             Stage = MailboxMutationStage.Recorded,
             IsAudited = this.AuditsMutations,
-            IsLocalErasure = erasesLocalCopy,
+            LocalChange = localChange,
             RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 0,
@@ -177,7 +177,9 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
                 continue;
             }
 
-            if (record.Stage is MailboxMutationStage.Recorded)
+            // The real store's own condition, read off the record rather than restated, so a record it refuses
+            // to cancel is one this fake refuses too.
+            if (record.IsWithdrawable)
             {
                 record = record with { Stage = MailboxMutationStage.Cancelled, StageChangedAt = withdrawnAt };
                 this.recordsById[recordId] = record;
@@ -295,7 +297,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
             .. this.OutstandingOf(account)
-                .Where(record => record.IsLocalErasure)
+                .Where(record => record.LocalChange is MailboxMutationLocalChange.Erasure)
                 .OrderBy(record => record.RecordedAt)
                 .Take(limit)
                 .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),

@@ -56,7 +56,7 @@ internal static class MailboxMutationRecordMapping
                 ToServerDisposition(entity, mutation)),
             Stage = entity.Stage,
             IsAudited = entity.AuditTrailEnabled,
-            IsLocalErasure = entity.IsLocalErasure,
+            LocalChange = entity.LocalChange,
             RequiresSourceRemoval = entity.RequiresSourceRemoval,
             Placement = StoredRemotePlacement.Of(entity.PlacementUidValidity, entity.PlacementUid),
             AttemptCount = entity.AttemptCount,

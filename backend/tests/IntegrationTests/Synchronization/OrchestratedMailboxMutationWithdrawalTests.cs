@@ -175,7 +175,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
 
         return await services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, heldUntil, erasesLocalCopy: false, token)).Id,
+                .OpenAsync(session, request, heldUntil, MailboxMutationLocalChange.None, token)).Id,
             cancellationToken);
     }
 }
