@@ -60,6 +60,35 @@ internal sealed record AgentConversationSummaryCase(
                 Person("Put the replacement in my calendar."),
             ],
             ["badge", "2 October"]),
+        new(
+            "PolishConversation",
+            PreviousSummary: null,
+            [
+                Person("Jakim pociągiem jedziemy do Gdańska?"),
+                Agent("Pociągiem IC 5310 z Warszawy Centralnej o 7:15 w środę, 14 października; przyjazd do Gdańska Głównego o 10:05."),
+                Person("A hotel?"),
+                Agent("Hotel Pod Żurawiem, rezerwacja GDA-2291, od 14 do 16 października. Hotel potwierdził późne wymeldowanie 16 października do 14:00."),
+            ],
+            ["IC 5310", "GDA-2291", "14:00"]),
+        new(
+            "OneOfTwoProposalsDeclined",
+            PreviousSummary: null,
+            [
+                Person("Put a call with Ingrid Solberg on 22 September at 11:00 and add a task to send her the updated floor plan."),
+                Agent("[Proposed an event \"Call with Ingrid Solberg\" on 22 September 2026 at 11:00 UTC.] [Proposed a task \"Send Ingrid the updated floor plan\", due 21 September 2026.]"),
+                Person("I declined the call, we will talk on Friday instead. The floor plan task stays."),
+            ],
+            ["Ingrid", "floor plan", "21 September", "Friday"]),
+        new(
+            "LaterTurnCorrectsAnEarlierOne",
+            PreviousSummary: null,
+            [
+                Person("When do we move to Wrzosowa 12?"),
+                Agent("On Saturday, 26 September 2026, with the goods lift booked from 8:00 to 12:00."),
+                Person("The building management wrote again, check it."),
+                Agent("They corrected it: because of a lift inspection the move is on Sunday, 27 September 2026, with the lift booked for the Sunday from 8:00 to 12:00. The bike rack stands by the courtyard entrance."),
+            ],
+            ["27 September", "courtyard"]),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>

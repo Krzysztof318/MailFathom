@@ -49,6 +49,16 @@
     <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
     <!-- The grant a scenario states for the Agent's tools, which decides which of them are offered. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
+    <!-- The one account and one inbox the Agent's readers resolve their scope over, and the thread reader that assembles
+         each corpus conversation as a deployment's does. -->
+    <Compile Include="..\shared\AssignedMailAccountCatalogs.cs" Link="AssignedMailAccountCatalogs.cs" />
+    <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
+    <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
+    <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
+    <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
+    <Compile Include="..\shared\StubEmailThreadReader.cs" Link="StubEmailThreadReader.cs" />
+    <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
   </ItemGroup>
 
   <ItemGroup>

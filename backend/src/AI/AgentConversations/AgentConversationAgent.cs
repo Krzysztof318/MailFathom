@@ -160,7 +160,11 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         return PresentationText.TryCreate(bounded, out var presentable) ? presentable : null;
     }
 
-    private static IReadOnlyList<ChatMessage> ComposeMessages(AgentAnswerBrief brief, MailboxScope scope) =>
+    /// <summary>Composes what the model is sent: every earlier turn of the conversation, then the question's own turn.</summary>
+    /// <param name="brief">The question, the language it is answered in, and the conversation before it.</param>
+    /// <param name="scope">The mailbox the run reads, whose accounts the turn names.</param>
+    /// <returns>The conversation, oldest turn first.</returns>
+    internal static IReadOnlyList<ChatMessage> ComposeMessages(AgentAnswerBrief brief, MailboxScope scope) =>
     [
         .. brief.History.Select(static turn => new ChatMessage(
             turn.Author is AgentMessageAuthor.Person ? ChatRole.User : ChatRole.Assistant,
