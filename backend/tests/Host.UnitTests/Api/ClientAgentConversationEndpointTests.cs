@@ -5,8 +5,12 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -43,6 +47,7 @@ public sealed class ClientAgentConversationEndpointTests
         Assert.Equal(
             [
                 "/agent/conversations",
+                "/agent/conversations/search",
                 "/agent/conversations/{conversationId:guid}",
                 "/agent/conversations/{conversationId:guid}/messages",
                 "/agent/conversations/{conversationId:guid}/runs/{runId:guid}",
@@ -51,6 +56,7 @@ public sealed class ClientAgentConversationEndpointTests
             ],
             [
                 ClientAgentConversationEndpoints.ConversationsRoute,
+                ClientAgentConversationEndpoints.SearchRoute,
                 ClientAgentConversationEndpoints.ConversationRoute,
                 ClientAgentConversationEndpoints.MessagesRoute,
                 ClientAgentConversationEndpoints.RunRoute,
@@ -362,6 +368,51 @@ public sealed class ClientAgentConversationEndpointTests
             answered.Value!.Conversations);
     }
 
+    /// <summary>A search answers <c>200</c> with each conversation found, where it matched, and the mode that ordered it.</summary>
+    [Fact]
+    public async Task SearchAsync_AQuery_AnswersTheConversationsFoundAndHowTheyWereOrdered()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+        var index = Substitute.For<IAgentConversationSearchIndex>();
+        index
+            .ReadLexicalRankingAsync(SyntheticUser.Deployment, EmailSearchQueryText.Create("indexation cap"), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([new AgentConversationSearchHit(AgentConversationId.Create(Conversation), "Indexation", Now, message, 7)]);
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.SearchAsync(
+            new ClientAgentConversationSearchRequest("indexation cap", Limit: null),
+            Resolver(),
+            SearchOver(index),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var response = Assert.IsType<Ok<ClientAgentConversationSearchResponse>>(answered.Result).Value!;
+        Assert.Equal([new ClientAgentConversationSearchResult(Conversation, "Indexation", Now, message.Value, 7)], response.Results);
+        Assert.Equal("Lexical", response.RetrievalMode);
+        Assert.Equal("Inactive", response.SemanticSearch);
+    }
+
+    /// <summary>A request with nothing to search for, or a limit outside the bound, is refused before anything is read.</summary>
+    [Theory]
+    [MemberData(nameof(MalformedSearches))]
+    public async Task SearchAsync_AMalformedRequest_AnswersBadRequestReadingNothing(int malformed)
+    {
+        // Arrange
+        var index = Substitute.For<IAgentConversationSearchIndex>();
+
+        // Act
+        var answered = await ClientAgentConversationEndpoints.SearchAsync(
+            MalformedSearchCases[malformed],
+            Resolver(),
+            SearchOver(index),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusOf(answered.Result));
+        Assert.Empty(index.ReceivedCalls());
+    }
+
     /// <summary>Deleting answers <c>204</c> where the conversation was the person's and <c>404</c> otherwise.</summary>
     [Theory]
     [InlineData(true, typeof(NoContent))]
@@ -380,6 +431,9 @@ public sealed class ClientAgentConversationEndpointTests
         Assert.IsType(expected, answered.Result);
     }
 
+    /// <summary>Indexes into <see cref="MalformedSearchCases" />, which the request records being internal keeps out of a theory's own data.</summary>
+    public static TheoryData<int> MalformedSearches => [.. Enumerable.Range(0, MalformedSearchCases.Length)];
+
     /// <summary>Indexes into <see cref="MalformedQuestionCases" />, which the request records being internal keeps out of a theory's own data.</summary>
     public static TheoryData<int> MalformedQuestions => [.. Enumerable.Range(0, MalformedQuestionCases.Length)];
 
@@ -393,6 +447,25 @@ public sealed class ClientAgentConversationEndpointTests
         (Conversation, new ClientAgentMessageRequest(Guid.CreateVersion7(Now), new string('x', PresentationText.MaxLength + 1), null)),
         (Conversation, new ClientAgentMessageRequest(Guid.CreateVersion7(Now), "About this thread", new ClientAgentMessageScope(AgentScopeKind.Thread, null))),
     ];
+
+    /// <summary>Requests with nothing to search for, or asking for a number of conversations outside the bound.</summary>
+    private static ClientAgentConversationSearchRequest?[] MalformedSearchCases =>
+    [
+        null,
+        new ClientAgentConversationSearchRequest("   ", Limit: null),
+        new ClientAgentConversationSearchRequest(new string('x', EmailSearchQueryText.MaximumLength + 1), Limit: null),
+        new ClientAgentConversationSearchRequest("indexation cap", Limit: 0),
+        new ClientAgentConversationSearchRequest("indexation cap", AgentConversationSearch.MaximumResults + 1),
+    ];
+
+    private static AgentConversationSearch SearchOver(IAgentConversationSearchIndex index) =>
+        new(
+            new ActiveEmbeddingSpace(
+                Substitute.For<IActiveEmbeddingProfileReader>(),
+                Substitute.For<IAiProviderHealthReader>(),
+                new FakeTimeProvider(Now),
+                textEmbeddingGenerator: null),
+            index);
 
     private static int? StatusOf(IResult result) => (result as IStatusCodeHttpResult)?.StatusCode;
 

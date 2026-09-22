@@ -155,6 +155,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `GET /api/client/agent/conversations` | `mailfathom.mail.ask` |
+| `POST /api/client/agent/conversations/search` | `mailfathom.mail.ask` |
 | `GET /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
 | `DELETE /api/client/agent/conversations/{conversationId}` | `mailfathom.mail.ask` |
 | `POST /api/client/agent/conversations/{conversationId}/messages` | `mailfathom.mail.ask` |
@@ -3408,6 +3409,39 @@ its limit counts visible entries, a cursor never lands on a technical one, and a
 means the client is caught up. `composing` says an answer
 is still being written, and `moreFollows` says more is written than one read returns, at most 250; the client reads
 again from the last place it was given. The listing returns at most 100 conversations, the one that moved last first.
+
+**The history is searched the way mail is: by its words and by its meaning, fused.** The query travels in the body
+rather than the address, so it reaches no access log:
+
+```http
+POST /api/client/agent/conversations/search
+Content-Type: application/json
+
+{ "query": "indexation cap", "limit": 20 }
+```
+
+```http
+200 OK
+Content-Type: application/json
+
+{
+  "results": [
+    { "conversationId": "0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d", "title": "Supplier quotes", "lastActivityAt": "2026-09-21T09:00:00+00:00", "messageId": "0199a2c4-6a7b-7c8d-9e0f-1a2b3c4d5e6f", "sequence": 6 }
+  ],
+  "retrievalMode": "Hybrid",
+  "semanticSearch": "Available"
+}
+```
+
+Each result is one of the person's own conversations and the message in it that matched, by its identifier and the
+place it was written at, best first — a conversation both rankings found ahead of one only one found, and the one that
+moved last first between two that rank alike. The words are matched against every question, every answer's prose, and
+every field of a block or an offer; the meaning against questions and answers' prose, embedded when an answer ends.
+`retrievalMode` is `Hybrid` when both were read and `Lexical` when only the words were, with `semanticSearch` saying why
+exactly as [the mail search route](#the-mail-search-route) does — a deployment whose embedding endpoint is unreachable still answers,
+from the words alone, and a conversation nothing has embedded is still found by them. `limit` is 1 to 50 and defaults
+to 50; the query is at most 512 characters, the body at most 4 KiB, and an empty query, a limit out of range, or a
+member the contract does not name is `400`. The client filters nothing: every result is already the person's.
 
 **Asking never waits for the answer.** The client names the conversation and the message, so the first question of a
 conversation starts it and a post retried over a dropped connection writes nothing twice:

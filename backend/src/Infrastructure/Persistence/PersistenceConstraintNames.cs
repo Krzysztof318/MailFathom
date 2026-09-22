@@ -768,6 +768,30 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string AgentConversationAnsweredProposalIndexName = "ix_agent_conversation_entries_answered";
 
+    /// <summary>The inverted index a person's Agent history is searched by words through.</summary>
+    /// <remarks>
+    /// Stated for the reason the mail search document's is: the lexical ranking of the history search reads nothing
+    /// else, and an index nobody named is one a later rename would drop and recreate under a different name.
+    /// </remarks>
+    internal const string AgentConversationEntrySearchVectorIndexName = "ix_agent_conversation_entries_search_vector";
+
+    /// <summary>The key one message's vector in one space is written under.</summary>
+    /// <remarks>An entry and a profile together, because that pair is what the vector is: recording one already recorded conflicts here and writes nothing.</remarks>
+    internal const string AgentConversationEmbeddingPrimaryKeyConstraintName = "pk_agent_conversation_embeddings";
+
+    /// <summary>The check that a message's vector has as many components as its space declares.</summary>
+    internal const string AgentConversationEmbeddingDimensionCheckConstraintName = "ck_agent_conversation_embeddings_dimension";
+
+    /// <summary>The foreign key tying a message's vector to the entry its text was read from, which is what it is deleted by.</summary>
+    /// <remarks>Stated because the name EF composes from the two tables runs past PostgreSQL's identifier limit and would be stored cut short.</remarks>
+    internal const string AgentConversationEmbeddingEntryForeignKeyName = "fk_agent_conversation_embeddings_entries";
+
+    /// <summary>The foreign key tying a message's vector to the space it was placed in, dimension included.</summary>
+    internal const string AgentConversationEmbeddingProfileForeignKeyName = "fk_agent_conversation_embeddings_embedding_profiles";
+
+    /// <summary>The index a superseded space's conversation vectors are found and removed by.</summary>
+    internal const string AgentConversationEmbeddingProfileIndexName = "ix_agent_conversation_embeddings_profile";
+
     /// <summary>The key one export of a mailbox is written under.</summary>
     internal const string MailboxExportPrimaryKeyConstraintName = "pk_mailbox_exports";
 

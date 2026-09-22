@@ -611,6 +611,91 @@
         ],
         "type": "object"
       },
+      "ClientAgentConversationSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "query": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "query",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationSearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClientAgentConversationSearchResult"
+            },
+            "type": "array"
+          },
+          "retrievalMode": {
+            "type": "string"
+          },
+          "semanticSearch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "results",
+          "retrievalMode",
+          "semanticSearch"
+        ],
+        "type": "object"
+      },
+      "ClientAgentConversationSearchResult": {
+        "properties": {
+          "conversationId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "conversationId",
+          "title",
+          "lastActivityAt",
+          "messageId",
+          "sequence"
+        ],
+        "type": "object"
+      },
       "ClientAgentConversationSummary": {
         "properties": {
           "id": {
@@ -14140,6 +14225,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientAgentConversationListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/agent/conversations/search": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientAgentConversationSearchRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAgentConversationSearchResponse"
                 }
               }
             },

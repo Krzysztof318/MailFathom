@@ -58,8 +58,10 @@ rest on its own.
    `The generation being built is complete and is now the one searches are answered from` and counted by
    `mailfathom.embedding.generation.switches`.
 4. **The superseded vectors are removed in bounded batches.** The old generation's vectors go a batch per pass,
-   counted by `mailfathom.embedding.generation.removed`. The profile row itself survives: it is what a vector was once
-   attributable to, and its identity may never move.
+   counted by `mailfathom.embedding.generation.removed`. An Agent conversation's vectors go the same way, ahead of the
+   mail's, and are counted with them. Nothing re-embeds a conversation into the new generation: a message embedded
+   before the switch is found by its words alone afterwards, and every answer after it is embedded in the new one. The
+   profile row itself survives: it is what a vector was once attributable to, and its identity may never move.
 
 While the reindex is running, `mailfathom.embedding.backfill.outstanding` is how much of the mailbox the new
 generation is still missing, and the counters beside it are what move in between.

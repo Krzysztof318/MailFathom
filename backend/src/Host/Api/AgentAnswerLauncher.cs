@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
 using MailFathom.Application.Signals;
 using MailFathom.Host.Security.Transport;
 
@@ -28,6 +29,10 @@ namespace MailFathom.Host.Api;
 /// reaches, and lets a fault it has no name for propagate after ending it; <c>Application</c> holds no logger, so the
 /// fault is logged here. A scope this process could not compose the use case out of never reaches the use case at all,
 /// so the answer is ended here instead, and nothing is left composing forever.
+/// </para>
+/// <para>
+/// Once the answer has ended, what its turn said is embedded for the history search as a step of its own, so a failure
+/// there is recorded as a lost ranking signal rather than as the failed answer it is not.
 /// </para>
 /// </remarks>
 internal sealed partial class AgentAnswerLauncher
@@ -102,6 +107,7 @@ internal sealed partial class AgentAnswerLauncher
 
             reached = true;
             await answering.RunAsync(question, this.lifetime.ApplicationStopping);
+            await this.EmbedTurnAsync(scope.ServiceProvider, question);
         }
         catch (Exception failure)
         {
@@ -111,6 +117,30 @@ internal sealed partial class AgentAnswerLauncher
             {
                 await this.EndFailedAsync(question);
             }
+        }
+    }
+
+    /// <summary>Places what the turn said beside the stored vectors, once the answer it belongs to has ended.</summary>
+    /// <remarks>
+    /// Its own step rather than a part of the answer, because the answer has already been delivered by the time it runs:
+    /// a failure here costs the history search its meaning for one turn, which is still found by its words, and is
+    /// written down as that rather than as an answer that failed. A process that is stopping leaves it undone.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The answer has already ended; any failure placing its turn is a lost ranking signal to write down, never a failed answer.")]
+    internal async Task EmbedTurnAsync(IServiceProvider services, AgentQuestion question)
+    {
+        try
+        {
+            var embedding = services.GetRequiredService<AgentConversationEmbedding>();
+
+            await embedding.EmbedTurnAsync(question, this.lifetime.ApplicationStopping);
+        }
+        catch (OperationCanceledException) when (this.lifetime.ApplicationStopping.IsCancellationRequested)
+        {
+        }
+        catch (Exception failure)
+        {
+            this.LogTurnCouldNotBeEmbedded(failure);
         }
     }
 
@@ -150,4 +180,10 @@ internal sealed partial class AgentAnswerLauncher
             + "as composing until a stop ends it. Neither the question nor anything it read is in this record; what "
             + "failed is the deployment's own store.")]
     private partial void LogAnswerCouldNotBeEnded(Exception failure);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "An Agent answer ended and was delivered, but what its turn said could not be embedded for the history "
+            + "search, so that turn is found by its words alone. Neither the question nor the answer is in this record.")]
+    private partial void LogTurnCouldNotBeEmbedded(Exception failure);
 }

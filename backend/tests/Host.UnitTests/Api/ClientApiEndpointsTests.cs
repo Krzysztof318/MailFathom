@@ -133,6 +133,7 @@ public sealed class ClientApiEndpointsTests
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.SearchRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.ConversationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientAgentConversationEndpoints.MessagesRoute}",
@@ -330,6 +331,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientTimeZoneEndpoint.TimeZoneRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientAgentConversationEndpoints.SearchRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientAgentConversationEndpoints.MessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientAgentConversationEndpoints.RunMessagesRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientCalendarEndpoints.CalendarRoute} -> {MailFathomPermission.MailRead.Name}",

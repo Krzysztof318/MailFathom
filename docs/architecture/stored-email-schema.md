@@ -1382,6 +1382,7 @@ to.
 | `AnsweredProposalAt` | Which offer this entry answers, as that offer's own place, and null on every other kind. An offer is addressed by where it was made rather than by the turn it belongs to, which is what lets the same offer be made twice and answered differently each time |
 | `ProposalState` | Where that offer now stands, by name, and null on every other kind. It is a column rather than only a field of the payload so the statement recording an answer can read what the last one said without deserializing anything |
 | `WrittenAt` | When the entry was written |
+| `SearchVector` | What the history search matches words against, as a `tsvector` PostgreSQL generates and stores from `Payload`: a message's own text, and every string field of a block or an offer. Every other kind stores null, so a status line, a tool's output, or a summary is never what a search finds. It is compiled with the deployment's text search configuration exactly as the mail's search document is, and indexed by `ix_agent_conversation_entries_search_vector`, a GIN index |
 
 **A person's message is written under the conversation's held row.** A question and the opening of the answer to it
 are two rows written in one transaction that first takes the conversation's row `FOR UPDATE`, so a question is never
@@ -1406,6 +1407,23 @@ record, both refused in the same statement that would write past either and each
 answer's ending and the agent's note after a stop — the title's length, how many
 entries one read returns, how many conversations one listing returns, and how many conversations one person may hold —
 1 000, counted in the statement that would start another, over the history index above.
+
+**A message's meaning is placed in `agent_conversation_embeddings`, one row per message and embedding profile.** Once
+an answer ends, the question that opened it and the prose the answer composed are embedded in one call and written here
+under the active profile, keyed by `(ConversationId, Sequence, EmbeddingProfileId)` so recording one twice writes
+nothing. Only a message's text is embedded; a block's other fields reach the search through `SearchVector` alone.
+
+| `agent_conversation_embeddings` column | What it records |
+|---|---|
+| `ConversationId`, `Sequence` | The entry the text was read from. The foreign key onto `agent_conversation_entries` cascades, so a vector goes with the entry it was placed from — a conversation deleted or a person erased takes them along |
+| `EmbeddingProfileId`, `Dimension` | The profile the vector was placed under, as the composite foreign key the mail's vectors carry, restricted rather than cascaded. `ix_agent_conversation_embeddings_profile` is what a superseded generation's vectors are removed by |
+| `Embedding` | The vector, `vector` with no fixed width, held to `Dimension` by `ck_agent_conversation_embeddings_dimension` |
+| `GeneratedAt` | When it was written |
+
+The history search reads both halves for one person at a time — the words through `SearchVector`, the meaning by an
+exact scan of this table against the active profile, with no approximate index — keeps each conversation's best entry
+from each, and fuses the two rankings as mail search does. A vector is derived from what somebody said about their own
+mail and is classified exactly as `Payload` is.
 
 ## The whole-mailbox rule run an account has outstanding
 

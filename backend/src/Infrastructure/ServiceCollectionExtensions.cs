@@ -10,6 +10,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Agent.Search;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Calendar;
 using MailFathom.Application.Calendar.Extraction;
@@ -831,6 +832,13 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IAiProviderHealthReader>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITextEmbeddingGenerator>()));
+        // Built by hand for the reason the search above is, and beside it because it is the same gate: the Agent's
+        // history search places its query through it, and a run places what its turn said through it.
+        services.AddScoped(provider => new ActiveEmbeddingSpace(
+            provider.GetRequiredService<IActiveEmbeddingProfileReader>(),
+            provider.GetRequiredService<IAiProviderHealthReader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<ITextEmbeddingGenerator>()));
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
         // Beside the freshness reader because both narrow the same folder rows to the same scope, and apart from it
         // because this one counts mail: it is asked for by the read that draws a folder tree and by nothing that
@@ -1145,6 +1153,11 @@ public static class ServiceCollectionExtensions
         // What a person does to a conversation, beside the store it writes through: it holds nothing between calls
         // either, and a stop has to reach a run executing anywhere, which it does through the store rather than here.
         services.AddSingleton<AgentConversationControls>();
+        // A singleton beside the store for the same reason: bare commands over the data source, holding nothing between
+        // calls. The search and the embedding of a turn are scoped because the embedding space they place through is.
+        services.AddSingleton<IAgentConversationSearchIndex, AgentConversationSearchIndex>();
+        services.AddScoped<AgentConversationSearch>();
+        services.AddScoped<AgentConversationEmbedding>();
         // Scoped, because an acceptance carries the act out through the drafting and sending use cases under the
         // accepting caller's principal, and a run composes under the principal of the person who asked — both of which
         // are the scope's. The composer is resolved optionally for the reason the Discover run's are: a deployment that
