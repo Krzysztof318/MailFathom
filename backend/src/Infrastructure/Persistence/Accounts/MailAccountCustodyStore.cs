@@ -70,9 +70,21 @@ internal sealed class MailAccountCustodyStore(MailFathomDbContext dbContext) : I
 
         var accountIdValue = account.Value;
 
-        var affected = await sessionContext.MailboxAccounts
-            .Where(row => row.Id == accountIdValue && row.CustodyPhase == decidedFrom)
-            .ExecuteUpdateAsync(row => row.SetProperty(entity => entity.CustodyPhase, moveTo), cancellationToken);
+        var moving = sessionContext.MailboxAccounts
+            .Where(row => row.Id == accountIdValue && row.CustodyPhase == decidedFrom);
+
+        // A phase that is not Restoring owes no walk position, and clearing it here is what makes a second restore
+        // walk the account's mail from the start. Nothing else writes the column, so a cursor left behind by one
+        // restore would silently skip every message of the next whose identity sorts at or below it.
+        var affected = moveTo is MailAccountCustodyPhase.Restoring
+            ? await moving.ExecuteUpdateAsync(
+                row => row.SetProperty(entity => entity.CustodyPhase, moveTo),
+                cancellationToken)
+            : await moving.ExecuteUpdateAsync(
+                row => row
+                    .SetProperty(entity => entity.CustodyPhase, moveTo)
+                    .SetProperty(entity => entity.RestoreStatePosition, (Guid?)null),
+                cancellationToken);
 
         return affected == 1;
     }

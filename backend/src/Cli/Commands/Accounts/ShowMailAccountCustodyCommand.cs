@@ -94,6 +94,9 @@ internal static class ShowMailAccountCustodyCommand
             context.Console.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
                 $"Unanswered appends:      {restore.UnansweredAppends}"));
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Awaiting confirmation:   {restore.AwaitingConfirmation}"));
 
             WriteUnansweredAppends(context, state.Account ?? account, restore.Unanswered ?? []);
         }

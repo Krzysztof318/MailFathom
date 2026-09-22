@@ -8,7 +8,7 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// <param name="AppendedCount">Messages the source holds again because this pass appended them.</param>
 /// <param name="StateWrittenCount">Messages whose local state this pass wrote down for the converger to carry.</param>
 /// <param name="UnansweredAppendCount">Appends this pass issued whose answer never came back, each of which now holds the account in its phase.</param>
-/// <param name="Failures">How many messages each kind of failure cost, with kinds that cost none absent. Every one of them is attempted again by the next ordinary run.</param>
+/// <param name="Failures">How many messages each kind of failure cost, with kinds that cost none absent. A message is attempted again only where the pass recorded nothing for it.</param>
 /// <param name="Pause">What is holding the restore up, or <see cref="MailboxRestorePause.None" /> where nothing is.</param>
 /// <param name="EndedTheRestore">Whether this pass was the one that put the account back to mirroring its source.</param>
 /// <remarks>
@@ -34,7 +34,13 @@ public sealed record MailboxRestoreReport(
     /// <summary>Gets how many messages failed, however they failed.</summary>
     public int FailedCount => this.Failures.Values.Sum();
 
-    /// <summary>Gets whether the pass failed at least one message, which the next ordinary run attempts again.</summary>
+    /// <summary>Gets whether the pass failed at least one message, however the failure ended for that message.</summary>
+    /// <remarks>
+    /// Not every failure here is retried, which is why this says nothing about the next run. A failure that recorded
+    /// nothing leaves the message a candidate and the next pass takes it again; one that opened the message's records
+    /// and stamped it, settled it as unrestorable, or left an append standing has decided the message's outcome, and
+    /// the next pass will not reach it.
+    /// </remarks>
     public bool Failed => this.FailedCount > 0;
 
     /// <summary>Builds the report of a pass that was held up before it attempted anything.</summary>

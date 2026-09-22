@@ -20,8 +20,11 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </para>
 /// <para>
 /// The surface is closed to exactly the mutations MailFathom is permitted to perform. There is no method that sends,
-/// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
-/// <c>\Answered</c>. Permitting one of those later is a decision to reopen rather than a method to append, and this
+/// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that changes whether
+/// a message on the source counts as answered. <see cref="AppendRestoredAsync" /> does put <c>\Answered</c> onto a
+/// message, and it is not an exception to that: it states what the source itself last showed about a message
+/// MailFathom is handing back, rather than asserting anything new about one the source already holds. Permitting one
+/// of the others later is a decision to reopen rather than a method to append, and this
 /// surface is what a permitted mutation arrives on — <c>\Flagged</c> and the keywords did, because each is a change to
 /// one message and therefore the same kind of act as the four that were here first. What does not arrive here is an act
 /// of a different kind: folder creation is a port of its own for exactly that reason, so a caller able to file a message
@@ -323,8 +326,11 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// The fifth reopening of this surface, and the one act here that puts a message somebody else sent back where it
     /// came from. It is a method of its own rather than a mode of <see cref="AppendAsync" /> because the two assert
     /// different things: that one appends a copy MailFathom composed, carrying the two flags a composition establishes,
-    /// while this one appends mail MailFathom was holding and carries the stored state a person left on it — which is
-    /// why <c>\Flagged</c> and the keywords are expressible here and <c>\Draft</c> is not.
+    /// while this one appends mail MailFathom was holding and carries what the source last showed about it together
+    /// with what a person did to it while it was held. So this operation carries four system flags — <c>\Seen</c>,
+    /// <c>\Answered</c>, <c>\Flagged</c> and <c>\Draft</c> — and the keywords beside them, each of which MailFathom
+    /// observed per message and would otherwise lose on the way back. <c>\Deleted</c> is the one it does not carry,
+    /// because it is a request that the folder stop holding the message rather than an observation about it.
     /// </para>
     /// <para>
     /// It is never repeated on the caller's behalf, for the reason <see cref="AppendAsync" /> is not: an <c>APPEND</c>

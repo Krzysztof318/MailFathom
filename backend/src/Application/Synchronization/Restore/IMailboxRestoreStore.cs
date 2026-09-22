@@ -168,6 +168,11 @@ public interface IMailboxRestoreStore
     /// committed — keeps its record rather than losing it, because it is then a message that may be on the source
     /// twice and that is an operator's to establish.
     /// </para>
+    /// <para>
+    /// Such a record also loses the placement recorded on it, in the same transaction. That is what moves it from the
+    /// work a pass finishes on its own to the work an operator is offered: nothing else would ever carry it, and a
+    /// record nothing finishes and nobody is offered holds the account in its phase for ever.
+    /// </para>
     /// </remarks>
     Task<bool> ConfirmAppendAsync(
         IPersistenceSession session,
@@ -246,19 +251,31 @@ public interface IMailboxRestoreStore
 /// <param name="AwaitingAppend">Messages the source no longer holds that have still to be put back.</param>
 /// <param name="AwaitingStateWrite">Messages whose local state has still to be written onto the occurrence they keep.</param>
 /// <param name="UnansweredAppends">Appends whose answer never came back, each of which holds the account in its phase.</param>
+/// <param name="AwaitingConfirmation">Appends the source answered in full whose occurrence has still to be written onto the message.</param>
 /// <remarks>
+/// <para>
 /// Counts and never a listing, for the reason the drain's own standing carries none: what a client sees about a held
 /// message is nothing about the message, and these figures carry no subject, address, or content.
+/// </para>
+/// <para>
+/// The last two are disjoint by construction and are told apart because an operator can act on only one of them. An
+/// unanswered append is a folder somebody has to look in; one awaiting confirmation is work the next pass does, and
+/// offering it as a verdict would either put a second copy in a folder or strand a placement nobody ever carries.
+/// </para>
 /// </remarks>
 public sealed record MailboxRestoreStanding(
     int AwaitingAppend,
     int AwaitingStateWrite,
-    int UnansweredAppends)
+    int UnansweredAppends,
+    int AwaitingConfirmation)
 {
     /// <summary>The standing of an account that is not restoring anything.</summary>
-    public static MailboxRestoreStanding Nothing { get; } = new(0, 0, 0);
+    public static MailboxRestoreStanding Nothing { get; } = new(0, 0, 0, 0);
 
     /// <summary>Gets whether the account still owes its source something the restore itself has to do.</summary>
     public bool IsOutstanding =>
-        this.AwaitingAppend > 0 || this.AwaitingStateWrite > 0 || this.UnansweredAppends > 0;
+        this.AwaitingAppend > 0
+        || this.AwaitingStateWrite > 0
+        || this.UnansweredAppends > 0
+        || this.AwaitingConfirmation > 0;
 }

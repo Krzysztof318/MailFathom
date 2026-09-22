@@ -37,7 +37,10 @@ namespace MailFathom.IntegrationTests.Synchronization;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixture orchestration)
 {
-    private static readonly DateTimeOffset ArrivedAt = new(2026, 3, 4, 8, 15, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset ReadArrivedAt = new(2026, 3, 4, 8, 15, 0, TimeSpan.Zero);
+
+    /// <summary>A day apart from the other, so an append stamping both with one instant fails rather than passing.</summary>
+    private static readonly DateTimeOffset UnreadArrivedAt = new(2026, 3, 5, 17, 42, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task AppendRestoredAsync_AFolderTheDrainEmptied_PutsItsMailBackWithTheFlagsAndKeywordsItWasHeldWith()
@@ -92,7 +95,7 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
                             IsFlagged: true,
                             IsDraft: false,
                             RemoteEmailKeywords.Create(["$Label1"])),
-                        ArrivedAt,
+                        ReadArrivedAt,
                         token),
                     await session.AppendRestoredAsync(
                         MimeOf(unreadSubject),
@@ -102,7 +105,7 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
                             IsFlagged: false,
                             IsDraft: false,
                             RemoteEmailKeywords.None),
-                        ArrivedAt,
+                        UnreadArrivedAt,
                         token),
                 };
             },
@@ -118,12 +121,14 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
             [.. restored.Select(email => (ImapUid?)email.Uid)]);
 
         var read = Assert.Single(restored, email => email.Subject == readSubject);
+        Assert.Equal(ReadArrivedAt, read.ArrivedAt);
         Assert.True(read.IsSeen);
         Assert.True(read.IsAnswered);
         Assert.True(read.IsFlagged);
         Assert.Contains("$Label1", read.Keywords);
 
         var unread = Assert.Single(restored, email => email.Subject == unreadSubject);
+        Assert.Equal(UnreadArrivedAt, unread.ArrivedAt);
         Assert.False(unread.IsSeen);
         Assert.False(unread.IsAnswered);
         Assert.False(unread.IsFlagged);

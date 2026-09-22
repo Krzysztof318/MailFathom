@@ -997,12 +997,18 @@ where the copy went came back, so the folder may hold the copy and may not, and 
 one. Each holds the account in `Restoring` until an operator looks in the folder and settles the record with
 `mfctl account custody settle`. A non-zero reading that nobody acts on is an account that never finishes switching off.
 
-`mailfathom.mailbox.restore.failures` counts what refused an append and breaks it down by
-`mailfathom.mailbox.restore.failure`, whose values are MailFathom's own names for it: the source was unavailable, the
-source refused the credential, the folder is no longer there, the stored payload could not be read, the folder the
-message goes back into is bound to nothing, or the pass could not classify it. A failure before the command went out
-leaves nothing standing and the next run takes the message again; one after it went out is counted here *and* under the
-unanswered appends above, because both are true of it.
+`mailfathom.mailbox.restore.failures` counts what the restore could not put back and breaks it down by
+`mailfathom.mailbox.restore.failure`, whose seven values are MailFathom's own names for it: the source was unavailable,
+the source refused the credential, the folder is no longer there, the stored payload could not be read, the folder the
+message goes back into is bound to nothing, MailFathom holds a keyword on the message that no authored change may name,
+or the pass could not classify it. Two of those are raised by the half that writes held state onto messages the source
+still holds, rather than by an append at all: the unresolved folder, and the unwritable keyword.
+
+Whether the next run takes the message again follows from what the pass recorded for it rather than from the value. A
+failure that recorded nothing leaves the message a candidate; one whose command went out is counted here *and* under
+the unanswered appends above, because both are true of it; and the unreadable payload and the unwritable keyword are
+neither — the first is recorded as a message the restore can never put back and the second is stamped as state that has
+been written, so neither is reached again and neither holds the phase open.
 
 ### Contact collection
 

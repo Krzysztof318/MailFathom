@@ -37,9 +37,10 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// <para>
 /// The append is the one command of the mode that may never be issued twice, since a second <c>APPEND</c> is a second
 /// message in the user's folder rather than a repeat of the first. So a record is written and committed before the
-/// command goes out and deleted once the server has named where the copy went, and a record found standing is an append
-/// whose outcome is unknown: it is reported to an operator and never reissued, and it holds the account in its phase
-/// until they settle it. See
+/// command goes out; the placement the source named is written onto it next, and the occurrence is carried onto the
+/// message after that. A record carrying a placement is a fully answered append the next pass finishes on its own. A
+/// record standing with no placement is an append whose outcome is unknown: it is reported to an operator and never
+/// reissued, and it holds the account in its phase until they settle it. See
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
@@ -261,10 +262,19 @@ public sealed class MailboxRestorePass
 
     /// <summary>Opens every record one message owes, and stamps the message as owing none afterwards.</summary>
     /// <remarks>
+    /// <para>
+    /// The order is the whole of this method. Every record names the occurrence the message has <em>now</em>, and the
+    /// converger carries them in the order they were opened, so a relocation opened first would move the message out
+    /// of that folder and leave the three behind it issuing <c>UID STORE</c> against a UID the folder no longer holds
+    /// — which a server answers as success having changed nothing. The flags and the keywords are therefore written
+    /// onto the occurrence that still exists, and the move is opened last.
+    /// </para>
+    /// <para>
     /// A message whose stored keywords are not all writable opens no keyword record at all, rather than one naming the
     /// empty set: the empty set is what clearing every keyword asks for, and clearing the source's labels is the one
     /// outcome worse than leaving them as they are. Refusing the whole message would be worse still, because the walk
     /// would stop at it and the account could never leave the phase.
+    /// </para>
     /// </remarks>
     private async Task OpenStateRecordsAsync(
         IPersistenceSession session,
@@ -275,15 +285,6 @@ public sealed class MailboxRestorePass
         CancellationToken cancellationToken)
     {
         var requester = MailboxMutationRequester.Command(RestoreRequesterIdentity);
-
-        if (destination is { } folder)
-        {
-            await this.mutations.OpenAsync(
-                session,
-                MailboxMutationRequest.Relocate(candidate.Email, candidate.Occurrence, requester, folder.RemotePath),
-                heldUntil: null,
-                cancellationToken);
-        }
 
         await this.mutations.OpenAsync(
             session,
@@ -302,6 +303,15 @@ public sealed class MailboxRestorePass
             await this.mutations.OpenAsync(
                 session,
                 MailboxMutationRequest.SetKeywords(candidate.Email, candidate.Occurrence, requester, keywords),
+                heldUntil: null,
+                cancellationToken);
+        }
+
+        if (destination is { } folder)
+        {
+            await this.mutations.OpenAsync(
+                session,
+                MailboxMutationRequest.Relocate(candidate.Email, candidate.Occurrence, requester, folder.RemotePath),
                 heldUntil: null,
                 cancellationToken);
         }
@@ -551,8 +561,9 @@ public sealed class MailboxRestorePass
         }
 
         // Something else holds the occurrence the source named, which on a restoring account means synchronization met
-        // the appended copy as an arrival and stored it beside the message it is a copy of. The record stays standing,
-        // because what is now true is that the message may be on the source twice.
+        // the appended copy as an arrival and stored it beside the message it is a copy of. The record stays standing
+        // and loses its placement in that same commit, because what is now true is that the message may be on the
+        // source twice — which no pass can settle and an operator establishes by looking in the folder.
         tally.LeftUnanswered();
     }
 

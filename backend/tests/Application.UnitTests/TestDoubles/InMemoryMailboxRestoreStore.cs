@@ -9,21 +9,30 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
-/// <summary>Holds what a restoring account still owes its source, with the rules the pass's safety rests on.</summary>
+/// <summary>Holds what restoring accounts still owe their sources, with the rules the pass's safety rests on.</summary>
 /// <remarks>
+/// <para>
 /// The rules reproduced are the ones the real store enforces in SQL and the pass would be wrong without: a message an
 /// append record stands for is no longer a candidate, a record is written only where none already stands for the
-/// message, and the state walk advances over one forward-only position per account rather than a stamp per message —
-/// which is what makes a candidate the pass skipped observable as one nothing comes back for. The session is accepted
-/// and unused, because there is no transaction here to join.
+/// message, a record carrying a placement is finished by the pass rather than offered to an operator, and the state
+/// walk advances over one forward-only position per account rather than a stamp per message — which is what makes a
+/// candidate the pass skipped observable as one nothing comes back for.
+/// </para>
+/// <para>
+/// Everything is held per account, because that is a guarantee of the port rather than a detail of the store behind
+/// it: every member takes the account whose mailbox it is about, and a fake that ignored it would let a verdict
+/// authored against one account reach another's record and report that as correct. The session is accepted and
+/// unused, because there is no transaction here to join.
+/// </para>
 /// </remarks>
 internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
 {
-    private readonly List<MailboxRestoreCandidate> awaitingAppend = [];
-    private readonly List<MailboxRestoredStateCandidate> stateWalk = [];
-    private readonly List<MailboxRestoreAppend> standingAppends = [];
+    private readonly List<(MailAccountId Account, MailboxRestoreCandidate Candidate)> awaitingAppend = [];
+    private readonly List<(MailAccountId Account, MailboxRestoredStateCandidate Candidate)> stateWalk = [];
+    private readonly List<(MailAccountId Account, MailboxRestoreAppend Record)> standingAppends = [];
     private readonly Dictionary<MailboxRestoreAppendId, (ImapUidValidity UidValidity, ImapUid Uid)> placements = [];
-    private readonly HashSet<StoredEmailId> settledAppends = [];
+    private readonly HashSet<(MailAccountId Account, StoredEmailId Email)> settledAppends = [];
+    private readonly Dictionary<MailAccountId, int> statePositions = [];
 
     /// <summary>Gets the appends written down before their command went out, in the order they were issued.</summary>
     internal List<MailboxRestoreAppend> IssuedAppends { get; } = [];
@@ -47,37 +56,44 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
     /// <summary>Gets or sets how many of the account's local folders hold mail and map onto no source folder.</summary>
     internal int UnmappedFoldersHoldingMail { get; set; }
 
-    /// <summary>Gets how far the state walk has got, which is what a skipped candidate must not move.</summary>
-    internal int StatePosition { get; private set; }
+    /// <summary>Reports how far one account's state walk has got, which is what a skipped candidate must not move.</summary>
+    /// <param name="account">The account whose walk is being read.</param>
+    /// <returns>The number of candidates the walk has passed.</returns>
+    internal int StatePositionOf(MailAccountId account) => this.statePositions.GetValueOrDefault(account);
 
-    internal InMemoryMailboxRestoreStore AwaitingAppendOf(params MailboxRestoreCandidate[] candidates)
+    internal InMemoryMailboxRestoreStore AwaitingAppendOf(
+        MailAccountId account,
+        params MailboxRestoreCandidate[] candidates)
     {
-        this.awaitingAppend.AddRange(candidates);
+        this.awaitingAppend.AddRange(candidates.Select(candidate => (account, candidate)));
 
         return this;
     }
 
-    internal InMemoryMailboxRestoreStore AwaitingStateWriteOf(params MailboxRestoredStateCandidate[] candidates)
+    internal InMemoryMailboxRestoreStore AwaitingStateWriteOf(
+        MailAccountId account,
+        params MailboxRestoredStateCandidate[] candidates)
     {
-        this.stateWalk.AddRange(candidates);
+        this.stateWalk.AddRange(candidates.Select(candidate => (account, candidate)));
 
         return this;
     }
 
-    internal InMemoryMailboxRestoreStore WithAppendStandingFor(MailboxRestoreAppend record)
+    internal InMemoryMailboxRestoreStore WithAppendStandingFor(MailAccountId account, MailboxRestoreAppend record)
     {
-        this.standingAppends.Add(record);
+        this.standingAppends.Add((account, record));
 
         return this;
     }
 
     /// <summary>Leaves behind what a pass that ended between a fully answered append and its occurrence would leave.</summary>
     internal InMemoryMailboxRestoreStore WithPlacementRecordedFor(
+        MailAccountId account,
         MailboxRestoreAppend record,
         ImapUidValidity uidValidity,
         ImapUid uid)
     {
-        this.standingAppends.Add(record);
+        this.standingAppends.Add((account, record));
         this.placements[record.Id] = (uidValidity, uid);
 
         return this;
@@ -91,11 +107,7 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumCandidates, 1);
 
         return Task.FromResult<IReadOnlyList<MailboxRestoreCandidate>>(
-        [
-            .. this.awaitingAppend
-                .Where(candidate => !this.HasRecordFor(candidate.Email))
-                .Take(maximumCandidates),
-        ]);
+            [.. this.CandidatesOf(account).Take(maximumCandidates)]);
     }
 
     public Task<IReadOnlyList<MailboxRestoredStateCandidate>> ReadStateCandidatesAsync(
@@ -106,7 +118,7 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumCandidates, 1);
 
         return Task.FromResult<IReadOnlyList<MailboxRestoredStateCandidate>>(
-            [.. this.stateWalk.Skip(this.StatePosition).Take(maximumCandidates)]);
+            [.. this.WalkOf(account).Skip(this.StatePositionOf(account)).Take(maximumCandidates)]);
     }
 
     public Task RecordStateWrittenAsync(
@@ -117,11 +129,11 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
     {
         this.StateWritten.Add(email);
 
-        var reached = this.stateWalk.FindIndex(candidate => candidate.Email == email);
+        var reached = this.WalkOf(account).FindIndex(candidate => candidate.Email == email);
 
-        if (reached >= this.StatePosition)
+        if (reached >= this.StatePositionOf(account))
         {
-            this.StatePosition = reached + 1;
+            this.statePositions[account] = reached + 1;
         }
 
         return Task.CompletedTask;
@@ -133,13 +145,13 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         MailboxRestoreAppend record,
         CancellationToken cancellationToken)
     {
-        if (this.HasRecordFor(record.Email))
+        if (this.HasRecordFor(account, record.Email))
         {
             return Task.FromResult(false);
         }
 
         this.IssuedAppends.Add(record);
-        this.standingAppends.Add(record);
+        this.standingAppends.Add((account, record));
 
         return Task.FromResult(true);
     }
@@ -151,14 +163,14 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         DateTimeOffset settledAt,
         CancellationToken cancellationToken)
     {
-        if (this.HasRecordFor(record.Email))
+        if (this.HasRecordFor(account, record.Email))
         {
             return Task.FromResult(false);
         }
 
         this.Unrestorable.Add(record.Email);
-        this.settledAppends.Add(record.Email);
-        this.awaitingAppend.RemoveAll(candidate => candidate.Email == record.Email);
+        this.settledAppends.Add((account, record.Email));
+        this.awaitingAppend.RemoveAll(entry => entry.Account == account && entry.Candidate.Email == record.Email);
 
         return Task.FromResult(true);
     }
@@ -185,12 +197,14 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
 
         if (this.OccurrenceIsAlreadyHeld)
         {
+            this.placements.Remove(record.Id);
+
             return Task.FromResult(false);
         }
 
-        this.standingAppends.RemoveAll(standing => standing.Id == record.Id);
+        this.standingAppends.RemoveAll(entry => entry.Record.Id == record.Id);
         this.placements.Remove(record.Id);
-        this.awaitingAppend.RemoveAll(candidate => candidate.Email == record.Email);
+        this.awaitingAppend.RemoveAll(entry => entry.Candidate.Email == record.Email);
 
         return Task.FromResult(true);
     }
@@ -204,7 +218,7 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
 
         return Task.FromResult<IReadOnlyList<MailboxRestoreConfirmation>>(
         [
-            .. this.standingAppends
+            .. this.RecordsOf(account)
                 .Where(record => this.placements.ContainsKey(record.Id))
                 .OrderBy(record => record.IssuedAt)
                 .Take(maximumRecords)
@@ -223,7 +237,7 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumRecords, 1);
 
         return Task.FromResult<IReadOnlyList<MailboxRestoreAppend>>(
-            [.. this.standingAppends.OrderBy(record => record.IssuedAt).Take(maximumRecords)]);
+            [.. this.UnansweredOf(account).OrderBy(record => record.IssuedAt).Take(maximumRecords)]);
     }
 
     public Task<bool> SettleAppendAsync(
@@ -234,24 +248,26 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         DateTimeOffset settledAt,
         CancellationToken cancellationToken)
     {
-        var index = this.standingAppends.FindIndex(standing => standing.Id == record);
+        var index = this.standingAppends.FindIndex(entry =>
+            entry.Account == account
+            && entry.Record.Id == record
+            && !this.placements.ContainsKey(entry.Record.Id));
 
         if (index < 0)
         {
             return Task.FromResult(false);
         }
 
-        var settled = this.standingAppends[index];
+        var settled = this.standingAppends[index].Record;
         this.standingAppends.RemoveAt(index);
-        this.placements.Remove(record);
 
         if (!sourceHoldsTheCopy)
         {
             return Task.FromResult(true);
         }
 
-        this.settledAppends.Add(settled.Email);
-        this.awaitingAppend.RemoveAll(candidate => candidate.Email == settled.Email);
+        this.settledAppends.Add((account, settled.Email));
+        this.awaitingAppend.RemoveAll(entry => entry.Account == account && entry.Candidate.Email == settled.Email);
 
         return Task.FromResult(true);
     }
@@ -265,11 +281,30 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(new MailboxRestoreStanding(
-            this.awaitingAppend.Count(candidate => !this.HasRecordFor(candidate.Email)),
-            this.stateWalk.Count - this.StatePosition,
-            this.standingAppends.Count));
+            this.CandidatesOf(account).Count,
+            this.WalkOf(account).Count - this.StatePositionOf(account),
+            this.UnansweredOf(account).Count,
+            this.RecordsOf(account).Count(record => this.placements.ContainsKey(record.Id))));
+
+    private List<MailboxRestoreCandidate> CandidatesOf(MailAccountId account) =>
+    [
+        .. this.awaitingAppend
+            .Where(entry => entry.Account == account && !this.HasRecordFor(account, entry.Candidate.Email))
+            .Select(entry => entry.Candidate),
+    ];
+
+    private List<MailboxRestoredStateCandidate> WalkOf(MailAccountId account) =>
+        [.. this.stateWalk.Where(entry => entry.Account == account).Select(entry => entry.Candidate)];
+
+    private List<MailboxRestoreAppend> RecordsOf(MailAccountId account) =>
+        [.. this.standingAppends.Where(entry => entry.Account == account).Select(entry => entry.Record)];
+
+    /// <summary>Reads the records an operator is offered, which is the ones no placement has come back for.</summary>
+    private List<MailboxRestoreAppend> UnansweredOf(MailAccountId account) =>
+        [.. this.RecordsOf(account).Where(record => !this.placements.ContainsKey(record.Id))];
 
     /// <summary>Reports whether any record stands for a message, settled or not, which is what the unique index says.</summary>
-    private bool HasRecordFor(StoredEmailId email) =>
-        this.settledAppends.Contains(email) || this.standingAppends.Any(record => record.Email == email);
+    private bool HasRecordFor(MailAccountId account, StoredEmailId email) =>
+        this.settledAppends.Contains((account, email))
+        || this.standingAppends.Any(entry => entry.Account == account && entry.Record.Email == email);
 }

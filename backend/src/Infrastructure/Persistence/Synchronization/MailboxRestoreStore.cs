@@ -9,6 +9,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -37,11 +38,14 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
 
         // Oldest first. A message with no occurrence is one the drain took off the source, which is exactly what the
         // restore puts back, and a message any append record names is out of the answer whether that record is settled
-        // or standing, because in both cases the source may already hold the copy. No index serves the null test —
+        // or standing, because in both cases the source may already hold the copy. Mail the mailbox regards as deleted
+        // is out of it too: the drain takes a tombstoned row off the source like any other, and putting one back would
+        // hand somebody a message they deleted before the account was ever held. No index serves the null test —
         // the drain's filtered index covers the occurrence being present rather than absent — so this is the account's
         // own rows scanned once per pass, which is what the run's budget already bounds.
         var rows = await readContext.StoredEmails
             .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.MailboxAccountId == accountValue
                 && email.UidValidity == null
                 && !readContext.MailboxRestoreAppends.Any(append => append.StoredEmailId == email.Id))
@@ -189,12 +193,24 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
             occurrence,
             cancellationToken);
 
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
         if (!carried)
         {
+            // The occurrence is held by something else, so this record will never be carried by a pass and clearing
+            // the placement is what hands it to an operator: a record carrying one is read as work the next pass
+            // finishes, and one that nothing finishes and nobody is offered would hold the account in its phase for
+            // ever. What it stops being is not what it is — the copy is on the source and an operator will find it.
+            await writeContext.MailboxRestoreAppends
+                .Where(append => append.Id == record.Id.Value)
+                .ExecuteUpdateAsync(
+                    row => row
+                        .SetProperty(append => append.AppendedUidValidity, (uint?)null)
+                        .SetProperty(append => append.AppendedUid, (uint?)null),
+                    cancellationToken);
+
             return false;
         }
-
-        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         await writeContext.MailboxRestoreAppends
             .Where(append => append.Id == record.Id.Value)
@@ -243,9 +259,14 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
 
         var accountValue = account.Value;
 
+        // A record carrying a placement is not one an operator can help with: its outcome is completely known and the
+        // next pass carries it. Offering one would invite a verdict that either deletes the row and lets a second
+        // APPEND go out, or stamps it settled so the placement is never carried at all.
         var rows = await readContext.MailboxRestoreAppends
             .AsNoTracking()
-            .Where(append => append.MailboxAccountId == accountValue && append.SettledAt == null)
+            .Where(append => append.MailboxAccountId == accountValue
+                && append.SettledAt == null
+                && append.AppendedUidValidity == null)
             .OrderBy(append => append.IssuedAt)
             .ThenBy(append => append.Id)
             .Take(maximumRecords)
@@ -275,7 +296,8 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         var standing = writeContext.MailboxRestoreAppends
             .Where(append => append.Id == recordValue
                 && append.MailboxAccountId == accountValue
-                && append.SettledAt == null);
+                && append.SettledAt == null
+                && append.AppendedUidValidity == null);
 
         var settled = sourceHoldsTheCopy
             ? await standing.ExecuteUpdateAsync(
@@ -315,6 +337,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
 
         var awaitingAppend = await readContext.StoredEmails
             .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .CountAsync(
                 email => email.MailboxAccountId == accountValue
                     && email.UidValidity == null
@@ -332,10 +355,24 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         var unanswered = await readContext.MailboxRestoreAppends
             .AsNoTracking()
             .CountAsync(
-                append => append.MailboxAccountId == accountValue && append.SettledAt == null,
+                append => append.MailboxAccountId == accountValue
+                    && append.SettledAt == null
+                    && append.AppendedUidValidity == null,
                 cancellationToken);
 
-        return new MailboxRestoreStanding(awaitingAppend, awaitingStateWrite, unanswered);
+        var awaitingConfirmation = await readContext.MailboxRestoreAppends
+            .AsNoTracking()
+            .CountAsync(
+                append => append.MailboxAccountId == accountValue
+                    && append.SettledAt == null
+                    && append.AppendedUidValidity != null,
+                cancellationToken);
+
+        return new MailboxRestoreStanding(
+            awaitingAppend,
+            awaitingStateWrite,
+            unanswered,
+            awaitingConfirmation);
     }
 
     /// <summary>Stages one record for a message nothing has a record for yet.</summary>

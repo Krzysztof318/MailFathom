@@ -27,7 +27,12 @@ public enum MailboxRestoreFailure
     /// <summary>The account has bound no folder under the alias the message goes back through.</summary>
     FolderUnresolved = 4,
 
-    /// <summary>Anything else the attempt ended in, which the next ordinary run attempts again.</summary>
+    /// <summary>Anything else the attempt ended in.</summary>
+    /// <remarks>
+    /// Whether the message is attempted again follows from what the pass recorded rather than from this member: one
+    /// raised before an <c>APPEND</c> went out leaves the message a candidate, and one raised by a command whose
+    /// answer never came back leaves a record standing that nothing reissues.
+    /// </remarks>
     SomethingElse = 5,
 
     /// <summary>MailFathom holds a keyword on the message that no authored change may name.</summary>

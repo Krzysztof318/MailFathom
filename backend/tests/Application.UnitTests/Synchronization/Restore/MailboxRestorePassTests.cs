@@ -319,9 +319,13 @@ public sealed class MailboxRestorePassTests
         Assert.Single(context.Store.StateWritten);
     }
 
-    /// <summary>A move somebody made while the account was held reaches the source as an ordinary relocation.</summary>
+    /// <summary>
+    /// A move somebody made while the account was held reaches the source as an ordinary relocation, and it is opened
+    /// last: the converger carries these in the order they were opened, so a move ahead of them would leave the three
+    /// <c>UID STORE</c> commands naming a UID the folder no longer holds — which a server answers as success.
+    /// </summary>
     [Fact]
-    public async Task RestoreAsync_MessageWasMovedWhileTheAccountWasHeld_WritesARelocationAheadOfItsState()
+    public async Task RestoreAsync_MessageWasMovedWhileTheAccountWasHeld_WritesTheRelocationBehindItsState()
     {
         // Arrange
         var context = new RestoreContext(Restoring)
@@ -331,8 +335,16 @@ public sealed class MailboxRestorePassTests
         await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
-        var relocation = context.Mutations.OpenedRequests[0];
-        Assert.Equal(MailboxMutation.Relocate, relocation.Mutation);
+        Assert.Equal(
+            [
+                MailboxMutation.SetSeen,
+                MailboxMutation.SetFlagged,
+                MailboxMutation.SetKeywords,
+                MailboxMutation.Relocate,
+            ],
+            context.Mutations.OpenedRequests.Select(request => request.Mutation));
+
+        var relocation = context.Mutations.OpenedRequests[^1];
         Assert.Equal(Archive.RemotePath, relocation.DestinationPath);
     }
 
@@ -530,7 +542,7 @@ public sealed class MailboxRestorePassTests
 
         // Assert
         Assert.Empty(context.Store.StateWritten);
-        Assert.Equal(0, context.Store.StatePosition);
+        Assert.Equal(0, context.Store.StatePositionOf(Account));
         Assert.Equal(1, report.Failures[MailboxRestoreFailure.FolderUnresolved]);
         Assert.False(report.EndedTheRestore);
     }
@@ -763,21 +775,21 @@ public sealed class MailboxRestorePassTests
 
         internal RestoreContext AwaitingAppendOf(params MailboxRestoreCandidate[] candidates)
         {
-            this.Store.AwaitingAppendOf(candidates);
+            this.Store.AwaitingAppendOf(Account, candidates);
 
             return this;
         }
 
         internal RestoreContext AwaitingStateWriteOf(params MailboxRestoredStateCandidate[] candidates)
         {
-            this.Store.AwaitingStateWriteOf(candidates);
+            this.Store.AwaitingStateWriteOf(Account, candidates);
 
             return this;
         }
 
         internal RestoreContext WithAppendStandingFor(MailboxRestoreCandidate candidate)
         {
-            this.Store.WithAppendStandingFor(new MailboxRestoreAppend(
+            this.Store.WithAppendStandingFor(Account, new MailboxRestoreAppend(
                 MailboxRestoreAppendId.New(),
                 candidate.Email,
                 candidate.SourceFolderAlias,
@@ -800,6 +812,7 @@ public sealed class MailboxRestorePassTests
         internal RestoreContext WithPlacementRecordedFor(MailboxRestoreCandidate candidate)
         {
             this.Store.WithPlacementRecordedFor(
+                Account,
                 new MailboxRestoreAppend(
                     MailboxRestoreAppendId.New(),
                     candidate.Email,

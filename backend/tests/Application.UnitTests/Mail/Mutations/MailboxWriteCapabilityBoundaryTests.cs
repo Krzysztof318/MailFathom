@@ -44,10 +44,18 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// rather than a mutation because no user asked for any one of its expunges, and it reaches the source through the
 /// same session every other tier does so that one write connection per account stays the whole of the write surface.
 /// </para>
+/// <para>
+/// That same record opens the tier at both ends, which is why the restore's append is inside it rather than beside it:
+/// custody returning to mirroring puts back onto the source exactly what the drain took off it, message by message and
+/// authored by nobody, and an act that undoes a tier's act is that tier rather than a new one. It is an
+/// <c>APPEND</c> and not a mutation for the same reason the filing tier's is — the message it appends has no
+/// occurrence on the server to mutate — and it is not the filing tier because what it appends is the user's own mail
+/// coming home rather than a copy MailFathom composed.
+/// </para>
 /// </remarks>
 public sealed class MailboxWriteCapabilityBoundaryTests
 {
-    /// <summary>Five application types can obtain a session that writes, and each acts within a tier a decision record names.</summary>
+    /// <summary>Six application types can obtain a session that writes, and each acts within a tier a decision record names.</summary>
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something

@@ -71,10 +71,11 @@ Awaiting source removal: 0
 Awaiting append:         318
 Awaiting state write:    12
 Unanswered appends:      1
+Awaiting confirmation:   0
 
 These appends were issued and never answered. The account stays in Restoring until each is settled;
 open the folder, look for the message, and run 'account custody settle --account personal --record <id> --found|--missing'.
-  0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04  archive  issued 2026-09-15 11:00:00Z
+  0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04  ARCHIVE  issued 2026-09-15 11:00:00Z
 ```
 
 Nothing about the restore is printed for an account that is putting nothing back, which is every account outside
@@ -205,7 +206,15 @@ A held mailbox is in two states at once, and each owes the source something diff
   *now*, which may be a mapping rewritten since the drain took the message off.
 - **A message the drain never reached still has its occurrence**, so what it owes the source is the state somebody gave
   it while the account was held: the move, the read, the star, and the labels. Those are written down as ordinary
-  remote mutations and carried by the converger, exactly as an act on a mirrored account is.
+  remote mutations and carried by the converger, exactly as an act on a mirrored account is — the read, the star and
+  the labels first, and the move last, so each is written onto the occurrence that still exists before the message
+  leaves the folder it was in.
+
+  **A label MailFathom may not write back stays with MailFathom.** A keyword a server once reported can be one no
+  authored change may name — a system flag spelled as a keyword, or a word an IMAP atom cannot hold — and the message
+  then has its read, its star and its move written down and its labels left where they are, rather than the whole
+  message being refused or its labels cleared on the source. The run counts it, so the reading below shows it; the
+  remedy is to correct the keyword on the message.
 
 **A folder is created on the source only where a mapping's `CreateIfMissing` says so.** The restore appends into the
 folder the run's own folder resolution bound, and creates none of its own, so a local folder whose mapping names a
@@ -221,8 +230,12 @@ mapping, and the next run carries on.
 
 `APPEND` is the only command of this mode that may never be issued twice: a second one is a second message in somebody's
 folder rather than a repeat of the first. So a record is written and committed **before** the command goes out and
-deleted once the server has named where the copy went, and a record found standing is an append whose outcome is
-unknown — the folder may hold the copy and may not, and nothing the folder shows afterwards tells a copy MailFathom
+deleted once the occurrence the server named has been written onto the message.
+
+An answer from a mail server and a write to PostgreSQL cannot commit together, so the placement the source named is
+recorded on the record first, on its own. A record carrying one is a fully answered append that the next run finishes
+by itself, and it is never put in front of a person. A record standing with **no** placement is an append whose outcome
+is unknown — the folder may hold the copy and may not, and nothing the folder shows afterwards tells a copy MailFathom
 appended apart from one somebody else put there.
 
 MailFathom therefore refuses to guess. It reissues nothing for that message, reports the record, and keeps the account
@@ -255,7 +268,7 @@ has.
 | `mailfathom.mailbox.restore.appended` | Messages put back onto the source, whose new occurrence MailFathom wrote down |
 | `mailfathom.mailbox.restore.state_written` | Messages whose held state was written down as the mutations the converger carries |
 | `mailfathom.mailbox.restore.unanswered_appends` | Appends this run left with an unknown outcome, each holding the account in `Restoring` until an operator settles it |
-| `mailfathom.mailbox.restore.failures` | What refused an append, broken down by the reason, each attempted again by the next run unless a record stands for it |
+| `mailfathom.mailbox.restore.failures` | What the restore could not put back, broken down by the reason. Two of the reasons come from the state half rather than from an append, and only a reason that recorded nothing for the message is attempted again |
 
 ## What changes about the rest of the product
 

@@ -107,12 +107,18 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
             deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountRestoreSettlementPath));
     }
 
+    /// <summary>
+    /// The verdict is asserted in the request rather than in the sentence, because the sentence and the exit code both
+    /// come from the command's own reading of what it was given: a client that inverted the verdict or dropped the
+    /// record would print the right words about the wrong act.
+    /// </summary>
     [Theory]
-    [InlineData("--found", "holds that copy")]
-    [InlineData("--missing", "does not hold that copy")]
+    [InlineData("--found", "holds that copy", "true")]
+    [InlineData("--missing", "does not hold that copy", "false")]
     public async Task Settle_TheOperatorSaidWhatTheFolderHolds_RecordsThatVerdictAndSaysWhatFollowsFromIt(
         string verdict,
-        string expected)
+        string expected,
+        string sent)
     {
         // Arrange
         using var deployment = FakeMailAccountCustodyDeployment.Answering();
@@ -127,6 +133,15 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
         Assert.Equal(
             1,
             deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountRestoreSettlementPath));
+
+        var posted = Assert.Single(
+            deployment.RecordedRequests,
+            request => request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailAccountRestoreSettlementPath);
+        var body = posted.ContentAsUtf8String();
+
+        Assert.Contains("\"account\": \"work\"", body, StringComparison.Ordinal);
+        Assert.Contains($"\"record\": \"{RecordIdentity}\"", body, StringComparison.Ordinal);
+        Assert.Contains($"\"sourceHoldsTheCopy\": {sent}", body, StringComparison.Ordinal);
         Assert.Contains(this.harness.Console.Lines, line => line.Contains(expected, StringComparison.Ordinal));
     }
 

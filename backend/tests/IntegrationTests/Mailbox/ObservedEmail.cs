@@ -9,6 +9,11 @@ namespace MailFathom.IntegrationTests.Mailbox;
 /// <summary>One message as the server reports it, independently of anything MailFathom stored about it.</summary>
 /// <param name="Uid">The remote identifier within the folder's current UIDVALIDITY.</param>
 /// <param name="Subject">The subject the envelope carries, which is how a test recognizes the message it seeded.</param>
+/// <param name="ArrivedAt">
+/// The <c>INTERNALDATE</c> the server holds for the message, which is the arrival every client sorts and every
+/// window reads by — and which an append names for itself, so it is the part of a restored message that a write
+/// dropping it would lose in complete silence. Absent only where a server answers the fetch without one.
+/// </param>
 /// <param name="IsSeen">Whether the server currently holds the <c>\Seen</c> flag for the message.</param>
 /// <param name="IsAnswered">Whether the server currently holds the <c>\Answered</c> flag for the message.</param>
 /// <param name="IsFlagged">Whether the server currently holds the <c>\Flagged</c> flag for the message.</param>
@@ -20,6 +25,7 @@ namespace MailFathom.IntegrationTests.Mailbox;
 internal sealed record ObservedEmail(
     ImapUid Uid,
     string? Subject,
+    DateTimeOffset? ArrivedAt,
     bool IsSeen,
     bool IsAnswered,
     bool IsFlagged,

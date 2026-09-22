@@ -43,11 +43,13 @@ internal sealed record MailAccountDrainStanding(
 /// <param name="AwaitingAppend">Messages the source no longer holds that have still to be put back.</param>
 /// <param name="AwaitingStateWrite">Messages whose stored state has still to be written onto the occurrence they keep.</param>
 /// <param name="UnansweredAppends">Appends whose answer never came back, each of which holds the account in Restoring.</param>
-/// <param name="Unanswered">Those appends, named so an operator can settle them one at a time.</param>
+/// <param name="AwaitingConfirmation">Appends the source answered in full whose occurrence the next run has still to write.</param>
+/// <param name="Unanswered">The unanswered appends, named so an operator can settle them one at a time.</param>
 internal sealed record MailAccountRestoreStanding(
     [property: JsonPropertyName("awaitingAppend")] int AwaitingAppend,
     [property: JsonPropertyName("awaitingStateWrite")] int AwaitingStateWrite,
     [property: JsonPropertyName("unansweredAppends")] int UnansweredAppends,
+    [property: JsonPropertyName("awaitingConfirmation")] int AwaitingConfirmation,
     [property: JsonPropertyName("unanswered")] IReadOnlyList<MailAccountUnansweredAppend>? Unanswered);
 
 /// <summary>One append the restore issued whose answer never came back.</summary>

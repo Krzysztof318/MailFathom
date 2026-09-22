@@ -84,6 +84,27 @@ public sealed class MailboxRestoreSettlementTests
         Assert.False(settled);
     }
 
+    /// <summary>A record identity alone must never decide which mailbox an operator's verdict reaches.</summary>
+    [Fact]
+    public async Task SettleAsync_TheRecordBelongsToAnotherAccount_SettlesNothingAndLeavesItStanding()
+    {
+        // Arrange
+        var context = new SettlementContext();
+
+        // Act
+        var settled = await context.Settlement.SettleAsync(
+            MailAccountId.Create("work"),
+            context.Standing.Id,
+            sourceHoldsTheCopy: true,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(settled);
+
+        var standing = await context.Store.ReadStandingAsync(Account, TestContext.Current.CancellationToken);
+        Assert.Equal(1, standing.UnansweredAppends);
+    }
+
     [Fact]
     public async Task SettleAsync_TheCallerMayNotWriteCustody_IsRefusedBeforeAnythingIsWritten()
     {
@@ -117,17 +138,19 @@ public sealed class MailboxRestoreSettlementTests
                 Now);
 
             this.Store
-                .AwaitingAppendOf(new MailboxRestoreCandidate(
-                    email,
-                    MailFolderAlias.Create("inbox"),
-                    new RestoredEmailState(
-                        IsSeen: false,
-                        IsAnswered: false,
-                        IsFlagged: false,
-                        IsDraft: false,
-                        RemoteEmailKeywords.None),
-                    Now))
-                .WithAppendStandingFor(this.Standing);
+                .AwaitingAppendOf(
+                    Account,
+                    new MailboxRestoreCandidate(
+                        email,
+                        MailFolderAlias.Create("inbox"),
+                        new RestoredEmailState(
+                            IsSeen: false,
+                            IsAnswered: false,
+                            IsFlagged: false,
+                            IsDraft: false,
+                            RemoteEmailKeywords.None),
+                        Now))
+                .WithAppendStandingFor(Account, this.Standing);
 
             var persistenceSession = Substitute.For<IPersistenceSession>();
             persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);

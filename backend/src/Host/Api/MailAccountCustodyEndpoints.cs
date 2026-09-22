@@ -25,14 +25,16 @@ namespace MailFathom.Host.Api;
 /// that arrives with a file.
 /// </para>
 /// <para>
-/// The read is published under <c>mailfathom.admin.read</c> and the switch under its own
-/// <c>mailfathom.admin.custody.write</c>. A grant of its own rather than the configuration writer's, because this is
-/// the only administrative act that ends with a mail server no longer holding a copy of the mailbox: a credential that
-/// may rewrite settings must not thereby be able to empty a source server.
+/// The read is published under <c>mailfathom.admin.read</c>, and both write routes — the switch, and the settlement of
+/// an append whose answer never came back — under the same <c>mailfathom.admin.custody.write</c>. A grant of its own
+/// rather than the configuration writer's, because these are the administrative acts that end with a mail server no
+/// longer holding a copy of the mailbox, or with a second copy in somebody's folder: a credential that may rewrite
+/// settings must not thereby be able to do either.
 /// </para>
 /// <para>
-/// Nothing on either route is derived from a message. The standing figures are counts, and a refusal names an account,
-/// a folder alias, or a replica — MailFathom's own words for things.
+/// Nothing on any of the three routes is derived from a message. The standing figures are counts, an append is named
+/// by a record identity, a folder alias and an instant, and a refusal names an account, a folder alias, or a replica —
+/// MailFathom's own words for things.
 /// </para>
 /// </remarks>
 internal static class MailAccountCustodyEndpoints
@@ -46,11 +48,11 @@ internal static class MailAccountCustodyEndpoints
     /// <summary>The route an unanswered restore append is settled on, relative to the administrative prefix.</summary>
     internal const string CustodyAppendSettlementRoute = "/accounts/custody/restore/settle";
 
-    /// <summary>The greatest request body the switch reads before refusing it.</summary>
+    /// <summary>The greatest request body either write route reads before refusing it.</summary>
     /// <remarks>
-    /// The body names one account and one custody, so a few hundred bytes is the whole of anything it could mean.
-    /// Stated for the reason every administrative body states it: the server's own default is measured in tens of
-    /// megabytes.
+    /// One body names an account and a custody and the other an account, a record and a verdict, so a few hundred
+    /// bytes is the whole of anything either could mean. Stated for the reason every administrative body states it:
+    /// the server's own default is measured in tens of megabytes.
     /// </remarks>
     internal const int MaxCustodyRequestBytes = 4 * 1024;
 
@@ -137,6 +139,7 @@ internal static class MailAccountCustodyEndpoints
             standing.AwaitingAppend,
             standing.AwaitingStateWrite,
             standing.UnansweredAppends,
+            standing.AwaitingConfirmation,
             [
                 .. unanswered.Select(static append => new MailAccountUnansweredAppendResponse(
                     append.Id.Value,
@@ -322,7 +325,8 @@ internal sealed record MailAccountDrainStandingResponse(
 /// <param name="AwaitingAppend">Messages the source no longer holds that have still to be put back.</param>
 /// <param name="AwaitingStateWrite">Messages whose stored state has still to be written onto the occurrence they keep.</param>
 /// <param name="UnansweredAppends">Appends whose answer never came back, each of which holds the account in <c>Restoring</c>.</param>
-/// <param name="Unanswered">Those appends, named so an operator can settle them one at a time.</param>
+/// <param name="AwaitingConfirmation">Appends the source answered in full whose occurrence the next pass has still to write, which need nobody.</param>
+/// <param name="Unanswered">The unanswered appends, named so an operator can settle them one at a time.</param>
 /// <remarks>
 /// The records are the one part of this answer that is a list rather than a count, and they carry a record identity, a
 /// folder alias, and an instant — MailFathom's own words for things. What an operator needs is which of their folders
@@ -332,6 +336,7 @@ internal sealed record MailAccountRestoreStandingResponse(
     int AwaitingAppend,
     int AwaitingStateWrite,
     int UnansweredAppends,
+    int AwaitingConfirmation,
     IReadOnlyList<MailAccountUnansweredAppendResponse> Unanswered);
 
 /// <summary>One append the restore issued whose answer never came back.</summary>

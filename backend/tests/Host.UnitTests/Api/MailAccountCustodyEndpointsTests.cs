@@ -16,6 +16,8 @@ using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -82,6 +84,82 @@ public sealed class MailAccountCustodyEndpointsTests
         Assert.Equal(4812, state.Drain.AwaitingDrain);
         Assert.Equal(3, state.Drain.HeldBackAboveSizeLimit);
         Assert.Equal(7, state.Drain.AwaitingSourceRemoval);
+    }
+
+    /// <summary>
+    /// The counts an operator acts on, and the records they act with: a count of unanswered appends with no record
+    /// named beside it is a number nobody can settle, which is the shape this route exists to avoid.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ARestoringAccount_AnswersWhatItOwesItsSourceAndNamesEachUnansweredAppend()
+    {
+        // Arrange
+        var custody = SwitchOver(CustodyStoreHolding(
+            new MailAccountCustodyState(MailAccountCustody.MirrorSource, MailAccountCustodyPhase.Restoring)));
+        var unanswered = new MailboxRestoreAppend(
+            MailboxRestoreAppendId.New(),
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            MailFolderAlias.Create("archive"),
+            Moment);
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.ReadAsync(
+            Account.Value,
+            CatalogServing(Account),
+            custody,
+            DrainOver(),
+            RestoreOver(
+                new MailboxRestoreStanding(
+                    AwaitingAppend: 318,
+                    AwaitingStateWrite: 12,
+                    UnansweredAppends: 1,
+                    AwaitingConfirmation: 2),
+                unanswered),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var restore = Assert.IsType<Ok<MailAccountCustodyResponse>>(answer.Result).Value!.Restore;
+        Assert.NotNull(restore);
+        Assert.Equal(318, restore.AwaitingAppend);
+        Assert.Equal(12, restore.AwaitingStateWrite);
+        Assert.Equal(1, restore.UnansweredAppends);
+        Assert.Equal(2, restore.AwaitingConfirmation);
+
+        var named = Assert.Single(restore.Unanswered);
+        Assert.Equal(unanswered.Id.Value, named.Record);
+        Assert.Equal("archive", named.Folder);
+        Assert.Equal(Moment, named.IssuedAt);
+    }
+
+    /// <summary>
+    /// The standing query counts a whole mailbox, and an account that is not restoring owes none of it — so the block
+    /// is absent rather than zero, and the query never runs for the accounts a deployment mostly holds.
+    /// </summary>
+    [Theory]
+    [InlineData(MailAccountCustodyPhase.Mirrored)]
+    [InlineData(MailAccountCustodyPhase.Held)]
+    public async Task ReadAsync_AnAccountThatIsNotRestoring_AnswersNoRestoreBlockAndAsksTheStoreNothing(
+        MailAccountCustodyPhase phase)
+    {
+        // Arrange
+        var custody = SwitchOver(CustodyStoreHolding(
+            new MailAccountCustodyState(MailAccountCustody.HoldMailbox, phase)));
+        var store = Substitute.For<IMailboxRestoreStore>();
+
+        // Act
+        var answer = await MailAccountCustodyEndpoints.ReadAsync(
+            Account.Value,
+            CatalogServing(Account),
+            custody,
+            DrainOver(),
+            RestoreOver(store),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.IsType<Ok<MailAccountCustodyResponse>>(answer.Result).Value!.Restore);
+        await store.DidNotReceiveWithAnyArgs().ReadStandingAsync(
+            Arg.Any<MailAccountId>(),
+            TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -417,6 +495,11 @@ public sealed class MailAccountCustodyEndpointsTests
         store.ReadUnansweredAppendsAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<MailboxRestoreAppend>>(unanswered));
 
+        return RestoreOver(store);
+    }
+
+    private static MailboxRestorePass RestoreOver(IMailboxRestoreStore store)
+    {
         return new MailboxRestorePass(
             Substitute.For<IMailAccountCustodyStore>(),
             store,

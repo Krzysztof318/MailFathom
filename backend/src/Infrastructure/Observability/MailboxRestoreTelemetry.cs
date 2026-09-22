@@ -20,8 +20,8 @@ namespace MailFathom.Infrastructure.Observability;
 /// each is a restore that will stand still until somebody acts.
 /// </para>
 /// <para>
-/// The dimensions are the account alias and MailFathom's own names, bounded by the configured accounts times the six
-/// kinds of failure. Nothing here is derived from a message.
+/// The dimensions are the account alias and MailFathom's own names, bounded by the configured accounts times the
+/// seven kinds of failure. Nothing here is derived from a message.
 /// </para>
 /// </remarks>
 public sealed partial class MailboxRestoreTelemetry : IMailboxRestoreTelemetry
@@ -58,7 +58,7 @@ public sealed partial class MailboxRestoreTelemetry : IMailboxRestoreTelemetry
         this.failures = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.mailbox.restore.failures",
             unit: "{message}",
-            description: "Messages the source did not take back, by the kind of failure, each attempted again by the next ordinary run.");
+            description: "Messages the restore did not put back, by the kind of failure; only a kind that recorded nothing for the message is attempted again.");
     }
 
     /// <inheritdoc />
@@ -126,7 +126,7 @@ public sealed partial class MailboxRestoreTelemetry : IMailboxRestoreTelemetry
     /// <summary>States what one pass put back, and what it could not.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Restored mail of account {AccountId} onto its source; {AppendedCount} messages were appended back, {StateWrittenCount} had their stored state written down, and {FailedCount} messages failed and will be attempted again.")]
+        Message = "Restored mail of account {AccountId} onto its source; {AppendedCount} messages were appended back, {StateWrittenCount} had their stored state written down, and {FailedCount} messages failed.")]
     private partial void LogRestorePassFinished(
         string accountId,
         int appendedCount,
