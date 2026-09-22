@@ -21,7 +21,8 @@ namespace MailFathom.AI.AgentConversations;
 /// </para>
 /// <para>
 /// It also records what the run's first call sent and was charged, which is the rate the next turn's budget is measured
-/// at. The first call is the one whose input is the conversation itself; the later ones add this run's own tool traffic.
+/// at. The first call is the one whose input is the conversation itself; the later ones add this run's own tool traffic,
+/// so a first call the provider reported no usage for leaves no charge rather than letting a later one stand in for it.
 /// </para>
 /// <para>
 /// A write the conversation refuses is the stop reaching the run, exactly as it is for everything else a run writes, so
@@ -35,7 +36,7 @@ internal sealed class RecordedChatClient : DelegatingChatClient
 
     private readonly AgentAnswerJournal journal;
     private readonly HashSet<string> answered = [];
-    private bool charged;
+    private bool called;
 
     /// <summary>Initializes the client over the one the run sends through.</summary>
     /// <param name="innerClient">The client every call is sent through.</param>
@@ -64,10 +65,11 @@ internal sealed class RecordedChatClient : DelegatingChatClient
 
         var response = await base.GetResponseAsync(sent, options, cancellationToken);
 
-        if (!this.charged && response.Usage?.InputTokenCount is > 0 and var inputTokens)
-        {
-            this.charged = true;
+        var first = !this.called;
+        this.called = true;
 
+        if (first && response.Usage?.InputTokenCount is > 0 and var inputTokens)
+        {
             await this.RequireAsync(this.journal.RecordChargeAsync(CharactersOf(sent, options), inputTokens, cancellationToken));
         }
 

@@ -8,11 +8,11 @@ using MailFathom.Application.Retrieval.AskMail;
 
 namespace MailFathom.Host.Configuration.Answering;
 
-/// <summary>Turns the bound answering declaration into the four ceilings the boundaries that enforce them are registered with.</summary>
+/// <summary>Turns the bound answering declaration into the five ceilings the boundaries that enforce them are registered with.</summary>
 /// <remarks>
 /// The mapping is separate from the options type for the reason every mapper in this directory is: the bound object is
-/// mutable and binder-shaped, while what comes out is four validated values the retrieval, the run, the ledger, and the
-/// response boundary are each allowed to assume. Nothing here returns <see langword="null" /> — unlike the provider
+/// mutable and binder-shaped, while what comes out is five validated values the retrieval, the run, the ledger, the
+/// response boundary, and the Agent turn's context are each allowed to assume. Nothing here returns <see langword="null" /> — unlike the provider
 /// mappers, every deployment has these ceilings, and an absent section means the defaults rather than no answering.
 /// </remarks>
 internal static class MailAnsweringBudgetMapper

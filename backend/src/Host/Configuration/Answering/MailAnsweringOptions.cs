@@ -142,6 +142,15 @@ internal sealed class MailAnsweringOptions : IValidatableObject
                 [nameof(this.MaxRetrievedCharactersPerRun)]);
         }
 
+        // A turn sends at most the conversation budget on its first call, which the run's own ceiling then counts, so a
+        // budget above that ceiling composes turns whose later calls the run is bound to refuse.
+        if (this.MaxConversationContextTokens > this.MaxTokensPerRun)
+        {
+            yield return new ValidationResult(
+                $"MailAnswering declares MaxConversationContextTokens of {this.MaxConversationContextTokens}, above the MaxTokensPerRun of {this.MaxTokensPerRun}, so a long Agent conversation would send more in one call than its whole run may spend.",
+                [nameof(this.MaxConversationContextTokens)]);
+        }
+
         if (this.AggregatePeriod <= TimeSpan.Zero)
         {
             yield return new ValidationResult(

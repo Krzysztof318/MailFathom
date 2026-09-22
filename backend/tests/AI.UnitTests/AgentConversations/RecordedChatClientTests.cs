@@ -93,6 +93,28 @@ public sealed class RecordedChatClientTests : IAsyncDisposable
         Assert.Empty(this.channel.Published);
     }
 
+    /// <summary>A first call the provider reported no usage for leaves no charge, because a later one carries the run's own tool traffic.</summary>
+    [Fact]
+    public async Task GetResponseAsync_AFirstCallReportingNoUsage_RecordsNoChargeFromALaterOne()
+    {
+        // Arrange
+        this.inner
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "Looking.")),
+                Charged(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Northwind sent it.")), 420));
+        using var journal = this.Journal();
+        using var client = new RecordedChatClient(this.inner, journal);
+        ChatMessage question = new(ChatRole.User, "Who sent the quote?");
+
+        // Act
+        await client.GetResponseAsync([question], cancellationToken: TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([question], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.written.OfType<AgentModelCharged>());
+    }
+
     /// <summary>A tool that handed the model a very long text is recorded at the length the record keeps, never whole.</summary>
     [Fact]
     public async Task GetResponseAsync_AResultPastTheBound_IsRecordedCutToIt()

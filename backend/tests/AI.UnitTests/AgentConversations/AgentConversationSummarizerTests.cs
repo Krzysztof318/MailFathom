@@ -18,6 +18,7 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -84,7 +85,7 @@ public sealed class AgentConversationSummarizerTests
     {
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("A key was shared."));
-        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, new FakeTimeProvider());
         using var actingFor = egress.ActingForUser();
 
         // Act
