@@ -86,6 +86,24 @@ public sealed class AgentProposalAcceptanceTests : IAsyncDisposable
         Assert.Equal(10L, place);
     }
 
+    /// <summary>A fault nothing names while the act is carried out still ends the proposal as failed, and is raised for the caller to report.</summary>
+    [Fact]
+    public async Task AcceptAsync_AnUnnamedFaultCarryingTheActOut_EndsTheProposalAsFailedAndIsRaised()
+    {
+        // Arrange
+        this.ProposalStands();
+        this.store.TryResolveProposalAsync(Conversation, SyntheticUser.Deployment, ProposedAt, AgentProposalState.Accepted, Now, Arg.Any<CancellationToken>())
+            .Returns(9L);
+        this.performer.PerformAsync(this.act, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<bool>(new InvalidOperationException("Unexpected.")));
+
+        // Act and assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() => this.Acceptance(Granted())
+            .AcceptAsync(Conversation, SyntheticUser.Deployment, ProposedAt, TestContext.Current.CancellationToken));
+        await this.store.Received(1).TryResolveProposalAsync(
+            Conversation, SyntheticUser.Deployment, ProposedAt, AgentProposalState.Failed, Now, Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A grant that could not carry the act out is refused before anything is recorded, so no proposal reads accepted and then failed over it.</summary>
     [Fact]
     public async Task AcceptAsync_AGrantThatCannotSend_IsRefusedBeforeAnythingIsRecorded()

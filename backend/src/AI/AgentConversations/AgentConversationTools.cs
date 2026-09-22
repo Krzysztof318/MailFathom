@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Globalization;
+using System.Security;
 using System.Text;
 using MailFathom.AI.Retrieval;
 using MailFathom.Application.Agent.Answering;
@@ -152,9 +153,11 @@ internal sealed class AgentConversationTools
             var citation = await this.CiteAsync(message.StoredEmailId, message.Headers.Subject, cancellationToken);
             var body = message.Body.PlainText.Text;
 
-            text.Append(CultureInfo.InvariantCulture, $"<message id=\"{message.StoredEmailId}\" source=\"{citation.Id.Value}\" from=\"{SenderOf(message)?.Address}\" sent=\"{message.Headers.SentAt:O}\">\n")
-                .Append(CultureInfo.InvariantCulture, $"<subject>{message.Headers.Subject}</subject>\n")
-                .Append(body.Length <= MaximumBodyCharacters ? body : body[..MaximumBodyCharacters])
+            // Every part a message's author wrote is escaped, so no subject or body can close the element it sits in
+            // and write a turn of its own after it.
+            text.Append(CultureInfo.InvariantCulture, $"<message id=\"{message.StoredEmailId}\" source=\"{citation.Id.Value}\" from=\"{SecurityElement.Escape(SenderOf(message)?.Address)}\" sent=\"{message.Headers.SentAt:O}\">\n")
+                .Append(CultureInfo.InvariantCulture, $"<subject>{SecurityElement.Escape(message.Headers.Subject)}</subject>\n")
+                .Append(SecurityElement.Escape(body.Length <= MaximumBodyCharacters ? body : body[..MaximumBodyCharacters]))
                 .Append("\n</message>\n");
         }
 

@@ -89,10 +89,23 @@ public sealed class AgentProposalAcceptance
             return null;
         }
 
-        var carriedOut = await this.performer.PerformAsync(
-            proposal.Act,
-            AgentActPerformer.KeyOf(conversation, proposedAt),
-            cancellationToken);
+        // Once the acceptance is recorded, the act it permits is carried out whatever the connection does, and one that
+        // could not be carried out never goes on reading as accepted.
+        bool carriedOut;
+
+        try
+        {
+            carriedOut = await this.performer.PerformAsync(
+                proposal.Act,
+                AgentActPerformer.KeyOf(conversation, proposedAt),
+                CancellationToken.None);
+        }
+        catch
+        {
+            await this.ResolveAsync(conversation, user, proposedAt, AgentProposalState.Failed, CancellationToken.None);
+
+            throw;
+        }
 
         return carriedOut
             ? accepted
