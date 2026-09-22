@@ -29,6 +29,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     MailboxAccountId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     StoredEmailId = table.Column<Guid>(type: "uuid", nullable: false),
                     FolderAlias = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    FolderGeneration = table.Column<int>(type: "integer", nullable: false),
                     IssuedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     AppendedUidValidity = table.Column<long>(type: "bigint", nullable: true),
                     AppendedUid = table.Column<long>(type: "bigint", nullable: true),

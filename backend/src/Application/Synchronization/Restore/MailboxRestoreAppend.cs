@@ -11,6 +11,7 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// <param name="Id">What an operator settles the record by.</param>
 /// <param name="Email">The message the append carried, which is what the restore will not carry again while this stands.</param>
 /// <param name="SourceFolderAlias">MailFathom's own name for the folder the copy was appended into.</param>
+/// <param name="SourceFolderGeneration">Which binding of that alias the command went out against.</param>
 /// <param name="IssuedAt">When the command went out, which is how long the record has been standing.</param>
 /// <remarks>
 /// <para>
@@ -21,8 +22,15 @@ namespace MailFathom.Application.Synchronization.Restore;
 /// <see cref="Domain.Accounts.MailAccountCustodyPhase.Restoring" /> until an operator says which of the two happened.
 /// </para>
 /// <para>
-/// It names a message by its identity and a folder by its alias, which are MailFathom's own words for things. No
-/// subject, address, or content is here, for the reason the drain's own figures carry none. See
+/// The generation is part of the folder the command went out against rather than a detail beside the alias. An alias
+/// is repointed by a rewritten mapping or by discovery matching a different advertised folder, and a new generation is
+/// what says so — two unrelated remote folders may advertise the same <c>UIDVALIDITY</c>, so an occurrence written
+/// under the alias alone would name the new binding while carrying the old folder's identity. A record whose
+/// generation no longer matches what the alias binds is therefore left standing for an operator rather than carried.
+/// </para>
+/// <para>
+/// It names a message by its identity and a folder by its alias and generation, which are MailFathom's own words for
+/// things. No subject, address, or content is here, for the reason the drain's own figures carry none. See
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
 /// </para>
 /// </remarks>
@@ -30,6 +38,7 @@ public sealed record MailboxRestoreAppend(
     MailboxRestoreAppendId Id,
     StoredEmailId Email,
     MailFolderAlias SourceFolderAlias,
+    MailFolderResolutionGeneration SourceFolderGeneration,
     DateTimeOffset IssuedAt);
 
 /// <summary>Identifies one restore append record.</summary>

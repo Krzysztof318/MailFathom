@@ -135,6 +135,7 @@ public sealed class MailboxRestoreSettlementTests
                 MailboxRestoreAppendId.New(),
                 email,
                 MailFolderAlias.Create("inbox"),
+                MailFolderResolutionGeneration.First,
                 Now);
 
             this.Store

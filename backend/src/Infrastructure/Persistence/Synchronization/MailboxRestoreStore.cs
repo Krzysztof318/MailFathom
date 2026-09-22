@@ -85,8 +85,12 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         var accountValue = account.Value;
         var position = await this.ReadStatePositionAsync(accountValue, cancellationToken);
 
+        // Mail the mailbox regards as deleted is out of this half for the reason it is out of the append half: the
+        // person deleted it, so writing its read, its star, its labels and its move back onto the source spends the
+        // run's budget and a round trip each on mail nobody is going to see.
         var rows = await readContext.StoredEmails
             .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.MailboxAccountId == accountValue
                 && email.UidValidity != null
                 && (position == null || email.Id.CompareTo(position!.Value) > 0))
@@ -175,6 +179,24 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
     }
 
     /// <inheritdoc />
+    public async Task ReleasePlacementAsync(
+        IPersistenceSession session,
+        MailboxRestoreAppendId record,
+        CancellationToken cancellationToken)
+    {
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var recordValue = record.Value;
+
+        await writeContext.MailboxRestoreAppends
+            .Where(append => append.Id == recordValue)
+            .ExecuteUpdateAsync(
+                update => update
+                    .SetProperty(append => append.AppendedUidValidity, (uint?)null)
+                    .SetProperty(append => append.AppendedUid, (uint?)null),
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> ConfirmAppendAsync(
         IPersistenceSession session,
         MailboxRestoreAppend record,
@@ -241,6 +263,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                 append.Id,
                 append.StoredEmailId,
                 append.FolderAlias,
+                append.FolderGeneration,
                 append.IssuedAt,
                 append.AppendedUidValidity!.Value,
                 append.AppendedUid!.Value))
@@ -274,6 +297,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                 append.Id,
                 append.StoredEmailId,
                 append.FolderAlias,
+                append.FolderGeneration,
                 append.IssuedAt))
             .ToArrayAsync(cancellationToken);
 
@@ -346,6 +370,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
 
         var awaitingStateWrite = await readContext.StoredEmails
             .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .CountAsync(
                 email => email.MailboxAccountId == accountValue
                     && email.UidValidity != null
@@ -406,6 +431,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
             MailboxAccountId = account.Value,
             StoredEmailId = email,
             FolderAlias = record.SourceFolderAlias.Value,
+            FolderGeneration = record.SourceFolderGeneration.Value,
             IssuedAt = record.IssuedAt,
             SettledAt = settledAt,
         });
@@ -496,6 +522,7 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
         Guid Id,
         Guid Email,
         string FolderAlias,
+        int FolderGeneration,
         DateTimeOffset IssuedAt,
         uint UidValidity,
         uint Uid)
@@ -505,17 +532,24 @@ internal sealed class MailboxRestoreStore(MailFathomDbContext readContext, IEmai
                 new MailboxRestoreAppendId(this.Id),
                 StoredEmailId.Create(this.Email),
                 MailFolderAlias.Create(this.FolderAlias),
+                MailFolderResolutionGeneration.Create(this.FolderGeneration),
                 this.IssuedAt),
             ImapUidValidity.Create(this.UidValidity),
             ImapUid.Create(this.Uid));
     }
 
-    private sealed record AppendRow(Guid Id, Guid Email, string FolderAlias, DateTimeOffset IssuedAt)
+    private sealed record AppendRow(
+        Guid Id,
+        Guid Email,
+        string FolderAlias,
+        int FolderGeneration,
+        DateTimeOffset IssuedAt)
     {
         internal MailboxRestoreAppend ToRecord() => new(
             new MailboxRestoreAppendId(this.Id),
             StoredEmailId.Create(this.Email),
             MailFolderAlias.Create(this.FolderAlias),
+            MailFolderResolutionGeneration.Create(this.FolderGeneration),
             this.IssuedAt);
     }
 }

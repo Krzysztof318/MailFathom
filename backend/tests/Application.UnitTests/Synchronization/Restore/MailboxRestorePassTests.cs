@@ -616,6 +616,62 @@ public sealed class MailboxRestorePassTests
     }
 
     /// <summary>
+    /// The alias binds a different remote folder than the one the command went out against, and two unrelated folders
+    /// may advertise the same UIDVALIDITY — so an occurrence built from the binding that holds now would name somebody
+    /// else's mail. The placement is released instead, which is what puts the record in front of an operator.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_TheAliasWasRepointedSinceTheAppend_ReleasesThePlacementForAnOperator()
+    {
+        // Arrange
+        var candidate = Drained(Inbox.Alias);
+        var context = new RestoreContext(Restoring)
+            .WithPlacementRecordedFor(candidate, Inbox.Generation.Next());
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.AppendedCount);
+        Assert.Empty(context.Store.ConfirmedOccurrences);
+        Assert.Equal(1, report.UnansweredAppendCount);
+        Assert.False(report.EndedTheRestore);
+
+        // Released rather than merely left: a record still carrying a placement is read as work the next pass
+        // finishes and is offered to nobody, so it would hold the phase open with nothing anybody could settle.
+        Assert.Single(await context.Pass.ReadUnansweredAppendsAsync(Account, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// A record the server refused, or one whose attempts ran out, is a call for an operator's attention rather than
+    /// work anything will do — and none of them can be withdrawn, so treating one as outstanding would hold the
+    /// account in its phase with no act left that clears it.
+    /// </summary>
+    [Fact]
+    public async Task RestoreAsync_EveryMutationRecordIsDeadLettered_StillTakesTheAccountToMirroring()
+    {
+        // Arrange
+        var context = new RestoreContext(Restoring)
+            .AwaitingStateWriteOf(StillOnTheSource(Inbox, Archive.Alias));
+
+        await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        foreach (var request in context.Mutations.OpenedRequests)
+        {
+            context.Mutations.Arrange(
+                request,
+                record => record with { Stage = MailboxMutationStage.Abandoned });
+        }
+
+        // Act
+        var report = await context.Pass.RestoreAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(report.EndedTheRestore);
+        Assert.Equal(MailAccountCustodyPhase.Mirrored, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>
     /// <c>\Answered</c> and <c>\Draft</c> are observations MailFathom records per message, so a copy put back
     /// without them asserts less about the message than the source stated before the drain took it off.
     /// </summary>
@@ -793,6 +849,7 @@ public sealed class MailboxRestorePassTests
                 MailboxRestoreAppendId.New(),
                 candidate.Email,
                 candidate.SourceFolderAlias,
+                MailFolderResolutionGeneration.First,
                 RunInstant));
 
             return this;
@@ -809,7 +866,11 @@ public sealed class MailboxRestorePassTests
         }
 
         /// <summary>Leaves behind what a pass that ended between a fully answered append and its occurrence leaves.</summary>
-        internal RestoreContext WithPlacementRecordedFor(MailboxRestoreCandidate candidate)
+        /// <param name="candidate">The message the interrupted pass appended.</param>
+        /// <param name="generation">Which binding of the alias that append went out against; the current one by default.</param>
+        internal RestoreContext WithPlacementRecordedFor(
+            MailboxRestoreCandidate candidate,
+            MailFolderResolutionGeneration? generation = null)
         {
             this.Store.WithPlacementRecordedFor(
                 Account,
@@ -817,6 +878,7 @@ public sealed class MailboxRestorePassTests
                     MailboxRestoreAppendId.New(),
                     candidate.Email,
                     candidate.SourceFolderAlias,
+                    generation ?? MailFolderResolutionGeneration.First,
                     RunInstant),
                 ImapUidValidity.Create(9),
                 ImapUid.Create(91));

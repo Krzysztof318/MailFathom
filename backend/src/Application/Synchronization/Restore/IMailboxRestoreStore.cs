@@ -125,6 +125,24 @@ public interface IMailboxRestoreStore
         ImapUid uid,
         CancellationToken cancellationToken);
 
+    /// <summary>Takes a recorded placement off a record, which is what hands the record to an operator.</summary>
+    /// <param name="session">The transaction the release commits in.</param>
+    /// <param name="record">The record whose placement no pass can carry.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes once the release is staged in the session.</returns>
+    /// <remarks>
+    /// A record carrying a placement is read as work the next pass finishes, so one that no pass can finish has to
+    /// stop carrying one or it holds the account in its phase for ever while being offered to nobody. There is one
+    /// caller: an alias repointed between the append and the carry, where the copy sits in a folder the alias no
+    /// longer names and only a person can say what became of it. The occurrence being taken by something else is the
+    /// other such case and is not here, because that one is decided inside
+    /// <see cref="ConfirmAppendAsync" /> and released in the same transaction that decided it.
+    /// </remarks>
+    Task ReleasePlacementAsync(
+        IPersistenceSession session,
+        MailboxRestoreAppendId record,
+        CancellationToken cancellationToken);
+
     /// <summary>Writes down that the restore can never put one message back, so it stops being counted as outstanding.</summary>
     /// <param name="session">The transaction the record commits in.</param>
     /// <param name="account">The account the message is stored for.</param>

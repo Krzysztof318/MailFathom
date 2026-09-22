@@ -100,6 +100,7 @@ public sealed class MailAccountCustodyEndpointsTests
             MailboxRestoreAppendId.New(),
             StoredEmailId.Create(Guid.CreateVersion7()),
             MailFolderAlias.Create("archive"),
+            MailFolderResolutionGeneration.First,
             Moment);
 
         // Act

@@ -5,16 +5,24 @@
 namespace MailFathom.Application.Synchronization.Restore;
 
 /// <summary>What one restore pass put back onto a source, and what stopped the rest of it.</summary>
-/// <param name="AppendedCount">Messages the source holds again because this pass appended them.</param>
+/// <param name="AppendedCount">Messages this pass wrote the occurrence of, whichever pass issued the append that put them back.</param>
 /// <param name="StateWrittenCount">Messages whose local state this pass wrote down for the converger to carry.</param>
-/// <param name="UnansweredAppendCount">Appends this pass issued whose answer never came back, each of which now holds the account in its phase.</param>
+/// <param name="UnansweredAppendCount">Appends whose outcome this pass left unknown, whichever pass issued them, each of which now holds the account in its phase.</param>
 /// <param name="Failures">How many messages each kind of failure cost, with kinds that cost none absent. A message is attempted again only where the pass recorded nothing for it.</param>
 /// <param name="Pause">What is holding the restore up, or <see cref="MailboxRestorePause.None" /> where nothing is.</param>
 /// <param name="EndedTheRestore">Whether this pass was the one that put the account back to mirroring its source.</param>
 /// <remarks>
+/// <para>
 /// Counts only. What a pass did to somebody's mailbox is reported as figures an operator reads and a metric records,
 /// never as a list of messages: a subject, an address, or a folder path in this answer would put mail content into a
 /// log line about custody.
+/// </para>
+/// <para>
+/// Two of the counts are the pass's own work rather than the pass's own appends. A pass begins by finishing the
+/// placements an interrupted one recorded, so a run that issued no command at all can report a dozen messages back on
+/// the source and one whose outcome it could not settle. What the counts add up to across passes is each message once,
+/// which is what an operator reading a total needs; what they do not say is which pass the command went out in.
+/// </para>
 /// </remarks>
 public sealed record MailboxRestoreReport(
     int AppendedCount,

@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260922095113_AddMailboxRestoreAppends")]
+    [Migration("20260922112035_AddMailboxRestoreAppends")]
     partial class AddMailboxRestoreAppends
     {
         /// <inheritdoc />
@@ -2442,6 +2442,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<int>("FolderGeneration")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone");

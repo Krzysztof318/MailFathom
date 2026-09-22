@@ -187,6 +187,16 @@ internal sealed class InMemoryMailboxRestoreStore : IMailboxRestoreStore
         return Task.CompletedTask;
     }
 
+    public Task ReleasePlacementAsync(
+        IPersistenceSession session,
+        MailboxRestoreAppendId record,
+        CancellationToken cancellationToken)
+    {
+        this.placements.Remove(record);
+
+        return Task.CompletedTask;
+    }
+
     public Task<bool> ConfirmAppendAsync(
         IPersistenceSession session,
         MailboxRestoreAppend record,

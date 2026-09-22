@@ -60,6 +60,7 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Phase:     Restoring", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting append:         318", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Unanswered appends:      1", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting confirmation:   2", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("archive", StringComparison.Ordinal));
     }

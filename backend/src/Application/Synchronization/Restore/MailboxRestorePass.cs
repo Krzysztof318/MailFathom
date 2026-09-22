@@ -58,6 +58,15 @@ public sealed class MailboxRestorePass
     /// <summary>The most unanswered appends one reading reports, which is a ceiling rather than a page.</summary>
     private const int MaximumReportedUnansweredAppends = 100;
 
+    /// <summary>The most fully answered appends one pass finishes before it spends any of the run's budget.</summary>
+    /// <remarks>
+    /// A bound of its own rather than the reporting ceiling's, because the two are disjoint sets and answer to
+    /// different things: that one is how much an operator is shown at once, and this is how much recovery a pass does
+    /// for a shutdown that interrupted an earlier one. Ordinarily nothing is found here, so what the number decides is
+    /// how quickly an account works through a large interruption rather than how long a normal pass takes.
+    /// </remarks>
+    private const int MaximumConfirmationsPerPass = 100;
+
     private readonly IMailAccountCustodyStore custody;
     private readonly IMailboxRestoreStore store;
     private readonly IMailboxDrainStore drain;
@@ -437,6 +446,7 @@ public sealed class MailboxRestorePass
             MailboxRestoreAppendId.New(),
             candidate.Email,
             folder.Alias,
+            folder.Generation,
             this.timeProvider.GetUtcNow());
 
         if (stored is null || stored.RawMime.IsEmpty)
@@ -525,7 +535,7 @@ public sealed class MailboxRestorePass
     {
         var confirmations = await this.store.ReadConfirmableAppendsAsync(
             account,
-            MaximumReportedUnansweredAppends,
+            MaximumConfirmationsPerPass,
             cancellationToken);
 
         foreach (var confirmation in confirmations)
@@ -537,6 +547,22 @@ public sealed class MailboxRestorePass
             if (await this.resolutions.GetCurrentResolutionAsync(account, alias, cancellationToken) is not { } folder)
             {
                 tally.Failed(MailboxRestoreFailure.FolderUnresolved);
+
+                continue;
+            }
+
+            // The alias has been repointed since the command went out, so the copy is in a folder this alias no longer
+            // names. An occurrence built from the binding that holds now would carry the old folder's UIDVALIDITY and
+            // UID — which another folder may legitimately advertise — and would name somebody else's mail. The record
+            // is left standing with its placement for an operator instead, and nothing appends the message again.
+            if (folder.Generation != confirmation.Record.SourceFolderGeneration)
+            {
+                await this.commitPolicy.CommitAsync(
+                    (persistence, token) => this.store.ReleasePlacementAsync(
+                        persistence, confirmation.Record.Id, token),
+                    cancellationToken);
+
+                tally.LeftUnanswered();
 
                 continue;
             }
@@ -581,9 +607,11 @@ public sealed class MailboxRestorePass
     /// <returns><see langword="true" /> when this pass is what ended the restore.</returns>
     /// <remarks>
     /// Four conditions, and each is a different way the source could still be behind what MailFathom holds: a message
-    /// not yet appended, an append nobody has settled, a state record the converger has not carried, and a source
+    /// not yet appended, an append nobody has settled, a state record the converger may yet carry, and a source
     /// removal the drain still owes. The source becomes the truth again only when none of them stands, because a
-    /// mirrored account's truth is by definition what its source holds.
+    /// mirrored account's truth is by definition what its source holds. The third is what the converger <em>may yet</em>
+    /// carry rather than what it has not carried, for the reason <see cref="ConvergenceIsStillOwedAsync" /> gives: a
+    /// record nothing will attempt again is a call for an operator's attention rather than a reason to hold a phase.
     /// </remarks>
     private async Task<bool> EndRestoreIfNothingIsLeftAsync(
         MailAccountId account,
@@ -602,7 +630,7 @@ public sealed class MailboxRestorePass
             return false;
         }
 
-        if ((await this.mutations.ReadOutstandingAsync(account, 1, cancellationToken)).Count > 0)
+        if (await this.ConvergenceIsStillOwedAsync(account, cancellationToken))
         {
             return false;
         }
@@ -620,6 +648,31 @@ public sealed class MailboxRestorePass
                 MailAccountCustodyPhase.Mirrored,
                 token),
             cancellationToken);
+    }
+
+    /// <summary>Reports whether any mutation record of the account is still one the converger may yet carry.</summary>
+    /// <remarks>
+    /// <para>
+    /// A dead-lettered record is not one of them, and reading the outstanding page instead would count it as one. That
+    /// page deliberately reports an abandoned record — which is what makes a stuck change visible to an operator — so a
+    /// single record the server refused, or one whose attempts ran out, would hold the account in <c>Restoring</c> for
+    /// ever. The restore manufactures its own candidates for that: a keyword set a folder will not keep, a destination
+    /// that has gone. Each is opened as <see cref="MailboxMutationLocalChange.AlreadyCommitted" /> and so cannot be
+    /// withdrawn, and the settlement acts on append records rather than on these, so there would be no way out at all.
+    /// </para>
+    /// <para>
+    /// The aggregate is read rather than a page, because a bounded page is wrong exactly where it matters: an account
+    /// whose first records are all dead-lettered would report nothing outstanding while its real backlog sits behind
+    /// them. The database groups and counts, so the answer is a handful of rows however many records the account has.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> ConvergenceIsStillOwedAsync(MailAccountId account, CancellationToken cancellationToken)
+    {
+        var counts = await this.mutations.ReadLifecycleCountsAsync(account, cancellationToken);
+
+        return counts.Any(group => group.Count > 0
+            && (group.Lifecycle == MailboxMutationLifecycle.Pending
+                || group.Lifecycle == MailboxMutationLifecycle.Converging));
     }
 
     /// <summary>Reports whether the account's configuration has come to synchronize a folder playing a virtual role.</summary>

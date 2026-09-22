@@ -9,12 +9,14 @@ using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Signals;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Application.Synchronization.Restore;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
@@ -63,6 +65,50 @@ public sealed class AccountSynchronizationSupervisorTests
 
         // Assert
         Assert.Equal(["INBOX", "ARCHIVE"], attemptedFolders);
+    }
+
+    /// <summary>
+    /// The stage resolves its pass from the run's own scope, and the supervisor isolates an account run from every
+    /// exception — so a pass nothing registered would be swallowed as a logged failure and the stage would never run
+    /// once while every test here stayed green. What proves it composed is the instrument the stage reports through.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AnAccountRun_ReachesTheRestoreStageWithAPassItCanResolve()
+    {
+        // Arrange
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(emptyMailbox));
+
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+
+        var restoreReported = new TaskCompletionSource();
+        var restoreTelemetry = harness.RestoreTelemetry;
+        restoreTelemetry
+            .When(instrument => instrument.Report(Arg.Any<MailAccountId>(), Arg.Any<MailboxRestoreReport>()))
+            .Do(_ => restoreReported.TrySetResult());
+
+        // Act
+        await harness.SuperviseUntilAsync(restoreReported.Task);
+
+        // Assert
+        restoreTelemetry.Received().Report(
+            MailAccountId.Create("primary"),
+            Arg.Is<MailboxRestoreReport>(report => report != null && report.Pause == MailboxRestorePause.None));
+
+        // The supervisor logs rather than fails when a stage throws, so the absence of that line is half of what says
+        // the stage ran on a pass it resolved rather than on one it swallowed.
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("restore", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -1569,6 +1615,9 @@ public sealed class AccountSynchronizationSupervisorTests
                 this.Signals,
                 this.Logger);
         }
+
+        /// <summary>Gets the instrument the run's restore stage reports through, which is how a test sees that stage run.</summary>
+        internal IMailboxRestoreTelemetry RestoreTelemetry => this.services.GetRequiredService<IMailboxRestoreTelemetry>();
 
         internal MailSynchronizationRunLedger RunLedger { get; }
 

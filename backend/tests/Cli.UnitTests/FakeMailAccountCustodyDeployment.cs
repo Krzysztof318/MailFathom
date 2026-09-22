@@ -76,7 +76,7 @@ internal static class FakeMailAccountCustodyDeployment
             "drain":{"awaitingDrain":0,"heldBackAboveSizeLimit":0,
                      "heldBackAwaitingHeadroom":0,"awaitingSourceRemoval":0},
             "restore":{"awaitingAppend":318,"awaitingStateWrite":12,
-                       "unansweredAppends":{{{unansweredAppends}}},
+                       "unansweredAppends":{{{unansweredAppends}}},"awaitingConfirmation":2,
                        "unanswered":[{"record":"0199a7c4-6d21-7a55-9f1e-2c7d3b9a1f04",
                                       "folder":"archive","issuedAt":"2026-09-15T11:00:00+00:00"}]}}
            """;

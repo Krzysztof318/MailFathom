@@ -30,11 +30,19 @@ internal sealed class MailboxRestoreAppendEntity
     public StoredEmailEntity? StoredEmail { get; set; }
 
     /// <summary>Gets or sets MailFathom's own name for the folder the copy was appended into.</summary>
-    /// <remarks>
-    /// The alias rather than the binding, because the row outlives the folder generation it was written under and what
-    /// an operator needs from it is which of their folders to look in.
-    /// </remarks>
+    /// <remarks>What an operator needs from the row is which of their folders to look in, which the alias is.</remarks>
     public required string FolderAlias { get; set; }
+
+    /// <summary>Gets or sets which binding of that alias the command went out against.</summary>
+    /// <remarks>
+    /// Recorded because the occurrence written from a placement names the binding as well as the identity inside it,
+    /// and an alias is repointed by a rewritten mapping or by discovery matching a different advertised folder. Two
+    /// unrelated remote folders may advertise the same UIDVALIDITY, so a placement carried under a generation that has
+    /// moved would write an occurrence naming the new binding with the old folder's identity. The row outlives the
+    /// binding either way; what the column decides is whether a later pass may carry the placement or has to leave the
+    /// row for an operator.
+    /// </remarks>
+    public int FolderGeneration { get; set; }
 
     /// <summary>Gets or sets when the command went out, which is how long an unanswered record has been standing.</summary>
     public DateTimeOffset IssuedAt { get; set; }

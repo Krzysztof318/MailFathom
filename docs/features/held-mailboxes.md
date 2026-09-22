@@ -268,7 +268,7 @@ has.
 | `mailfathom.mailbox.restore.appended` | Messages put back onto the source, whose new occurrence MailFathom wrote down |
 | `mailfathom.mailbox.restore.state_written` | Messages whose held state was written down as the mutations the converger carries |
 | `mailfathom.mailbox.restore.unanswered_appends` | Appends this run left with an unknown outcome, each holding the account in `Restoring` until an operator settles it |
-| `mailfathom.mailbox.restore.failures` | What the restore could not put back, broken down by the reason. Two of the reasons come from the state half rather than from an append, and only a reason that recorded nothing for the message is attempted again |
+| `mailfathom.mailbox.restore.failures` | What the restore could not put back, broken down by the reason. Only the unwritable keyword is the state half's alone; the unresolved folder is raised by the state half, by a folder of appends that never went out, and by the confirmation of an earlier pass's placement alike. Only a reason that recorded nothing for the message is attempted again |
 
 ## What changes about the rest of the product
 

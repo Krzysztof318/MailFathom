@@ -29,13 +29,17 @@ public sealed class MailKitImapRestoredAppendTests
         "Message-ID: <held-1@mailfathom.invalid>\r\nSubject: held\r\nFrom: sender@example.test\r\n\r\nbody\r\n");
 
     /// <summary>The arrival is the row's rather than the run's, and the flags are what the source last showed.</summary>
+    /// <remarks>
+    /// The folder advertises this one keyword by name rather than <c>\*</c>, which is the branch worth arranging: a
+    /// folder keeping any keyword at all would carry the set without ever reading what it advertises.
+    /// </remarks>
     [Fact]
     public async Task AppendRestoredAsync_AHeldMessage_AppendsItWithTheFlagsKeywordsAndArrivalItWasHeldWith()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
         var client = new FakeImapClient { Capabilities = ImapCapabilities.UidPlus };
-        var openFolder = CreateWritableFolder(keptKeywords: "$LABEL1");
+        var openFolder = CreateWritableFolder(keepsAnyKeyword: false, keptKeywords: "$LABEL1");
         IAppendRequest? sent = null;
         openFolder.AppendAsync(Arg.Any<IAppendRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>

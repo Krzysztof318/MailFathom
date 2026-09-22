@@ -1001,8 +1001,11 @@ one. Each holds the account in `Restoring` until an operator looks in the folder
 `mailfathom.mailbox.restore.failure`, whose seven values are MailFathom's own names for it: the source was unavailable,
 the source refused the credential, the folder is no longer there, the stored payload could not be read, the folder the
 message goes back into is bound to nothing, MailFathom holds a keyword on the message that no authored change may name,
-or the pass could not classify it. Two of those are raised by the half that writes held state onto messages the source
-still holds, rather than by an append at all: the unresolved folder, and the unwritable keyword.
+or the pass could not classify it. One of those is raised by the half that writes held state onto messages the source
+still holds and by nothing else: the unwritable keyword. The unresolved folder is raised by three places rather than
+one — that same half, a whole folder of appends that never went out, and the confirmation of a placement an earlier
+pass recorded — so a non-zero count there is read as *some folder of this account binds to nothing* rather than as a
+statement about the state walk.
 
 Whether the next run takes the message again follows from what the pass recorded for it rather than from the value. A
 failure that recorded nothing leaves the message a candidate; one whose command went out is counted here *and* under

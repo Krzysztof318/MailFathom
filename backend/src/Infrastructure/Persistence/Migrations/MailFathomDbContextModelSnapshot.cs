@@ -2440,6 +2440,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<int>("FolderGeneration")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone");
 
