@@ -3428,6 +3428,14 @@ of which are kept for an answer's ending and the agent's note after a stop, so a
 and one that would start a conversation for a person already holding 1 000, where deleting one makes room; an empty or
 over-long text, an empty identifier, or a scope naming no subject is `400`.
 
+**The answer is composed by the replica that took the question, past the request that asked it.** The run reads the
+person's mail, calendar, and tasks under the grant the question was asked with, writes a status line, each block, and
+each proposal the moment it exists, and ends as completed, stopped, or failed — so a client that leaves and returns
+reads everything written meanwhile, and closing the connection ends nothing. It spends from the same period ceiling and
+per-run bounds a mail answer does, on the model `Chat:Agent:Model` routes it to; a deployment with no chat endpoint
+ends every answer as failed rather than refusing the question. A replica that stops mid-answer leaves it failed rather
+than resumed.
+
 **Steering adds to a running answer; stopping ends it.** They are different routes because they are different acts:
 
 ```http
@@ -3443,7 +3451,7 @@ asking where to pick it up. A run that ended a moment earlier answers `204` as w
 delivered to the replica composing the answer, so either works through any replica and while the hub is down — the run
 meets a stop as the next write it is refused.
 
-**A proposal is accepted or declined by the place it was written at, and accepting executes nothing:**
+**A proposal is accepted or declined by the place it was written at, and accepting carries out exactly what was proposed:**
 
 ```http
 PUT /api/client/agent/conversations/{conversationId}/proposals/7
@@ -3454,8 +3462,12 @@ Content-Type: application/json
 
 The answer is `200` with the place the decision was written at, `400` for any decision but `accepted` or `declined`, and
 `409` where there is no proposal at that place this person can answer that way — none offered, or already decided —
-which is also what a second press gets. What an accepted proposal permits is carried out by the Agent's own composition
-under the grant that act needs, never by this route. `DELETE /api/client/agent/conversations/{conversationId}` removes
+which is also what a second press gets, so an act is never carried out twice. Accepting is recorded first and the act
+carried out after it — a message sent, or an answer to a message sent, through the same drafting and sending a person
+composing it by hand goes through — and an act this deployment refuses ends the proposal as `failed`, which is what the
+conversation then shows. A caller whose grant does not carry every permission the act needs — `mailfathom.mail.drafts.write`
+and `mailfathom.mail.send`, and `mailfathom.mail.read` as well for an answer to a message — is `403` before anything is
+recorded. Declining carries nothing out. `DELETE /api/client/agent/conversations/{conversationId}` removes
 the conversation and everything said in it, `204`, and `404` once there is nothing to remove.
 
 **Every write is announced as `run.advanced`** over [the signal channel](#the-signal-channel), naming the conversation,
