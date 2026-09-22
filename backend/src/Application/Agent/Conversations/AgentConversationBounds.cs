@@ -80,6 +80,14 @@ public static class AgentConversationBounds
     /// </remarks>
     public const int MaximumEntriesPerRead = 250;
 
+    /// <summary>The longest a recorded tool call's arguments or a tool's result may be, in characters; longer text is cut to it.</summary>
+    /// <remarks>
+    /// A tool's result is what the tool handed the model, which the run's own ceilings already bound in total but not per
+    /// call, so without this one read of a long thread would become one very large row. The record is for reconstructing
+    /// what a turn did rather than a second copy of the mail, so a cut result loses nothing a person reads.
+    /// </remarks>
+    public const int MaximumToolTextLength = 32_000;
+
     /// <summary>The greatest number of conversations one person may hold at once.</summary>
     /// <remarks>
     /// A client names a new conversation by an identifier of its own choosing, so without a ceiling one grant could grow

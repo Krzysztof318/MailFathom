@@ -93,6 +93,22 @@ public sealed class RecordedChatClientTests : IAsyncDisposable
         Assert.Empty(this.channel.Published);
     }
 
+    /// <summary>A tool that handed the model a very long text is recorded at the length the record keeps, never whole.</summary>
+    [Fact]
+    public async Task GetResponseAsync_AResultPastTheBound_IsRecordedCutToIt()
+    {
+        // Arrange
+        using var journal = this.Journal();
+        using var client = new RecordedChatClient(this.inner, journal);
+        ChatMessage answered = new(ChatRole.Tool, [new FunctionResultContent("call-1", new string('x', AgentConversationBounds.MaximumToolTextLength * 2))]);
+
+        // Act
+        await client.GetResponseAsync([answered], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AgentConversationBounds.MaximumToolTextLength, Assert.Single(this.written.OfType<AgentToolAnswered>()).Result.Length);
+    }
+
     /// <summary>A write the conversation refuses is the stop reaching the run, so the call is abandoned rather than sent.</summary>
     [Fact]
     public async Task GetResponseAsync_AResultTheConversationRefuses_AbandonsTheCall()

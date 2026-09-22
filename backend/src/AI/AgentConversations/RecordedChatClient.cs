@@ -4,6 +4,8 @@
 
 using System.Text.Json;
 using MailFathom.Application.Agent.Answering;
+using MailFathom.Application.Agent.Conversations;
+using MailFathom.Domain.Emails;
 using Microsoft.Extensions.AI;
 
 namespace MailFathom.AI.AgentConversations;
@@ -56,7 +58,7 @@ internal sealed class RecordedChatClient : DelegatingChatClient
         {
             if (this.answered.Add(result.CallId))
             {
-                await this.RequireAsync(this.journal.RecordToolResultAsync(result.CallId, Serialized(result.Result), cancellationToken));
+                await this.RequireAsync(this.journal.RecordToolResultAsync(result.CallId, Recorded(Serialized(result.Result)), cancellationToken));
             }
         }
 
@@ -71,7 +73,7 @@ internal sealed class RecordedChatClient : DelegatingChatClient
 
         foreach (var call in response.Messages.SelectMany(static message => message.Contents).OfType<FunctionCallContent>())
         {
-            await this.RequireAsync(this.journal.RecordToolCallAsync(call.CallId, call.Name, Serialized(call.Arguments), cancellationToken));
+            await this.RequireAsync(this.journal.RecordToolCallAsync(call.CallId, call.Name, Recorded(Serialized(call.Arguments)), cancellationToken));
         }
 
         return response;
@@ -84,6 +86,12 @@ internal sealed class RecordedChatClient : DelegatingChatClient
     /// <summary>Writes a value the way it travels to the provider, as a JSON document.</summary>
     private static string Serialized(object? value) =>
         JsonSerializer.Serialize(value, RecordedJson);
+
+    /// <summary>Cuts a recorded text to the length the record keeps of one tool call or result.</summary>
+    private static string Recorded(string text) =>
+        text.Length <= AgentConversationBounds.MaximumToolTextLength
+            ? text
+            : MailTextBounds.TruncateAtTextElementBoundary(text, AgentConversationBounds.MaximumToolTextLength);
 
     /// <summary>Counts the characters of text a call sends: the instruction, every message, and the tools it may call.</summary>
     /// <remarks>
