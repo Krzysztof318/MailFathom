@@ -4,11 +4,12 @@
 
 using MailFathom.AI.AgentConversations;
 using MailFathom.AI.Retrieval;
+using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Agent.Conversations;
+using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Mailboxes;
-using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
@@ -25,8 +26,9 @@ namespace MailFathom.AI.UnitTests.AgentConversations;
 
 /// <summary>Covers which tools one Agent run is offered and what a proposing tool leaves behind.</summary>
 /// <remarks>
-/// The readers other than the authorization are left unset because nothing asserted here reads mail: which tools exist is
-/// decided by the grant alone, and a proposal is written from the arguments the model supplied.
+/// The readers other than the authorization are left unset because nothing asserted here reads mail through them: which
+/// tools exist is decided by the grant alone, and a proposal is written from the arguments the model supplied. The search
+/// answers from a recording retrieval, which is what a proposal citing a message the run found is arranged over.
 /// </remarks>
 public sealed class AgentConversationToolsTests : IAsyncDisposable
 {
@@ -43,6 +45,8 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     private readonly IAgentConversationStore store = Substitute.For<IAgentConversationStore>();
 
     private readonly List<AgentConversationEntry> written = [];
+
+    private readonly RecordingEmailKnowledgeSearch knowledgeSearch = new();
 
     private readonly ClientSignals signals;
 
@@ -273,6 +277,38 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
         Assert.Contains("cites no source", answer?.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>A message the search showed the model is a source a proposal may rest on while the run is still going, not only once it has ended.</summary>
+    [Fact]
+    public async Task ProposeTask_AMessageTheSearchShowed_CitesItAndNamesItAsTheSource()
+    {
+        // Arrange
+        var found = Guid.CreateVersion7();
+        this.knowledgeSearch.Returning("notice period", KnowledgePassages.Create("Please send the list by Thursday.", found, subject: "Notice period"));
+        var search = this.ToolNamed("search_mail", MailFathomPermission.MailRead);
+        await search.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { [ScopedMailKnowledgeRetrieval.QueryArgumentName] = "notice period" }),
+            TestContext.Current.CancellationToken);
+        var propose = Assert.IsType<AIFunction>(Assert.Single(this.tools.Create(), tool => tool.Name == "propose_task"), exactMatch: false);
+
+        // Act
+        var answer = await propose.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>
+            {
+                ["title"] = "Send the notice-period list",
+                ["dueOn"] = null,
+                ["messageId"] = found.ToString(),
+            }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var proposal = Assert.Single(this.written.OfType<AgentActionProposed>());
+        var citation = Assert.Single(this.tools.Cited);
+        Assert.Equal(
+            ((StoredEmailId?)StoredEmailId.Create(found), PresentationSupport.Supported, citation.Id),
+            (Assert.IsType<AgentTaskRecording>(proposal.Act).SourceMessage, proposal.Block.Evidence.Support, Assert.Single(proposal.Block.Evidence.Citations)));
+        Assert.DoesNotContain("cites no source", answer?.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>Proposing a task writes the proposal and the exact act accepting it would carry out, and creates nothing.</summary>
     [Fact]
     public async Task ProposeTask_AValidTask_WritesTheProposalCarryingExactlyThatAct()
@@ -381,7 +417,7 @@ public sealed class AgentConversationToolsTests : IAsyncDisposable
     private AgentConversationTools Tools(params MailFathomPermission[] granted)
     {
         var retrieval = new ScopedMailKnowledgeRetrieval(
-            Substitute.For<IEmailKnowledgeSearch>(),
+            this.knowledgeSearch,
             MailboxScope.Create([Primary], [new MailFolderIdentity(Primary, MailFolderAlias.Create("INBOX"))]),
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
             SensitiveContentEgressGuards.Inactive(),

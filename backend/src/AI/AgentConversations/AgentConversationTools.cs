@@ -376,7 +376,7 @@ internal sealed class AgentConversationTools
             ends = closes;
         }
 
-        var source = this.SourceOf(messageId);
+        var source = await this.SourceOfAsync(messageId, cancellationToken);
         var block = new EventProposalBlock(EvidenceOf(source), titled, begins, ends, allDay);
 
         await this.WriteAsync(this.journal.ProposeAsync(
@@ -414,7 +414,7 @@ internal sealed class AgentConversationTools
             due = day;
         }
 
-        var source = this.SourceOf(messageId);
+        var source = await this.SourceOfAsync(messageId, cancellationToken);
         var block = new TaskProposalBlock(EvidenceOf(source), titled, due);
 
         await this.WriteAsync(this.journal.ProposeAsync(
@@ -428,14 +428,42 @@ internal sealed class AgentConversationTools
 
     /// <summary>Reads the message a proposal cites out of what this run has already shown the model.</summary>
     /// <remarks>
+    /// <para>
     /// A citation is minted from what a tool read, never from a name a model supplied, so a proposal rests on a message
-    /// this run actually opened or nothing at all. That is also what keeps an invented identifier from becoming a source
-    /// a reader is invited to follow.
+    /// this run actually opened or searched up, or on nothing at all. That is also what keeps an invented identifier from
+    /// becoming a source a reader is invited to follow.
+    /// </para>
+    /// <para>
+    /// A message the search showed is declared here rather than left to <see cref="DeclareSearchedAsync" />, which runs
+    /// once the run has ended: searching and then proposing out of what was found is the ordinary path, and waiting for
+    /// the end would leave every such proposal uncited.
+    /// </para>
     /// </remarks>
-    private (StoredEmailId Message, PresentationCitationId Citation)? SourceOf(string? messageId) =>
-        Guid.TryParse(messageId, out var named) && this.cited.TryGetValue(StoredEmailId.Create(named), out var known)
-            ? (StoredEmailId.Create(named), known.Id)
-            : null;
+    private async Task<(StoredEmailId Message, PresentationCitationId Citation)?> SourceOfAsync(
+        string? messageId,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(messageId, out var named))
+        {
+            return null;
+        }
+
+        var message = StoredEmailId.Create(named);
+
+        if (this.cited.TryGetValue(message, out var known))
+        {
+            return (message, known.Id);
+        }
+
+        if (this.retrieval.Report.Passages.FirstOrDefault(passage => passage.StoredEmailId == message) is not { } searched)
+        {
+            return null;
+        }
+
+        var citation = await this.CiteAsync(message, searched.Subject, cancellationToken);
+
+        return (message, citation.Id);
+    }
 
     private static PresentationEvidence EvidenceOf((StoredEmailId Message, PresentationCitationId Citation)? source) =>
         source is { } read
