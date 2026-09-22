@@ -23,13 +23,16 @@ internal static class ModelsUnderTest
     /// <summary>The variable carrying the models, separated by commas, whitespace, or line breaks.</summary>
     public const string ModelsVariable = "MAILFATHOM_EVALUATION_MODELS";
 
+    /// <summary>The variable carrying the reasoning effort every model under test is asked for, where the run declares one.</summary>
+    public const string ReasoningEffortVariable = "MAILFATHOM_EVALUATION_REASONING_EFFORT";
+
     /// <summary>The output budget one answer may occupy.</summary>
     /// <remarks>Room for the structured answer an agent writes and the reasoning a reasoning model spends before it.</remarks>
     private const int MaximumOutputTokens = 4096;
 
     /// <summary>Builds one plan per declared model.</summary>
     /// <returns>The plans, in the order the run declared the models.</returns>
-    /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run declared no model.</exception>
+    /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run declared no model or an effort no provider could read.</exception>
     public static IReadOnlyList<ChatGenerationPlan> Plans()
     {
         var models = AiEvaluationRun.Required(ModelsVariable)
@@ -41,16 +44,29 @@ internal static class ModelsUnderTest
         }
 
         var address = EvaluationEndpoint.Address();
+        var reasoningEffort = ParseReasoningEffort(AiEvaluationRun.Optional(ReasoningEffortVariable));
 
-        return [.. models.Distinct(StringComparer.Ordinal).Select(model => PlanFor(model, address))];
+        return [.. models.Distinct(StringComparer.Ordinal).Select(model => PlanFor(model, address, reasoningEffort))];
     }
+
+    /// <summary>Reads a declared reasoning effort.</summary>
+    /// <param name="declared">The declaration, or <see langword="null" /> where the run made none.</param>
+    /// <returns>The effort, or <see langword="null" /> where the run sends none.</returns>
+    /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the declaration is not a level a provider could read.</exception>
+    /// <remarks>Held to the shape a deployment's own <c>ReasoningEffort</c> is, and the failure names the variable and never the value, as the judge's does.</remarks>
+    public static string? ParseReasoningEffort(string? declared) =>
+        declared is null || ChatGenerationPlan.IsUsableReasoningEffort(declared)
+            ? declared
+            : throw new InvalidOperationException(
+                $"{ReasoningEffortVariable} is not a single word a provider could read as a reasoning level.");
 
     /// <summary>Builds the plan one model is measured with.</summary>
     /// <remarks>
-    /// Neither sampling parameter nor a reasoning effort is sent, for the reason the contract tests give: several current
-    /// models refuse one outright, and what is measured is the request a deployment makes with nothing declared.
+    /// No sampling parameter is sent, for the reason the contract tests give: several current models refuse one outright,
+    /// and what is measured is the request a deployment makes with nothing declared. A reasoning effort is sent only where
+    /// the run declares one, which is the request a deployment declaring that effort makes.
     /// </remarks>
-    private static ChatGenerationPlan PlanFor(string model, Uri? address)
+    private static ChatGenerationPlan PlanFor(string model, Uri? address, string? reasoningEffort)
     {
         var endpoint = new ChatEndpoint(
             "evaluation",
@@ -64,7 +80,7 @@ internal static class ModelsUnderTest
             MaximumOutputTokens,
             temperature: null,
             topP: null,
-            reasoningEffort: null,
+            reasoningEffort,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 64_000,
             maximumRequestImageOctets: 4 * 1024 * 1024,

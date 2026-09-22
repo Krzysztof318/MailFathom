@@ -176,9 +176,13 @@ internal static class EvaluationStore
     {
         var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
 
+        // The effort travels in a request-options factory the cache key cannot read, so it joins the key explicitly — and
+        // only where one is declared, so every answer cached by a run declaring none keeps the key it was filed under.
+        string[] identity = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty];
+
         return new DistributedCachingChatClient(model, cache)
         {
-            CacheKeyAdditionalValues = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty],
+            CacheKeyAdditionalValues = plan.ReasoningEffort is { } effort ? [.. identity, effort] : identity,
         };
     }
 

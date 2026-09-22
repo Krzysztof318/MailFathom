@@ -45,6 +45,10 @@ on:
         description: 'How many times each case is asked of each model, from 1 to 20; defaults to the EVALUATION_REPETITIONS variable, or 1'
         required: false
         type: string
+      reasoning_effort:
+        description: 'Reasoning effort every model under test is asked for, such as low or high; unset sends none'
+        required: false
+        type: string
       embedding_models:
         description: 'Embedding models under test, separated by commas; defaults to the one the integration tests reach'
         required: false
@@ -158,6 +162,9 @@ jobs:
           # already reaches is measured, so a repository configured for those tests can run this one as it stands.
           MAILFATHOM_EVALUATION_MODELS: ${{ inputs.models || vars.EVALUATION_MODELS || vars.CHAT_PROVIDER_MODEL }}
           MAILFATHOM_EVALUATION_REPETITIONS: ${{ inputs.repetitions || vars.EVALUATION_REPETITIONS }}
+          # How hard every model under test reasons. Unset sends no reasoning parameter, which is how a deployment
+          # declaring none calls a model; the judge's own effort is declared apart below.
+          MAILFATHOM_EVALUATION_REASONING_EFFORT: ${{ inputs.reasoning_effort }}
           MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
           MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
           # The judge answers from the same endpoint and the same key as the models under test, so the
