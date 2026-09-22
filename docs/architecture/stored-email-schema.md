@@ -1337,13 +1337,15 @@ carries. Nothing here is logged, nothing here reaches an instrument, and the row
 conversation and a conversation from the user record — so erasing a person takes every conversation they had and
 everything said in one.
 
-**Two indexes and four bounds hold it.** `ix_agent_conversations_user_last_activity` over
+**Two indexes and five bounds hold it.** `ix_agent_conversations_user_last_activity` over
 `(UserId, LastActivityAt DESC)` is a person's history, which is the only shape that listing takes, and it answers the
 cascade's own lookup as well. `ix_agent_conversation_entries_answered` over `(ConversationId, AnsweredProposalAt)` is
 partial over the rows where that column is not null, because answers to offers are a small minority of what a
 conversation holds and an index over all of them would be rewritten on every block a run composes to serve a query only
-a press makes. The bounds are a conversation's entry count, refused in the same statement that would write past it, the
-title's length, how many entries one read returns, and how many conversations one listing returns.
+a press makes. The bounds are a conversation's entry count, refused in the same statement that would write past it and
+keeping its last two places for an answer's ending and the agent's note after a stop, the title's length, how many
+entries one read returns, how many conversations one listing returns, and how many conversations one person may hold —
+1 000, counted in the statement that would start another, over the history index above.
 
 ## The whole-mailbox rule run an account has outstanding
 

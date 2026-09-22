@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Agent.Conversations;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Localization;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
@@ -124,18 +125,18 @@ public sealed class AgentConversationControlsTests
         Assert.Equal((Conversation, Run.Value, 7L), (signal.Conversation!.Value, signal.Run!.Value, signal.Sequence));
     }
 
-    /// <summary>A stopped answer ends as stopped and the agent then says so in the person's own language, both announced as one advance.</summary>
+    /// <summary>A stopped answer ends with the agent saying so in the person's own language, announced as one advance at the note's place.</summary>
     [Theory]
     [MemberData(nameof(EveryLanguage))]
-    public async Task StopAsync_ARunningAnswer_EndsItAsStoppedThenWritesTheAgentsNoteInThePersonsLanguage(UserLanguage language)
+    public async Task StopAsync_ARunningAnswer_EndsItWithTheAgentsNoteInThePersonsLanguage(UserLanguage language)
     {
         // Arrange
         await using var signals = this.Signals(out var channel);
         this.languages.LanguageOf(SyntheticUser.Deployment).Returns(language);
-        List<AgentConversationEntry> appended = [];
+        AgentMessageWritten? note = null;
         this.store
-            .AppendAsync(Conversation, SyntheticUser.Deployment, Arg.Do<AgentConversationEntry>(appended.Add), Now, Arg.Any<CancellationToken>())
-            .Returns(5L, 6L);
+            .StopAsync(Conversation, SyntheticUser.Deployment, Run, Arg.Do<AgentMessageWritten>(written => note = written), Now, Arg.Any<CancellationToken>())
+            .Returns(6L);
 
         // Act
         var stopping = await this.Controls(signals).StopAsync(
@@ -147,11 +148,9 @@ public sealed class AgentConversationControlsTests
 
         // Assert
         Assert.Equal(AgentRunStopping.Stopped, stopping);
-        Assert.Equal(2, appended.Count);
-        Assert.Equal(new AgentAnswerEnded(Run, AgentAnswerOutcome.Stopped), appended[0]);
-        var note = Assert.IsType<AgentMessageWritten>(appended[1]);
+        Assert.NotNull(note);
         Assert.Equal(AgentMessageAuthor.Agent, note.Author);
-        Assert.True(note.Text.IsSpecified);
+        Assert.Equal(ApplicationTexts.GetText(ApplicationText.AgentRunStoppedNote, language), note.Text.Value);
         var signal = Assert.Single(announced);
         Assert.Equal((Run.Value, 6L), (signal.Run!.Value, signal.Sequence));
     }
@@ -162,10 +161,10 @@ public sealed class AgentConversationControlsTests
     {
         // Arrange
         await using var signals = this.Signals(out _);
-        List<AgentConversationEntry> appended = [];
+        List<AgentMessageWritten> notes = [];
         this.store
-            .AppendAsync(Conversation, SyntheticUser.Deployment, Arg.Do<AgentConversationEntry>(appended.Add), Now, Arg.Any<CancellationToken>())
-            .Returns(5L);
+            .StopAsync(Conversation, SyntheticUser.Deployment, Run, Arg.Do<AgentMessageWritten>(notes.Add), Now, Arg.Any<CancellationToken>())
+            .Returns(6L);
         var controls = this.Controls(signals);
 
         // Act
@@ -175,9 +174,8 @@ public sealed class AgentConversationControlsTests
         await controls.StopAsync(Conversation, SyntheticUser.Deployment, Run, TestContext.Current.CancellationToken);
 
         // Assert
-        var notes = appended.OfType<AgentMessageWritten>().Select(note => note.Text.Value).ToArray();
-        Assert.Equal(2, notes.Length);
-        Assert.NotEqual(notes[0], notes[1]);
+        Assert.Equal(2, notes.Count);
+        Assert.NotEqual(notes[0].Text.Value, notes[1].Text.Value);
     }
 
     /// <summary>An answer that is not being composed writes nothing further, and the person is told whether the conversation is theirs at all.</summary>
@@ -191,7 +189,7 @@ public sealed class AgentConversationControlsTests
         // Arrange
         await using var signals = this.Signals(out var channel);
         this.store
-            .AppendAsync(Conversation, SyntheticUser.Deployment, Arg.Any<AgentConversationEntry>(), Now, Arg.Any<CancellationToken>())
+            .StopAsync(Conversation, SyntheticUser.Deployment, Run, Arg.Any<AgentMessageWritten>(), Now, Arg.Any<CancellationToken>())
             .Returns((long?)null);
         this.store
             .ReadAsync(Conversation, SyntheticUser.Deployment, 0, 1, Arg.Any<CancellationToken>())
@@ -206,12 +204,6 @@ public sealed class AgentConversationControlsTests
 
         // Assert
         Assert.Equal(expected, stopping);
-        await this.store.Received(1).AppendAsync(
-            Arg.Any<AgentConversationId>(),
-            Arg.Any<UserId>(),
-            Arg.Any<AgentConversationEntry>(),
-            Arg.Any<DateTimeOffset>(),
-            Arg.Any<CancellationToken>());
         Assert.Empty(await this.PublishedAsync(signals, channel));
     }
 

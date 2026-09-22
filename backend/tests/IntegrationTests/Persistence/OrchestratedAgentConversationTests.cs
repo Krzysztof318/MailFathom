@@ -192,13 +192,13 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         }
     }
 
-    /// <summary>An answer still running when its conversation fills can be ended, at the last place the ceiling allows.</summary>
+    /// <summary>A stop reaching a conversation that filled while its answer ran writes both the ending and the agent's note.</summary>
     /// <remarks>
-    /// Every other entry stops one short of the ceiling, so a stop reaching a full conversation still ends the answer
-    /// rather than being refused as though that answer were not running. Nothing is written past the ending.
+    /// Every other entry stops short of the places kept for this pair, so the stop is neither refused as though the
+    /// answer were not running nor written as an ending with no word from the agent after it. Nothing fits past the note.
     /// </remarks>
     [Fact]
-    public async Task AppendAsync_AnAnswerRunningWhenTheConversationFills_CanStillBeEndedAtTheLastPlace()
+    public async Task StopAsync_AnAnswerRunningWhenTheConversationFills_WritesTheEndingAndTheNoteInTheKeptPlaces()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
@@ -215,25 +215,27 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
             var answer = AgentMessageId.New();
             await store.AppendAsync(conversation, person, new AgentAnswerStarted(answer), Instant, cancellationToken);
 
-            for (var place = 2; place < AgentConversationBounds.MaximumEntries; place++)
+            var lastOrdinaryPlace = AgentConversationBounds.MaximumEntries - AgentConversationBounds.PlacesKeptForAnEnding;
+
+            for (var place = 2; place <= lastOrdinaryPlace; place++)
             {
                 await store.AppendAsync(conversation, person, Composed(answer), Instant, cancellationToken);
             }
 
             // Act
-            var composedIntoTheLastPlace = await store.AppendAsync(conversation, person, Composed(answer), Instant, cancellationToken);
-            var ended = await store.AppendAsync(
-                conversation,
-                person,
-                new AgentAnswerEnded(answer, AgentAnswerOutcome.Stopped),
-                Instant,
-                cancellationToken);
+            var composedIntoAKeptPlace = await store.AppendAsync(conversation, person, Composed(answer), Instant, cancellationToken);
+            var noted = await store.StopAsync(conversation, person, answer, Note(), Instant, cancellationToken);
             var pastTheEnd = await store.AppendAsync(conversation, person, Note(), Instant, cancellationToken);
 
             // Assert
-            Assert.Null(composedIntoTheLastPlace);
-            Assert.Equal(AgentConversationBounds.MaximumEntries, ended);
+            Assert.Null(composedIntoAKeptPlace);
+            Assert.Equal(AgentConversationBounds.MaximumEntries, noted);
             Assert.Null(pastTheEnd);
+
+            var tail = await store.ReadAsync(conversation, person, afterSequence: lastOrdinaryPlace, limit: 10, cancellationToken);
+            Assert.NotNull(tail);
+            Assert.False(tail.Composing);
+            Assert.Equal([AgentAnswerEnded.Kind, AgentMessageWritten.Kind], tail.Entries.Select(written => written.EntryName));
         }
         finally
         {

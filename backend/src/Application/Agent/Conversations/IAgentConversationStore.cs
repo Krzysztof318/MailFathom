@@ -84,6 +84,28 @@ public interface IAgentConversationStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
+    /// <summary>Ends the answer being composed as stopped and writes the agent's note saying so, together or not at all.</summary>
+    /// <param name="id">The conversation holding the answer.</param>
+    /// <param name="user">The person stopping it, whose conversation it has to be.</param>
+    /// <param name="answer">The answer to stop, which has to be the one being composed.</param>
+    /// <param name="note">The agent's note that follows the ending.</param>
+    /// <param name="now">The instant of the stop, in UTC.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The place the note was written at, or <see langword="null" /> when the answer is not the one being composed or the conversation is not this person's.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="note" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="note" /> is not the agent's own.</exception>
+    /// <remarks>
+    /// A conversation's last two places are kept for exactly this pair, so a stop reaching a conversation that filled
+    /// while its answer was running writes both rather than an ending with no word from the agent after it.
+    /// </remarks>
+    Task<long?> StopAsync(
+        AgentConversationId id,
+        UserId user,
+        AgentMessageId answer,
+        AgentMessageWritten note,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
     /// <summary>Writes a person's question and opens the answer to it, starting the conversation where it has not been started.</summary>
     /// <param name="id">The conversation, which the client named and which is started here when nothing stands under it yet.</param>
     /// <param name="user">The person asking, whose conversation it is or becomes.</param>

@@ -21,9 +21,14 @@ public static class AgentConversationBounds
     /// A conversation is durable and never swept, so without a ceiling one would grow until reading it stopped being
     /// possible. Reaching it means this conversation is full rather than that anything failed: what the person does
     /// next is start another, and the reply that says so belongs to whichever surface they reached this through. The
-    /// last place is kept for an answer's ending, so an answer running when the conversation fills can still end.
+    /// last <see cref="PlacesKeptForAnEnding" /> places are kept for an answer's ending, so an answer running when the
+    /// conversation fills can still end.
     /// </remarks>
     public const int MaximumEntries = 5_000;
+
+    /// <summary>How many of a conversation's last places only an answer's ending, and the agent's note after a stop, may take.</summary>
+    /// <remarks>Two because a stop writes two entries: the ending, and the agent saying where to pick it up.</remarks>
+    public const int PlacesKeptForAnEnding = 2;
 
     /// <summary>The greatest number of entries one read may return.</summary>
     /// <remarks>

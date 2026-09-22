@@ -16,7 +16,7 @@ namespace MailFathom.Application.Localization;
 /// is each other language. Adding a language is a file and a <see cref="UserLanguage" /> member, never an edit here
 /// beyond naming its culture.
 /// </remarks>
-public static class ApplicationTexts
+internal static class ApplicationTexts
 {
     private static readonly ResourceManager Resources = new(typeof(ApplicationTexts));
 

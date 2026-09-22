@@ -47,6 +47,10 @@ namespace MailFathom.Infrastructure.Persistence.Agent;
 [RequiresIntegrationCoverage]
 internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAgentConversationStore
 {
+    /// <summary>The last place anything but an answer's ending, or the agent's note after a stop, may take.</summary>
+    private const long MostOrdinaryEntries =
+        AgentConversationBounds.MaximumEntries - AgentConversationBounds.PlacesKeptForAnEnding;
+
     /// <summary>Starts a conversation, and says nothing happened where one already stands under that identifier.</summary>
     /// <remarks>
     /// The conflict is left to the key rather than checked for, because a repeated start is a client retrying over a
@@ -96,9 +100,10 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     /// executing.
     /// </para>
     /// <para>
-    /// The last place is kept for an answer's ending: every other entry stops one short of the ceiling, so an answer
-    /// being composed when a conversation fills can still be ended, whether by its run or by a person stopping it. A
-    /// refused ending therefore always means the answer named is not the one being composed.
+    /// The last places are kept for an answer's ending and the agent's note after a stop: every other entry stops
+    /// <see cref="AgentConversationBounds.PlacesKeptForAnEnding" /> short of the ceiling, so an answer being composed
+    /// when a conversation fills can still be ended, whether by its run or by a person stopping it. A refused ending
+    /// therefore always means the answer named is not the one being composed.
     /// </para>
     /// </remarks>
     private const string AppendEntryStatement = $"""
@@ -112,7 +117,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
                     ELSE c."{AgentConversationEntity.ComposingMessageIdColumnName}" END
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < CASE WHEN @endsTheAnswer THEN @mostEntries ELSE @mostEntries - 1 END
+              AND c."{AgentConversationEntity.SequenceColumnName}" < CASE WHEN @takesAKeptPlace THEN @mostEntries ELSE @mostOrdinaryEntries END
               AND (NOT @opensTheAnswer OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" IS NULL)
               AND (@composedInto IS NULL OR c."{AgentConversationEntity.ComposingMessageIdColumnName}" = @composedInto)
             RETURNING c."{AgentConversationEntity.IdColumnName}" AS conversation, c."{AgentConversationEntity.SequenceColumnName}" AS place
@@ -220,7 +225,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
             FROM standing s
             WHERE c."{AgentConversationEntity.IdColumnName}" = @id
               AND c."{AgentConversationEntity.UserIdColumnName}" = @userId
-              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostEntries - 1
+              AND c."{AgentConversationEntity.SequenceColumnName}" < @mostOrdinaryEntries
               AND s.offered
               AND ((s.stands IS NULL AND @state IN (@accepted, @declined))
                    OR (s.stands = @accepted AND @state = @failed))
@@ -330,7 +335,52 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         await using var command = dataSource.CreateCommand(AppendEntryStatement);
 
-        return await AppendAsync(command, id, user, entry, now, cancellationToken);
+        return await AppendAsync(command, id, user, entry, takesAKeptPlace: entry.EndsTheAnswer, now, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<long?> StopAsync(
+        AgentConversationId id,
+        UserId user,
+        AgentMessageId answer,
+        AgentMessageWritten note,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+
+        if (note.Author is not AgentMessageAuthor.Agent)
+        {
+            throw new ArgumentException("The note after a stop is the agent's own.", nameof(note));
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var stopping = await connection.BeginTransactionAsync(cancellationToken);
+        await using var ending = new NpgsqlCommand(AppendEntryStatement, connection, stopping);
+
+        var ended = await AppendAsync(
+            ending,
+            id,
+            user,
+            new AgentAnswerEnded(answer, AgentAnswerOutcome.Stopped),
+            takesAKeptPlace: true,
+            now,
+            cancellationToken);
+
+        if (ended is null)
+        {
+            return null;
+        }
+
+        await using var noting = new NpgsqlCommand(AppendEntryStatement, connection, stopping);
+        var noted = await AppendAsync(noting, id, user, note, takesAKeptPlace: true, now, cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"The note after a stop was refused under a row of {AgentConversationEntity.TableName} that admitted the ending. "
+                + "Neither the conversation nor what was said in it is in this message.");
+
+        await stopping.CommitAsync(cancellationToken);
+
+        return noted;
     }
 
     /// <inheritdoc />
@@ -398,7 +448,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         command.Parameters.AddWithValue("accepted", AgentProposalState.Accepted.ToString());
         command.Parameters.AddWithValue("declined", AgentProposalState.Declined.ToString());
         command.Parameters.AddWithValue("failed", AgentProposalState.Failed.ToString());
-        command.Parameters.AddWithValue("mostEntries", (long)AgentConversationBounds.MaximumEntries);
+        command.Parameters.AddWithValue("mostOrdinaryEntries", MostOrdinaryEntries);
 
         var place = await command.ExecuteScalarAsync(cancellationToken) as long?;
 
@@ -541,11 +591,13 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
     }
 
     /// <summary>Fills the append statement for one entry and runs it, on whichever connection the command was made on.</summary>
+    /// <remarks>Only an ending, and the note a stop writes after it, may take one of the places a conversation keeps for them.</remarks>
     private static async Task<long?> AppendAsync(
         NpgsqlCommand command,
         AgentConversationId id,
         UserId user,
         AgentConversationEntry entry,
+        bool takesAKeptPlace,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -558,7 +610,9 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         command.Parameters.AddWithValue("endsTheAnswer", entry.EndsTheAnswer);
         command.Parameters.Add(Identity("opensMessageId", entry is AgentAnswerStarted started ? started.MessageId : null));
         command.Parameters.Add(Identity("composedInto", entry.ComposedInto));
+        command.Parameters.AddWithValue("takesAKeptPlace", takesAKeptPlace);
         command.Parameters.AddWithValue("mostEntries", (long)AgentConversationBounds.MaximumEntries);
+        command.Parameters.AddWithValue("mostOrdinaryEntries", MostOrdinaryEntries);
 
         return await command.ExecuteScalarAsync(cancellationToken) as long?;
     }
@@ -620,7 +674,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
 
         AgentConversationEntry[] entries = steering ? [message] : [message, new AgentAnswerStarted(answer)];
 
-        if (held.Reached + entries.Length > AgentConversationBounds.MaximumEntries - 1)
+        if (held.Reached + entries.Length > MostOrdinaryEntries)
         {
             return AgentMessagePosting.Refused(AgentMessagePostingOutcome.ConversationFull);
         }
@@ -630,7 +684,7 @@ internal sealed class AgentConversationStore(NpgsqlDataSource dataSource) : IAge
         foreach (var entry in entries)
         {
             await using var append = new NpgsqlCommand(AppendEntryStatement, connection, posting);
-            reached = await AppendAsync(append, id, user, entry, now, cancellationToken)
+            reached = await AppendAsync(append, id, user, entry, takesAKeptPlace: false, now, cancellationToken)
                 ?? throw new InvalidOperationException(
                     $"An entry was refused under a held row of {AgentConversationEntity.TableName} that admitted it. "
                     + "Neither the conversation nor what was said in it is in this message.");

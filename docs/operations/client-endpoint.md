@@ -3400,9 +3400,9 @@ Location: /api/client/agent/conversations/0199a2c4-5e6f-7a1b-8c2d-3e4f5a6b7c8d
 The question and the opening of the answer to it — the run — are written together, and the run's identifier is the
 answer's. A repeated `messageId` answers with what the first post wrote. `scope` is `Mailbox` with no subject, or
 `Thread`, `CalendarEvent`, or `DiscoveryRun` naming the one it was asked about, and may be left out. A question asked
-while an answer is still being composed is `409`, and so is one into a full conversation — 5 000 entries, the last of which is kept for an answer's ending so a
-running answer can always be stopped — and one that
-would start a conversation for a person already holding 1 000 — deleting one makes room; an empty or
+while an answer is still being composed is `409`, and so is one into a full conversation — 5 000 entries, the last two
+of which are kept for an answer's ending and the agent's note after a stop, so a running answer can always be stopped —
+and one that would start a conversation for a person already holding 1 000, where deleting one makes room; an empty or
 over-long text, an empty identifier, or a scope naming no subject is `400`.
 
 **Steering adds to a running answer; stopping ends it.** They are different routes because they are different acts:

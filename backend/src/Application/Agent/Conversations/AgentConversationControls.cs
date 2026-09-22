@@ -148,7 +148,8 @@ public sealed class AgentConversationControls
     /// </para>
     /// <para>
     /// The ending is a condition on the conversation's row, so it lands on whichever replica this request reached and
-    /// the run meets it as a refused write wherever it is executing.
+    /// the run meets it as a refused write wherever it is executing. The ending and the note are written together, in
+    /// places a full conversation keeps for them, so neither is ever written without the other.
     /// </para>
     /// </remarks>
     public async Task<AgentRunStopping> StopAsync(
@@ -157,32 +158,28 @@ public sealed class AgentConversationControls
         AgentMessageId run,
         CancellationToken cancellationToken)
     {
-        var ended = await this.store.AppendAsync(
+        var note = new AgentMessageWritten(
+            AgentMessageId.New(),
+            AgentMessageAuthor.Agent,
+            PresentationText.Create(this.languages.GetText(ApplicationText.AgentRunStoppedNote, user)),
+            Scope: null);
+
+        var noted = await this.store.StopAsync(
             conversation,
             user,
-            new AgentAnswerEnded(run, AgentAnswerOutcome.Stopped),
+            run,
+            note,
             this.timeProvider.GetUtcNow(),
             cancellationToken);
 
-        if (ended is null)
+        if (noted is null)
         {
             var held = await this.store.ReadAsync(conversation, user, afterSequence: 0, limit: 1, cancellationToken);
 
             return held is null ? AgentRunStopping.NoSuchConversation : AgentRunStopping.NotRunning;
         }
 
-        var noted = await this.store.AppendAsync(
-            conversation,
-            user,
-            new AgentMessageWritten(
-                AgentMessageId.New(),
-                AgentMessageAuthor.Agent,
-                PresentationText.Create(this.languages.GetText(ApplicationText.AgentRunStoppedNote, user)),
-                Scope: null),
-            this.timeProvider.GetUtcNow(),
-            cancellationToken);
-
-        this.Announce(user, conversation, run, noted ?? ended.Value);
+        this.Announce(user, conversation, run, noted.Value);
 
         return AgentRunStopping.Stopped;
     }
