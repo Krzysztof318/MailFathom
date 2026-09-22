@@ -18,14 +18,18 @@ const starters: readonly MessageKey[] = ['agent.starter.day', 'agent.starter.sli
  * Sending while an answer is composed steers it rather than starting another — the instruction joins the run in flight
  * and it takes it from its next turn — so there is one field and one Send for both.
  *
- * @param onSend Sends what was typed, answering whether it went, which is what clears the field.
+ * @param onSend Sends what was typed, answering the conversation it went into and `null` where it did not go.
  * @param notSent Why the last send did not go, already in the reader's language, and `null` where it went.
+ * @param conversation The conversation the field writes into, and `null` for a new one. What was typed belongs to it,
+ * so moving to another puts the draft down — except where a new conversation is given its identity by the question
+ * being sent from this field, which is the same conversation acquiring a name.
  * @param focusAsked Changed by the screen when what held focus went away, which puts focus in the field.
  */
 export function AgentComposer({
     running,
     offersStarters,
     notSent,
+    conversation,
     focusAsked,
     onSend,
     onCancel,
@@ -33,15 +37,27 @@ export function AgentComposer({
     readonly running: boolean;
     readonly offersStarters: boolean;
     readonly notSent: string | null;
+    readonly conversation: string | null;
     readonly focusAsked: number;
-    readonly onSend: (text: string) => Promise<boolean>;
+    readonly onSend: (text: string) => Promise<string | null>;
     readonly onCancel: () => void;
 }) {
     const { translate } = useLocalization();
     const field = useId();
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
+    const [writtenFor, setWrittenFor] = useState(conversation);
+    const [sentInto, setSentInto] = useState<string | null>(null);
     const input = useRef<HTMLInputElement>(null);
+
+    // Adjusted while rendering rather than in an effect, so the old draft is never drawn under the new conversation.
+    if (writtenFor !== conversation) {
+        setWrittenFor(conversation);
+
+        if (!(writtenFor === null && conversation === sentInto)) {
+            setText('');
+        }
+    }
 
     useEffect(() => {
         if (focusAsked > 0) {
@@ -61,7 +77,8 @@ export function AgentComposer({
         setSending(false);
 
         // Against the field as it stands when the send answers: anything typed while it was going is kept.
-        if (sent) {
+        if (sent !== null) {
+            setSentInto(sent);
             setText((now) => (now === written ? '' : now));
         }
     }

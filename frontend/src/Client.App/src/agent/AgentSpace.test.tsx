@@ -317,6 +317,17 @@ describe('AgentSpace', () => {
         expect((field as HTMLInputElement).value).toBe('And by when?');
     });
 
+    it('puts an unsent draft down when another conversation is opened', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        const field = screen.getByRole('textbox', { name: 'Tell the agent what to do' });
+        fireEvent.change(field, { target: { value: 'Meant for a new conversation' } });
+
+        await opened('How many bays were confirmed');
+
+        expect((field as HTMLInputElement).value).toBe('');
+    });
+
     it('deletes a conversation only once the confirmation naming it is answered', async () => {
         const { transport, asked } = deploymentAnswering();
         screenOf(transport);

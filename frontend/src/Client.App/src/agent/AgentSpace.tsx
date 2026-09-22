@@ -169,9 +169,9 @@ export function AgentSpace({
         }
     }
 
-    async function send(text: string): Promise<boolean> {
+    async function send(text: string): Promise<string | null> {
         if (session === null) {
-            return false;
+            return null;
         }
 
         const conversation = current ?? newIdentifier();
@@ -185,7 +185,7 @@ export function AgentSpace({
         if (posted.outcome === 'failed') {
             setUnsent(posted.failure.reason);
 
-            return false;
+            return null;
         }
 
         const inFront = shown.current === conversation || (current === null && shown.current === null);
@@ -204,7 +204,7 @@ export function AgentSpace({
 
         setRevision((before) => before + 1);
 
-        return true;
+        return conversation;
     }
 
     function cancel(): void {
@@ -362,6 +362,7 @@ export function AgentSpace({
                         running={inFlight !== null}
                         offersStarters={current === null}
                         notSent={unsent === null ? null : translate(notSent[unsent])}
+                        conversation={current}
                         focusAsked={composerFocusAsked}
                         onSend={send}
                         onCancel={cancel}
