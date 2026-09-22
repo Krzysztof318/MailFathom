@@ -504,8 +504,8 @@ function discoveryAnswer(
  *
  * The composing conversation stays composing, which is the state the status line and Cancel are looked at in; a
  * conversation this corpus does not name — the one a question just opened — reads as the answered one, so a question
- * asked here arrives at an answer. A read past a cursor answers what was written after it, and every write is accepted
- * without changing what is read afterwards.
+ * asked here arrives at an answer. A read past a cursor answers what was written after it, and every write — archiving
+ * and restoring among them — is accepted without changing what is read afterwards.
  */
 function agentAnswer(
     route: string,
@@ -527,7 +527,7 @@ function agentAnswer(
         return { ...answering(agent.messagePosted(run)), status: 202 };
     }
 
-    if (request.method === 'DELETE') {
+    if (request.method === 'DELETE' || route.endsWith('/archive')) {
         return { status: 204, body: '', headers: {} };
     }
 

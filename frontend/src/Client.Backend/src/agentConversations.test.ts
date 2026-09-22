@@ -5,10 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import {
     agentConversationRoute,
+    archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
     listAgentConversations,
     readAgentConversation,
+    restoreAgentConversation,
     steerAgentRun,
     stopAgentRun,
 } from './agentConversations';
@@ -69,7 +71,7 @@ describe('agentConversationRoute', () => {
 });
 
 describe('listAgentConversations', () => {
-    it('reads each conversation the history lists, and a title not yet given as none', async () => {
+    it('reads each conversation the history lists, a title not yet given as none, and whether it is archived', async () => {
         const answered = await listAgentConversations(
             session,
             answering({
@@ -81,6 +83,7 @@ describe('listAgentConversations', () => {
                             title: null,
                             startedAt: '2026-08-31T09:40:00+00:00',
                             lastActivityAt: '2026-08-31T09:42:00+00:00',
+                            archived: true,
                         },
                     ],
                 }),
@@ -95,9 +98,32 @@ describe('listAgentConversations', () => {
                     title: null,
                     startedAt: '2026-08-31T09:40:00+00:00',
                     lastActivityAt: '2026-08-31T09:42:00+00:00',
+                    archived: true,
                 },
             ],
         });
+    });
+
+    it('refuses a conversation that does not say whether it is archived', async () => {
+        const answered = await listAgentConversations(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    conversations: [
+                        {
+                            id: conversation,
+                            title: null,
+                            startedAt: '2026-08-31T09:40:00+00:00',
+                            lastActivityAt: '2026-08-31T09:42:00+00:00',
+                            archived: 'yes',
+                        },
+                    ],
+                }),
+            }),
+        );
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unreadable' } });
     });
 
     it('refuses a listing longer than the service ever answers with', async () => {
@@ -106,6 +132,7 @@ describe('listAgentConversations', () => {
             title: null,
             startedAt: '2026-08-31T09:40:00+00:00',
             lastActivityAt: '2026-08-31T09:42:00+00:00',
+            archived: false,
         }));
 
         const answered = await listAgentConversations(
@@ -501,9 +528,45 @@ describe('every Agent operation', () => {
         ['asking', () => askAgent(session, unreachable, conversation, question, 'How many bays?')],
         ['steering', () => steerAgentRun(session, unreachable, conversation, question, question, 'Shorter.')],
         ['stopping', () => stopAgentRun(session, unreachable, conversation, question)],
+        ['archiving', () => archiveAgentConversation(session, unreachable, conversation)],
+        ['restoring', () => restoreAgentConversation(session, unreachable, conversation)],
         ['deleting', () => deleteAgentConversation(session, unreachable, conversation)],
     ])('reports a deployment it could not reach while %s', async (_, operation) => {
         expect(await operation()).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
+});
+
+describe('archiveAgentConversation', () => {
+    it('puts the conversation into the archive', async () => {
+        const { transport, requests } = recording({ status: 204, body: '' });
+
+        const answered = await archiveAgentConversation(session, transport, conversation);
+
+        expect(answered).toEqual({ outcome: 'read', value: undefined });
+        expect(requests[0]).toMatchObject({ method: 'PUT', path: `${base}/${conversation}/archive` });
+    });
+
+    it('reads a conversation this person does not hold as missing', async () => {
+        const answered = await archiveAgentConversation(session, answering({ status: 404, body: '' }), conversation);
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'missing' } });
+    });
+});
+
+describe('restoreAgentConversation', () => {
+    it('takes the conversation back out of the archive', async () => {
+        const { transport, requests } = recording({ status: 204, body: '' });
+
+        const answered = await restoreAgentConversation(session, transport, conversation);
+
+        expect(answered).toEqual({ outcome: 'read', value: undefined });
+        expect(requests[0]).toMatchObject({ method: 'DELETE', path: `${base}/${conversation}/archive` });
+    });
+
+    it('reads a refused grant as the reason it failed', async () => {
+        const answered = await restoreAgentConversation(session, answering({ status: 403, body: '' }), conversation);
+
+        expect(answered).toMatchObject({ outcome: 'failed', failure: { reason: 'unauthorized' } });
     });
 });
 

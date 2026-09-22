@@ -98,6 +98,10 @@ internal sealed class RecordingAgentConversationStore : IAgentConversationStore
         throw Unasked();
 
     /// <inheritdoc />
+    public Task<bool> TrySetArchivedAsync(AgentConversationId id, UserId user, bool archived, CancellationToken cancellationToken) =>
+        throw Unasked();
+
+    /// <inheritdoc />
     public Task<bool> TryDeleteAsync(AgentConversationId id, UserId user, CancellationToken cancellationToken) =>
         throw Unasked();
 

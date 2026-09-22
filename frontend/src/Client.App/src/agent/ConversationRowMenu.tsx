@@ -7,23 +7,28 @@ import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { useLocalization } from '../localization/useLocalization';
 
 /**
- * What a conversation row offers when it is pressed and held: picking it out, opening it, and deleting it.
- *
- * The design draws archiving beside these, and it is left out rather than drawn inert because the deployment keeps no
- * archive of conversations to put one in.
+ * What a conversation row offers when it is pressed and held: picking it out, opening it, putting it away or taking it
+ * back out of the archive, and deleting it.
  */
 export function ConversationRowMenu({
     title,
+    archived,
     at,
     onSelect,
     onOpen,
+    onArchive,
     onAskDeletion,
     onClose,
 }: {
     readonly title: string;
+
+    /** Whether the conversation is archived, which turns archiving it into restoring it. */
+    readonly archived: boolean;
+
     readonly at: MenuPoint;
     readonly onSelect: () => void;
     readonly onOpen: () => void;
+    readonly onArchive: () => void;
     readonly onAskDeletion: () => void;
     readonly onClose: () => void;
 }) {
@@ -36,6 +41,9 @@ export function ConversationRowMenu({
             items={[
                 { icon: 'check_box', label: translate('agent.selectConversations'), choose: onSelect },
                 { icon: 'forum', label: translate('agent.openConversation'), choose: onOpen },
+                archived
+                    ? { icon: 'unarchive', label: translate('agent.restoreConversation'), choose: onArchive }
+                    : { icon: 'archive', label: translate('agent.archiveConversation'), choose: onArchive },
                 {
                     icon: 'delete',
                     label: translate('agent.deleteConversation'),

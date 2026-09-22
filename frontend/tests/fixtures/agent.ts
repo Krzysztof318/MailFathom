@@ -24,7 +24,12 @@ export const answeredQuestionId = '0198f4a1-0000-7000-8000-00000000a9f1';
 /** The question the composing conversation is answering, which is the run a steer or a stop names. */
 export const composingQuestionId = '0198f4a1-0000-7000-8000-00000000a9f2';
 
-/** The history, newest activity first. */
+/**
+ * The history, the conversations being worked in first and then the one put away, each group newest activity first.
+ *
+ * The archived conversation is what the history's archive section is looked at with. It is read as the answered one,
+ * which is where any conversation this corpus does not name reads.
+ */
 export const agentHistory = {
     conversations: [
         {
@@ -32,12 +37,21 @@ export const agentHistory = {
             title: 'What is waiting on me today',
             startedAt: '2026-08-31T09:50:00+00:00',
             lastActivityAt: '2026-08-31T09:51:00+00:00',
+            archived: false,
         },
         {
             id: answeredConversationId,
             title: 'How many bays were confirmed',
             startedAt: '2026-08-31T09:40:00+00:00',
             lastActivityAt: '2026-08-31T09:42:00+00:00',
+            archived: false,
+        },
+        {
+            id: '0198f4a1-0000-7000-8000-00000000a9e3',
+            title: 'Invoice 08/2026 — what is missing',
+            startedAt: '2026-08-24T08:10:00+00:00',
+            lastActivityAt: '2026-08-24T08:14:00+00:00',
+            archived: true,
         },
     ],
 };

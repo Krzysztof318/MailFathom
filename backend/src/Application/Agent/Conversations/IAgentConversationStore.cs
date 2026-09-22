@@ -234,15 +234,40 @@ public interface IAgentConversationStore
         int limit,
         CancellationToken cancellationToken);
 
-    /// <summary>Lists a person's conversations, the one that moved most recently first.</summary>
+    /// <summary>Lists a person's conversations, the ones not archived before the archived ones.</summary>
     /// <param name="user">Whose history to read.</param>
     /// <param name="limit">The greatest number to return, at most <see cref="AgentConversationBounds.MaximumConversationsPerListing" />.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The lines of the history, and empty where this person has held none.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is outside the bound.</exception>
+    /// <remarks>
+    /// The conversations the person is working in come first and the ones they put away come after them, each group
+    /// most recently active first, so a listing cut at the bound loses an archived conversation before it loses a
+    /// working one.
+    /// </remarks>
     Task<IReadOnlyList<AgentConversationSummary>> ListAsync(
         UserId user,
         int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Puts a conversation this person holds away, or takes it back out of the archive.</summary>
+    /// <param name="id">The conversation to move.</param>
+    /// <param name="user">The person whose conversation it has to be.</param>
+    /// <param name="archived"><see langword="true" /> to archive it, and <see langword="false" /> to restore it.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when the conversation was this person's; <see langword="false" /> where they hold no such conversation.</returns>
+    /// <remarks>
+    /// Archiving is where a conversation is listed and nothing else: every entry stays, the conversation reads and
+    /// answers exactly as it did, and an answer being composed in it goes on being composed. It leaves the instant the
+    /// history is ordered by alone, for the reason naming a conversation does — putting one away is a fact about it
+    /// rather than a turn of it, and moving it would send an archived conversation back to the top of its group.
+    /// Moving a conversation to where it already is is not a refusal: what the caller asked for is the case, so it is
+    /// reported as done and the conversation is left where it stands.
+    /// </remarks>
+    Task<bool> TrySetArchivedAsync(
+        AgentConversationId id,
+        UserId user,
+        bool archived,
         CancellationToken cancellationToken);
 
     /// <summary>Names a conversation, which the agent does once it has read the first question.</summary>

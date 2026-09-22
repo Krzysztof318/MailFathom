@@ -4,11 +4,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    archiveAgentConversation,
     askAgent,
     deleteAgentConversation,
+    restoreAgentConversation,
     steerAgentRun,
     stopAgentRun,
     type ClientFailureReason,
+    type ClientResult,
     type ClientSession,
     type MailFathomTransport,
     type RunFollowingSchedule,
@@ -32,7 +35,8 @@ import { useFollowedConversation } from './useFollowedConversation';
 // The Agent: several conversations held open as tabs, the history beside them, and the thread in front with the field
 // the reader tells the agent what to do in. Nothing here acts on its own — every block the agent composes is drawn as
 // what it proposes, and sending, steering, stopping and deleting are each the reader's press and each a route of its
-// own, so none of them waits for the signal connection and the screen draws from an ordinary read.
+// own, so none of them waits for the signal connection and the screen draws from an ordinary read. Archiving is the
+// one write that needs no confirmation, because restoring undoes it whole.
 
 /** How the follower waits before reading a silent conversation again, which is the one thing it cannot do for itself. */
 const whileTheConversationIsSilent: RunFollowingSchedule = {
@@ -57,8 +61,26 @@ const notDeleted: Readonly<Record<Exclude<ClientFailureReason, 'missing'>, Messa
     unreadable: 'agent.notDeleted.unreadable',
 };
 
-function refusedDeletion(reason: ClientFailureReason): reason is Exclude<ClientFailureReason, 'missing'> {
+const notArchived: Readonly<Record<Exclude<ClientFailureReason, 'missing'>, MessageKey>> = {
+    unauthenticated: 'agent.notArchived.unauthenticated',
+    unauthorized: 'agent.notArchived.unauthorized',
+    unavailable: 'agent.notArchived.unavailable',
+    unreadable: 'agent.notArchived.unreadable',
+};
+
+// A conversation already gone needs no word: deleting it asked for exactly that, and archiving or restoring one that is
+// no longer there is answered by the history, which reads again after every write and no longer lists it.
+function refusedUnlessGone(reason: ClientFailureReason): reason is Exclude<ClientFailureReason, 'missing'> {
     return reason !== 'missing';
+}
+
+// The conversations a write leaves out of the tabs: the ones it reached, and the ones the deployment no longer holds.
+function doneOrGone(conversations: readonly string[], answers: readonly ClientResult<void>[]): readonly string[] {
+    return conversations.filter((_, at) => {
+        const answered = answers[at];
+
+        return answered !== undefined && (answered.outcome === 'read' || answered.failure.reason === 'missing');
+    });
 }
 
 // What the chip says, by what was handed over. Exhaustive by its own type, so a kind a space learns to hand over does
@@ -108,6 +130,7 @@ export function AgentSpace({
     const [deleting, setDeleting] = useState<readonly string[]>([]);
     const [unsent, setUnsent] = useState<ClientFailureReason | null>(null);
     const [undeleted, setUndeleted] = useState<Exclude<ClientFailureReason, 'missing'> | null>(null);
+    const [unarchived, setUnarchived] = useState<Exclude<ClientFailureReason, 'missing'> | null>(null);
     const [historyShown, setHistoryShown] = useState(true);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [following, setFollowing] = useState(0);
@@ -270,13 +293,11 @@ export function AgentSpace({
 
         // One already gone is what deleting it asked for, so only the other failures are said.
         const refused = answers.flatMap((answered) =>
-            answered.outcome === 'failed' && refusedDeletion(answered.failure.reason) ? [answered.failure.reason] : [],
+            answered.outcome === 'failed' && refusedUnlessGone(answered.failure.reason)
+                ? [answered.failure.reason]
+                : [],
         );
-        const gone = conversations.filter((_, at) => {
-            const answered = answers[at];
-
-            return answered !== undefined && (answered.outcome === 'read' || answered.failure.reason === 'missing');
-        });
+        const gone = doneOrGone(conversations, answers);
 
         setUndeleted(refused[0] ?? null);
 
@@ -284,6 +305,42 @@ export function AgentSpace({
         setOpen((before) => before.filter((conversation) => !gone.includes(conversation)));
 
         setCurrent((now) => (now !== null && gone.includes(now) ? null : now));
+
+        setRevision((before) => before + 1);
+    }
+
+    async function setArchived(conversations: readonly string[], archived: boolean): Promise<void> {
+        if (session === null) {
+            return;
+        }
+
+        const answers = await Promise.all(
+            conversations.map((conversation) =>
+                archived
+                    ? archiveAgentConversation(session, transport, conversation)
+                    : restoreAgentConversation(session, transport, conversation),
+            ),
+        );
+
+        const refused = answers.flatMap((answered) =>
+            answered.outcome === 'failed' && refusedUnlessGone(answered.failure.reason)
+                ? [answered.failure.reason]
+                : [],
+        );
+
+        setUnarchived(refused[0] ?? null);
+
+        // A conversation that changed lists leaves the selection, which only ever holds rows the reader can see picked.
+        const moved = doneOrGone(conversations, answers);
+        setSelected((before) => before.filter((conversation) => !moved.includes(conversation)));
+
+        // A conversation put away leaves the front and the tabs, as the design draws it; it is still read from the
+        // archive section, which opens it again like any other. One the deployment no longer holds leaves them too, as
+        // it does when deleting it finds it gone. Restoring one opens nothing.
+        if (archived) {
+            setOpen((before) => before.filter((conversation) => !moved.includes(conversation)));
+            setCurrent((now) => (now !== null && moved.includes(now) ? null : now));
+        }
 
         setRevision((before) => before + 1);
     }
@@ -300,6 +357,9 @@ export function AgentSpace({
             onOpen={openConversation}
             onSelected={setSelected}
             onNew={startNew}
+            onArchive={(conversations, archived) => {
+                void setArchived(conversations, archived);
+            }}
             onAskDeletion={askDeletion}
             onReadAgain={() => {
                 setRevision((before) => before + 1);
@@ -391,6 +451,12 @@ export function AgentSpace({
                     {undeleted === null ? null : (
                         <p role="alert" className="px-3.5 py-2 text-sm text-warning-text workspace:px-6.5">
                             {translate(notDeleted[undeleted])}
+                        </p>
+                    )}
+
+                    {unarchived === null ? null : (
+                        <p role="alert" className="px-3.5 py-2 text-sm text-warning-text workspace:px-6.5">
+                            {translate(notArchived[unarchived])}
                         </p>
                     )}
 

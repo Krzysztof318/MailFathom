@@ -733,6 +733,59 @@ public sealed class OrchestratedAgentConversationTests(MailFathomOrchestrationFi
         }
     }
 
+    /// <summary>
+    /// Archiving lists a conversation behind the ones being worked in without moving its instant, answers for the
+    /// person's own conversation alone, and restoring puts it back where its instant places it.
+    /// </summary>
+    [Fact]
+    public async Task TrySetArchivedAsync_APersonsOwnConversation_ListsItBehindTheRestUntilItIsRestored()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+        var somebodyElse = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+        await OrchestratedForeignUser.ProvisionAsync(host, somebodyElse, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var store = await StoreOfAsync(host, cancellationToken);
+            var older = await StartedAsync(store, user, cancellationToken);
+            var newer = await StartedAsync(store, user, cancellationToken);
+            var theirs = await StartedAsync(store, somebodyElse, cancellationToken);
+
+            await store.AppendAsync(older, UserId.Create(user), Question(), Instant, cancellationToken);
+            await store.AppendAsync(newer, UserId.Create(user), Question(), Instant.AddMinutes(1), cancellationToken);
+
+            var before = await store.ListAsync(UserId.Create(user), limit: 10, cancellationToken);
+
+            // Act
+            var putAway = await store.TrySetArchivedAsync(newer, UserId.Create(user), archived: true, cancellationToken);
+            var putAwayAgain = await store.TrySetArchivedAsync(newer, UserId.Create(user), archived: true, cancellationToken);
+            var putAwaySomebodyElses = await store.TrySetArchivedAsync(theirs, UserId.Create(user), archived: true, cancellationToken);
+            var whileArchived = await store.ListAsync(UserId.Create(user), limit: 10, cancellationToken);
+            var restored = await store.TrySetArchivedAsync(newer, UserId.Create(user), archived: false, cancellationToken);
+            var afterRestoring = await store.ListAsync(UserId.Create(user), limit: 10, cancellationToken);
+
+            // Assert
+            Assert.True(putAway);
+            Assert.True(putAwayAgain);
+            Assert.False(putAwaySomebodyElses);
+            Assert.True(restored);
+            Assert.Equal([(newer, false), (older, false)], before.Select(line => (line.Id, line.Archived)));
+            Assert.Equal([(older, false), (newer, true)], whileArchived.Select(line => (line.Id, line.Archived)));
+            Assert.Equal(before, afterRestoring);
+            Assert.False(Assert.Single(await store.ListAsync(UserId.Create(somebodyElse), limit: 10, cancellationToken)).Archived);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
+            await OrchestratedForeignUser.EraseAsync(host, somebodyElse);
+        }
+    }
+
     /// <summary>A person erased takes their conversations and everything said in them, through the cascade alone.</summary>
     [Fact]
     public async Task TryStartAsync_AConversationOfAnErasedPerson_GoesWithTheirRecord()

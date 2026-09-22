@@ -9,6 +9,7 @@ namespace MailFathom.Application.Agent.Conversations;
 /// <param name="Title">What it is called, and <see langword="null" /> while nothing has named it.</param>
 /// <param name="StartedAt">When it was started, in UTC.</param>
 /// <param name="LastActivityAt">When anything was last written into it, in UTC, which is what the history is ordered by.</param>
+/// <param name="Archived">Whether the person has put it away, which is what separates the history they are working in from the rest.</param>
 /// <remarks>
 /// It carries no part of the conversation — no question, no block, no source — because a history list draws a name and
 /// a time, and nothing that reads a list has any use for what the conversations said. The title is still the person's
@@ -18,4 +19,5 @@ public sealed record AgentConversationSummary(
     AgentConversationId Id,
     string? Title,
     DateTimeOffset StartedAt,
-    DateTimeOffset LastActivityAt);
+    DateTimeOffset LastActivityAt,
+    bool Archived);

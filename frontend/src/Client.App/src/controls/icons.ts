@@ -109,6 +109,7 @@ export const iconNames = [
     'text_format',
     'topic',
     'tune',
+    'unarchive',
     'warning',
 ] as const;
 

@@ -68,7 +68,7 @@ function deploymentAnswering(posting: { readonly status: number; readonly body: 
                 });
             }
 
-            if (request.method === 'DELETE') {
+            if (request.method === 'DELETE' || request.method === 'PUT') {
                 return Promise.resolve({ status: 204, body: '', headers: {} });
             }
 
@@ -487,5 +487,176 @@ describe('AgentSpace', () => {
                 `${conversations}/${agent.answeredConversationId}`,
             ]);
         });
+    });
+
+    it('draws the archived conversations folded under the rest, and opens them on a press', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        const section = await screen.findByRole('button', { name: 'Show the archived conversations' });
+
+        expect(section.textContent).toBe('Archived (1)');
+        expect(section.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.queryByRole('listbox', { name: 'Archived conversations' })).toBeNull();
+
+        fireEvent.click(section);
+
+        const archive = screen.getByRole('listbox', { name: 'Archived conversations' });
+
+        expect(section.getAttribute('aria-expanded')).toBe('true');
+        expect(
+            within(archive)
+                .getAllByRole('option')
+                .map((row) => row.textContent),
+        ).toEqual([expect.stringContaining('Invoice 08/2026 — what is missing')]);
+    });
+
+    it('archives a conversation from its menu and puts it down where it was open', async () => {
+        const { transport, asked } = deploymentAnswering();
+        screenOf(transport);
+
+        await opened('How many bays were confirmed');
+        const row = screen.getByRole('option', { name: /How many bays were confirmed/ });
+
+        expect(row.getAttribute('aria-current')).toBe('true');
+
+        fireEvent.keyDown(row, { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(asked.filter((request) => request.method === 'PUT').map((request) => request.path)).toEqual([
+                `${conversations}/${agent.answeredConversationId}/archive`,
+            ]);
+        });
+        await waitFor(() => {
+            expect(
+                screen.getByRole('option', { name: /How many bays were confirmed/ }).getAttribute('aria-current'),
+            ).toBeNull();
+        });
+    });
+
+    it('keeps focus in the history when the row that held it is archived out of the list', async () => {
+        const { transport } = deploymentAnswering();
+        const archived = new Set<string>();
+        screenOf((request) => {
+            if (request.method === 'PUT') {
+                archived.add(agent.answeredConversationId);
+            }
+
+            if (request.method === 'GET' && request.path === conversations) {
+                const listed = agent.agentHistory.conversations.map((line) =>
+                    archived.has(line.id) ? { ...line, archived: true } : line,
+                );
+
+                return Promise.resolve({ status: 200, body: JSON.stringify({ conversations: listed }), headers: {} });
+            }
+
+            return transport(request);
+        });
+
+        const row = await screen.findByRole('option', { name: /How many bays were confirmed/ });
+        row.focus();
+        fireEvent.keyDown(row, { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole('option', { name: /How many bays were confirmed/ })).toBeNull();
+        });
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('option', { name: /What is waiting on me today/ }));
+        });
+    });
+
+    it('puts down a conversation the deployment no longer holds when archiving it finds it gone', async () => {
+        const { transport } = deploymentAnswering();
+        screenOf((request) =>
+            request.method === 'PUT' ? Promise.resolve({ status: 404, body: '', headers: {} }) : transport(request),
+        );
+
+        await opened('How many bays were confirmed');
+        fireEvent.keyDown(screen.getByRole('option', { name: /How many bays were confirmed/ }), { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(
+                screen.getByRole('option', { name: /How many bays were confirmed/ }).getAttribute('aria-current'),
+            ).toBeNull();
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('offers restoring rather than archiving on an archived conversation', async () => {
+        const { transport, asked } = deploymentAnswering();
+        screenOf(transport);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the archived conversations' }));
+        fireEvent.keyDown(screen.getByRole('option', { name: /Invoice 08\/2026/ }), { key: 'ContextMenu' });
+
+        expect(screen.queryByRole('menuitem', { name: 'Archive' })).toBeNull();
+
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Restore from archive' }));
+
+        await waitFor(() => {
+            expect(asked.filter((request) => request.method === 'DELETE').map((request) => request.path)).toEqual([
+                `${conversations}/0198f4a1-0000-7000-8000-00000000a9e3/archive`,
+            ]);
+        });
+    });
+
+    it('archives every conversation picked out from the selection bar', async () => {
+        const { transport, asked } = deploymentAnswering();
+        screenOf(transport);
+
+        fireEvent.keyDown(await screen.findByRole('option', { name: /How many bays were confirmed/ }), {
+            key: 'ContextMenu',
+        });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Select conversations' }));
+        fireEvent.click(screen.getByRole('option', { name: /What is waiting on me today/ }));
+        fireEvent.click(within(screen.getByRole('toolbar')).getByRole('button', { name: 'Archive' }));
+
+        await waitFor(() => {
+            expect(
+                asked
+                    .filter((request) => request.method === 'PUT')
+                    .map((request) => request.path)
+                    .toSorted(),
+            ).toEqual([
+                `${conversations}/${agent.answeredConversationId}/archive`,
+                `${conversations}/${agent.composingConversationId}/archive`,
+            ]);
+        });
+        expect(screen.queryByRole('toolbar')).toBeNull();
+    });
+
+    it('drops a conversation archived from its own menu out of the selection', async () => {
+        screenOf(deploymentAnswering().transport);
+
+        fireEvent.keyDown(await screen.findByRole('option', { name: /How many bays were confirmed/ }), {
+            key: 'ContextMenu',
+        });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Select conversations' }));
+        fireEvent.click(screen.getByRole('option', { name: /What is waiting on me today/ }));
+
+        expect(within(screen.getByRole('toolbar')).getByText('2 selected')).toBeTruthy();
+
+        fireEvent.keyDown(screen.getByRole('option', { name: /How many bays were confirmed/ }), { key: 'ContextMenu' });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        expect(await within(screen.getByRole('toolbar')).findByText('1 selected')).toBeTruthy();
+    });
+
+    it('says why the archive did not change', async () => {
+        const { transport } = deploymentAnswering();
+        screenOf((request) =>
+            request.method === 'PUT' ? Promise.resolve({ status: 503, body: '', headers: {} }) : transport(request),
+        );
+
+        fireEvent.keyDown(await screen.findByRole('option', { name: /How many bays were confirmed/ }), {
+            key: 'ContextMenu',
+        });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'The deployment could not be reached, so the archive did not change. Try again.',
+        );
     });
 });
