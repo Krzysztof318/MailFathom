@@ -113,6 +113,15 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// </remarks>
     public ChatCapabilityModelOptions Agent { get; set; } = new();
 
+    /// <summary>Gets or sets which declared model summarises the earlier part of an Agent conversation that outgrew its budget.</summary>
+    /// <remarks>
+    /// A reference and nothing else: whether a conversation is compacted is decided by its size against
+    /// <c>MailAnswering:MaxConversationContextTokens</c>, never by a switch. Summarising text a conversation already
+    /// holds is the cheap kind of judgement this reference exists to route to a small model; left empty it runs on
+    /// <c>Chat:MainModel</c>.
+    /// </remarks>
+    public ChatCapabilityModelOptions ConversationCompaction { get; set; } = new();
+
     /// <summary>Gets or sets whether an opened contact is read into a note about where the correspondence with them stands.</summary>
     /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and on is the default for the reason reply drafting is — the block itself says why, and what turning it off leaves is the contact page every deployment drew before this existed.</remarks>
     public ContactRelationshipOptions ContactRelationship { get; set; } = new();
@@ -187,6 +196,7 @@ internal sealed class ChatModelOptions : IValidatableObject
         ChatCapability.CalendarEventExtraction => this.CalendarEventExtraction.Model,
         ChatCapability.DayLayout => this.DayLayout.Model,
         ChatCapability.Agent => this.Agent.Model,
+        ChatCapability.ConversationCompaction => this.ConversationCompaction.Model,
         _ => throw new ArgumentOutOfRangeException(nameof(capability), capability, "The section declares no model reference for this capability."),
     };
 

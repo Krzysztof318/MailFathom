@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Answering;
 
-/// <summary>Covers the step between a bound answering declaration and the four ceilings the boundaries enforce.</summary>
+/// <summary>Covers the step between a bound answering declaration and the ceilings the boundaries enforce.</summary>
 public sealed class MailAnsweringBudgetMapperTests
 {
     [Fact]
@@ -27,6 +27,7 @@ public sealed class MailAnsweringBudgetMapperTests
             AggregatePeriod = TimeSpan.FromMinutes(30),
             MaxRunsPerPeriod = 15,
             MaxTokensPerPeriod = 150_000,
+            MaxConversationContextTokens = 32_000,
         };
 
         // Act
@@ -43,6 +44,7 @@ public sealed class MailAnsweringBudgetMapperTests
         Assert.Equal(TimeSpan.FromMinutes(30), budget.Period.Period);
         Assert.Equal(15, budget.Period.MaximumRuns);
         Assert.Equal(150_000L, budget.Period.MaximumTokens);
+        Assert.Equal(32_000, budget.Context.Tokens);
     }
 
     /// <summary>An absent section binds to the defaults, and the defaults are what the value objects state — never a second copy of them.</summary>

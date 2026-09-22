@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922134513_RecordAgentConversationTechnicalHistory")]
+    partial class RecordAgentConversationTechnicalHistory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2071,12 +2074,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasDefaultValueSql("'MirrorSource'");
 
-                    b.Property<int>("RestoreGeneration")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("RestoreStatePosition")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id")
                         .HasName("PK_mailbox_accounts");
 
@@ -2433,53 +2430,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_mailbox_refresh_tokens_data_encryption_key");
 
                     b.ToTable("mailbox_refresh_tokens", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxRestoreAppendEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("AppendedUid")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("AppendedUidValidity")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("FolderAlias")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("FolderGeneration")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("IssuedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("MailboxAccountId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTimeOffset?>("SettledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("StoredEmailId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id")
-                        .HasName("PK_mailbox_restore_appends");
-
-                    b.HasIndex("StoredEmailId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_mailbox_restore_appends_email");
-
-                    b.HasIndex("MailboxAccountId", "IssuedAt")
-                        .HasDatabaseName("ix_mailbox_restore_appends_unanswered")
-                        .HasFilter("\"SettledAt\" IS NULL");
-
-                    b.ToTable("mailbox_restore_appends", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxSourceRemovalEntity", b =>
@@ -4318,17 +4268,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MailFolder");
-
-                    b.Navigation("StoredEmail");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxRestoreAppendEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
-                        .WithMany()
-                        .HasForeignKey("StoredEmailId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("StoredEmail");
                 });

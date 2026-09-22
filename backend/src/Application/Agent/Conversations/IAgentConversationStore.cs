@@ -65,9 +65,15 @@ public interface IAgentConversationStore
     /// </para>
     /// <para>
     /// Nothing is written for a conversation that does not exist, for one that is not this person's, for one that is
-    /// full, for an entry belonging to an answer that is not the one being composed, or for an answer opened while
-    /// another is still being composed. Each of those is a statement about the conversation rather than a fault, so
-    /// the caller stops rather than retrying.
+    /// full on either of its two ceilings, for an entry belonging to an answer that is not the one being composed, or
+    /// for an answer opened while another is still being composed. Each of those is a statement about the conversation
+    /// rather than a fault, so the caller stops rather than retrying.
+    /// </para>
+    /// <para>
+    /// An entry of the visible history counts against <see cref="AgentConversationBounds.MaximumEntries" /> and against
+    /// <see cref="AgentConversationBounds.MaximumRecordedEntries" />; an entry of the technical history alone counts
+    /// against the second only, which is what keeps a run's tool traffic from shortening what a person can keep
+    /// working in.
     /// </para>
     /// <para>
     /// The person is checked here as everywhere else, and it is worth saying why the run's own writes are not the
@@ -198,21 +204,32 @@ public interface IAgentConversationStore
     /// <summary>Reads a conversation this person holds, from a stated point.</summary>
     /// <param name="id">The conversation the caller is reading.</param>
     /// <param name="user">The person the caller was admitted for.</param>
+    /// <param name="history">Which reading to return: the visible history a person reads back, or the technical history a turn is composed from, which is all of it.</param>
     /// <param name="afterSequence">The last place the caller already holds, or <c>0</c> to read from the beginning.</param>
-    /// <param name="limit">The greatest number of entries to return, at most <see cref="AgentConversationBounds.MaximumEntriesPerRead" />.</param>
+    /// <param name="limit">The greatest number of entries of that reading to return, at most <see cref="AgentConversationBounds.MaximumEntriesPerRead" />.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The conversation's standing and everything after that point, or <see langword="null" /> where this person has no such conversation.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="afterSequence" /> is negative, or when <paramref name="limit" /> is outside the bound.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="afterSequence" /> is negative, when <paramref name="limit" /> is outside the bound, or when <paramref name="history" /> is not a declared member.</exception>
     /// <remarks>
+    /// <para>
     /// A place this conversation has not reached reads as the beginning rather than as a point to wait at, which is the
     /// safe direction: no reader can hold one honestly, so what such a value means is a cursor belonging to some other
     /// conversation, and replaying costs a few entries where honouring it would hand back a conversation missing
     /// everything before the number. A conversation belonging to somebody else is reported as no such conversation,
     /// exactly as one that never existed is.
+    /// </para>
+    /// <para>
+    /// <strong>The visible reading passes over the technical entries rather than returning a page short of them.</strong>
+    /// Both readings share one order, so the places a visible read returns have gaps where tool traffic and summaries
+    /// stand. The limit counts the entries of the reading asked for, so a page is short only where the history is, an
+    /// empty page with nothing following is a reader that has caught up, and the last place returned is the cursor to
+    /// read on from — never a technical entry's, which no visible read hands out.
+    /// </para>
     /// </remarks>
     Task<AgentConversationReading?> ReadAsync(
         AgentConversationId id,
         UserId user,
+        AgentConversationHistory history,
         long afterSequence,
         int limit,
         CancellationToken cancellationToken);

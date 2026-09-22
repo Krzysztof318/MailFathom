@@ -61,4 +61,7 @@ public enum ChatCapability
 
     /// <summary>Answering a person in a conversation with the Agent, reading their mail, calendar, and tasks and proposing what to do.</summary>
     Agent = 13,
+
+    /// <summary>Summarising the earlier part of an Agent conversation, so a turn can send the summary in its place.</summary>
+    ConversationCompaction = 14,
 }

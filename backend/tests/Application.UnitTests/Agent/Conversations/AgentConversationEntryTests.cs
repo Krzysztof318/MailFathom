@@ -181,4 +181,47 @@ public sealed class AgentConversationEntryTests
         Assert.False(new AgentAnswerStarted(message).EndsTheAnswer);
         Assert.False(new AgentBlockComposed(message, AgentConversationExample.Reading()).EndsTheAnswer);
     }
+
+    /// <summary>Each entry says which history it belongs to, and only what a person was shown belongs to the visible one.</summary>
+    [Fact]
+    public void History_EveryKindOfEntry_IsVisibleOnlyWhereAPersonReadsIt()
+    {
+        // Arrange
+        var message = AgentMessageId.New();
+
+        // Act, Assert
+        Assert.Equal(AgentConversationHistory.Visible, AgentConversationExample.Question(message, "Price?").History);
+        Assert.Equal(AgentConversationHistory.Visible, new AgentAnswerStarted(message).History);
+        Assert.Equal(AgentConversationHistory.Visible, new AgentProposalResolved(3, AgentProposalState.Accepted).History);
+        Assert.Equal(AgentConversationHistory.Technical, new AgentToolCalled(message, "call-1", "search_mail", "{}").History);
+        Assert.Equal(AgentConversationHistory.Technical, new AgentToolAnswered(message, "call-1", "[]").History);
+        Assert.Equal(AgentConversationHistory.Technical, new AgentModelCharged(message, 900, 250).History);
+        Assert.Equal(AgentConversationHistory.Technical, new AgentConversationCompacted(message, 1, "A summary.", []).History);
+    }
+
+    /// <summary>A charge that counted nothing would turn every later estimate into zero or infinity, so it is refused.</summary>
+    [Theory]
+    [InlineData(0, 250)]
+    [InlineData(900, 0)]
+    public void Constructor_AChargeCountingNothing_IsRefused(long sentCharacters, long inputTokens)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AgentModelCharged(AgentMessageId.New(), sentCharacters, inputTokens));
+    }
+
+    /// <summary>A proposal carried beside a summary stands inside the part the summary covers, never after it.</summary>
+    [Fact]
+    public void Constructor_ACompactionCarryingAPlaceItDoesNotCover_IsRefused()
+    {
+        // Act, Assert
+        Assert.ThrowsAny<ArgumentException>(() => new AgentConversationCompacted(AgentMessageId.New(), Through: 4, "A summary.", Carried: [5]));
+    }
+
+    /// <summary>A summary that says nothing would stand in for the turns it replaced with nothing.</summary>
+    [Fact]
+    public void Constructor_ACompactionWithABlankSummary_IsRefused()
+    {
+        // Act, Assert
+        Assert.ThrowsAny<ArgumentException>(() => new AgentConversationCompacted(AgentMessageId.New(), Through: 4, " ", Carried: []));
+    }
 }

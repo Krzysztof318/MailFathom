@@ -165,6 +165,14 @@ internal static class ClientAgentConversationEndpoints
     /// honouring it would hand back a conversation missing its start.
     /// </para>
     /// <para>
+    /// <strong>What comes back is the visible history and nothing else.</strong> A summary a compaction produced, a tool
+    /// the agent called, what the tool answered, and what a call was charged are written into the same order to compose
+    /// the model's input, and none of them is ever handed to a client — so every original message reads back exactly as
+    /// it was written however many times the conversation was compacted. The places returned therefore skip where those
+    /// entries stand; a page still holds as many entries as the bound allows wherever the history has them, and an empty
+    /// page with nothing following is a reader that has caught up.
+    /// </para>
+    /// <para>
     /// Each entry is handed over as the record states it, under the same names and the same discriminator it is stored
     /// with, beside the place it was written at — so the order a client draws from is the database's rather than one it
     /// reconstructs.
@@ -188,6 +196,7 @@ internal static class ClientAgentConversationEndpoints
         var read = await store.ReadAsync(
             AgentConversationId.Create(conversationId),
             scopeResolver.User,
+            AgentConversationHistory.Visible,
             Math.Max(since ?? 0, 0),
             AgentConversationBounds.MaximumEntriesPerRead,
             cancellationToken);

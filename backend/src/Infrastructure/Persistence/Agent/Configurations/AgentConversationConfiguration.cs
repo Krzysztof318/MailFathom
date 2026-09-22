@@ -44,6 +44,8 @@ internal sealed class AgentConversationConfiguration : IEntityTypeConfiguration<
         entity.Property(conversation => conversation.Sequence)
             .HasColumnName(AgentConversationEntity.SequenceColumnName)
             .ValueGeneratedNever();
+        entity.Property(conversation => conversation.VisibleEntryCount)
+            .HasColumnName(AgentConversationEntity.VisibleEntryCountColumnName);
         entity.Property(conversation => conversation.ComposingMessageId)
             .HasColumnName(AgentConversationEntity.ComposingMessageIdColumnName);
 

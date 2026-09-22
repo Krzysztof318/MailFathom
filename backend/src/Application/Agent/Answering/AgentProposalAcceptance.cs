@@ -118,7 +118,7 @@ public sealed class AgentProposalAcceptance
         long proposedAt,
         CancellationToken cancellationToken)
     {
-        var reading = await this.store.ReadAsync(conversation, user, proposedAt - 1, limit: 1, cancellationToken);
+        var reading = await this.store.ReadAsync(conversation, user, AgentConversationHistory.Visible, proposedAt - 1, limit: 1, cancellationToken);
 
         return reading?.Entries.FirstOrDefault(entry => entry.Sequence == proposedAt) as AgentActionProposed;
     }

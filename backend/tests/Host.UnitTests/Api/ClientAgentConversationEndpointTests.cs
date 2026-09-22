@@ -126,7 +126,7 @@ public sealed class ClientAgentConversationEndpointTests
     {
         // Arrange
         this.store
-            .ReadAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, 2, 1, Arg.Any<CancellationToken>())
+            .ReadAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, AgentConversationHistory.Visible, 2, 1, Arg.Any<CancellationToken>())
             .Returns(new AgentConversationReading(null, Now, false, [], false));
 
         // Act
@@ -224,7 +224,7 @@ public sealed class ClientAgentConversationEndpointTests
             .AppendAsync(Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<AgentConversationEntry>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((long?)null);
         this.store
-            .ReadAsync(Arg.Any<AgentConversationId>(), SyntheticUser.Deployment, 0, 1, Arg.Any<CancellationToken>())
+            .ReadAsync(Arg.Any<AgentConversationId>(), SyntheticUser.Deployment, AgentConversationHistory.Visible, 0, 1, Arg.Any<CancellationToken>())
             .Returns(conversationIsTheirs ? new AgentConversationReading(null, Now, false, [], false) : null);
 
         // Act
@@ -289,7 +289,7 @@ public sealed class ClientAgentConversationEndpointTests
         // Arrange
         var answer = AgentMessageId.New();
         this.store
-            .ReadAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, 3, AgentConversationBounds.MaximumEntriesPerRead, Arg.Any<CancellationToken>())
+            .ReadAsync(AgentConversationId.Create(Conversation), SyntheticUser.Deployment, AgentConversationHistory.Visible, 3, AgentConversationBounds.MaximumEntriesPerRead, Arg.Any<CancellationToken>())
             .Returns(new AgentConversationReading(
                 "Supplier quotes",
                 Now,
@@ -321,7 +321,7 @@ public sealed class ClientAgentConversationEndpointTests
     {
         // Arrange
         this.store
-            .ReadAsync(Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadAsync(Arg.Any<AgentConversationId>(), Arg.Any<UserId>(), Arg.Any<AgentConversationHistory>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((AgentConversationReading?)null);
 
         // Act
@@ -337,6 +337,7 @@ public sealed class ClientAgentConversationEndpointTests
         await this.store.Received(1).ReadAsync(
             Arg.Any<AgentConversationId>(),
             SyntheticUser.Deployment,
+            AgentConversationHistory.Visible,
             0,
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Agent.Answering;
 using MailFathom.Application.Emails.Search;
 
 namespace MailFathom.Host.Configuration.Answering;
@@ -80,6 +81,17 @@ internal sealed class MailAnsweringOptions : IValidatableObject
     /// <summary>Gets or sets the greatest number of emails one answer may cite.</summary>
     [Range(1, 1_000)]
     public int MaxCitations { get; set; } = 20;
+
+    /// <summary>Gets or sets the greatest number of tokens one turn of an Agent conversation may send before its earlier part is compacted.</summary>
+    /// <remarks>
+    /// One number for the whole deployment rather than one per person or per conversation, and not read from the model:
+    /// a provider's own window is what a call would be refused at, while this is what the deployment has decided to
+    /// spend per turn. A conversation that outgrows it has its oldest turns summarised, and the turn sends the summary
+    /// in their place; nothing a person reads back changes. Raise it on a model with a larger window and a price that
+    /// allows it.
+    /// </remarks>
+    [Range(AgentContextBudget.MinimumTokens, AgentContextBudget.MaximumTokens)]
+    public int MaxConversationContextTokens { get; set; } = AgentContextBudget.DefaultTokens;
 
     /// <summary>Gets or sets how long one period lasts before what was spent in it is forgotten.</summary>
     /// <remarks>

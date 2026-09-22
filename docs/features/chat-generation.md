@@ -50,7 +50,8 @@ reader waits in front of on a small fast model writes a second block rather than
 **Every capability may name a model of its own**, through a `Model` block shaped exactly alike wherever it appears:
 `Chat:MailAnswering`, `Chat:Agent`, `Chat:DiscoveryPlanning`, `Chat:DiscoveryComposition`, `Chat:Enrichment`,
 `Chat:ThreadState`, `Chat:ReplyDrafting`, `Chat:ContactRelationship`, `Chat:SearchPhrasing`, `Chat:RelevanceFilter`,
-`Chat:ImageDescription`, `Chat:BodyCleanup`, `Chat:CalendarEventExtraction`, and `Chat:DayLayout`. That is what lets
+`Chat:ImageDescription`, `Chat:BodyCleanup`, `Chat:CalendarEventExtraction`, `Chat:DayLayout`, and
+`Chat:ConversationCompaction`. That is what lets
 one deployment run the per-message derivations and the per-candidate judgement on a cheap fast model while answering
 and drafting keep the best one it pays for, and describe a picture with a vision model while everything else runs on a
 cheaper text-only one. A capability that names

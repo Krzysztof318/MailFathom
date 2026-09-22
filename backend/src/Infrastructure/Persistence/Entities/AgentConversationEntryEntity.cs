@@ -51,6 +51,9 @@ internal sealed class AgentConversationEntryEntity
     /// <summary>The column holding the entry itself, named here for the same reason the table is.</summary>
     internal const string PayloadColumnName = "Payload";
 
+    /// <summary>The column saying whether the entry belongs to the visible history, named here for the same reason the table is.</summary>
+    internal const string VisibleColumnName = "Visible";
+
     /// <summary>The column naming the offer this entry answers, named here for the same reason the table is.</summary>
     internal const string AnsweredProposalAtColumnName = "AnsweredProposalAt";
 
@@ -79,6 +82,15 @@ internal sealed class AgentConversationEntryEntity
     /// <summary>Gets or sets the entry itself, as the conversation's own serialization contract writes it.</summary>
     /// <remarks>Held as JSON so a rolling upgrade's older build reads a newer build's row rather than failing on a column it does not know about, and as <c>json</c> rather than <c>jsonb</c> for the reason the configuration gives.</remarks>
     public string Payload { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets whether the entry belongs to the visible history, rather than to the technical history alone.</summary>
+    /// <remarks>
+    /// A column beside the payload rather than a list of kinds in the reading statement, so the entry's own statement of
+    /// which reading it belongs to is the one thing the store consults: a read of the visible history passes over every
+    /// row this says is technical, and a kind a newer build adds is read correctly by an older one during a rolling
+    /// upgrade without that build knowing the kind exists.
+    /// </remarks>
+    public bool Visible { get; set; }
 
     /// <summary>Gets or sets the place the offer this entry answers was written at, and <see langword="null" /> on every entry that answers none.</summary>
     public long? AnsweredProposalAt { get; set; }

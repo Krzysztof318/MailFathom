@@ -39,6 +39,7 @@ internal sealed class RecordingAgentConversationStore : IAgentConversationStore
     public Task<AgentConversationReading?> ReadAsync(
         AgentConversationId id,
         UserId user,
+        AgentConversationHistory history,
         long afterSequence,
         int limit,
         CancellationToken cancellationToken) =>

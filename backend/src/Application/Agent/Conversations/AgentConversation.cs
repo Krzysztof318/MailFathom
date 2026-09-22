@@ -82,6 +82,11 @@ public sealed record AgentConversation
     /// arrived in. A client watching an answer being composed reads the entries themselves, because what it is drawing
     /// is exactly their arrival.
     /// </para>
+    /// <para>
+    /// It is a reading of the visible history: an entry of the technical history alone — a tool call, a tool's answer, a
+    /// charge, a summary — is passed over wherever it stands, so the same entries read the same way whether or not the
+    /// record they came from held them.
+    /// </para>
     /// </remarks>
     public static AgentConversation Compose(
         AgentConversationId id,
@@ -147,6 +152,10 @@ public sealed record AgentConversation
 
                 case AgentProposalResolved resolved:
                     return this.TryAnswer(resolved, out refusal);
+
+                // Written to compose a model input rather than to be read, so a reading of what was said passes over it.
+                case { History: AgentConversationHistory.Technical }:
+                    return true;
 
                 default:
                     refusal = $"The entry at {entry.Sequence} is of a kind this reading does not know.";

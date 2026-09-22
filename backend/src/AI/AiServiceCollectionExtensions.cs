@@ -455,7 +455,7 @@ public static class AiServiceCollectionExtensions
     /// <returns>The same service collection.</returns>
     /// <remarks>
     /// Behind the chat declaration like every other agent, so an instance that declared no endpoint registers no composer
-    /// and its runs end as failed before anything is spent. Scoped, because a run executes on a scope of its own under
+    /// and no summariser, and its runs end as failed before anything is spent. Scoped, because a run executes on a scope of its own under
     /// the principal of the person who asked, and every use case its tools reach reads that principal.
     /// </remarks>
     public static IServiceCollection AddAgentConversationAgent(this IServiceCollection services)
@@ -466,6 +466,7 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<AgentConversationReaders>();
         services.AddScoped<IAgentAnswerComposer, AgentConversationAgent>();
+        services.AddScoped<IAgentConversationSummarizer, AgentConversationSummarizer>();
 
         return services;
     }

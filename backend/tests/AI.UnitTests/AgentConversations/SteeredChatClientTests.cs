@@ -53,7 +53,7 @@ public sealed class SteeredChatClientTests : IAsyncDisposable
     {
         // Arrange
         this.store
-            .ReadAsync(this.conversation, SyntheticUser.Deployment, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadAsync(this.conversation, SyntheticUser.Deployment, AgentConversationHistory.Visible, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
                 Reading(),
                 Reading(new AgentMessageWritten(AgentMessageId.New(), AgentMessageAuthor.Person, PresentationText.Create("Only this week."), Scope: null) with { Sequence = 7 }),

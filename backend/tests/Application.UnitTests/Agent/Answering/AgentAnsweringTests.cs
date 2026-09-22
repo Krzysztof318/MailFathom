@@ -33,6 +33,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
 
     private readonly IAgentAnswerComposer composer = Substitute.For<IAgentAnswerComposer>();
 
+    private readonly IAgentConversationSummarizer summarizer = Substitute.For<IAgentConversationSummarizer>();
+
     private readonly IMailAnsweringSpendLedger spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
 
     private readonly IUserLanguages languages = Substitute.For<IUserLanguages>();
@@ -46,6 +48,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
     private readonly AgentMessageId answer = AgentMessageId.New();
 
     private readonly ClientSignals signals;
+
+    private AgentContextBudget budget = AgentContextBudget.Default;
 
     private bool stopped;
 
@@ -68,7 +72,7 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
                 return 5L + this.written.Count;
             });
         this.store
-            .ReadAsync(Conversation, SyntheticUser.Deployment, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Technical, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(new AgentConversationReading(
                 Title: null,
                 Now,
@@ -180,8 +184,100 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
         Assert.Equal(AgentAnswerOutcome.Failed, Assert.IsType<AgentAnswerEnded>(this.written[^1]).Outcome);
     }
 
+    /// <summary>A conversation past the budget is summarised before the turn, and the summary is recorded beside what it covers rather than in its place.</summary>
+    [Fact]
+    public async Task RunAsync_AConversationPastTheBudget_RecordsACompactionAndLeadsTheTurnWithIt()
+    {
+        // Arrange
+        this.LongConversation();
+        this.summarizer
+            .SummarizeAsync(null, Arg.Any<IReadOnlyList<AgentHistoryTurn>>(), Arg.Any<CancellationToken>())
+            .Returns("They asked twice about the quote.");
+        AgentAnswerBrief? brief = null;
+        await this.composer.ComposeAsync(Arg.Do<AgentAnswerBrief>(handed => brief = handed), Arg.Any<AgentAnswerJournal>(), Arg.Any<CancellationToken>());
+
+        // Act
+        await this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var compaction = Assert.Single(this.written.OfType<AgentConversationCompacted>());
+        Assert.Equal(this.answer, compaction.MessageId);
+        Assert.Equal("They asked twice about the quote.", compaction.Summary);
+        Assert.NotNull(brief);
+        Assert.EndsWith("They asked twice about the quote.", Assert.Single(brief.History).Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A summariser that produced nothing does not fail the turn: it sends the newest turns that fit, and records no summary.</summary>
+    [Fact]
+    public async Task RunAsync_ASummarizerThatFails_SendsTheNewestTurnsThatFitAndRecordsNothing()
+    {
+        // Arrange
+        this.LongConversation();
+        this.summarizer
+            .SummarizeAsync(Arg.Any<string?>(), Arg.Any<IReadOnlyList<AgentHistoryTurn>>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        AgentAnswerBrief? brief = null;
+        await this.composer.ComposeAsync(Arg.Do<AgentAnswerBrief>(handed => brief = handed), Arg.Any<AgentAnswerJournal>(), Arg.Any<CancellationToken>());
+
+        // Act
+        await this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(this.written, static entry => entry is AgentConversationCompacted);
+        Assert.Equal(AgentAnswerOutcome.Completed, Assert.IsType<AgentAnswerEnded>(this.written[^1]).Outcome);
+        Assert.NotNull(brief);
+        Assert.Equal([new string('c', 3_000)], brief.History.Select(static turn => turn.Text));
+    }
+
+    /// <summary>A conversation inside the budget is sent whole and costs no summary.</summary>
+    [Fact]
+    public async Task RunAsync_AConversationInsideTheBudget_AsksForNoSummary()
+    {
+        // Act
+        await this.Answering().RunAsync(this.Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.summarizer.DidNotReceive().SummarizeAsync(
+            Arg.Any<string?>(), Arg.Any<IReadOnlyList<AgentHistoryTurn>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A follow-up that states no scope is asked under the one the conversation stands under, which no summary may paraphrase away.</summary>
+    [Fact]
+    public async Task RunAsync_AFollowUpStatingNoScope_IsAskedUnderTheScopeInForce()
+    {
+        // Arrange
+        AgentAnswerBrief? brief = null;
+        await this.composer.ComposeAsync(Arg.Do<AgentAnswerBrief>(handed => brief = handed), Arg.Any<AgentAnswerJournal>(), Arg.Any<CancellationToken>());
+
+        // Act
+        await this.Answering().RunAsync(this.Question() with { Scope = null }, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(brief);
+        Assert.Equal(AgentScopeKind.Mailbox, brief.Question.Scope?.Kind);
+    }
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => this.signals.DisposeAsync();
+
+    /// <summary>Makes the conversation before the question three long turns, which a budget of a thousand tokens cannot send whole.</summary>
+    private void LongConversation()
+    {
+        this.budget = new AgentContextBudget(AgentContextBudget.MinimumTokens);
+        this.store
+            .ReadAsync(Conversation, SyntheticUser.Deployment, AgentConversationHistory.Technical, Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentConversationReading(
+                Title: null,
+                Now,
+                Composing: true,
+                AgentConversationExample.Written(
+                    AgentConversationExample.Question(AgentMessageId.New(), new string('a', 3_000)),
+                    AgentConversationExample.Note(AgentMessageId.New(), new string('b', 3_000)),
+                    AgentConversationExample.Question(AgentMessageId.New(), new string('c', 3_000)),
+                    AgentConversationExample.Question(this.question, "Accept it for me."),
+                    new AgentAnswerStarted(this.answer)),
+                MoreFollows: false));
+    }
 
     private AgentQuestion Question() => new(
         Conversation,
@@ -195,6 +291,8 @@ public sealed class AgentAnsweringTests : IAsyncDisposable
     private AgentAnswering Answering(bool composing = true) => new(
         this.store,
         composing ? this.composer : null,
+        this.summarizer,
+        this.budget,
         this.spendLedger,
         this.signals,
         this.languages,

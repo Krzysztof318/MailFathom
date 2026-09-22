@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Chat;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.AgentConversations;
@@ -25,4 +26,16 @@ internal static partial class AgentConversationEvents
         Level = LogLevel.Warning,
         Message = "The Agent at {EndpointAlias} ended its turn with no text, so the answer ends as failed.")]
     internal static partial void LogProducedNoAnswer(ILogger logger, string endpointAlias);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "The conversation was compacted at {EndpointAlias} into a summary of {SummaryLength} characters.")]
+    internal static partial void LogCompacted(ILogger logger, string endpointAlias, int summaryLength);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Warning,
+        Message = "Compacting an Agent conversation failed at {EndpointAlias} ({Failure}), so the turn is composed from as much recent history as fits and nothing is recorded.")]
+    internal static partial void LogCompactionFailed(ILogger logger, string endpointAlias, ChatGenerationFailure failure);
 }
