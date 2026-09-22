@@ -2,9 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Collections.Frozen;
 using MailFathom.Application.Access;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Localization;
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 
@@ -33,19 +33,6 @@ namespace MailFathom.Application.Agent.Conversations;
 /// </remarks>
 public sealed class AgentConversationControls
 {
-    /// <summary>What the agent says when a person stopped its answer, in each language it writes for a person.</summary>
-    /// <remarks>
-    /// The design project's own words, and the agent's rather than the person's, so it is written in the language the
-    /// deployment writes for this person. It says what arrived stays, because nothing is rolled back, and asks where to
-    /// pick it up, because a stopped conversation is one to carry on in.
-    /// </remarks>
-    private static readonly FrozenDictionary<UserLanguage, PresentationText> StoppedNoteByLanguage =
-        new Dictionary<UserLanguage, PresentationText>
-        {
-            [UserLanguage.English] = PresentationText.Create("Stopped. What arrived so far stays — tell me where to pick it up."),
-            [UserLanguage.Polish] = PresentationText.Create("Zatrzymano. To, co już dotarło, zostaje — powiedz, od czego mam kontynuować."),
-        }.ToFrozenDictionary();
-
     private readonly IAgentConversationStore store;
     private readonly ClientSignals signals;
     private readonly IUserLanguages languages;
@@ -190,7 +177,7 @@ public sealed class AgentConversationControls
             new AgentMessageWritten(
                 AgentMessageId.New(),
                 AgentMessageAuthor.Agent,
-                StoppedNoteByLanguage[this.languages.LanguageOf(user)],
+                PresentationText.Create(this.languages.GetText(ApplicationText.AgentRunStoppedNote, user)),
                 Scope: null),
             this.timeProvider.GetUtcNow(),
             cancellationToken);
