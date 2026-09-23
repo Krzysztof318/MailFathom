@@ -959,6 +959,11 @@ internal static class HostComposition
             builder.Services.AddHostedService<AiProviderTransportEncryptionWarning>();
         }
 
+        if (declaredChat?.IsConfigured is true)
+        {
+            builder.Services.AddHostedService<ChatStickySessionsIgnoredWarning>();
+        }
+
         if (declaredEmbeddings?.IsConfigured is true)
         {
             builder.Services.AddSingleton(provider => EmbeddingGenerationPlanMapper.Map(

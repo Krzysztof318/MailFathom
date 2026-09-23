@@ -115,6 +115,48 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
         Assert.Empty(followUps);
     }
 
+    /// <summary>
+    /// Every round of the tool loop is one request, and all of them belong to the conversation — so each carries the
+    /// same session, and it is not the conversation's own identifier.
+    /// </summary>
+    [Fact]
+    public async Task ComposeAsync_AModelDeclaringStickySessionsOnOpenRouter_SendsTheConversationsSessionOnEveryRequest()
+    {
+        // Arrange
+        using var provider = new ScriptedProvider(
+            answering: [Suggesting("Who confirmed the bays?"), Answering("Two bays were confirmed.")],
+            standby: []);
+        var plan = ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(address: "https://openrouter.ai/api/v1/", stickySessions: true),
+            maximumRequestCharacters: 100_000);
+
+        // Act
+        await provider.AgentOver(plan).ComposeAsync(this.Brief(), this.journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        var expected = AgentConversationAgent.StickySessionOf(this.conversation);
+        Assert.Equal([expected, expected], provider.SentSessions);
+        Assert.DoesNotContain(this.conversation.Value.ToString("N"), expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StickySessionOf_TheSameConversationTwice_IsTheSameKey()
+    {
+        // Act, Assert
+        Assert.Equal(
+            AgentConversationAgent.StickySessionOf(this.conversation),
+            AgentConversationAgent.StickySessionOf(AgentConversationId.Create(this.conversation.Value)));
+    }
+
+    [Fact]
+    public void StickySessionOf_TwoConversations_AreDifferentKeys()
+    {
+        // Act, Assert
+        Assert.NotEqual(
+            AgentConversationAgent.StickySessionOf(this.conversation),
+            AgentConversationAgent.StickySessionOf(AgentConversationId.New()));
+    }
+
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
@@ -165,6 +207,7 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
             {
                 var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
                 var fromStandby = body.Contains(StandbyModel, StringComparison.Ordinal);
+                this.SentSessions.Add(request.Headers.TryGetValues("x-session-id", out var sessions) ? sessions.Single() : null);
                 this.StandbyRequestCount += fromStandby ? 1 : 0;
                 var payload = (fromStandby ? standbyScript : answeringScript).Dequeue();
 
@@ -181,6 +224,9 @@ public sealed class AgentConversationAgentTests : IAsyncDisposable
         }
 
         public int StandbyRequestCount { get; private set; }
+
+        /// <summary>Gets the session each request carried, in the order they arrived, with <see langword="null" /> for one carrying none.</summary>
+        public List<string?> SentSessions { get; } = [];
 
         public AgentConversationAgent AgentOver(ChatGenerationPlan plan)
         {

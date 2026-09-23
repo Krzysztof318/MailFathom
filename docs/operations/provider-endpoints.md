@@ -123,6 +123,11 @@ embedding models, and its **OpenAI-compatible** surface does not. Its own docume
 "currently available for chat completion tasks only" and directs every other task, embeddings included, at the Hugging
 Face inference clients — which are a different protocol and out of this mechanism's reach.
 
+OpenRouter is the one entry on the page that routes by a session, and so the one where a chat model's `StickySessions`
+does anything: it keeps an Agent conversation on the upstream provider whose prompt cache already holds it. Declared
+against any other entry it is ignored with a startup warning — [chat generation § a conversation can stay on one
+provider](../features/chat-generation.md#a-conversation-can-stay-on-one-provider) says what it groups.
+
 Fireworks documents `dimensions` as accepted but honoured only by particular models, so the value is a property of the
 model an entry names rather than of the service. It also documents `normalize` as defaulting to false, which is a
 declaration to check against `NormalizeVectors` rather than to assume.

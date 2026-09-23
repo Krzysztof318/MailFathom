@@ -42,6 +42,9 @@ namespace MailFathom.AI.ProviderAdapters;
 /// </remarks>
 internal sealed class OpenAiCompatibleClientFactory
 {
+    /// <summary>The header OpenRouter reads a sticky session from.</summary>
+    private const string StickySessionHeader = "x-session-id";
+
     private readonly ConcurrentDictionary<string, TokenCredential> entraCredentials = new(StringComparer.Ordinal);
 
     /// <summary>Opens an embedding generator over one endpoint for the duration of one request.</summary>
@@ -59,7 +62,7 @@ internal sealed class OpenAiCompatibleClientFactory
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(transport);
 
-        var options = BuildClientOptions(endpoint.Address, transport, credential);
+        var options = BuildClientOptions(endpoint.Address, transport, credential.ExtraHeaders);
 
         // OPENAI001 marks the authentication-policy constructor as evaluation-only. It is nonetheless the supported
         // shape: it is what Microsoft's own Azure OpenAI guidance shows for a Microsoft Entra credential, and the
@@ -81,20 +84,30 @@ internal sealed class OpenAiCompatibleClientFactory
     /// <param name="endpoint">Where the request goes, what it is routed to, and which API it is conducted through.</param>
     /// <param name="credential">What the request presents, resolved for this call.</param>
     /// <param name="transport">The transport the request is sent over, owned by the caller.</param>
+    /// <param name="stickySession">The session every request through this client belongs to, or <see langword="null" /> for a call that belongs to none.</param>
     /// <returns>The client, which the caller disposes when the request ends.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="stickySession" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the endpoint names an API this factory cannot reach.</exception>
     /// <remarks>
+    /// <para>
     /// Both APIs are opened here rather than by two factories, because everything around the choice is one decision: the
     /// address, the credential, the transport, and the retry opt-out are identical, and what the returned client
     /// publishes is the same provider-neutral interface either way. The caller therefore never learns which surface it
     /// is speaking to, which is what keeps the resilience decorator, the budget decorator, and the composed agent
     /// unchanged by the choice.
+    /// </para>
+    /// <para>
+    /// The session goes out as OpenRouter's <c>x-session-id</c> header, and only where
+    /// <see cref="ChatEndpoint.SendsStickySessions" /> holds. A header rather than the body's <c>session_id</c>, because
+    /// it reaches both APIs by the route every declared header already takes, and a plan refuses <c>session_id</c> as an
+    /// additional property so nothing in the body can override it.
+    /// </para>
     /// </remarks>
     public IChatClient OpenChatClient(
         ChatEndpoint endpoint,
         ProviderEndpointCredential credential,
-        HttpClient transport)
+        HttpClient transport,
+        string? stickySession = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(credential);
@@ -102,8 +115,8 @@ internal sealed class OpenAiCompatibleClientFactory
 
         return ObservedThroughTelemetry(endpoint.Api switch
         {
-            ChatProviderApi.ChatCompletions => this.OpenChatCompletionsClient(endpoint, credential, transport),
-            ChatProviderApi.Responses => this.OpenResponsesClient(endpoint, credential, transport),
+            ChatProviderApi.ChatCompletions => this.OpenChatCompletionsClient(endpoint, credential, transport, stickySession),
+            ChatProviderApi.Responses => this.OpenResponsesClient(endpoint, credential, transport, stickySession),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(endpoint),
                 endpoint.Api,
@@ -114,9 +127,10 @@ internal sealed class OpenAiCompatibleClientFactory
     private IChatClient OpenChatCompletionsClient(
         ChatEndpoint endpoint,
         ProviderEndpointCredential credential,
-        HttpClient transport)
+        HttpClient transport,
+        string? stickySession)
     {
-        var options = BuildClientOptions(endpoint.Address, transport, credential);
+        var options = BuildClientOptions(endpoint.Address, transport, HeadersFor(endpoint, credential, stickySession));
 
 #pragma warning disable OPENAI001
         var client = credential.Kind is ProviderEndpointCredentialKind.ApiKey
@@ -139,9 +153,10 @@ internal sealed class OpenAiCompatibleClientFactory
     private IChatClient OpenResponsesClient(
         ChatEndpoint endpoint,
         ProviderEndpointCredential credential,
-        HttpClient transport)
+        HttpClient transport,
+        string? stickySession)
     {
-        var options = BuildResponsesClientOptions(endpoint.Address, transport, credential);
+        var options = BuildResponsesClientOptions(endpoint.Address, transport, HeadersFor(endpoint, credential, stickySession));
 
         // The whole responses surface carries the evaluation-only marker in this release of the client library, the
         // adapter that publishes it as a chat client included, so the suppression covers the construction and the
@@ -213,11 +228,11 @@ internal sealed class OpenAiCompatibleClientFactory
     private static OpenAIClientOptions BuildClientOptions(
         Uri? address,
         HttpClient transport,
-        ProviderEndpointCredential credential)
+        IReadOnlyList<ProviderEndpointHeader> headers)
     {
         var options = new OpenAIClientOptions();
 
-        ApplyPipeline(options, transport, credential);
+        ApplyPipeline(options, transport, headers);
 
         if (address is not null)
         {
@@ -236,11 +251,11 @@ internal sealed class OpenAiCompatibleClientFactory
     private static ResponsesClientOptions BuildResponsesClientOptions(
         Uri? address,
         HttpClient transport,
-        ProviderEndpointCredential credential)
+        IReadOnlyList<ProviderEndpointHeader> headers)
     {
         var options = new ResponsesClientOptions();
 
-        ApplyPipeline(options, transport, credential);
+        ApplyPipeline(options, transport, headers);
 
         if (address is not null)
         {
@@ -264,16 +279,26 @@ internal sealed class OpenAiCompatibleClientFactory
     private static void ApplyPipeline(
         ClientPipelineOptions options,
         HttpClient transport,
-        ProviderEndpointCredential credential)
+        IReadOnlyList<ProviderEndpointHeader> headers)
     {
         options.Transport = new HttpClientPipelineTransport(transport);
         options.RetryPolicy = new ClientRetryPolicy(maxRetries: 0);
 
-        if (credential.ExtraHeaders.Count > 0)
+        if (headers.Count > 0)
         {
-            options.AddPolicy(new DeclaredRequestHeadersPolicy(credential.ExtraHeaders), PipelinePosition.PerCall);
+            options.AddPolicy(new DeclaredRequestHeadersPolicy(headers), PipelinePosition.PerCall);
         }
     }
+
+    /// <summary>Lists the headers a chat request carries: the declared ones, then the session where the endpoint sends one.</summary>
+    /// <remarks>The session goes last, so a declared header of the same name cannot replace the value a conversation is routed by.</remarks>
+    private static IReadOnlyList<ProviderEndpointHeader> HeadersFor(
+        ChatEndpoint endpoint,
+        ProviderEndpointCredential credential,
+        string? stickySession) =>
+        stickySession is not null && endpoint.SendsStickySessions
+            ? [.. credential.ExtraHeaders, new ProviderEndpointHeader(StickySessionHeader, stickySession)]
+            : credential.ExtraHeaders;
 
     /// <summary>Resolves the policy every request to one endpoint is sent under, for each shape that is not a key.</summary>
     /// <remarks>

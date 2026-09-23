@@ -86,7 +86,8 @@ public sealed partial class ChatGenerationPlan
         "temperature",
         "top_p",
         "reasoning",
-        "reasoning_effort");
+        "reasoning_effort",
+        "session_id");
 
     private ChatGenerationPlan(
         ChatEndpoint endpoint,

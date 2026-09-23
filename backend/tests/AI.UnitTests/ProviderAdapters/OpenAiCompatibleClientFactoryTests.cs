@@ -196,6 +196,75 @@ public sealed class OpenAiCompatibleClientFactoryTests
         Assert.DoesNotContain(sentHeaders, header => header.Key.StartsWith("X-", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>OpenRouter keeps every request carrying one session on one upstream provider, on both APIs.</summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public async Task OpenChatClient_AStickySessionOnAnOpenRouterEndpointDeclaringThem_SendsItAsTheSessionHeader(ChatProviderApi api)
+    {
+        // Arrange
+        using var provider = new HeaderRecordingProvider(api);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+        var endpoint = ChatDeclarations.Endpoint(address: "https://openrouter.ai/api/v1/", api: api, stickySessions: true);
+
+        using var client = this.factory.OpenChatClient(endpoint, credential, provider.Transport, stickySession: "a-session");
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("a-session", Assert.Single(provider.SentHeaders!.GetValues("x-session-id")));
+    }
+
+    /// <summary>A declared header of the same name cannot replace the value a conversation is routed by.</summary>
+    [Fact]
+    public async Task OpenChatClient_AStickySessionBesideADeclaredHeaderOfTheSameName_SendsTheSession()
+    {
+        // Arrange
+        using var provider = new HeaderRecordingProvider(ChatProviderApi.ChatCompletions);
+        using var credential = ProviderEndpointCredential.FromApiKey(
+            "a-resolved-key",
+            resolvedMaterial: null,
+            extraHeaders: [new ProviderEndpointHeader("x-session-id", "a-declared-value")]);
+        var endpoint = ChatDeclarations.Endpoint(address: "https://openrouter.ai/api/v1/", stickySessions: true);
+
+        using var client = this.factory.OpenChatClient(endpoint, credential, provider.Transport, stickySession: "a-session");
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("a-session", Assert.Single(provider.SentHeaders!.GetValues("x-session-id")));
+    }
+
+    /// <summary>
+    /// A session is sent only where both halves hold: the model declared sticky sessions and OpenRouter serves it. A
+    /// call belonging to no session sends none either.
+    /// </summary>
+    [Theory]
+    [InlineData("https://provider.invalid/v1/", true, "a-session")]
+    [InlineData("https://openrouter.ai/api/v1/", false, "a-session")]
+    [InlineData("https://openrouter.ai/api/v1/", true, null)]
+    public async Task OpenChatClient_AnywhereASessionIsNotHonoured_SendsNoSessionHeader(
+        string address,
+        bool stickySessions,
+        string? stickySession)
+    {
+        // Arrange
+        using var provider = new HeaderRecordingProvider(ChatProviderApi.ChatCompletions);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+        var endpoint = ChatDeclarations.Endpoint(address: address, stickySessions: stickySessions);
+
+        using var client = this.factory.OpenChatClient(endpoint, credential, provider.Transport, stickySession);
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(provider.SentHeaders);
+        Assert.False(provider.SentHeaders.Contains("x-session-id"));
+    }
+
     /// <summary>The other role reaches the same server through the same construction, so neither is left unreachable.</summary>
     [Fact]
     public void OpenChatClient_AnEndpointNeedingNoCredential_OpensAClient()
@@ -494,4 +563,43 @@ public sealed class OpenAiCompatibleClientFactoryTests
         "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
         + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"an answer\"},"
         + "\"finish_reason\":\"stop\"}]}";
+
+    /// <summary>Builds the responses payload a provider answers with.</summary>
+    private static string OneResponse() =>
+        "{\"id\":\"resp-1\",\"object\":\"response\",\"created_at\":1,\"model\":\"a-chat-model\",\"status\":\"completed\","
+        + "\"output\":[{\"type\":\"message\",\"id\":\"msg-1\",\"status\":\"completed\",\"role\":\"assistant\","
+        + "\"content\":[{\"type\":\"output_text\",\"text\":\"an answer\",\"annotations\":[]}]}],"
+        + "\"usage\":{\"input_tokens\":11,\"output_tokens\":3,\"total_tokens\":14}}";
+
+    /// <summary>A provider answering one request on the declared API and keeping the headers it arrived with.</summary>
+    private sealed class HeaderRecordingProvider : IDisposable
+    {
+        private readonly FakeHttpMessageHandler handler;
+
+        public HeaderRecordingProvider(ChatProviderApi api)
+        {
+            var payload = api is ChatProviderApi.Responses ? OneResponse() : OneChatCompletion();
+
+            this.handler = new FakeHttpMessageHandler((request, _) =>
+            {
+                this.SentHeaders = request.Headers;
+
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+                });
+            });
+            this.Transport = new HttpClient(this.handler, disposeHandler: false);
+        }
+
+        public HttpClient Transport { get; }
+
+        public HttpRequestHeaders? SentHeaders { get; private set; }
+
+        public void Dispose()
+        {
+            this.Transport.Dispose();
+            this.handler.Dispose();
+        }
+    }
 }

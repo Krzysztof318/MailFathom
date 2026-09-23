@@ -114,6 +114,20 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     /// </remarks>
     public string? ReasoningEffort { get; set; }
 
+    /// <summary>Gets or sets whether the requests of one Agent conversation ask the gateway to stay on one upstream provider.</summary>
+    /// <remarks>
+    /// <para>
+    /// A long conversation resends its whole history on every turn, and a provider's prompt cache only pays off while the
+    /// same provider keeps answering it. OpenRouter chooses the provider per request, so this sends the session a
+    /// conversation belongs to and OpenRouter routes every request carrying it the same way.
+    /// </para>
+    /// <para>
+    /// OpenRouter is the only provider known to honour it, so a model reached anywhere else sends nothing and startup
+    /// says the setting is ignored rather than refusing a configuration that may be moving between providers.
+    /// </para>
+    /// </remarks>
+    public bool StickySessions { get; set; }
+
     /// <summary>Gets or sets the greatest number of turns one request carries.</summary>
     [Range(1, 512)]
     public int MaxMessagesPerRequest { get; set; } = 64;
@@ -223,7 +237,8 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         this.Address is { Length: > 0 } address ? new Uri(address, UriKind.Absolute) : null,
         this.Model.Trim(),
         this.Api,
-        this.PublishedModel.Trim());
+        this.PublishedModel.Trim(),
+        this.StickySessions);
 
     /// <summary>Names a result against the block it came from, so a message carries the key an operator edits rather than a property name.</summary>
     /// <remarks>
@@ -333,7 +348,7 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
             else if (ChatGenerationPlan.IsOwnedRequestMember(member.Key))
             {
                 yield return new ValidationResult(
-                    $"{description} declares an additional property '{member.Key}', which is a request member this deployment writes itself. Use the model's own key where one exists — MaxOutputTokens, Temperature, TopP, or ReasoningEffort — and leave the rest to the deployment.",
+                    $"{description} declares an additional property '{member.Key}', which is a request member this deployment writes itself. Use the model's own key where one exists — MaxOutputTokens, Temperature, TopP, ReasoningEffort, or StickySessions — and leave the rest to the deployment.",
                     key);
             }
 

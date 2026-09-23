@@ -272,6 +272,7 @@ public sealed class ChatGenerationPlanTests
     [InlineData("temperature")]
     [InlineData("Top_P")]
     [InlineData("reasoning")]
+    [InlineData("session_id")]
     [InlineData("n")]
     public void Create_AnAdditionalPropertyNamingAMemberThisDeploymentWrites_IsRefused(string name)
     {

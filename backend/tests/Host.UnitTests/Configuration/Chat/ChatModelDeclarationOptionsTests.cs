@@ -445,6 +445,22 @@ public sealed class ChatModelDeclarationOptionsTests
         Assert.Null(endpoint.Address);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToEndpoint_ADeclaredStickySessionsSetting_ReachesTheEndpoint(bool stickySessions)
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.StickySessions = stickySessions;
+
+        // Act
+        var endpoint = model.ToEndpoint();
+
+        // Assert
+        Assert.Equal(stickySessions, endpoint.StickySessions);
+    }
+
     /// <summary>A header's own rules name a property of the header, so the reported key carries the header's index and not the block's alone.</summary>
     /// <remarks>
     /// Without the element's index an operator is sent to <c>Chat:Models:0:Name</c>, which nothing binds — the key they
@@ -557,6 +573,7 @@ public sealed class ChatModelDeclarationOptionsTests
     [InlineData("max_completion_tokens")]
     [InlineData("store")]
     [InlineData("model")]
+    [InlineData("session_id")]
     public void FindConfigurationErrors_AnAdditionalPropertyNamingAMemberTheDeploymentWrites_IsRefused(string name)
     {
         // Arrange
