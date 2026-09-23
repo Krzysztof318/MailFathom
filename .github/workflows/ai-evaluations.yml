@@ -89,9 +89,11 @@ jobs:
       contents: read
       actions: read
     # Every model under test and the judge answer one request per scenario, each with a two-minute
-    # ceiling, and a cached one costs nothing. An hour is far past what a healthy run takes and short
-    # of the six the Actions default would hold a runner for.
-    timeout-minutes: 60
+    # ceiling, and a cached one costs nothing. A run's length is that times the models and the
+    # repetitions a dispatch declares — two models asked once take about half an hour — so the job
+    # takes the six hours a hosted runner holds one for at most, and a request's own ceiling is what
+    # bounds a run that has stopped answering.
+    timeout-minutes: 360
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
