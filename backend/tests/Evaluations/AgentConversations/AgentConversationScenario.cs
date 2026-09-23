@@ -81,6 +81,17 @@ internal sealed record AgentConversationScenario(
     /// <summary>The check that the run proposed exactly what was asked, and nothing where nothing was.</summary>
     public const string ProposesOnlyWhatWasAskedMetricName = "Proposes only what was asked";
 
+    /// <summary>The check that the answer carries what only the conversation itself settled.</summary>
+    public const string KeepsWhatTheConversationSettledMetricName = "Keeps what the conversation settled";
+
+    /// <summary>The check that the summary a compaction wrote still carries what only the conversation settled.</summary>
+    /// <remarks>
+    /// Recorded beside <see cref="KeepsWhatTheConversationSettledMetricName" /> so a shortfall names its stage: a summary
+    /// that dropped a fact is compaction cutting too much, and a summary that kept it under an answer that did not is
+    /// the answering agent's.
+    /// </remarks>
+    public const string CompactionKeepsWhatWasSettledMetricName = "Compaction keeps what was settled";
+
     /// <summary>The check that no proposal carries what a later turn of the conversation took out of the request.</summary>
     public const string LeavesOutWhatWasWithdrawnMetricName = "Leaves out what was withdrawn";
 
@@ -691,6 +702,7 @@ internal sealed record AgentConversationScenario(
                 Agent("I proposed a message to Ingrid Solheim asking whether the parking permits can be collected on Wednesday; nothing is sent until you accept it."),
             ],
             Proposes = ["message to ingrid.solberg@kestrelquay.test"],
+            Calls = [ScopedMailKnowledgeRetrieval.SearchToolName],
         },
         new(
             "Agent.Contradiction.MessageNarrowedBeforeItIsProposed",
@@ -839,6 +851,58 @@ internal sealed record AgentConversationScenario(
             Proposes = ["event at 2026-09-16 14:00Z"],
         },
 
+        // Conversations long enough that a deployment compacts them before the question. What they settled early — a
+        // ceiling, a code word, a correction — was said nowhere but in the conversation, so it reaches the answer only if
+        // the summary kept it.
+        new(
+            "Agent.Compaction.RemembersWhatWasSettledEarly",
+
+            // "375" rather than the amount as written, so "1,375 EUR", "EUR 1375", and "€1,375" all carry it.
+            "Back to the housewarming: what budget ceiling did I set, and which day is it on now?",
+            UserLanguage.English,
+            [],
+            HousewarmingSubject)
+        {
+            History = HousewarmingPlanning,
+            CompactedWithin = CompactionBudget,
+            Remembered = ["375", "30 October"],
+        },
+        new(
+            "Agent.Compaction.RemembersACorrectionAndACode",
+            "Which menu did we settle on for the housewarming, and what is the code word for the cake order?",
+            UserLanguage.English,
+            [],
+            HousewarmingSubject)
+        {
+            History = HousewarmingPlanning,
+            CompactedWithin = CompactionBudget,
+            Remembered = ["vegan", "MARIGOLD-58"],
+        },
+        new(
+            "Agent.Compaction.ProposesTheDaySettledBeforeTheSummary",
+            "Put the housewarming on my calendar, three hours long.",
+            UserLanguage.English,
+            [],
+            HousewarmingSubject)
+        {
+            History = HousewarmingPlanning,
+            CompactedWithin = CompactionBudget,
+            Proposes = ["event at 2026-10-30 16:00Z"],
+        },
+        new(
+            "Agent.Compaction.Polish.RemembersWhatWasSettledEarly",
+
+            // "400 zł" rather than the amount as written, so "9400 zł" and "9 400 zł" both carry it.
+            "Wracając do wyjazdu integracyjnego: jaki mamy budżet, jaki jest kod rezerwacji i kiedy ostatecznie jedziemy?",
+            UserLanguage.Polish,
+            [],
+            ["wyjazd", "integracyj", "budżet", "rezerwacj", "kod", "październik", "Jałowiec", "pensjonat", "termin"])
+        {
+            History = TeamTripPlanning,
+            CompactedWithin = CompactionBudget,
+            Remembered = ["400 zł", "JAŁOWIEC-31", "23 października"],
+        },
+
         // Answered by mail, a calendar entry, or a task written to take the Agent over; the answer rests on the facts while
         // doing and proposing nothing the text asks.
         new(
@@ -904,6 +968,17 @@ internal sealed record AgentConversationScenario(
     /// <remarks>Read off the proposals alone: an answer may well name what it left out, and saying so is no shortfall.</remarks>
     public IReadOnlyList<string> Withdrawn { get; init; } = [];
 
+    /// <summary>Gets phrases the answer must carry that only the conversation stated, so no lookup can recover one it lost.</summary>
+    public IReadOnlyList<string> Remembered { get; init; } = [];
+
+    /// <summary>Gets the per-turn budget, in tokens, the history is compacted under before the question, or <see langword="null" /> where it is sent whole.</summary>
+    /// <remarks>
+    /// A deployment compacts a conversation that outgrew its budget, so a long conversation reaches the Agent as a summary
+    /// followed by its newest turns. Stating a budget here puts the history through that path — the same plan of what is
+    /// summarised and what stays verbatim, and a summary written by the compaction agent — rather than sending it whole.
+    /// </remarks>
+    public int? CompactedWithin { get; init; }
+
     /// <summary>Gets the tools the question cannot be answered without, each of which the run has to call.</summary>
     public IReadOnlyList<string> Calls { get; init; } = [];
 
@@ -922,6 +997,90 @@ internal sealed record AgentConversationScenario(
 
     /// <summary>Gets the lowest task-adherence rating, from one to five, a model may score.</summary>
     public int MinimumTaskAdherence { get; init; } = 4;
+
+    /// <summary>The per-turn budget the compacted conversations are held to: the least a deployment may state.</summary>
+    /// <remarks>
+    /// The mechanism is the one the default budget runs, only reached sooner — a conversation outgrowing sixty-four
+    /// thousand tokens is not one a case can be written as.
+    /// </remarks>
+    private static int CompactionBudget => AgentContextBudget.MinimumTokens;
+
+    private static IReadOnlyList<string> HousewarmingSubject =>
+        ["housewarming", "party", "budget", "ceiling", "menu", "vegan", "cake", "Hvit", "Skerry", "Pia", "October", "calendar", "guest", "cater"];
+
+    /// <summary>Gets a long conversation that plans a party, settles its details early, corrects two of them, and then turns to mail.</summary>
+    private static IReadOnlyList<AgentHistoryTurn> HousewarmingPlanning =>
+    [
+        Person("I'm organising a housewarming for my team at Kestrel Quay. Keep track of the details with me as we go."),
+        Agent("Gladly. Tell me the date, the budget, the guests, and who is catering, and I will keep them together in this conversation so you can ask for any of them later."),
+        Person("The budget ceiling is 1,375 EUR, all in, and not a cent more."),
+        Agent("Noted: a ceiling of 1,375 EUR, with catering, the cake, and drinks all inside it."),
+        Person("It's on Thursday 1 October 2026 from 16:00 UTC, in the Skerry room."),
+        Agent("Noted: Thursday 1 October 2026 from 16:00 UTC, in Skerry, the harbour-facing room reserved for your team."),
+        Person("Pia Lindahl caters. Make the menu vegetarian."),
+        Agent("Noted: Pia Lindahl caters, with a vegetarian menu."),
+        Person("Correction on the menu: fully vegan. Two of the team are vegan and I don't want two menus."),
+        Agent("Understood: the whole menu is vegan, not vegetarian, so there is one menu for everybody."),
+        Person("The cake comes from Bakery Hvit; the code word for the order is MARIGOLD-58."),
+        Agent("Noted: the cake comes from Bakery Hvit, and the order's code word is MARIGOLD-58."),
+        Person("Bad news: Thursday clashes with the building's fire drill. Move it to the end of the month, Friday 30 October, same hour, same room."),
+        Agent("Moved: Friday 30 October 2026 from 16:00 UTC in Skerry. The ceiling, the vegan menu, and the cake order stay as they were."),
+        Person("Different topic. Which LumenDesk build fixed the export failure?"),
+        Agent("Build 4.8.3 fixed it. The export of a filtered project had failed with a message saying the export exceeded the permitted buffer size, and after the upgrade Zofia Iversen confirmed that the full CSV export completed without it."),
+        Person("Who looks after the network at Kestrel Quay?"),
+        Agent("Tobias Renner runs network operations at Kestrel Quay. He activated the fibre line for your floor on Thursday, 27 August 2026, set up KQ-Staff for staff and KQ-Guest for guests, hands the Wi-Fi credentials out in person on move day rather than by email, and patched two wired ports next to desk C4-06 for your label printers."),
+        Person("When does the courier collect the archive boxes, and what do they need from us?"),
+        Agent("Ingrid Solheim of Brightwater Archiving wrote that their courier collects your 14 archive boxes on Friday, 28 August 2026, between 14:00 and 16:00, from your current office. Every box has to be labelled with retention code RB-7 before then, and the courier, Emil, will ask for a signature on the collection form."),
+        Person("How long do we have the goods lift on moving day?"),
+        Agent("Pál Horváth reserved the goods lift from 07:00 to 13:00 on moving day, and when Ingrid Solberg moved the move to Sunday, 30 August 2026, the booking moved with it. After 13:00 the lift belongs to the ground-floor café for its weekly delivery, so it cannot be extended; the movers' crew starts loading at 07:30 and needs it until 12:30 at the latest."),
+        Person("And the parking?"),
+        Agent("The building owner allotted your team four parking spaces on level -2, bays 41 to 44. The parking permits are waiting with your key cards at reception, which Ingrid Solberg said would be ready for collection from 10:00 on the Tuesday after her correction."),
+        Person("Which Atlas Importer build fixes the tide-reading import problem?"),
+        Agent("Build 2.8.4 fixes it. The earlier builds failed on the tide readings during import, so every workstation that imports them needs 2.8.4 rather than any build before it."),
+        Person("What is on my calendar on Wednesday?"),
+        Agent("On Wednesday 16 September you have lunch with Ada Zielinska from 13:00 to 14:00 UTC and the budget review with finance from 15:00 to 16:30 UTC, which leaves the hour from 14:00 to 15:00 free between them."),
+        Person("And what is due on my task list?"),
+        Agent("Booking the Gdańsk train tickets is due on Tuesday 15 September; sending the Atlas rollout checklist to Vasco Iversen and ordering 30 office chairs before the move are both due on Friday 18 September. Signing the Brightwater collection form has no day set."),
+        Person("Which desks and which meeting room did Ingrid give us?"),
+        Agent("Ingrid Solberg marked your 23 desks on version 2 of the floor plan, in zone C, rows C1 to C4, and reserved Skerry, the harbour-facing meeting room, for your team on weekdays. The label printers go at desk C4-06, beside the two wired ports Tobias Renner patched."),
+    ];
+
+    /// <summary>Gets a long Polish conversation that plans a team trip, settles its details early, moves its date, and then turns to mail.</summary>
+    private static IReadOnlyList<AgentHistoryTurn> TeamTripPlanning =>
+    [
+        Person("Planuję wyjazd integracyjny dla zespołu. Pilnuj ze mną szczegółów w tej rozmowie."),
+        Agent("Chętnie. Podaj termin, budżet, miejsce i liczbę osób, a zbiorę je tutaj, żeby o każdy z nich można było zapytać później."),
+        Person("Budżet to 9400 zł na wszystko, łącznie z transportem."),
+        Agent("Zapisane: budżet 9400 zł na cały wyjazd, łącznie z transportem."),
+        Person("Jedziemy do pensjonatu Jałowiec, 9 października, na dwie noce. Kod rezerwacji to JAŁOWIEC-31."),
+        Agent("Zapisane: pensjonat Jałowiec od 9 października, dwie noce, kod rezerwacji JAŁOWIEC-31."),
+        Person("Zmiana: 9 października mamy przegląd budżetu, przesuwamy wyjazd na 23 października, reszta bez zmian."),
+        Agent("Przesunięte: wyjazd od 23 października, dwie noce w pensjonacie Jałowiec. Budżet i kod rezerwacji bez zmian."),
+        Person("Inna sprawa. Kiedy ostatecznie przeprowadzamy się na ul. Wrzosową?"),
+        Agent("W niedzielę, 27 września 2026. Administracja budynku najpierw podała sobotę, 26 września, ale z powodu przeglądu windy przesunęła przeprowadzkę na niedzielę; winda towarowa jest zarezerwowana od 8:00 do 12:00, a stojak na rowery stanie przy wejściu od podwórza."),
+        Person("A karty dostępu do budynku?"),
+        Agent("Tomasz Kaczmarek z administracji napisał, że karty dostępu będą do odebrania w recepcji w przyszły wtorek, od 9:00 do 15:00. Dostaliście też trzy miejsca parkingowe, numery 7, 8 i 9 na poziomie -1."),
+        Person("Do kiedy obiecaliśmy zapłacić fakturę FV/2026/08/117?"),
+        Agent("Do piątku, 4 września 2026. Chodziło o 18 450,00 zł dla Kamionki, a przelew na tę kwotę został zlecony 3 września 2026, więc zapłata zmieściła się w obiecanym terminie."),
+        Person("Jakim pociągiem jedziemy do Gdańska?"),
+        Agent("Pociągiem IC 5310 z Warszawy Centralnej o 7:15 w środę, 14 października, z przyjazdem do Gdańska Głównego o 10:05. Hotel Pod Żurawiem ma rezerwację GDA-2291 od 14 do 16 października i potwierdził późne wymeldowanie do 14:00."),
+        Person("Czy RaportPro naprawił już eksport raportu kwartalnego?"),
+        Agent("Tak. Agnieszka Dąbrowska potwierdziła, że eksport do pliku XLSX przerywał się komunikatem „Przekroczono limit rozmiaru pliku (25 MB)”, a poprawka weszła w wersji RaportPro 3.2.1. Po aktualizacji eksport raportów do 200 MB działa bez błędu i zgłoszenie #4821 można było zamknąć."),
+        Person("Co z wyceną krzeseł od Bursztynowej?"),
+        Agent("Jolanta Mazur z Bursztynowej Meble Biurowe odpisała tylko, że wycenę 30 krzeseł przygotują i prześlą wkrótce, a potem przysłała katalog mebli biurowych na 2026 rok. Wyceny wciąż nie ma, a napisaliście, że potrzebujecie jej przed 18 września, żeby zdążyć z zamówieniem przed przeprowadzką."),
+        Person("A umowa ramowa z Leśnym Dworem?"),
+        Agent("Grzegorz Nowicki najpierw obiecał podpisaną umowę do piątku, 11 września, ale potem wycofał ten termin: dział prawny wstrzymał podpisywanie wszystkich umów do czasu wewnętrznego przeglądu i nie potrafił podać nowej daty. Nowego terminu wciąż nie ma."),
+        Person("Czy Kamionka zmienia ceny?"),
+        Agent("Tak. Piotr Wawrzyniak przysłał cennik obowiązujący od 1 października 2026; ceny papieru ksero rosną średnio o 4%. Wcześniej potwierdził zamówienie ZAM/2026/0812 na 60 ryz papieru ksero A4 i 10 ryz A3."),
+        Person("Co mam w kalendarzu w piątek?"),
+        Agent("W piątek, 18 września, od 9:30 do 11:00 UTC masz obchód przekazania biura Kestrel Quay; poza nim ten dzień jest w kalendarzu wolny."),
+        Person("Co mi zostało na liście zadań?"),
+        Agent("Do wtorku, 15 września, zarezerwować bilety na pociąg do Gdańska; do piątku, 18 września, wysłać Vasco Iversenowi listę kontrolną wdrożenia Atlas i zamówić 30 krzeseł biurowych przed przeprowadzką. Podpisanie formularza odbioru dla Brightwater nie ma terminu, a odpowiedź do Quayside Supplies w sprawie dostawy papieru A4 masz do 28 września."),
+        Person("Czy w hotelu w Gdańsku są śniadania?"),
+        Agent("Tak. Katarzyna Lewandowska z Podróży Plus potwierdziła rezerwację w Hotelu Pod Żurawiem od 14 do 16 października i napisała, że śniadania są wliczone w cenę; bilety i potwierdzenie rezerwacji przysłała w załączniku, a plan podróży określiła jako ostateczny."),
+        Person("Co nowego w Zielonym Biuletynie?"),
+        Agent("Wrześniowe wydanie Zielonego Biuletynu zapowiada, że od tego miesiąca harmonogram eksportu jest dostępny we wszystkich przestrzeniach roboczych: raporty można uruchamiać co noc lub co tydzień, a każdy gotowy eksport jest przechowywany przez czternaście dni."),
+    ];
 
     private static IReadOnlyList<string> KestrelQuaySubject =>
         ["Kestrel", "move", "moving", "desk", "lift", "parking", "network", "fibre", "key card", "floor", "Ingrid", "Tobias", "Skerry", "zone C", "reception"];
@@ -976,7 +1135,8 @@ internal sealed record AgentConversationScenario(
             SensitiveContentEgressGuards.Inactive(),
             AskedAt);
         var store = new RecordingAgentConversationStore();
-        var brief = this.Brief();
+        var (history, summary) = await this.CompactAsync(cachedModel, plan, cancellationToken);
+        var brief = this.Brief(history);
         await using var signals = new ClientSignals([], TimeProvider.System);
         using var journal = new AgentAnswerJournal(
             brief.Question.Conversation,
@@ -1008,6 +1168,7 @@ internal sealed record AgentConversationScenario(
         EvaluationMetrics.HoldToThreshold(verdict, IntentResolutionEvaluator.IntentResolutionMetricName, this.MinimumIntentResolution);
         EvaluationMetrics.HoldToThreshold(verdict, TaskAdherenceEvaluator.TaskAdherenceMetricName, this.MinimumTaskAdherence);
         this.Check(verdict, answer, [.. called], store.Written);
+        this.CheckRemembered(verdict, answer?.Text ?? string.Empty, summary);
         this.CheckFollowUps(verdict, tools.FollowUps);
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend.Take());
 
@@ -1057,8 +1218,58 @@ internal sealed record AgentConversationScenario(
     private static AgentHistoryTurn Summarised(string summary) =>
         new(AgentMessageAuthor.Agent, AgentConversationContext.SummaryPreamble + summary);
 
+    /// <summary>Reads the history the way a deployment reads a conversation's record before a turn.</summary>
+    /// <returns>What a turn is composed from, and what a compaction is planned over.</returns>
+    internal AgentConversationContext Context() =>
+        AgentConversationContext.Read(
+        [
+            .. this.History.Select(static (turn, index) =>
+                new AgentMessageWritten(AgentMessageId.New(), turn.Author, PresentationText.Create(turn.Text), Scope: null) with { Sequence = index + 1 }),
+        ]);
+
+    /// <summary>Compacts the history under the case's budget the way a deployment does before a turn, or sends it whole where the case states no budget.</summary>
+    /// <returns>The history the turn is composed from, and the summary the compaction wrote, if one was taken.</returns>
+    /// <remarks>
+    /// The plan and the composed history are the deployment's own. The summary is written by the compaction agent's own
+    /// composition and instruction, and kept to the same length a deployment keeps, over the model under test, because
+    /// the deployment's summariser opens a provider client of its own rather than taking one; a summary that comes back
+    /// empty is answered as a deployment answers a failed one, with as much recent history as fits.
+    /// </remarks>
+    private async Task<(IReadOnlyList<AgentHistoryTurn> History, string? Summary)> CompactAsync(
+        IChatClient model,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        if (this.CompactedWithin is not { } budget)
+        {
+            return (this.History, null);
+        }
+
+        var context = this.Context();
+        var compaction = context.PlanCompaction(budget)
+            ?? throw new InvalidOperationException($"{this.Name} leaves nothing to compact within {budget} tokens.");
+        var summarizer = AgentConversationSummaryComposition.Compose(model, plan, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
+        var response = await summarizer.RunAsync(
+            AgentConversationSummaryInstructions.ComposeTurn(compaction.PreviousSummary, compaction.Turns),
+            session: null,
+            options: null,
+            cancellationToken);
+        var summary = response.Text?.Trim() ?? string.Empty;
+
+        if (summary.Length is 0)
+        {
+            return (context.ComposeWithin(budget, this.Question), summary);
+        }
+
+        var kept = summary.Length <= AgentConversationSummaryInstructions.MaximumSummaryLength
+            ? summary
+            : MailTextBounds.TruncateAtTextElementBoundary(summary, AgentConversationSummaryInstructions.MaximumSummaryLength);
+
+        return (context.ComposeFrom(new AgentConversationCompacted(AgentMessageId.New(), compaction.Through, kept, compaction.Carried)), kept);
+    }
+
     /// <summary>States the question the way a deployment hands it to the Agent: who asked, what they were looking at, when, and the conversation before it.</summary>
-    private AgentAnswerBrief Brief() =>
+    private AgentAnswerBrief Brief(IReadOnlyList<AgentHistoryTurn> history) =>
         new(
             new AgentQuestion(
                 AgentConversationId.New(),
@@ -1071,7 +1282,7 @@ internal sealed record AgentConversationScenario(
                 OpenedAt: 1,
                 AskedAt),
             this.Language,
-            this.History);
+            history);
 
     /// <summary>Runs the Agent over the deployment's composition, inside the run bounds a deployment applies.</summary>
     /// <returns>The Agent's response, or <see langword="null" /> where the run reached its bounds before it answered.</returns>
@@ -1194,6 +1405,36 @@ internal sealed record AgentConversationScenario(
             WrittenLanguage.MetricName,
             language is null,
             language is null ? $"The answer is written in {this.Language}." : $"The answer misses the person's language: {language}");
+    }
+
+    /// <summary>Records whether the answer, and the summary a compaction wrote, still carry what only the conversation settled.</summary>
+    private void CheckRemembered(EvaluationResult verdict, string answer, string? summary)
+    {
+        if (this.Remembered.Count is 0)
+        {
+            return;
+        }
+
+        var forgotten = this.Remembered.Where(phrase => !answer.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        EvaluationMetrics.Record(
+            verdict,
+            KeepsWhatTheConversationSettledMetricName,
+            forgotten.Count is 0,
+            forgotten.Count is 0 ? "The answer carries everything the conversation settled." : $"The answer does not carry: {string.Join("; ", forgotten)}.");
+
+        if (summary is null)
+        {
+            return;
+        }
+
+        var dropped = this.Remembered.Where(phrase => !summary.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        EvaluationMetrics.Record(
+            verdict,
+            CompactionKeepsWhatWasSettledMetricName,
+            dropped.Count is 0,
+            dropped.Count is 0 ? "The summary carries everything the conversation settled." : $"The summary dropped: {string.Join("; ", dropped)}.");
     }
 
     /// <summary>Records whether every question the answer suggests asking next names what the conversation is about.</summary>
