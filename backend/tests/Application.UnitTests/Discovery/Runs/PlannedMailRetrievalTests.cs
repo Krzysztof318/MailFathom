@@ -86,7 +86,9 @@ public sealed class PlannedMailRetrievalTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("the queue-handling patch", evidence.Passages.Select(passage => passage.Text));
+        Assert.Equal(
+            ["first", "second", "third", "fourth", "the queue-handling patch", "fifth", "sixth", "seventh"],
+            evidence.Passages.Select(passage => passage.Text));
         Assert.Equal(evidence.Passages.Sum(passage => passage.Text.Length), ledger.Read().RetrievedCharacters);
     }
 
@@ -95,7 +97,7 @@ public sealed class PlannedMailRetrievalTests
     /// what it could not know, and the one that does often ranks it behind other mail sharing its words.
     /// </summary>
     [Fact]
-    public async Task RetrieveAsync_OnePassageJudgedEnoughOverFourLookups_HandsOverWhatOnlyTheLastLookupReached()
+    public async Task RetrieveAsync_OnePassageJudgedEnoughOverFourLookups_RunsEveryLookupAndAdmitsWhatTheLaterOnesReached()
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
