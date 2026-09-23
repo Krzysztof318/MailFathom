@@ -61,8 +61,9 @@ question. The plan is bounded before it runs:
   against somebody else's day, and running it unbounded is nearer the question than running it against that day.
 - **`sufficientPassages` says how much the model judges enough**, and is clamped into what one retrieval may return —
   never below one, never above the deployment's own passage ceiling. It is a judgement rather than the bound a run keeps
-  to: every lookup is assured four passages whatever it says, so a run may hand over the larger of that number and four
-  for every lookup, within the same passage ceiling. A model routinely judges one extract enough, and the wording that
+  to: a run may hand over the larger of that number and four for every lookup, within the same passage ceiling. So every
+  lookup is assured four passages where the ceiling holds four for each of them, and an equal part of the ceiling where
+  it does not — three each for a plan of six lookups under the default ceiling of twenty. A model routinely judges one extract enough, and the wording that
   reaches the evidence often ranks it behind other mail sharing its words, so taking the judgement as the bound would
   hand over the first lookup's best passage and never run the others. That allowance is divided between the lookups
   rather than spent by whichever runs first: each lookup is admitted up to an equal share of it, and only what that

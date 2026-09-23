@@ -31,7 +31,10 @@ public sealed record RetrievalPlan
     /// </remarks>
     public const int MaximumLookups = 6;
 
-    /// <summary>How many passages every lookup may hand over, whatever number of passages the plan called enough.</summary>
+    /// <summary>
+    /// How many passages every lookup may hand over, whatever number of passages the plan called enough, where what one
+    /// retrieval returns holds that many for each lookup.
+    /// </summary>
     /// <remarks>
     /// A plan writes several wordings because it cannot know which one the mail uses, and the one that does rarely
     /// ranks the evidence first: the other messages sharing its words come before it. A model's judgement of how many
@@ -62,9 +65,10 @@ public sealed record RetrievalPlan
     /// <summary>Gets the number of distinct passages a run may hand over to answer from.</summary>
     /// <remarks>
     /// The larger of <see cref="SufficientPassages" /> and <see cref="PassagesAssuredPerLookup" /> for every lookup,
-    /// within what one retrieval may return. It is divided between the lookups rather than spent by whichever runs
-    /// first: each lookup is admitted up to its equal share, and what a lookup found beyond that fills only what the
-    /// others left unspent. So every lookup runs, and one that never reaches this number answers from what it found.
+    /// within what one retrieval may return, so a plan whose lookups would need more than that gets an equal part of it
+    /// instead. It is divided between the lookups rather than spent by whichever runs first: each lookup is admitted up
+    /// to its equal share, and what a lookup found beyond that fills only what the others left unspent. So every lookup
+    /// runs, and one that never reaches this number answers from what it found.
     /// </remarks>
     public int PassageAllowance { get; }
 
