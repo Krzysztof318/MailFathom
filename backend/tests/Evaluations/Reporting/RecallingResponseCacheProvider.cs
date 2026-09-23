@@ -11,7 +11,7 @@ namespace MailFathom.Evaluations.Reporting;
 /// <summary>A response cache that remembers which entries each scenario and iteration touched, so a shortfall can be forgotten.</summary>
 /// <param name="inner">The cache the entries live in.</param>
 /// <remarks>
-/// A cached answer that fell short would otherwise be read back by every retry and every later run, and a single miss would
+/// A cached answer that fell short would otherwise be read back by every later run, and a single miss would
 /// fail every run that followed it. An entry is remembered when it is read back as well as when it is written, because an answer
 /// that fell short on this run may have been paid for on an earlier one.
 /// </remarks>

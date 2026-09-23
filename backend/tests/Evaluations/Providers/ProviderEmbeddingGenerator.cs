@@ -14,7 +14,8 @@ namespace MailFathom.Evaluations.Providers;
 /// <summary>A provider's embedding generator opened the way a deployment opens one, holding the transport and credential it speaks with.</summary>
 /// <remarks>
 /// The factory a deployment uses, for the reason <see cref="ProviderChatClient" /> gives, and without the resilience and
-/// health decorators for the same reason.
+/// health decorators for the same reason. Unlike the chat client it asks nothing again, even after a rate limit: the one
+/// scenario reaching it sends its passages in batches, so a transient failure fails that scenario once.
 /// </remarks>
 internal sealed class ProviderEmbeddingGenerator : DelegatingEmbeddingGenerator<string, Embedding<float>>
 {

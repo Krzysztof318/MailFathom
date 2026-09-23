@@ -14,7 +14,9 @@ namespace MailFathom.Evaluations.Providers;
 /// <remarks>
 /// The factory a deployment uses rather than a client built here, so what a scenario measures is the request a
 /// deployment sends. What it leaves out is the resilience and budget decorators: a scenario is not a deployment's spend,
-/// and a retried refusal would be several paid calls of the same answer.
+/// and a retried refusal would be several paid calls of the same answer. What it adds instead is
+/// <see cref="TransientProviderRetryChatClient" />, which asks again only where the provider failed transiently, so every
+/// model under test and the judge, all of which are opened here, ride out a rate limit the same way.
 /// </remarks>
 internal sealed class ProviderChatClient : DelegatingChatClient
 {
@@ -46,7 +48,10 @@ internal sealed class ProviderChatClient : DelegatingChatClient
         try
         {
             return new ProviderChatClient(
-                new OpenAiCompatibleClientFactory().OpenChatClient(endpoint, credential, transport),
+                new OpenAiCompatibleClientFactory().OpenChatClient(endpoint, credential, transport)
+                    .AsBuilder()
+                    .Use(static inner => new TransientProviderRetryChatClient(inner, TimeProvider.System))
+                    .Build(),
                 transport,
                 credential);
         }
@@ -57,7 +62,6 @@ internal sealed class ProviderChatClient : DelegatingChatClient
             throw;
         }
     }
-
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

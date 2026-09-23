@@ -8,7 +8,6 @@ using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI.Evaluation;
-using xRetry.v3;
 using Xunit;
 
 namespace MailFathom.Evaluations.RelevanceFilter;
@@ -16,7 +15,7 @@ namespace MailFathom.Evaluations.RelevanceFilter;
 /// <summary>Measures the model-judged relevance filter under every declared model, against the labelled candidates.</summary>
 /// <remarks>
 /// <para>
-/// Shaped like <see cref="Answering.MailAnsweringEvaluations" /> — one test over the whole model list, the models
+/// Shaped like <see cref="ReplyDrafts.ReplyDraftEvaluations" /> — one test over the whole model list, the models
 /// measured at the same time, every shortfall collected before the test fails — with the one difference the filter's
 /// shape makes: no judge is declared, read, or opened, so the run's only provider calls are the filter's own.
 /// </para>
@@ -28,21 +27,11 @@ namespace MailFathom.Evaluations.RelevanceFilter;
 /// </remarks>
 public sealed class RelevanceFilterEvaluations
 {
-    /// <summary>How many times the test is run before its failure is reported.</summary>
-    private const int MaxAttempts = 3;
-
-    /// <summary>How long to wait before running it again, sized for a rate limit or a momentary overload to clear.</summary>
-    private const int DelayBetweenAttemptsMs = 5000;
-
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [RetryFact(
-        MaxAttempts,
-        DelayBetweenAttemptsMs,
-        Skip = AiEvaluationRun.SkipReason,
-        SkipUnless = nameof(EvaluationsRequested))]
+    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
     public async Task FindPassagesAsync_LabelledCandidates_EveryDeclaredModelKeepsWhatAnswersAndDropsWhatDoesNot()
     {
         // Arrange

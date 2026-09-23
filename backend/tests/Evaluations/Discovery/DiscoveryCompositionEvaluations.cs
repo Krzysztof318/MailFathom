@@ -7,34 +7,23 @@ using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Judging;
 using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
-using xRetry.v3;
 using Xunit;
 
 namespace MailFathom.Evaluations.Discovery;
 
 /// <summary>Has every declared model compose every question in <see cref="DiscoveryCompositionScenario.All" /> from its extracts.</summary>
 /// <remarks>
-/// Shaped like the mail-answering evaluation for the reasons it gives, with one difference: a question the extracts do
-/// not answer is judged on nothing, so each scenario opens its store handle with its own evaluators rather than the run
-/// sharing one set.
+/// Shaped like <see cref="ReplyDrafts.ReplyDraftEvaluations" /> for the reasons it gives, with one difference: a question
+/// the extracts do not answer is judged on nothing, so each scenario opens its store handle with its own evaluators rather
+/// than the run sharing one set.
 /// </remarks>
 public sealed class DiscoveryCompositionEvaluations
 {
-    /// <summary>How many times the test is run before its failure is reported.</summary>
-    private const int MaxAttempts = 3;
-
-    /// <summary>How long to wait before running it again, sized for a rate limit or a momentary overload to clear.</summary>
-    private const int DelayBetweenAttemptsMs = 5000;
-
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [RetryFact(
-        MaxAttempts,
-        DelayBetweenAttemptsMs,
-        Skip = AiEvaluationRun.SkipReason,
-        SkipUnless = nameof(EvaluationsRequested))]
+    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
     public async Task Compose_EveryScenario_EveryDeclaredModelComposesOnlyFromTheExtractsItWasHanded()
     {
         // Arrange

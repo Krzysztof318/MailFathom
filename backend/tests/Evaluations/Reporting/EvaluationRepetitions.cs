@@ -19,7 +19,7 @@ namespace MailFathom.Evaluations.Reporting;
 /// </para>
 /// <para>
 /// A case whose share falls short forgets every repetition rather than only the ones that fell short, so the next
-/// attempt draws a whole new sample. Forgetting only the misses would keep the lucky answers and re-ask the rest until
+/// run draws a whole new sample. Forgetting only the misses would keep the lucky answers and re-ask the rest until
 /// they passed, which reports a rate no deployment would see.
 /// </para>
 /// </remarks>
