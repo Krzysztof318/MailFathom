@@ -744,6 +744,17 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             RecordedAt = now,
         });
 
+        // An append a restore issued and no server answered yet, which names the account beside the mail it carried and
+        // leaves with that mail rather than through a statement of the seam's own.
+        context.MailboxRestoreAppends.Add(new MailboxRestoreAppendEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            StoredEmailId = storedEmail.Id,
+            FolderAlias = "inbox",
+            IssuedAt = now,
+        });
+
         await context.SaveChangesAsync(cancellationToken);
 
         return storedEmail.Id;

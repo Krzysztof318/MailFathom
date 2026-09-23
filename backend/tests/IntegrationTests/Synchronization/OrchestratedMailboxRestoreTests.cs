@@ -125,7 +125,9 @@ public sealed class OrchestratedMailboxRestoreTests(MailFathomOrchestrationFixtu
         Assert.True(read.IsSeen);
         Assert.True(read.IsAnswered);
         Assert.True(read.IsFlagged);
-        Assert.Contains("$Label1", read.Keywords);
+        // Without regard to case, as RFC 9051 compares a flag: the held copy kept the keyword in the form
+        // RemoteEmailKeywords folds it to, and that form is what the append carries back.
+        Assert.Contains("$Label1", read.Keywords, StringComparer.OrdinalIgnoreCase);
 
         var unread = Assert.Single(restored, email => email.Subject == unreadSubject);
         Assert.Equal(UnreadArrivedAt, unread.ArrivedAt);
