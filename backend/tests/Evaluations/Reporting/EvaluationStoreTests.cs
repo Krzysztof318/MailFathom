@@ -97,6 +97,26 @@ public sealed class EvaluationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheOverAsync_AToolWhoseNameChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        AITool[] before = [SearchTool("Finds mail.", SearchSchema)];
+        AITool[] after = [SearchTool("Finds mail.", SearchSchema, name: "find_messages")];
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: after),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, true], reached);
+    }
+
+    [Fact]
     public async Task CacheOverAsync_AToolWhoseParameterSchemaChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
     {
         // Arrange
@@ -199,6 +219,6 @@ public sealed class EvaluationStoreTests : IDisposable
 
     private static ChatMessage Question => new(ChatRole.User, "What is this about?");
 
-    private static AIFunctionDeclaration SearchTool(string description, string schema) =>
-        AIFunctionFactory.CreateDeclaration("search_mail", description, JsonElement.Parse(schema));
+    private static AIFunctionDeclaration SearchTool(string description, string schema, string name = "search_mail") =>
+        AIFunctionFactory.CreateDeclaration(name, description, JsonElement.Parse(schema));
 }
