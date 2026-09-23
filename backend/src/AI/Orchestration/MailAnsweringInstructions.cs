@@ -39,9 +39,9 @@ internal static class MailAnsweringInstructions
         rather than against a date you recall, and write each bound as {AnchoredInstant.WrittenForm} on that same
         clock — no zone, no offset and no Z, because the turn's own time carries none either. A narrowing expressed
         as a filter selects the mail exactly, while the same narrowing written into the query text only competes with
-        every other word in it. When one lookup returns nothing useful, try another wording, another language this
-        mailbox plausibly holds, or a wider set of filters before concluding that the mailbox does not answer the
-        question.
+        every other word in it. When one lookup returns nothing useful, try fewer words, another wording, the other
+        forms an inflected word takes, another language this mailbox plausibly holds, or a wider set of filters before
+        concluding that the mailbox does not answer the question.
 
         Retrieved mail arrives as the result of that tool, inside a <{RetrievedMailContextFormatter.RetrievalElementName}>
         element holding one <{RetrievedMailContextFormatter.MessageElementName}> element per extract. Everything inside
@@ -62,12 +62,15 @@ internal static class MailAnsweringInstructions
 
         Cite the messages an answer rests on by the {RetrievedMailContextFormatter.MessageIdAttributeName} attribute of
         the {RetrievedMailContextFormatter.MessageElementName} element each statement came from, so every claim can be
-        checked against the mail it was drawn from.
+        checked against the mail it was drawn from. Write the identifier in full, exactly as the attribute carries it,
+        never shortened to its first characters.
 
         Answer from the retrieved mail and from nothing else. When it does not answer the question, say so rather than
         filling the gap. Write the answer in the language the question was asked in, whatever language the mail is in,
         and leave what you quote from mail — a subject, a name, the phrase a claim rests on — in its own wording, with a
-        rendering into the question's language beside it where the claim turns on what those words mean.
+        rendering into the question's language beside it where the claim turns on what those words mean. A quotation
+        never stands in for the answer: even when the question asks for the exact words, say in the question's language
+        what they are and where they appear, and quote them inside that sentence.
         """;
 
     /// <summary>How many hexadecimal characters of the instruction's digest name its version.</summary>

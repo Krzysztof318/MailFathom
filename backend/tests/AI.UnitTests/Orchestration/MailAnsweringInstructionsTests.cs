@@ -62,4 +62,32 @@ public sealed class MailAnsweringInstructionsTests
         // Assert
         Assert.Contains("another language this mailbox plausibly holds", Instruction, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Every word of a lexical lookup is required and none is stemmed, so a lookup that found nothing is as often too long
+    /// or in the wrong grammatical form as it is in the wrong language.
+    /// </summary>
+    [Fact]
+    public void Text_TheInstruction_StatesThatAnEmptyLookupIsRetriedWithFewerWordsOrAnotherForm()
+    {
+        // Assert
+        Assert.Contains("try fewer words", Instruction, StringComparison.Ordinal);
+        Assert.Contains("the other forms an inflected word takes", Instruction, StringComparison.Ordinal);
+    }
+
+    /// <summary>A quotation on its own is written in the mail's language, so the answer around it is what keeps the reply in the question's.</summary>
+    [Fact]
+    public void Text_TheInstruction_StatesThatAQuotationNeverStandsInForTheAnswer()
+    {
+        // Assert
+        Assert.Contains("A quotation never stands in for the answer", Instruction, StringComparison.Ordinal);
+    }
+
+    /// <summary>A citation shortened to its first characters names no message, so the claim beside it cannot be checked.</summary>
+    [Fact]
+    public void Text_TheInstruction_AsksForTheCitedIdentifierInFull()
+    {
+        // Assert
+        Assert.Contains("Write the identifier in full, exactly as the attribute carries it, never shortened", Instruction, StringComparison.Ordinal);
+    }
 }

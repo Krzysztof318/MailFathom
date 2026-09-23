@@ -52,6 +52,17 @@ public sealed class ThreadStateInstructionsTests
         Assert.Contains("not a reply to it", text, StringComparison.Ordinal);
     }
 
+    /// <summary>A payment stated as scheduled is owed by a day, and read as an agreement it loses that day.</summary>
+    [Fact]
+    public void Text_TheInstruction_RecordsAScheduledActAsACommitment()
+    {
+        // Act
+        var text = string.Join(' ', ThreadStateInstructions.TextFor(MailAccountLanguage.English).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("is a commitment even when it is written as a fact rather than as a promise", text, StringComparison.Ordinal);
+    }
+
     /// <summary>A citation is a position in the list this deployment composed, so the turn numbers the messages.</summary>
     [Fact]
     public void ComposeThreadTurn_SeveralMessages_NumbersThemInTheConversationsOwnOrder()

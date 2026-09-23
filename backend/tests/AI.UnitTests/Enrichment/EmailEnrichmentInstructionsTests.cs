@@ -48,6 +48,29 @@ public sealed class EmailEnrichmentInstructionsTests
         Assert.Contains($"Write every sentence you produce in {named}", text, StringComparison.Ordinal);
     }
 
+    /// <summary>A useful newsletter is still not pressing, and a significance on every message is one nobody reads.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_ReservesSignificanceForWhatIsMorePressingThanUsual()
+    {
+        // Act
+        var text = string.Join(' ', EmailEnrichmentInstructions.TextFor(MailAccountLanguage.English).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("is omitted for a message that is merely informative or routine", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A day written only into the sentence is a commitment no reminder can be set from.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_AsksForTheDueDayWheneverTheMessageNamesOne()
+    {
+        // Act
+        var text = string.Join(' ', EmailEnrichmentInstructions.TextFor(MailAccountLanguage.English).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("Write \"dueAt\" whenever the message names the day the commitment falls due", text, StringComparison.Ordinal);
+        Assert.Contains("give the earliest of those days", text, StringComparison.Ordinal);
+    }
+
     /// <summary>A subject rendered into another language is no longer the subject somebody would find in their mail.</summary>
     [Fact]
     public void TextFor_TheInstruction_LeavesQuotedTextAsItWasWritten()

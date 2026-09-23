@@ -367,7 +367,10 @@ reports that as the reason rather than as a failure.
 photographed pages, screenshots, and receipts, and what somebody searching for one of those types is a number, a date,
 or a name printed on it — never "a scanned invoice". So the instruction asks for the text itself, read out in full and
 in order with its numbers and identifiers unchanged, and leaves the description to whatever the text does not already
-say. That is the model reading what it was shown; nothing here rasterizes a page or reaches a recognition engine, so a
+say. Unchanged is meant character for character: every digit of a long number, the spacing and hyphens an identifier is
+printed with, the difference between characters a font draws alike such as 0 and O, text turned sideways or upside down
+read in its own direction, and the words kept in the language they are printed in, diacritics and all, rather than
+translated — a search for the characters on the page has to find them in the description. That is the model reading what it was shown; nothing here rasterizes a page or reaches a recognition engine, so a
 model that cannot read the page writes what it can see instead, and a dedicated OCR step for documents nothing else
 reads stays worth having.
 

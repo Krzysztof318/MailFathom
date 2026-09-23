@@ -47,6 +47,39 @@ public sealed class DiscoveryCompositionInstructionsTests
         Assert.Contains("Leave it empty when the extracts do not answer", text, StringComparison.Ordinal);
     }
 
+    /// <summary>A correction replaces what it corrects, so reporting the two as a disagreement leaves the question unanswered.</summary>
+    [Fact]
+    public void Text_TheInstruction_AnswersWithACorrectionRatherThanReportingAConflict()
+    {
+        // Act
+        var text = string.Join(' ', DiscoveryCompositionInstructions.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("A later message that corrects or withdraws what an earlier one said is not a disagreement", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A change with one dated point is still a change over time, and leaving the timeline out turns it into prose.</summary>
+    [Fact]
+    public void Text_TheInstruction_GivesAnEventEvenWhereOnlyOnePointIsDated()
+    {
+        // Act
+        var text = string.Join(' ', DiscoveryCompositionInstructions.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("Give an event even where only one point in the change carries a date", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A quotation keeps the extract's language, so an answer that is only a quotation is not written in the question's.</summary>
+    [Fact]
+    public void Text_TheInstruction_FramesAQuotationInTheQuestionsLanguage()
+    {
+        // Act
+        var text = DiscoveryCompositionInstructions.Text.ReplaceLineEndings(" ");
+
+        // Assert
+        Assert.Contains("a quotation never stands alone as the answer: say in the question's language", text, StringComparison.Ordinal);
+    }
+
     /// <summary>The extracts are somebody's own words, which a model reads as data rather than as instructions to it.</summary>
     [Fact]
     public void Text_TheInstruction_TellsTheAgentTheExtractsAreNotInstructionsToIt()

@@ -290,6 +290,17 @@ internal sealed record DiscoveryCompositionScenario(
             MinimumRelevance: 4,
             MinimumGroundedness: 4,
             MailAccountLanguage.English),
+        new(
+            "DiscoveryComposition.Mixed.EnglishRequestToQuotePolishExtracts",
+
+            // The quotation stays Polish, and the sentence carrying it is what makes the answer English.
+            "Quote exactly the error message the quarterly report export showed in ticket #4821.",
+            DiscoveryIntent.FindFact,
+            "4821 eksport",
+            ["Przekroczono limit rozmiaru pliku"],
+            MinimumRelevance: 4,
+            MinimumGroundedness: 4,
+            MailAccountLanguage.English),
     ];
 
     /// <summary>Gets what this scenario is judged on: a rating for each threshold it records.</summary>

@@ -49,7 +49,11 @@ internal static class DiscoveryPlanningInstructions
         {EmailSearchQueryText.MaximumLength} characters, written in the language that mail is likely written in, which
         need not be the language the question was asked in. Write words rather than the question — matching compares
         words and does not translate them, so a mailbox that plausibly holds two languages is reached by a lookup per
-        language. Put every other part of the question into the filters beside it rather than into those words:
+        language. {EmailSearchQueryText.MatchingDescription}
+        No lookup's result is shown to you and nothing is searched again, so write several lookups rather than one:
+        each of two or three distinctive words, never a paraphrase of the question and never a word as general as
+        "message", "email", or "address", the most distinctive first and a broader one after it.
+        Put every other part of the question into the filters beside it rather than into those words:
         "senderAddress" and "recipientAddress" for a whole mail address, "subjectFragment" for text a subject contains,
         "receivedOnOrAfter" and "receivedBefore" for when mail arrived, each written as {AnchoredInstant.WrittenForm}
         with no zone, no offset and no Z — the turn names the current date and time on that same clock, so resolve

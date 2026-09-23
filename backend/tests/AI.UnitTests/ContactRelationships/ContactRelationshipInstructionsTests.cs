@@ -71,6 +71,18 @@ public sealed class ContactRelationshipInstructionsTests
         Assert.Contains("2. Document: addendum.pdf", turn, StringComparison.Ordinal);
     }
 
+    /// <summary>The instant is that of the last message naming the person, which may be one sent to them and left unanswered.</summary>
+    [Fact]
+    public void ComposeRelationshipTurn_AConversation_DoesNotClaimItsLastMessageCameFromThePerson()
+    {
+        // Act
+        var turn = ContactRelationshipInstructions.ComposeRelationshipTurn(
+            new GuardedRelationshipTurn([new GuardedRelationshipConversation("the addendum", FirstJuly)], []));
+
+        // Assert
+        Assert.Contains("Last message naming them, from them or to them:", turn, StringComparison.Ordinal);
+    }
+
     /// <summary>A heading over no documents would read as a person who sent one this deployment could not name.</summary>
     [Fact]
     public void ComposeRelationshipTurn_NoDocuments_WritesNoDocumentHeadingAtAll()

@@ -137,9 +137,12 @@ settled by the instruction the run carries, because both are properties of how a
 retrieval underneath it, and neither is anything an operator configures.
 
 **A lookup is worded in the language the mail is likely to carry**, which need not be the language the question was
-asked in, and one that returns nothing useful is tried again in another language the mailbox plausibly holds before the
-run concludes that the mailbox does not answer. The extra lookups are ordinary lookups, bounded by
-[§ What one question may spend](#what-one-question-may-spend) like every other.
+asked in, and one that returns nothing useful is tried again — with fewer words, with the other forms an inflected word
+takes, or in another language the mailbox plausibly holds — before the run concludes that the mailbox does not answer.
+The search tool's own description tells the model why: lexical matching requires every word and stems none, so a
+language that inflects its words, Polish among them, writes one word in several forms, and a lookup offers the forms it
+expects with `OR` or searches by a name or a number that does not change. The extra lookups are ordinary lookups,
+bounded by [§ What one question may spend](#what-one-question-may-spend) like every other.
 
 It cannot be left to retrieval, because the lexical half of retrieval matches a word against a word. The index is built
 with one PostgreSQL text search configuration for the whole deployment —
@@ -152,9 +155,12 @@ that does not. [Email search](email-search.md) documents the ranking itself.
 
 **An answer is written in the language the question was asked in**, whatever language the mail it rests on was written
 in. What the answer quotes from mail — a subject, a name, the phrase a claim rests on — keeps its own wording, with a
-rendering into the question's language beside it where the claim turns on what those words mean. That is what keeps a
+rendering into the question's language beside it where the claim turns on what those words mean. A quotation never
+stands in for the answer, even where the question asks for the exact words: the answer says in the question's language
+what they are and where they appear, and quotes them inside that sentence. That is what keeps a
 citation checkable: the quoted words have to be the words the cited message carried for anybody to be able to look them
-up in it.
+up in it. For the same reason a message is cited by its identifier written in full, as the retrieved mail carries it,
+and never by a shortened prefix that names no message.
 
 The second retrieval pass, where a deployment turned it on, is told the same thing from the other side: an extract in a
 language other than the lookup's is not less relevant for being in it, so the filter does not drop what the lookup was

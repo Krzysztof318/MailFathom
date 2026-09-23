@@ -5,6 +5,7 @@
 using MailFathom.AI.Discovery;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -34,6 +35,29 @@ public sealed class DiscoveryPlanningInstructionsTests
         Assert.All(
             DiscoveryIntent.All,
             intent => Assert.Contains(intent.Identity, text, StringComparison.Ordinal));
+    }
+
+    /// <summary>Every word of a lookup is required and none is stemmed, which a planner writing the question itself as the lookup does not know.</summary>
+    [Fact]
+    public void Text_TheInstruction_StatesHowTheWordsOfALookupAreMatched()
+    {
+        // Act
+        var text = DiscoveryPlanningInstructions.Text;
+
+        // Assert
+        Assert.Contains(EmailSearchQueryText.MatchingDescription, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A plan is run without its author seeing a result, so one long lookup that misses is the whole plan missing.</summary>
+    [Fact]
+    public void Text_TheInstruction_AsksForSeveralShortLookupsBecauseNoneIsRetried()
+    {
+        // Act
+        var text = string.Join(' ', DiscoveryPlanningInstructions.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("write several lookups rather than one", text, StringComparison.Ordinal);
+        Assert.Contains("the most distinctive first and a broader one after it", text, StringComparison.Ordinal);
     }
 
     /// <summary>The agent is never asked for a block type, because the composition is derived from the intent in code.</summary>
