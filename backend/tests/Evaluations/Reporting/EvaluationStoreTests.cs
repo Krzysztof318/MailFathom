@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.StructuredAnswers;
@@ -22,6 +23,8 @@ public sealed class EvaluationStoreTests : IDisposable
     private const string FellShort = "Scenario.FellShort";
 
     private const string Held = "Scenario.Held";
+
+    private const string SearchSchema = """{"type":"object","properties":{"query":{"type":"string"}}}""";
 
     private readonly DirectoryInfo store = Directory.CreateTempSubdirectory("mailfathom-evaluations-");
 
@@ -73,6 +76,90 @@ public sealed class EvaluationStoreTests : IDisposable
         Assert.Equal([true, true, false, false], reached);
     }
 
+    [Fact]
+    public async Task CacheOverAsync_AToolWhoseDescriptionChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        AITool[] before = [SearchTool("Finds mail.", SearchSchema)];
+        AITool[] after = [SearchTool("Finds mail by its sender.", SearchSchema)];
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: after),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, true], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_AToolWhoseNameChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        AITool[] before = [SearchTool("Finds mail.", SearchSchema)];
+        AITool[] after = [SearchTool("Finds mail.", SearchSchema, name: "find_messages")];
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: after),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, true], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_AToolWhoseParameterSchemaChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        AITool[] before = [SearchTool("Finds mail.", SearchSchema)];
+        AITool[] after =
+        [
+            SearchTool("Finds mail.", """{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"}}}"""),
+        ];
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: before),
+            await ReachesTheModelAsync(reporting, Held, tools: after),
+        ];
+
+        // Assert
+        Assert.Equal([true, false, true], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_ARequestOfferedNoTools_ReadsBackTheAnswerCachedUnderTheKeyItWasFiledUnderBefore()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var iterationName = EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1);
+        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(Held, iterationName, TestContext.Current.CancellationToken);
+        using var earlier = ScriptedStructuredAnswerRun.Model("{}");
+        using var filedBefore = new DistributedCachingChatClient(earlier, cache)
+        {
+            CacheKeyAdditionalValues = [ScriptedStructuredAnswerRun.ModelUnderTest, string.Empty],
+        };
+        await filedBefore.GetResponseAsync([Question], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var reached = await ReachesTheModelAsync(reporting, Held);
+
+        // Assert
+        Assert.False(reached);
+    }
+
     /// <inheritdoc />
     public void Dispose() => this.store.Delete(recursive: true);
 
@@ -110,7 +197,8 @@ public sealed class EvaluationStoreTests : IDisposable
     private static async Task<bool> ReachesTheModelAsync(
         ReportingConfiguration reporting,
         string scenarioName,
-        ChatGenerationPlan? plan = null)
+        ChatGenerationPlan? plan = null,
+        AITool[]? tools = null)
     {
         using var model = ScriptedStructuredAnswerRun.Model("{}");
         var cached = await EvaluationStore.CacheOverAsync(
@@ -122,9 +210,15 @@ public sealed class EvaluationStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await cached.GetResponseAsync(
-            [new ChatMessage(ChatRole.User, "What is this about?")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            [Question],
+            tools is null ? null : new ChatOptions { Tools = tools },
+            TestContext.Current.CancellationToken);
 
         return model.Requests > 0;
     }
+
+    private static ChatMessage Question => new(ChatRole.User, "What is this about?");
+
+    private static AIFunctionDeclaration SearchTool(string description, string schema, string name = "search_mail") =>
+        AIFunctionFactory.CreateDeclaration(name, description, JsonElement.Parse(schema));
 }

@@ -149,7 +149,7 @@ internal static class EvaluationStore
         return repetition is 1 ? model : string.Create(CultureInfo.InvariantCulture, $"{model}#{repetition}");
     }
 
-    /// <summary>Puts the run's response cache in front of the model under test, filed under the model and its address.</summary>
+    /// <summary>Puts the run's response cache in front of the model under test, filed under the model, its address, and the tools a request offers.</summary>
     /// <param name="reporting">The run's store.</param>
     /// <param name="model">The model under test's client, which stays the caller's.</param>
     /// <param name="plan">The plan the model is measured with.</param>
@@ -177,10 +177,11 @@ internal static class EvaluationStore
         var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
 
         // The effort travels in a request-options factory the cache key cannot read, so it joins the key explicitly — and
-        // only where one is declared, so every answer cached by a run declaring none keeps the key it was filed under.
+        // only where one is declared, so every answer cached by a run declaring none keeps the key it was filed under. The
+        // tools a request offers are the same kind of gap, closed per request by the client itself.
         string[] identity = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty];
 
-        return new DistributedCachingChatClient(model, cache)
+        return new ToolKeyedCachingChatClient(model, cache)
         {
             CacheKeyAdditionalValues = plan.ReasoningEffort is { } effort ? [.. identity, effort] : identity,
         };
