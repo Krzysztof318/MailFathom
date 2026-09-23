@@ -14,8 +14,8 @@
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.NLP" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="MimeKit" />
-    <PackageReference Include="xRetry.v3" />
     <PackageReference Include="xunit.v3.mtp-v2" />
   </ItemGroup>
 

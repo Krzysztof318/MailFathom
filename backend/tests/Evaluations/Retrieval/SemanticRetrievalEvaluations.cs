@@ -5,7 +5,6 @@
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
-using xRetry.v3;
 using Xunit;
 
 namespace MailFathom.Evaluations.Retrieval;
@@ -24,21 +23,11 @@ namespace MailFathom.Evaluations.Retrieval;
 /// </remarks>
 public sealed class SemanticRetrievalEvaluations
 {
-    /// <summary>How many times the test is run before its failure is reported.</summary>
-    private const int MaxAttempts = 3;
-
-    /// <summary>How long to wait before running it again, sized for a rate limit or a momentary overload to clear.</summary>
-    private const int DelayBetweenAttemptsMs = 5000;
-
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [RetryFact(
-        MaxAttempts,
-        DelayBetweenAttemptsMs,
-        Skip = AiEvaluationRun.SkipReason,
-        SkipUnless = nameof(EvaluationsRequested))]
+    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
     public async Task RunAsync_LabelledQuestions_EveryDeclaredEmbeddingModelRanksTheEvidenceWithinTheFloor()
     {
         // Arrange

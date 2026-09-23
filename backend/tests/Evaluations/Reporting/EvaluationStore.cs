@@ -110,7 +110,7 @@ internal static class EvaluationStore
             ResponseCacheAt(root),
             executionName: executionName);
 
-    /// <summary>Removes every answer and every verdict a scenario cached under one iteration, so the next attempt asks again.</summary>
+    /// <summary>Removes every answer and every verdict a scenario cached under one iteration, so the next run asks again.</summary>
     /// <param name="reporting">The store the scenario ran in, opened here.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
     /// <param name="iterationName">The iteration the answers are filed under, which names the model and the repetition.</param>
@@ -118,9 +118,9 @@ internal static class EvaluationStore
     /// <returns>A task that completes once the entries are gone.</returns>
     /// <remarks>
     /// Called where a model fell short of the share <see cref="EvaluationRepetitions" /> holds it to. Left cached, the
-    /// answers would be what every retry and every later run reads back, so one sample would decide them all however the
-    /// model answers when asked again. The verdict already filed stays in the result store, so the report still shows the
-    /// attempt that fell short.
+    /// answers would be what every later run reads back, so one sample would decide them all however the model answers
+    /// when asked again. The verdict already filed stays in the result store, so the report still shows the run that fell
+    /// short.
     /// </remarks>
     public static Task ForgetAsync(
         ReportingConfiguration reporting,

@@ -7,30 +7,36 @@ using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Judging;
 using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
-using xRetry.v3;
 using Xunit;
 
 namespace MailFathom.Evaluations.ReplyDrafts;
 
 /// <summary>Has every declared model draft every reply in <see cref="ReplyDraftScenario.All" />.</summary>
-/// <remarks>Shaped like the mail-answering evaluation, for the reasons it gives.</remarks>
+/// <remarks>
+/// <para>
+/// One test over the whole model list rather than a theory per model, because the list is read from the run's
+/// declaration and a theory's data is read before the skip condition is: a run nobody asked for would fail on a list
+/// nobody declared. Each model is still its own result in the store, filed under its name.
+/// </para>
+/// <para>
+/// The models are measured at the same time rather than one after another, because a run costs whatever the slowest
+/// model takes to answer. Each carries its own clients, its own spend meters, and its own handle on the store, so
+/// nothing is shared between two models but the directory their results are filed in. A model that falls short is
+/// collected rather than failing the run, so one weak model never hides what the others did, and the test fails at the
+/// end naming every model that fell short and why.
+/// </para>
+/// <para>
+/// One model's scenarios run one after another, because each one's cost is read off that model's meters and two
+/// scenarios answered at once would each report the other's spend.
+/// </para>
+/// </remarks>
 public sealed class ReplyDraftEvaluations
 {
-    /// <summary>How many times the test is run before its failure is reported.</summary>
-    private const int MaxAttempts = 3;
-
-    /// <summary>How long to wait before running it again, sized for a rate limit or a momentary overload to clear.</summary>
-    private const int DelayBetweenAttemptsMs = 5000;
-
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [RetryFact(
-        MaxAttempts,
-        DelayBetweenAttemptsMs,
-        Skip = AiEvaluationRun.SkipReason,
-        SkipUnless = nameof(EvaluationsRequested))]
+    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
     public async Task Draft_EveryScenario_EveryDeclaredModelDraftsWhatWasAskedFromTheConversationAlone()
     {
         // Arrange

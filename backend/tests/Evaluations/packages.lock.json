@@ -51,6 +51,12 @@
           "Microsoft.Extensions.AI.Evaluation": "10.8.0"
         }
       },
+      "Microsoft.Extensions.TimeProvider.Testing": {
+        "type": "Direct",
+        "requested": "[10.8.0, )",
+        "resolved": "10.8.0",
+        "contentHash": "xXcxGfXSO/8o7IfYK36r3eZTl9RMKAl5K6x3x6o/QQBolI0t8vsLIGmhc3HJBTd11u1uPLHz61VnOTSTmY7ZVA=="
+      },
       "Microsoft.VisualStudio.Threading.Analyzers": {
         "type": "Direct",
         "requested": "[17.14.15, )",
@@ -84,15 +90,6 @@
         "requested": "[4.13.1, )",
         "resolved": "4.13.1",
         "contentHash": "V9gCt0T1Tnu+jMWJDLiUV/vOTmGzmofEdVeUPKPdh8MJW7f3kkhFXSeDotwl8Ob88OxrBf+4LrV/D7OA4tAluA=="
-      },
-      "xRetry.v3": {
-        "type": "Direct",
-        "requested": "[1.0.0-rc3, )",
-        "resolved": "1.0.0-rc3",
-        "contentHash": "bPDo3ZmYy8cCelG2Tg4PHU87d+So6T4e4/OZ8xkvH9bvcCexCnYBdKLXP9X2c0fl4NZw0fzERzaos9CCU85eOg==",
-        "dependencies": {
-          "xunit.v3.extensibility.core": "[3.0.0, 4.0.0)"
-        }
       },
       "xunit.analyzers": {
         "type": "Direct",
