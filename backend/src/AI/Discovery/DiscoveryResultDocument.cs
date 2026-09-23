@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MailFathom.AI.Discovery;
@@ -60,9 +61,15 @@ internal sealed record DiscoveryConflictDocument
 /// <summary>One dated event as a model wrote it.</summary>
 internal sealed record DiscoveryEventDocument
 {
-    /// <summary>Gets when the event happened, as the correspondence dates it.</summary>
+    /// <summary>Gets when the event happened, as the correspondence dates it, in whatever form the model wrote it.</summary>
+    /// <remarks>
+    /// Held as the raw value rather than as a <see cref="DateTimeOffset" />, because a model writes a date the
+    /// correspondence gave without a year — or no date at all — often enough, and a typed property would make that one
+    /// value fail the reading of the whole answer. Whether it is a date is <see cref="DiscoveryCompositionReading" />'s to
+    /// decide, for this event alone.
+    /// </remarks>
     [JsonPropertyName("occurredAt")]
-    public DateTimeOffset? OccurredAt { get; init; }
+    public JsonElement OccurredAt { get; init; }
 
     /// <summary>Gets what happened.</summary>
     [JsonPropertyName("summary")]

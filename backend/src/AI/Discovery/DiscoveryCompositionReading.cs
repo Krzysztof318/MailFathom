@@ -174,11 +174,18 @@ internal static class DiscoveryCompositionReading
         return entries.Count is 0 ? null : new TimelineBlock(evidence, entries);
     }
 
+    /// <summary>Reads one event, or nothing where it lacks a readable date, a summary, or a subject.</summary>
+    /// <remarks>
+    /// An event whose date is not a full date — a day with no year, a sentence, a number — is dropped on its own, exactly
+    /// like one with no date at all, and the rest of the answer is read as before. The date is taken only in the form the
+    /// serializer itself would have taken it, so nothing here guesses a year the correspondence did not give.
+    /// </remarks>
     private static TimelineEntry? Entry(
         DiscoveryEventDocument entry,
         Dictionary<string, DiscoveryComposedSource> restedOn)
     {
-        if (entry.OccurredAt is not { } occurredAt
+        if (entry.OccurredAt.ValueKind is not JsonValueKind.String
+            || !entry.OccurredAt.TryGetDateTimeOffset(out var occurredAt)
             || !PresentationText.TryCreate(entry.Summary, out var summary)
             || !PresentationText.TryCreate(entry.Subject, out var subject))
         {

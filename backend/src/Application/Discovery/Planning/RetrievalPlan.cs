@@ -17,8 +17,8 @@ namespace MailFathom.Application.Discovery.Planning;
 /// </para>
 /// <para>
 /// Several lookups rather than one, because a question worth asking rarely matches one wording. Ordered rather than
-/// unordered, because the first lookup is the one a run pays for before it knows whether it needed the rest, and
-/// <see cref="SufficientPassages" /> is what lets it stop.
+/// unordered, because the order settles which lookup's passage goes first where two share a rank — but never which
+/// lookup deserves the whole of <see cref="SufficientPassages" />, since each is given its share of it.
 /// </para>
 /// </remarks>
 public sealed record RetrievalPlan
@@ -40,10 +40,13 @@ public sealed record RetrievalPlan
     /// <summary>Gets the lookups to run, in the order they are worth running.</summary>
     public IReadOnlyList<EmailKnowledgeQuery> Lookups { get; }
 
-    /// <summary>Gets the number of distinct passages at which the plan has found enough and stops running lookups.</summary>
+    /// <summary>Gets the number of distinct passages at which the plan has found enough.</summary>
     /// <remarks>
-    /// A ceiling on what one question reads rather than a target to reach. A plan that finds enough in its first lookup
-    /// leaves the rest unrun, and one that never reaches this number runs every lookup and answers from what it found.
+    /// A ceiling on what one question reads rather than a target to reach, divided between the lookups rather than
+    /// spent by whichever runs first: each lookup is admitted up to its equal share, and what a lookup found beyond that
+    /// fills only what the others left unspent. A plan calling for fewer passages than it holds lookups gives each lookup
+    /// one and leaves the lookups past that many unrun, and one that never reaches this number answers from what it
+    /// found.
     /// </remarks>
     public int SufficientPassages { get; }
 
