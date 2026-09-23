@@ -238,7 +238,7 @@ internal sealed record ImageDescriptionScenario(
             "ImageDescription.CharactersThatLookAlike",
             "voucher.png",
             "A pale pink gift voucher with a plum border. It reads \"GIFT VOUCHER\" in bold plum capitals, then \"Code:\", the "
-            + "code \"K8B0-O5S2-Z7Q1\" in a large bold monospaced face whose zero is marked apart from its capital O, and "
+            + "code \"K8B0-O5S2-Z7Q1\" in a large bold monospaced face whose zero carries a dot inside it while its capital O is an empty oval, and "
             + "\"Value EUR 25.00, valid until 31 Dec 2026\".",
 
             // The code mixes 8 and B, 0 and O, 5 and S, 2 and Z, 1 and a letter: only the print says which is which.
