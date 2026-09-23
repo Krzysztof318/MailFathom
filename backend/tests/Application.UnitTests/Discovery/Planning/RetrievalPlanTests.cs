@@ -86,6 +86,32 @@ public sealed class RetrievalPlanTests
         Assert.Equal("sufficientPassages", failure.ParamName);
     }
 
+    /// <summary>
+    /// The allowance assures every lookup its passages whatever the plan judged enough, follows the judgement above that,
+    /// and never passes what one retrieval returns.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1, 4)]
+    [InlineData(1, 4, 16)]
+    [InlineData(10, 2, 10)]
+    [InlineData(1, 6, 20)]
+    public void Create_AJudgementOfEnoughAndSeveralLookups_AllowsTheLargerWithinWhatRetrievalReturns(
+        int sufficientPassages,
+        int lookupCount,
+        int expectedAllowance)
+    {
+        // Arrange
+        IReadOnlyList<EmailKnowledgeQuery> lookups =
+            [.. Enumerable.Range(1, lookupCount).Select(number => EmailKnowledgeQuery.ForText($"lookup {number}"))];
+
+        // Act
+        var plan = RetrievalPlan.Create(EmailKnowledgeBounds.Create(20, 1200), lookups, sufficientPassages);
+
+        // Assert
+        Assert.Equal(expectedAllowance, plan.PassageAllowance);
+        Assert.Equal(sufficientPassages, plan.SufficientPassages);
+    }
+
     /// <summary>The plan holds its own copy, so a caller mutating the list it passed changes no plan.</summary>
     [Fact]
     public void Create_ALookupListTheCallerGoesOnEditing_DoesNotChangeThePlan()

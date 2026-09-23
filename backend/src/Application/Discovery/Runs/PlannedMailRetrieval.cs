@@ -48,7 +48,7 @@ public sealed class PlannedMailRetrieval
         this.ledger = ledger;
     }
 
-    /// <summary>Runs the plan's lookups in order, giving each its share of the passages the plan calls enough.</summary>
+    /// <summary>Runs the plan's lookups in order, giving each its share of the passages the plan allows.</summary>
     /// <param name="question">The question, whose scope bounds every lookup.</param>
     /// <param name="plan">The plan to run.</param>
     /// <param name="progress">Told how far the plan has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
@@ -57,12 +57,13 @@ public sealed class PlannedMailRetrieval
     /// <exception cref="MailboxQueryFilterInvalidException">Every lookup the plan holds carried a filter this deployment refuses.</exception>
     /// <remarks>
     /// <para>
-    /// Every lookup is admitted up to an equal share of <see cref="RetrievalPlan.SufficientPassages" /> first, and only
+    /// Every lookup is admitted up to an equal share of <see cref="RetrievalPlan.PassageAllowance" /> first, and only
     /// what that leaves unspent goes to the passages a lookup found beyond its share, taken rank by rank across the
-    /// lookups. So a later lookup's best passage is never crowded out by an earlier lookup's lower-ranked ones: a plan
+    /// lookups. So a later lookup's best passages are never crowded out by an earlier lookup's lower-ranked ones: a plan
     /// lists several short wordings because it cannot know which one reaches the evidence, and the one that does is as
-    /// often the last as the first. Where the plan calls for fewer passages than it holds lookups, each lookup's share is
-    /// one and the lookups past that many are not run, since nothing they found could be admitted.
+    /// often the last as the first. The allowance assures every lookup a share, so every lookup runs; only a deployment
+    /// whose retrieval returns fewer passages than the plan holds lookups gives each one passage and leaves the lookups
+    /// past that many unrun, since nothing they found could be admitted.
     /// </para>
     /// <para>
     /// One refused lookup is skipped rather than fatal: the filters are derived from a question by a model, and a
@@ -89,10 +90,10 @@ public sealed class PlannedMailRetrieval
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(plan);
 
-        var found = new List<EmailKnowledgePassage>(plan.SufficientPassages);
+        var found = new List<EmailKnowledgePassage>(plan.PassageAllowance);
         var alreadyFound = new HashSet<(Guid StoredEmailId, string Text)>();
         var beyondShare = new List<IReadOnlyList<EmailKnowledgePassage>>(plan.Lookups.Count);
-        var share = Math.Max(1, plan.SufficientPassages / plan.Lookups.Count);
+        var share = Math.Max(1, plan.PassageAllowance / plan.Lookups.Count);
         var retrievalMode = EmailSearchRetrievalMode.Lexical;
         var lookupsRun = 0;
         var lookupsRefused = 0;
@@ -126,7 +127,7 @@ public sealed class PlannedMailRetrieval
                 // the run for its share alone: what it found beyond that is held back uncharged, and reaches the ledger
                 // only if the rest of the plan leaves room for it.
                 var newlyFound = NotYetFound(retrieved.Passages, alreadyFound);
-                var admissible = Math.Min(newlyFound.Count, Math.Min(share, plan.SufficientPassages - found.Count));
+                var admissible = Math.Min(newlyFound.Count, Math.Min(share, plan.PassageAllowance - found.Count));
 
                 beyondShare.Add(newlyFound[admissible..]);
                 found.AddRange(Admit(newlyFound[..admissible]));
@@ -134,12 +135,12 @@ public sealed class PlannedMailRetrieval
 
             if (lookupsRun + lookupsRefused == plan.Lookups.Count && !this.ledger.RetrievalWasTruncated)
             {
-                found.AddRange(Admit(RankByRank(beyondShare, alreadyFound, plan.SufficientPassages - found.Count)));
+                found.AddRange(Admit(RankByRank(beyondShare, alreadyFound, plan.PassageAllowance - found.Count)));
             }
 
             await ReportAsync();
 
-            if (found.Count >= plan.SufficientPassages || this.ledger.RetrievalWasTruncated)
+            if (found.Count >= plan.PassageAllowance || this.ledger.RetrievalWasTruncated)
             {
                 // A ceiling that is reached stops the plan rather than cutting one lookup: nothing a later lookup found
                 // would fit either, so issuing it would read more of somebody's mail out of the database to discard it.
