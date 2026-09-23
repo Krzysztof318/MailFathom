@@ -1,6 +1,6 @@
 # Chat generation
 
-<!-- describes: backend/src/AI/Chat/**, backend/src/AI/Providers/**, backend/src/AI/ProviderAdapters/Chat*.cs, backend/src/AI/ProviderAdapters/ProviderChatModelClient.cs, backend/src/AI/ProviderAdapters/ProviderCallFailure*.cs, backend/src/Application/Chat/**, backend/src/Application/AiProviders/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Providers/**, backend/src/Host/Hosting/AiProviderHealthCheck.cs, backend/src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs, backend/src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
+<!-- describes: backend/src/AI/Chat/**, backend/src/AI/Providers/**, backend/src/AI/ProviderAdapters/Chat*.cs, backend/src/AI/ProviderAdapters/ProviderChatModelClient.cs, backend/src/AI/ProviderAdapters/ProviderCallFailure*.cs, backend/src/Application/Chat/**, backend/src/Application/AiProviders/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Providers/**, backend/src/Host/Hosting/AiProviderHealthCheck.cs, backend/src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs, backend/src/Host/Hosting/Warnings/ChatStickySessionsIgnoredWarning.cs, backend/src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
 
 Text in, generated text out. This page describes the second kind of outbound AI call MailFathom makes: what a
 deployment declares to enable it, what one call is allowed to spend, what a failing call is classified as, and how an
@@ -387,13 +387,54 @@ be a member this deployment writes itself or already has a key for: the routed m
 tools and the answer format, streaming, storage and what the responses API is asked to include, the number of answers,
 the output budget, the sampling parameters, and the reasoning effort. Each of those is a bound this deployment
 enforces, a privacy decision it states on every call — the responses API is told not to store the request whatever else
-is declared — or a parameter with a key of its own, which is `MaxOutputTokens`, `Temperature`, `TopP`, or
-`ReasoningEffort`. The refusal is on the top-level name alone, so a nested member called `store` or `temperature`
+is declared — or a parameter with a key of its own, which is `MaxOutputTokens`, `Temperature`, `TopP`,
+`ReasoningEffort`, or — for OpenRouter's `session_id` — `StickySessions`. The refusal is on the top-level name alone, so a nested member called `store` or `temperature`
 inside a gateway's own block is an ordinary value and goes out as one. One model carries at most 32 members, each at
 most 4096 characters of JSON and nested at most 16 levels deep. All of it is checked at startup.
 
 **A value is not a secret.** It is written into the configuration file and into every request body, so a credential or a
 routing token belongs in [a header](#a-model-may-declare-headers-of-its-own), whose value is a secret reference.
+
+## A conversation can stay on one provider
+
+OpenRouter answers one routed model from several upstream providers and chooses one per request, and a prompt cache
+belongs to the provider that filled it. An Agent conversation resends its whole history on every turn, so it is the
+request that gains most from reaching the same provider twice and loses most from reaching a new one. `StickySessions`
+asks OpenRouter to keep it where it is:
+
+```json
+{
+  "Alias": "agent",
+  "Model": "example/chat-2",
+  "Address": "https://openrouter.ai/api/v1/",
+  "ApiKey": { "SecretReference": "file:/etc/mailfathom/secrets/openrouter-key" },
+  "StickySessions": true
+}
+```
+
+**Only OpenRouter honours it today.** A model declaring it sends a session only when its address is an `openrouter.ai`
+host. On any other address nothing is sent — no other provider reached through these APIs defines a session — and
+startup logs one warning naming the model's alias, so a configuration moving between providers keeps working and says
+where the setting has stopped doing anything.
+
+**What is grouped is one Agent conversation, and nothing else.** Every request the conversation makes carries the same
+session: each turn, each round of a turn's tool loop, and the turns after a compaction rewrote the history. A fallback
+model sends it only if its own declaration asks for it, and OpenRouter keeps a session per model anyway. Without it OpenRouter routes by a hash of a request's first system message and first
+non-system message, and both of those move within one conversation — the first turn's question is sent with the moment
+and the accounts it was asked against and every later turn replays it as written, and a compaction replaces the
+opening turns with a summary — so each move would send the whole prefix to a provider whose cache has never seen it.
+Two conversations never share a session, whoever holds them, and the compaction summary is written by a run of its own
+that carries none.
+
+**Every other operation sends none.** Each of them is one run whose calls share their opening messages, which is
+exactly what OpenRouter's default routing already keeps together, and a key wider than one run would pin unrelated
+mail's calls to one provider for no cache it could reuse.
+
+**The session is not the conversation's identifier.** It is a SHA-256 hash of it, sent as the `x-session-id` header on
+both APIs, so OpenRouter receives a key to route by rather than a name this deployment uses in its own routes and
+records. A header rather than the body's `session_id`, because it reaches both APIs by the route every declared header
+takes; `session_id` is refused as an [additional request member](#a-model-may-declare-request-members-of-its-own) so
+nothing in the body can override it, and a declared header of the same name is overwritten by it.
 
 ## The model and its parameters come from configuration
 

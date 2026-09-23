@@ -20,13 +20,15 @@ internal static class ChatDeclarations
         string? address = "https://provider.invalid/v1/",
         string routedModelName = "a-chat-model",
         ChatProviderApi api = ChatProviderApi.ChatCompletions,
-        string publishedModelName = "") =>
+        string publishedModelName = "",
+        bool stickySessions = false) =>
         new(
             alias,
             address is null ? null : new Uri(address, UriKind.Absolute),
             routedModelName,
             api,
-            publishedModelName);
+            publishedModelName,
+            stickySessions);
 
     /// <summary>Builds a plan over the declared endpoint.</summary>
     public static ChatGenerationPlan Plan(

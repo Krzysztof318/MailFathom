@@ -37,10 +37,32 @@ namespace MailFathom.AI.Chat;
 /// surfaces are two paths under one address, reached with one credential over one transport. A deployment that has to
 /// move to the other one is correcting how its endpoint is reached, not how its model is asked to answer.
 /// </para>
+/// <para>
+/// Sticky sessions belong here for the same reason: they decide which of a gateway's upstream providers a request is
+/// routed to, not how the model answers it.
+/// </para>
 /// </remarks>
+/// <param name="StickySessions">Whether a caller that holds a session asks the gateway to keep that session's requests on one upstream provider.</param>
 public sealed record ChatEndpoint(
     string Alias,
     Uri? Address,
     string RoutedModelName,
     ChatProviderApi Api,
-    string PublishedModelName);
+    string PublishedModelName,
+    bool StickySessions = false)
+{
+    /// <summary>The host of the one gateway known to honour a sticky session today.</summary>
+    private const string OpenRouterHost = "openrouter.ai";
+
+    /// <summary>Gets whether a request carries its session: the model declared sticky sessions and is reached through OpenRouter.</summary>
+    /// <remarks>
+    /// OpenRouter reads a session identifier as the key it routes a conversation by, so the requests sharing one reach
+    /// the upstream provider whose prompt cache already holds their prefix. No other provider reached through these APIs
+    /// defines one, so a declaration anywhere else sends nothing rather than a header that means nothing there.
+    /// </remarks>
+    public bool SendsStickySessions =>
+        this.StickySessions
+        && this.Address?.Host is { } host
+        && (host.Equals(OpenRouterHost, StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith("." + OpenRouterHost, StringComparison.OrdinalIgnoreCase));
+}

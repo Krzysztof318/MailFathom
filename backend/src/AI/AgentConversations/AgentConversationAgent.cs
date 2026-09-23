@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -117,11 +118,12 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             brief.Question.AskedAt);
         var tools = new AgentConversationTools(journal, retrieval, this.readers, this.egressGuard, scope.AccountIds);
         var messages = ComposeMessages(brief, scope);
+        var stickySession = StickySessionOf(brief.Question.Conversation);
 
         var answer = await ChatModelFallThrough.RunAsync(
             this.plan,
             this.logger,
-            (model, attemptToken) => this.AskAsync(model, brief.Language, messages, tools, journal, runLedger, attemptToken),
+            (model, attemptToken) => this.AskAsync(model, brief.Language, messages, tools, journal, runLedger, stickySession, attemptToken),
             () => !tools.HasProposed,
             cancellationToken);
 
@@ -176,6 +178,25 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
             AgentConversationComposition.ComposeTurn(brief.Question.AskedAt, scope.AccountIds, brief.Question.Scope, brief.Question.Text.Value)),
     ];
 
+    /// <summary>Derives the sticky session every request of one conversation is routed by.</summary>
+    /// <param name="conversation">The conversation the turn belongs to.</param>
+    /// <returns>A key that is the same for every turn of the conversation and different for every other one.</returns>
+    /// <remarks>
+    /// <para>
+    /// The conversation rather than the turn or the run, because it is what grows: every turn resends the history before
+    /// it, and a compaction rewrites that history's opening turns. OpenRouter's own routing key hashes those opening
+    /// turns, so it would move after the first turn and after every compaction, and each move sends the whole prefix to
+    /// a provider whose cache has never seen it. Nothing wider is grouped either — two conversations never share a key,
+    /// whoever holds them.
+    /// </para>
+    /// <para>
+    /// A hash rather than the identifier itself, so the gateway is handed a routing key and never a name this
+    /// deployment uses for the conversation in its own routes and records.
+    /// </para>
+    /// </remarks>
+    internal static string StickySessionOf(AgentConversationId conversation) =>
+        Convert.ToHexStringLower(SHA256.HashData(conversation.Value.ToByteArray()));
+
     /// <summary>Scans every turn the person or the Agent wrote, which is what leaves this deployment on each call.</summary>
     private async Task<IReadOnlyList<ChatMessage>> GuardAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
     {
@@ -194,6 +215,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
         AgentConversationTools tools,
         AgentAnswerJournal journal,
         MailAnsweringRunLedger runLedger,
+        string stickySession,
         CancellationToken cancellationToken)
     {
         // Against this model's own bounds, and before the scan, so a conversation refused by a ceiling costs no scan.
@@ -206,7 +228,7 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
 
         using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport, stickySession);
         using var resilientClient = new ResilientChatClient(
             providerClient,
             endpoint,
