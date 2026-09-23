@@ -39,9 +39,10 @@ public sealed record RetrievalPlan
     /// A plan writes several wordings because it cannot know which one the mail uses, and the one that does rarely
     /// ranks the evidence first: the other messages sharing its words come before it. A model's judgement of how many
     /// extracts would answer is routinely one, which on its own would hand over the first lookup's best passage and
-    /// never run the rest. Four is where the evaluation corpus stops losing evidence that a lookup of the plan reached,
-    /// and at the passage lengths a deployment cuts, four passages for each of the most lookups a plan may hold stay far
-    /// inside the characters one question may retrieve.
+    /// never run the rest. Four is where the evaluation corpus stops losing evidence that a lookup of the plan reached.
+    /// Neither bound a run keeps to comes from this number: <see cref="PassageAllowance" /> caps it at what one
+    /// retrieval returns, and the run's own ledger stops admitting passages at the characters one question may
+    /// retrieve, whatever the allowance still has room for.
     /// </remarks>
     public const int PassagesAssuredPerLookup = 4;
 
