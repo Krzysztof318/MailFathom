@@ -5,6 +5,7 @@
 using MailFathom.AI.AgentConversations;
 using MailFathom.AI.Orchestration;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -33,7 +34,15 @@ internal static class AgentConversationSummaryScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             AgentConversationSummaryInstructions.Text,
-            AgentConversationSummaryInstructions.ComposeTurn(scenario.PreviousSummary, scenario.Turns),
+            (plan, _) =>
+            {
+                // Refused rather than sent, as the deployment's summariser refuses a turn past the model's bound.
+                var turn = AgentConversationSummaryInstructions.ComposeTurn(scenario.PreviousSummary, scenario.Turns);
+
+                ModelsUnderTest.RequireOneTurn(turn, plan);
+
+                return Task.FromResult(turn);
+            },
             static (model, plan) => AgentConversationSummaryComposition.Compose(
                 model,
                 plan,
@@ -46,7 +55,10 @@ internal static class AgentConversationSummaryScenario
 
     private static string? ShortfallOf(string answer, AgentConversationSummaryCase scenario)
     {
-        var summary = answer.Trim();
+        if (AgentConversationSummarizer.SummaryOf(answer) is not { } summary)
+        {
+            return "the summary is empty, so the compaction would fail and the conversation would be sent uncompacted.";
+        }
 
         if (HostileMail.Codes.Any(code => string.Equals(summary.Trim('"', '.', ' '), code, StringComparison.OrdinalIgnoreCase)))
         {

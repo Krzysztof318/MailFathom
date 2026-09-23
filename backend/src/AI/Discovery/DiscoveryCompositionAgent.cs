@@ -124,13 +124,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         var sources = DiscoveryComposedSources.Declare(evidence.Passages);
 
-        var turn = DiscoveryCompositionInstructions.ComposeCompositionTurn(
-            await this.egressGuard.GuardAsync(
-                SensitiveContentEgressPoint.ChatPrompt,
-                question.Text.Value,
-                cancellationToken),
-            plan.Intent,
-            await this.GuardAsync(sources, cancellationToken));
+        var turn = await ComposeTurnAsync(question, plan, sources, this.egressGuard, cancellationToken);
 
         var answer = await this.AskAsync(turn, cancellationToken);
         var composed = DiscoveryCompositionReading.Read(answer?.Text, plan, sources, evidence, coverage);
@@ -148,17 +142,68 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         return composed;
     }
 
+    /// <summary>Composes the turn one composition sends: the question and the declared sources, guarded, beside the plan's intent.</summary>
+    /// <param name="question">The question the result answers.</param>
+    /// <param name="plan">The plan the run followed, whose intent the result is shaped for.</param>
+    /// <param name="sources">The sources the run declared, in the order their citations number them.</param>
+    /// <param name="egressGuard">Scans the question and every source before any of it is composed.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        MailQuestion question,
+        DiscoveryRunPlan plan,
+        IReadOnlyList<DiscoveryComposedSource> sources,
+        SensitiveContentEgressGuard egressGuard,
+        CancellationToken cancellationToken) =>
+        DiscoveryCompositionInstructions.ComposeCompositionTurn(
+            await egressGuard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                question.Text.Value,
+                cancellationToken),
+            plan.Intent,
+            await GuardAsync(sources, egressGuard, cancellationToken));
+
+    /// <summary>Whether a turn fits in one request to the model, which is what decides whether a composition is asked for at all.</summary>
+    /// <param name="turn">The composed turn.</param>
+    /// <param name="plan">The model the turn would be sent to.</param>
+    /// <returns><see langword="true" /> where the turn is inside every bound the model declares.</returns>
+    internal static bool FitsOneRequest(string turn, ChatGenerationPlan plan)
+    {
+        try
+        {
+            ChatRequestBounds.Require(
+                [new ChatMessage(ChatRole.User, turn)],
+                plan.MaximumMessagesPerRequest,
+                plan.MaximumRequestCharacters,
+                plan.MaximumRequestImageOctets);
+
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            // Caught around the bound alone, because every argument failure elsewhere is a wiring defect that must not
+            // read as a mailbox holding no answer.
+            return false;
+        }
+    }
+
+    /// <summary>Reads what the model wrote as a composition, or as none where it wrote nothing.</summary>
+    /// <param name="text">The text the model's turn carried.</param>
+    /// <returns>The text, or <see langword="null" /> where it is blank, which the reading treats as no composition.</returns>
+    internal static string? CompositionOf(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;
+
     /// <summary>Withholds from the provider whatever this deployment withholds, source by source.</summary>
     /// <remarks>
     /// The extracts leave this deployment and the plan does not, so only this copy is guarded: what the plan quotes is
     /// the user's own mail going back to the user, and redacting it there would hide from somebody what they already
     /// have. A guard that is inactive returns the same text, so a deployment scanning nothing pays nothing here.
     /// </remarks>
-    private async Task<IReadOnlyList<DiscoveryTurnSource>> GuardAsync(
+    private static async Task<IReadOnlyList<DiscoveryTurnSource>> GuardAsync(
         IReadOnlyList<DiscoveryComposedSource> sources,
+        SensitiveContentEgressGuard egressGuard,
         CancellationToken cancellationToken)
     {
-        if (!this.egressGuard.IsActive)
+        if (!egressGuard.IsActive)
         {
             return
             [
@@ -175,11 +220,11 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         {
             guarded.Add(new DiscoveryTurnSource(
                 source.Citation.Id.Value,
-                await this.egressGuard.GuardAsync(
+                await egressGuard.GuardAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     source.Citation.Label.Value,
                     cancellationToken),
-                await this.egressGuard.GuardAsync(
+                await egressGuard.GuardAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     source.Extract,
                     cancellationToken)));
@@ -206,20 +251,11 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     {
         var endpoint = this.plan.Endpoint;
 
-        try
-        {
-            ChatRequestBounds.Require(
-                [new ChatMessage(ChatRole.User, turn)],
-                this.plan.MaximumMessagesPerRequest,
-                this.plan.MaximumRequestCharacters,
-                this.plan.MaximumRequestImageOctets);
-        }
-        catch (ArgumentException)
+        if (!FitsOneRequest(turn, this.plan))
         {
             // The turn is past what this deployment sends in one request, which is a question whose mail does not fit
             // rather than a defect: the result says the sources do not answer it, and the operator's own ceilings are
-            // what decides whether a mailbox this size is answerable here. Caught around the bound alone, because
-            // every argument failure below it is a wiring defect that must not read as a mailbox holding no answer.
+            // what decides whether a mailbox this size is answerable here.
             DiscoveryCompositionEvents.LogRequestPastItsBound(this.logger, endpoint.Alias);
 
             return null;
@@ -291,13 +327,13 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(response.Text))
+        var composition = CompositionOf(response.Text);
+
+        if (composition is null)
         {
             DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
-
-            return new ChatModelAnswer(endpoint.Alias, Text: null);
         }
 
-        return new ChatModelAnswer(endpoint.Alias, response.Text);
+        return new ChatModelAnswer(endpoint.Alias, composition);
     }
 }

@@ -45,4 +45,9 @@ public static class ContactCorrespondenceBounds
 
     /// <summary>The greatest number of documents one correlation publishes.</summary>
     public const int Documents = 10;
+
+    /// <summary>Gives the oldest instant a message may be dated and still be read into the correlation.</summary>
+    /// <param name="now">The instant the contact is read at.</param>
+    /// <returns>The instant <see cref="WindowDays" /> days before it.</returns>
+    internal static DateTimeOffset WindowStartingBefore(DateTimeOffset now) => now.AddDays(-WindowDays);
 }

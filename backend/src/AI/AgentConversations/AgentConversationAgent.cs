@@ -145,7 +145,9 @@ internal sealed class AgentConversationAgent : IAgentAnswerComposer
     }
 
     /// <summary>Turns an answer into the text a block may carry, or refuses it as no answer at all.</summary>
-    private static PresentationText? Presentable(string? text)
+    /// <param name="text">The text the run's last turn carried.</param>
+    /// <returns>The text a block carries, or <see langword="null" /> where none is left, which the run fails as an empty answer.</returns>
+    internal static PresentationText? Presentable(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

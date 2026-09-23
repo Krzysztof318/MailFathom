@@ -6,6 +6,7 @@ using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.Orchestration;
 using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.BodyCleanup;
@@ -39,7 +40,11 @@ internal static class MailBodyCleanupScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             MailBodyCleanupInstructions.Text,
-            MailBodyCleanupInstructions.ComposeOutlineTurn(outline),
+            (plan, cancellationToken) => MailBodyCleanupAgent.ComposeTurnAsync(
+                outline,
+                SensitiveContentEgressGuards.Inactive(),
+                plan,
+                cancellationToken),
             static (model, plan) => MailBodyCleanupAgentComposition.Compose(
                 model,
                 plan,

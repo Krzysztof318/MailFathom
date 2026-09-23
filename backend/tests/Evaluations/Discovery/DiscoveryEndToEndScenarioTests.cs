@@ -7,6 +7,7 @@ using MailFathom.AI.Chat;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -157,17 +158,7 @@ public sealed partial class DiscoveryEndToEndScenarioTests : IDisposable
             verdict.Get<BooleanMetric>(DiscoveryEndToEndScenario.CitesEvidenceMetricName),
         ];
 
-    private static ChatGenerationPlan PlanFor(string model) =>
-        ChatGenerationPlan.Create(
-            new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
-            maximumOutputTokens: 1024,
-            temperature: null,
-            topP: null,
-            reasoningEffort: null,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 1024,
-            requestTimeout: TimeSpan.FromSeconds(30));
+    private static ChatGenerationPlan PlanFor(string model) => ModelsUnderTest.PlanFor(model);
 
     [GeneratedRegex(@"^\[(s\d+)\]", RegexOptions.Multiline)]
     private static partial Regex OfferedSource();

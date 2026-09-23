@@ -6,6 +6,7 @@ using MailFathom.AI.Chat;
 using MailFathom.AI.Retrieval;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -130,17 +131,7 @@ public sealed class RelevanceFilterScenarioTests : IDisposable
     private static int? KeptAt(EvaluationResult verdict, string metricName) =>
         (int?)verdict.Get<NumericMetric>(metricName).Value;
 
-    private static ChatGenerationPlan PlanFor(string model) =>
-        ChatGenerationPlan.Create(
-            new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
-            maximumOutputTokens: 16,
-            temperature: null,
-            topP: null,
-            reasoningEffort: null,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 1024,
-            requestTimeout: TimeSpan.FromSeconds(30));
+    private static ChatGenerationPlan PlanFor(string model) => ModelsUnderTest.PlanFor(model);
 
     private async Task<EvaluationResult> RunScenarioAsync(IChatClient model)
     {

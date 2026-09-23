@@ -248,7 +248,11 @@ internal sealed class StoredThreadStateStore(
     /// text was never read out of the store, so there is nothing partial to send by mistake and the record written for
     /// it says the conversation was not read rather than summarizing the part that would have fitted.
     /// </remarks>
-    private static DerivableThread Compose(
+    /// <param name="conversation">The selected conversation.</param>
+    /// <param name="byThread">The messages read for every selected conversation, oldest first, each already cut to its bound.</param>
+    /// <param name="maximumMessagesPerThread">How many messages a conversation may carry and still be derived from.</param>
+    /// <returns>The conversation as a derivation is handed it.</returns>
+    internal static DerivableThread Compose(
         ThreadAwaitingStateRow conversation,
         IReadOnlyDictionary<Guid, DerivableThreadMessageRow[]> byThread,
         int maximumMessagesPerThread)
@@ -281,7 +285,14 @@ internal sealed class StoredThreadStateStore(
             ExceedsBound: false);
     }
 
-    private sealed record DerivableThreadMessageRow(
+    /// <summary>One message of a selected conversation as the store reads it.</summary>
+    /// <param name="EmailThreadId">The conversation it belongs to.</param>
+    /// <param name="StoredEmailId">The message.</param>
+    /// <param name="Subject">Its subject.</param>
+    /// <param name="SenderDisplayName">The name it was sent under, or <see langword="null" /> where it carried none.</param>
+    /// <param name="SentAt">When it was sent.</param>
+    /// <param name="Text">Its text, cut to what one message may carry.</param>
+    internal sealed record DerivableThreadMessageRow(
         Guid EmailThreadId,
         Guid StoredEmailId,
         string? Subject,

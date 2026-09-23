@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.AI.Evaluation;
 using Xunit;
@@ -60,19 +61,19 @@ public sealed class DayLayoutScenarioTests : IDisposable
     }
 
     [Fact]
-    public void RequestFor_ACase_PutsEveryTaskAndEveryCommitmentOfThatDayInTheTurn()
+    public async Task RequestFor_ACase_PutsEveryTaskAndEveryCommitmentOfThatDayInTheTurn()
     {
         // Arrange
         var scenario = DayLayoutCase.Named("OrdinaryDay");
 
         // Act
-        var request = DayLayoutScenario.RequestFor(scenario);
+        var turn = await DayLayoutScenario.RequestFor(scenario).ComposeTurnAsync(ModelsUnderTest.PlanFor("scripted-model"), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.All(
             scenario.Question.Tasks.Select(static task => task.Title)
                 .Concat(scenario.Question.Commitments.Select(static commitment => commitment.Title)),
-            line => Assert.Contains(line, request.Turn, StringComparison.Ordinal));
+            line => Assert.Contains(line, turn, StringComparison.Ordinal));
     }
 
     public void Dispose() => this.run.Dispose();

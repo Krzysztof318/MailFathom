@@ -4,7 +4,10 @@
 
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.Search;
+using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.Search;
@@ -34,7 +37,10 @@ internal static class MailSearchPhraseScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             MailSearchPhraseInstructions.Text,
-            MailSearchPhraseInstructions.ComposeReadingTurn(scenario.Sentence, MailSearchPhraseCase.AskedAt),
+            (_, cancellationToken) => MailSearchPhraseAgent.ComposeTurnAsync(
+                new MailSearchPhrase(EmailSearchQueryText.Create(scenario.Sentence), MailSearchPhraseCase.AskedAt),
+                SensitiveContentEgressGuards.Inactive(),
+                cancellationToken),
             static (model, plan) => MailSearchPhraseAgentComposition.Compose(
                 model,
                 plan,

@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.Enrichment;
@@ -36,17 +37,18 @@ internal static class EmailEnrichmentScenario
     {
         ArgumentNullException.ThrowIfNull(scenario);
 
-        var message = scenario.Message();
+        var message = scenario.Message().Enrichable;
         var language = scenario.Language ?? MailAccountLanguage.English;
         var instruction = EmailEnrichmentInstructions.TextFor(language);
 
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             instruction,
-            EmailEnrichmentInstructions.ComposeEnrichmentTurn(
-                message.Subject,
-                message.ReceivedAt,
-                [.. message.Passages.Select(static passage => passage.Text)]),
+            (plan, cancellationToken) => EmailEnrichmentAgent.ComposeTurnAsync(
+                message,
+                SensitiveContentEgressGuards.Inactive(),
+                plan,
+                cancellationToken),
             (model, plan) => EmailEnrichmentAgentComposition.Compose(
                 model,
                 plan,

@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails;
+using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Contacts;
@@ -57,17 +58,7 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
         var scanned = await this.ScannedThreadMessagesQuery(scope, normalizedAddresses, correspondedOnOrAfter)
             .ToArrayAsync(cancellationToken);
 
-        return
-        [
-            .. scanned
-                .DistinctBy(static row => row.EmailThreadId)
-                .Take(ContactCorrespondenceBounds.Threads)
-                .Select(static row => new CorrespondingThread(
-                    EmailThreadId.Create(row.EmailThreadId),
-                    StoredEmailId.Create(row.StoredEmailId),
-                    row.Subject,
-                    row.ReceivedAt)),
-        ];
+        return ThreadsOf(scanned);
     }
 
     /// <inheritdoc />
@@ -88,15 +79,7 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
         var rows = await this.RecentDocumentsQuery(scope, normalizedAddresses, correspondedOnOrAfter)
             .ToArrayAsync(cancellationToken);
 
-        return
-        [
-            .. rows.Select(static row => new CorrespondingDocument(
-                StoredEmailId.Create(row.StoredEmailId),
-                row.AttachmentPosition,
-                row.FileName,
-                row.DeclaredMediaType,
-                row.ReceivedAt)),
-        ];
+        return DocumentsOf(rows);
     }
 
     /// <summary>Composes the bounded walk the conversations are cut from.</summary>
@@ -112,12 +95,25 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
     internal IQueryable<CorrespondingThreadRow> ScannedThreadMessagesQuery(
         MailboxScope scope,
         IReadOnlyList<string> normalizedAddresses,
+        DateTimeOffset correspondedOnOrAfter) =>
+        ScannedThreadMessages(
+            StoredEmailSelectionPredicate.WithinScope(dbContext.StoredEmails.AsNoTracking(), scope),
+            normalizedAddresses,
+            correspondedOnOrAfter);
+
+    /// <summary>Selects the most recent messages exchanged with the addresses, newest first, which the threads are read from.</summary>
+    /// <param name="readable">The mail the caller may read.</param>
+    /// <param name="normalizedAddresses">The contact's addresses, normalized.</param>
+    /// <param name="correspondedOnOrAfter">The oldest instant a message may be dated and still count.</param>
+    /// <returns>The scanned messages, at most <see cref="ContactCorrespondenceBounds.ScannedMessages" /> of them.</returns>
+    internal static IQueryable<CorrespondingThreadRow> ScannedThreadMessages(
+        IQueryable<StoredEmailEntity> readable,
+        IReadOnlyList<string> normalizedAddresses,
         DateTimeOffset correspondedOnOrAfter)
     {
         var addresses = normalizedAddresses.ToArray();
 
-        return StoredEmailSelectionPredicate
-            .WithinScope(dbContext.StoredEmails.AsNoTracking(), scope)
+        return readable
             .Where(email => email.ReceivedAt >= correspondedOnOrAfter
                 && email.EmailThreadId != null
                 && ((email.SenderNormalizedAddress != null && addresses.Contains(email.SenderNormalizedAddress))
@@ -133,6 +129,21 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
             .Take(ContactCorrespondenceBounds.ScannedMessages);
     }
 
+    /// <summary>Reads the scanned messages as the threads they belong to, each named by its most recent message.</summary>
+    /// <param name="scanned">The scanned messages, newest first.</param>
+    /// <returns>The threads, most recent first, at most <see cref="ContactCorrespondenceBounds.Threads" /> of them.</returns>
+    internal static IReadOnlyList<CorrespondingThread> ThreadsOf(IEnumerable<CorrespondingThreadRow> scanned) =>
+    [
+        .. scanned
+            .DistinctBy(static row => row.EmailThreadId)
+            .Take(ContactCorrespondenceBounds.Threads)
+            .Select(static row => new CorrespondingThread(
+                EmailThreadId.Create(row.EmailThreadId),
+                StoredEmailId.Create(row.StoredEmailId),
+                row.Subject,
+                row.ReceivedAt)),
+    ];
+
     /// <summary>Composes the query the documents are read from.</summary>
     /// <param name="scope">The accounts and folders the caller may read.</param>
     /// <param name="normalizedAddresses">The comparison forms of the contact's addresses.</param>
@@ -145,12 +156,25 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
     internal IQueryable<CorrespondingDocumentRow> RecentDocumentsQuery(
         MailboxScope scope,
         IReadOnlyList<string> normalizedAddresses,
+        DateTimeOffset correspondedOnOrAfter) =>
+        RecentDocuments(
+            StoredEmailSelectionPredicate.WithinScope(dbContext.StoredEmails.AsNoTracking(), scope),
+            normalizedAddresses,
+            correspondedOnOrAfter);
+
+    /// <summary>Selects the files the addresses sent most recently, newest first.</summary>
+    /// <param name="readable">The mail the caller may read.</param>
+    /// <param name="normalizedAddresses">The contact's addresses, normalized.</param>
+    /// <param name="correspondedOnOrAfter">The oldest instant a message may be dated and still count.</param>
+    /// <returns>The files, at most <see cref="ContactCorrespondenceBounds.Documents" /> of them.</returns>
+    internal static IQueryable<CorrespondingDocumentRow> RecentDocuments(
+        IQueryable<StoredEmailEntity> readable,
+        IReadOnlyList<string> normalizedAddresses,
         DateTimeOffset correspondedOnOrAfter)
     {
         var addresses = normalizedAddresses.ToArray();
 
-        var sent = StoredEmailSelectionPredicate
-            .WithinScope(dbContext.StoredEmails.AsNoTracking(), scope)
+        var sent = readable
             .Where(email => email.ReceivedAt >= correspondedOnOrAfter
                 && email.SenderNormalizedAddress != null
                 && addresses.Contains(email.SenderNormalizedAddress));
@@ -167,4 +191,17 @@ internal sealed class ContactCorrespondenceIndex(MailFathomDbContext dbContext) 
 
         return documents.Take(ContactCorrespondenceBounds.Documents);
     }
+
+    /// <summary>Reads the selected files as the documents a card is derived from.</summary>
+    /// <param name="rows">The files, newest first.</param>
+    /// <returns>The documents, in the same order.</returns>
+    internal static IReadOnlyList<CorrespondingDocument> DocumentsOf(IEnumerable<CorrespondingDocumentRow> rows) =>
+    [
+        .. rows.Select(static row => new CorrespondingDocument(
+            StoredEmailId.Create(row.StoredEmailId),
+            row.AttachmentPosition,
+            row.FileName,
+            row.DeclaredMediaType,
+            row.ReceivedAt)),
+    ];
 }

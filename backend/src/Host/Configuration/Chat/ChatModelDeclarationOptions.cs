@@ -75,9 +75,14 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     public string Address { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the greatest number of tokens one answer may occupy.</summary>
-    /// <remarks>The bound on what one call costs. Reaching it is not a failure: the answer arrives marked as cut short, and the text before the cut is real.</remarks>
+    /// <remarks>
+    /// The bound on what one call costs. Reaching it is not a failure: the answer arrives marked as cut short, and the
+    /// text before the cut is real. The default leaves a reasoning model room to think before it writes: such a model
+    /// spends part of the same budget on reasoning, so a smaller one cuts the structured answer short on an ordinary
+    /// question.
+    /// </remarks>
     [Range(1, 200_000)]
-    public int MaxOutputTokens { get; set; } = 1024;
+    public int MaxOutputTokens { get; set; } = 4096;
 
     /// <summary>Gets or sets the sampling temperature, left unset to keep the model's own default.</summary>
     /// <remarks>

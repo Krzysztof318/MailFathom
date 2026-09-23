@@ -2,12 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
-using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Emails;
-using MailFathom.Domain.Emails.Authorship;
-using MailFathom.Domain.Folders;
+using MailFathom.Evaluations.AgentConversations;
 using MailFathom.Evaluations.Corpus;
 
 namespace MailFathom.Evaluations.RelevanceFilter;
@@ -19,30 +16,29 @@ namespace MailFathom.Evaluations.RelevanceFilter;
 internal sealed record LabelledCandidate(int MessagePosition, string Evidence, bool Answers)
 {
     /// <summary>Reads the passage out of the corpus, as retrieval would hand it to the filter.</summary>
-    /// <returns>The first passage of the message carrying the evidence.</returns>
-    /// <exception cref="InvalidOperationException">Thrown, naming the phrase, when no passage of the message carries it.</exception>
+    /// <returns>The first passage of the message carrying the evidence, read into the passage a model receives.</returns>
+    /// <exception cref="InvalidOperationException">Thrown, naming the phrase, when no passage of the message carries it within what one passage may carry.</exception>
     /// <remarks>
-    /// The identity is derived from the message's position, so the same message is the same stored email wherever it is
-    /// labelled. Nothing about the sender is established, which is what a judgement is shown for mail nobody verified.
+    /// The passage is the search's extract of the message, read through the deployment's own reading of a match, so it is
+    /// bounded as a deployment bounds it. Nothing about the sender is established, which is what a judgement is shown for
+    /// mail nobody verified.
     /// </remarks>
     public EmailKnowledgePassage Resolve()
     {
         var message = CorpusMessage.At(this.MessagePosition);
 
-        var passage = message.Passages.FirstOrDefault(passage => passage.Text.Contains(this.Evidence, StringComparison.Ordinal))
+        var extract = message.Passages.FirstOrDefault(passage => passage.Text.Contains(this.Evidence, StringComparison.Ordinal))
             ?? throw new InvalidOperationException(
                 $"No passage of message {this.MessagePosition} carries \"{this.Evidence}\", so the label names nothing.");
 
-        return new EmailKnowledgePassage
-        {
-            StoredEmailId = StoredEmailId.Create(new Guid(this.MessagePosition + 1, 0, 0, new byte[8])),
-            AccountId = MailAccountId.Create("evaluation"),
-            FolderAlias = MailFolderAlias.Create("INBOX"),
-            Subject = message.Subject,
-            ReceivedAt = message.ReceivedAt,
-            SenderVerification = SenderVerification.NotEstablished,
-            MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
-            Text = passage.Text,
-        };
+        var passage = MailboxKnowledgeSearch.PassagesOf(
+                [new EmailSearchMatch(CorpusReaders.SummaryOf(message, thread: null), RelevanceRank: 1, [extract.Text])],
+                EmailKnowledgeBounds.Default)
+            .Single();
+
+        return passage.Text.Contains(this.Evidence, StringComparison.Ordinal)
+            ? passage
+            : throw new InvalidOperationException(
+                $"Message {this.MessagePosition} carries \"{this.Evidence}\" past what one passage may carry, so the label names nothing.");
     }
 }

@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.SyntheticMail.Corpus;
 using MimeKit;
@@ -52,9 +53,6 @@ internal sealed record CorpusMessage(
     IReadOnlyList<EnrichablePassage> Passages,
     ReadOnlyMemory<byte> RawMime)
 {
-    /// <summary>The bound a deployment extracts a body under by default.</summary>
-    private const int MaximumBodyCharacters = 100_000;
-
     private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Delivered = new(static () =>
         ReadArchives(["office-en.zip", "hard-shapes-en.zip"], firstPosition: 0));
 
@@ -69,6 +67,20 @@ internal sealed record CorpusMessage(
 
     /// <summary>Gets whether it carries an attachment.</summary>
     public bool HasAttachments => this.Attachments.Count > 0;
+
+    /// <summary>Gets the message as the enrichment pass hands it to a derivation: the leading passages one derivation reads.</summary>
+    /// <remarks>
+    /// Every passage of a corpus message is cut from its body, so its passages are already in the order the pass reads
+    /// them — body before attachment, then by ordinal — and what is left to apply is the pass's own count.
+    /// </remarks>
+    public EnrichableEmail Enrichable =>
+        new(this.Id, this.Subject, this.ReceivedAt, [.. this.Passages.Take(MailEnrichmentPass.MaximumPassagesPerEmail)]);
+
+    /// <summary>Reads what the message added as a store reads it out for a derivation: its leading characters, up to a bound.</summary>
+    /// <param name="maximumCharacters">How many characters the store's query takes of one message.</param>
+    /// <returns>The text, cut to the bound.</returns>
+    public string TextWithin(int maximumCharacters) =>
+        this.Text.Length <= maximumCharacters ? this.Text : this.Text[..maximumCharacters];
 
     /// <summary>Gets the text a judge holds the answer against: the subject and every passage.</summary>
     public string GroundingText =>
@@ -128,12 +140,13 @@ internal sealed record CorpusMessage(
 
             message.WriteTo(stored);
 
-            // The same pair a deployment derives: what the message carried, and the reading with the quoted history
-            // cut off it. A message with no plain-text part is read from its markup the way a deployment reads it,
-            // rather than being taken for one that said nothing.
-            var text = message.TextBody is { } plain
-                ? ExtractedEmailText.FromPlainTextBody(plain, QuotedHistoryTrimmer.Trim(plain))
-                : DerivedFromMarkup(message.HtmlBody ?? string.Empty);
+            // The pair a deployment derives, by its own extraction under its default bound: what the message carried,
+            // and the reading with the quoted history cut off it.
+            var body = MimeAttachmentClassifier.FindBody(message);
+            var text = EmailBodyTextExtractor.Extract(
+                body.TextParts,
+                body.IsEncrypted,
+                new MailSynchronizationOptions().MaxExtractedTextCharacters);
 
             var author = message.From.Mailboxes.FirstOrDefault();
 
@@ -146,8 +159,8 @@ internal sealed record CorpusMessage(
                 author?.Address ?? string.Empty,
                 author?.Name is { Length: > 0 } name ? name : null,
                 [.. message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(static mailbox => mailbox.Address)],
-                [.. message.Attachments.Select(static part => new CorpusAttachment(
-                    part.ContentDisposition?.FileName ?? part.ContentType.Name,
+                [.. MimeAttachmentClassifier.FindAttachmentParts(message).Select(static part => new CorpusAttachment(
+                    MimeAttachmentClassifier.DeclaredFileNameOf(part)?.Value,
                     part.ContentType.MimeType))],
                 text.TrimmedText ?? string.Empty,
                 PassagesOf(text),
@@ -172,14 +185,5 @@ internal sealed record CorpusMessage(
                 chunk.Ordinal,
                 chunk.Text)),
         ];
-    }
-
-    private static ExtractedEmailText DerivedFromMarkup(string html)
-    {
-        var derived = HtmlBodyTextReader.ReadDisplayedText(html, MaximumBodyCharacters).Trim();
-
-        return derived.Length is 0
-            ? ExtractedEmailText.NoTextualBody
-            : ExtractedEmailText.DerivedFromHtmlBody(derived, QuotedHistoryTrimmer.Trim(derived));
     }
 }

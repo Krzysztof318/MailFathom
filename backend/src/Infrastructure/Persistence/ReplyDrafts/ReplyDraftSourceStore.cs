@@ -63,10 +63,7 @@ internal sealed class ReplyDraftSourceStore(
 
         // The recent end of the conversation rather than its opening, because a reply answers where an exchange got to.
         // Ordering descending and reversing afterwards is what makes the bound cut the beginning rather than the end.
-        var recent = await this.ReadableWithText(scope, answered, answeredEmailId)
-            .OrderByDescending(email => email.SentAt)
-            .ThenByDescending(email => email.Id)
-            .Take(bounds.MaximumMessages)
+        var recent = await MostRecent(this.ReadableWithText(scope, answered, answeredEmailId), bounds.MaximumMessages)
             .Select(email => new ConversationMessageRow(
                 email.Id,
                 email.Subject,
@@ -76,6 +73,32 @@ internal sealed class ReplyDraftSourceStore(
                 email.SearchDocument!.BodyText!.Substring(0, bounds.MaximumCharactersPerMessage)))
             .ToArrayAsync(cancellationToken);
 
+        return Assemble(
+            recent,
+            this.SendingAddressOf(answered.MailboxAccountId),
+            await this.StyleSamplesAsync(scope, answered, bounds, cancellationToken));
+    }
+
+    /// <summary>Orders mail newest first, by when it was sent and then by identity, and keeps the most recent of it.</summary>
+    /// <param name="emails">The mail to order.</param>
+    /// <param name="count">How many of the most recent messages to keep.</param>
+    /// <returns>The most recent messages, newest first.</returns>
+    internal static IQueryable<StoredEmailEntity> MostRecent(IQueryable<StoredEmailEntity> emails, int count) =>
+        emails
+            .OrderByDescending(email => email.SentAt)
+            .ThenByDescending(email => email.Id)
+            .Take(count);
+
+    /// <summary>Assembles what a drafting is grounded in from the conversation's most recent messages, read newest first.</summary>
+    /// <param name="recent">The conversation's most recent messages, newest first, each already cut to its bound.</param>
+    /// <param name="sendingNormalizedAddress">The normalized address the mailbox sends from, which names nobody the reply is addressed to.</param>
+    /// <param name="styleSamples">The person's own recent sent mail the reply's manner is drawn from.</param>
+    /// <returns>The sources, the conversation oldest first and numbered in that order.</returns>
+    internal static ReplyDraftSources Assemble(
+        IReadOnlyList<ConversationMessageRow> recent,
+        string? sendingNormalizedAddress,
+        IReadOnlyList<string> styleSamples)
+    {
         var conversation = recent.Reverse().ToArray();
 
         return new ReplyDraftSources(
@@ -88,8 +111,8 @@ internal sealed class ReplyDraftSourceStore(
                     row.SentAt,
                     row.Text)),
             ],
-            Participants(conversation, this.SendingAddressOf(answered.MailboxAccountId)),
-            await this.StyleSamplesAsync(scope, answered, bounds, cancellationToken));
+            Participants(conversation, sendingNormalizedAddress),
+            styleSamples);
     }
 
     /// <summary>Reads the people the conversation names, leaving out the account whose reply this is.</summary>
@@ -183,15 +206,13 @@ internal sealed class ReplyDraftSourceStore(
         var alias = sentFolder.Alias.Value;
         var answeredThreadId = answered.EmailThreadId;
 
-        return await this.Readable(scope)
-            .Where(email => email.MailboxAccountId == answered.MailboxAccountId
-                && email.MailFolder.Alias == alias
-                && email.SearchDocument != null
-                && email.SearchDocument.BodyText != null
-                && (answeredThreadId == null || email.EmailThreadId != answeredThreadId))
-            .OrderByDescending(email => email.SentAt)
-            .ThenByDescending(email => email.Id)
-            .Take(bounds.MaximumStyleMessages)
+        return await MostRecent(
+                this.Readable(scope).Where(email => email.MailboxAccountId == answered.MailboxAccountId
+                    && email.MailFolder.Alias == alias
+                    && email.SearchDocument != null
+                    && email.SearchDocument.BodyText != null
+                    && (answeredThreadId == null || email.EmailThreadId != answeredThreadId)),
+                bounds.MaximumStyleMessages)
             .Select(email => email.SearchDocument!.BodyText!.Substring(0, bounds.MaximumStyleCharactersPerMessage))
             .ToArrayAsync(cancellationToken);
     }
@@ -200,13 +221,20 @@ internal sealed class ReplyDraftSourceStore(
     private string? SendingAddressOf(string mailboxAccountId) =>
         senderIdentities.FindSenderIdentity(MailAccountId.Create(mailboxAccountId))?.Address.NormalizedAddress;
 
-    private sealed record AnsweredEmailRow(string MailboxAccountId, Guid? EmailThreadId);
-
-    private sealed record ConversationMessageRow(
+    /// <summary>One message of the conversation as the store reads it.</summary>
+    /// <param name="StoredEmailId">The message.</param>
+    /// <param name="Subject">Its subject.</param>
+    /// <param name="SenderDisplayName">The name it was sent under, or <see langword="null" /> where it carried none.</param>
+    /// <param name="SenderAddress">The address it was sent from.</param>
+    /// <param name="SentAt">When it was sent.</param>
+    /// <param name="Text">Its text, cut to what one message may carry.</param>
+    internal sealed record ConversationMessageRow(
         Guid StoredEmailId,
         string? Subject,
         string? SenderDisplayName,
         string? SenderAddress,
         DateTimeOffset? SentAt,
         string Text);
+
+    private sealed record AnsweredEmailRow(string MailboxAccountId, Guid? EmailThreadId);
 }

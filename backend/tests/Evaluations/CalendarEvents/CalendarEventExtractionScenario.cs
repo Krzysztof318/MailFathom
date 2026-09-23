@@ -39,7 +39,7 @@ internal static class CalendarEventExtractionScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             instruction,
-            turn.Text,
+            turn.ComposeAsync,
             static (model, plan) => CalendarEventExtractionAgentComposition.Compose(
                 model,
                 plan,

@@ -143,20 +143,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             return this.Withhold(EmailEnrichmentWithholding.AllowanceExhausted);
         }
 
-        // The subject and the passages are somebody's mail, so they are scanned like every other text this deployment
-        // sends: a message quoting a key a colleague pasted has put that key into the request.
-        var subject = await this.egressGuard.GuardOptionalAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            email.Subject,
-            cancellationToken);
-        var passages = await this.egressGuard.GuardAllAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            [.. email.Passages.Select(static passage => passage.Text)],
-            cancellationToken);
-
-        var turn = Bounded(
-            EmailEnrichmentInstructions.ComposeEnrichmentTurn(subject, email.ReceivedAt, passages),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(email, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -191,6 +178,34 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
         }
 
         return derivation;
+    }
+
+    /// <summary>Composes the turn one derivation sends: the message's subject and passages, guarded and cut to what one call may carry.</summary>
+    /// <param name="email">The message, with the passages the derivation reads.</param>
+    /// <param name="egressGuard">Scans the subject and every passage before either is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        EnrichableEmail email,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        // The subject and the passages are somebody's mail, so they are scanned like every other text this deployment
+        // sends: a message quoting a key a colleague pasted has put that key into the request.
+        var subject = await egressGuard.GuardOptionalAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            email.Subject,
+            cancellationToken);
+        var passages = await egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            [.. email.Passages.Select(static passage => passage.Text)],
+            cancellationToken);
+
+        return Bounded(
+            EmailEnrichmentInstructions.ComposeEnrichmentTurn(subject, email.ReceivedAt, passages),
+            plan.MaximumRequestCharacters);
     }
 
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>

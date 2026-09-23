@@ -139,10 +139,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
             return ContactRelationship.Nothing;
         }
 
-        var turn = Bounded(
-            ContactRelationshipInstructions.ComposeRelationshipTurn(
-                await this.GuardedTurnAsync(correspondence, cancellationToken)),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(correspondence, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -173,6 +170,22 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
         return card;
     }
 
+    /// <summary>Composes the turn one card is derived from: the correspondence, guarded and cut to what one call may carry.</summary>
+    /// <param name="correspondence">The conversations and files the card is read from.</param>
+    /// <param name="egressGuard">Scans every text a sender wrote before it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        ContactCorrespondence correspondence,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken) =>
+        Bounded(
+            ContactRelationshipInstructions.ComposeRelationshipTurn(
+                await GuardedTurnAsync(correspondence, egressGuard, cancellationToken)),
+            plan.MaximumRequestCharacters);
+
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
     /// <remarks>
     /// A bound rather than a refusal, and the trade every derivation beside it makes: what a bounded turn loses is the
@@ -190,8 +203,9 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
     /// deployment sends — a subject quoting a key a colleague pasted has put that key into the request. The declared
     /// type and the instants are this deployment's own reading of a message and carry nothing anybody composed.
     /// </remarks>
-    private async Task<GuardedRelationshipTurn> GuardedTurnAsync(
+    private static async Task<GuardedRelationshipTurn> GuardedTurnAsync(
         ContactCorrespondence correspondence,
+        SensitiveContentEgressGuard egressGuard,
         CancellationToken cancellationToken)
     {
         var conversations = new List<GuardedRelationshipConversation>(correspondence.Threads.Count);
@@ -199,7 +213,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
         foreach (var thread in correspondence.Threads)
         {
             conversations.Add(new GuardedRelationshipConversation(
-                await this.GuardedOptionalAsync(thread.Subject, cancellationToken),
+                await GuardedOptionalAsync(egressGuard, thread.Subject, cancellationToken),
                 thread.LastCorrespondedAt));
         }
 
@@ -208,7 +222,7 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
         foreach (var document in correspondence.Documents)
         {
             documents.Add(new GuardedRelationshipDocument(
-                await this.GuardedOptionalAsync(document.FileName, cancellationToken),
+                await GuardedOptionalAsync(egressGuard, document.FileName, cancellationToken),
                 document.DeclaredMediaType,
                 document.ReceivedAt));
         }
@@ -216,8 +230,11 @@ internal sealed class ContactRelationshipAgent : IContactRelationshipDeriver
         return new GuardedRelationshipTurn(conversations, documents);
     }
 
-    private Task<string?> GuardedOptionalAsync(string? text, CancellationToken cancellationToken) =>
-        this.egressGuard.GuardOptionalAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
+    private static Task<string?> GuardedOptionalAsync(
+        SensitiveContentEgressGuard egressGuard,
+        string? text,
+        CancellationToken cancellationToken) =>
+        egressGuard.GuardOptionalAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
 
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
     /// <remarks>

@@ -33,23 +33,33 @@ internal static class EmailBodyTextExtractor
     {
         ArgumentNullException.ThrowIfNull(classification);
 
+        return Extract(classification.BodyTextParts, classification.BodyIsEncrypted, maxCharacters);
+    }
+
+    /// <summary>Extracts the body text of one message from the parts its structure resolved as the body.</summary>
+    /// <param name="bodyTextParts">The textual parts the walk resolved as the body, in the order it found them.</param>
+    /// <param name="bodyIsEncrypted">Whether the body itself is encrypted.</param>
+    /// <param name="maxCharacters">The greatest number of characters the extracted text may hold.</param>
+    /// <returns>The extracted text, or the reason the message yielded none.</returns>
+    internal static ExtractedEmailText Extract(IReadOnlyList<TextPart> bodyTextParts, bool bodyIsEncrypted, int maxCharacters)
+    {
         // An encrypted body is present and unreadable rather than absent. Recording it as empty would make it
         // indistinguishable from a message that genuinely said nothing, and the difference is the whole reason the
         // marker exists: one is a complete record, the other a permanent gap in search.
         //
         // The body-specific marker is read rather than the summary's, which also answers for an encrypted attachment.
         // A readable message that forwards an encrypted one would otherwise have the body its author wrote discarded.
-        if (classification.BodyIsEncrypted)
+        if (bodyIsEncrypted)
         {
             return ExtractedEmailText.EncryptedBody;
         }
 
-        if (ReadPlainTextBody(classification.BodyTextParts, maxCharacters) is { } plainText)
+        if (ReadPlainTextBody(bodyTextParts, maxCharacters) is { } plainText)
         {
             return Build(plainText, maxCharacters, ExtractedEmailText.FromPlainTextBody);
         }
 
-        if (DeriveTextFromHtmlBody(classification.BodyTextParts, maxCharacters) is { } derivedText)
+        if (DeriveTextFromHtmlBody(bodyTextParts, maxCharacters) is { } derivedText)
         {
             return Build(derivedText, maxCharacters, ExtractedEmailText.DerivedFromHtmlBody);
         }

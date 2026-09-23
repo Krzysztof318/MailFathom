@@ -400,6 +400,20 @@ public sealed class ChatModelDeclarationOptionsTests
         Assert.Contains(errors, error => error.Contains("more than once", StringComparison.Ordinal));
     }
 
+    /// <summary>A model that declares no output budget leaves a reasoning model room to reason and still write the answer.</summary>
+    [Fact]
+    public void ToPlan_AModelDeclaringNoOutputBudget_AllowsFourThousandNinetySixTokens()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+
+        // Act
+        var plan = model.ToPlan();
+
+        // Assert
+        Assert.Equal(4096, plan.MaximumOutputTokens);
+    }
+
     /// <summary>The endpoint the adapter runs on takes its routing name from the declared model and trims what an operator typed.</summary>
     [Fact]
     public void ToEndpoint_ADeclaration_CarriesTheAliasAddressAndRoutedModel()

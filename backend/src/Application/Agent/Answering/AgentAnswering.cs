@@ -190,7 +190,13 @@ public sealed class AgentAnswering
             await this.store.TrySetTitleAsync(question.Conversation, question.User, TitleOf(question.Text), cancellationToken);
         }
 
-        var history = await this.ComposeHistoryAsync(question, earlier.Context, journal, cancellationToken);
+        var history = await ComposeHistoryAsync(
+            question,
+            earlier.Context,
+            this.contextBudget.Tokens,
+            this.summarizer,
+            journal,
+            cancellationToken);
 
         // The scope the conversation stands under rides on the question's own turn rather than in the history, so the
         // context it was opened from is stated verbatim on every turn and is never left for a summary to paraphrase.
@@ -205,13 +211,21 @@ public sealed class AgentAnswering
     }
 
     /// <summary>Composes the history the turn sends, compacting the conversation first where it has outgrown the budget.</summary>
-    private async Task<IReadOnlyList<AgentHistoryTurn>> ComposeHistoryAsync(
+    /// <param name="question">The question the turn answers, whose answer records the compaction.</param>
+    /// <param name="context">The conversation before the question.</param>
+    /// <param name="budget">How many tokens the turn may send before its earlier part is compacted.</param>
+    /// <param name="summarizer">Writes the summary a compaction keeps, or <see langword="null" /> where the deployment compacts nothing.</param>
+    /// <param name="journal">Records the compaction beside the answer it was taken for.</param>
+    /// <param name="cancellationToken">Withdraws the turn.</param>
+    /// <returns>The history, oldest turn first.</returns>
+    internal static async Task<IReadOnlyList<AgentHistoryTurn>> ComposeHistoryAsync(
         AgentQuestion question,
         AgentConversationContext context,
+        int budget,
+        IAgentConversationSummarizer? summarizer,
         AgentAnswerJournal journal,
         CancellationToken cancellationToken)
     {
-        var budget = this.contextBudget.Tokens;
         var history = context.Compose();
 
         if (context.EstimateTokens(history, question.Text.Value) <= budget)
@@ -220,9 +234,9 @@ public sealed class AgentAnswering
         }
 
         var plan = context.PlanCompaction(budget);
-        var summary = plan is null || this.summarizer is null
+        var summary = plan is null || summarizer is null
             ? null
-            : await this.summarizer.SummarizeAsync(plan.PreviousSummary, plan.Turns, cancellationToken);
+            : await summarizer.SummarizeAsync(plan.PreviousSummary, plan.Turns, cancellationToken);
 
         if (plan is null || summary is null)
         {

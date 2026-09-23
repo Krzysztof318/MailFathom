@@ -118,18 +118,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
 
         var endpoint = this.plan.Endpoint;
 
-        // The question is a prompt somebody wrote, so it is guarded like every other text that leaves this deployment:
-        // somebody asking what to do about the key a colleague sent them has put that key into the request.
-        var questionText = await this.egressGuard.GuardAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            question.Text.Value,
-            cancellationToken);
-
-        var turn = DiscoveryPlanningInstructions.ComposePlanningTurn(
-            questionText,
-            question.Scope,
-            question.AskedAt,
-            this.retrievalBounds);
+        var turn = await ComposeTurnAsync(question, this.retrievalBounds, this.egressGuard, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -158,6 +147,32 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
         }
 
         return outcome.Plan;
+    }
+
+    /// <summary>Composes the turn one derivation sends: the question, guarded, with its scope, its instant, and the retrieval bounds a plan may name.</summary>
+    /// <param name="question">The question and the scope it was asked over.</param>
+    /// <param name="retrievalBounds">What one run may retrieve, which a plan's sufficiency is stated against.</param>
+    /// <param name="egressGuard">Scans the question before it is composed.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        MailQuestion question,
+        EmailKnowledgeBounds retrievalBounds,
+        SensitiveContentEgressGuard egressGuard,
+        CancellationToken cancellationToken)
+    {
+        // The question is a prompt somebody wrote, so it is guarded like every other text that leaves this deployment:
+        // somebody asking what to do about the key a colleague sent them has put that key into the request.
+        var questionText = await egressGuard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            question.Text.Value,
+            cancellationToken);
+
+        return DiscoveryPlanningInstructions.ComposePlanningTurn(
+            questionText,
+            question.Scope,
+            question.AskedAt,
+            retrievalBounds);
     }
 
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>

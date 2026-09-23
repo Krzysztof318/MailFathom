@@ -142,20 +142,7 @@ internal sealed class DayLayoutAgent : IDayLayoutPlanner
             return this.Withhold(DayLayoutWithholding.AllowanceExhausted);
         }
 
-        // A task's line and an appointment's title are somebody's own text and some of it was read out of their mail,
-        // so both are scanned like every other text this deployment sends.
-        var taskTitles = await this.egressGuard.GuardAllAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            [.. question.Tasks.Select(static task => task.Title)],
-            cancellationToken);
-        var commitmentTitles = await this.egressGuard.GuardAllAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            [.. question.Commitments.Select(static commitment => commitment.Title)],
-            cancellationToken);
-
-        var turn = Bounded(
-            DayLayoutInstructions.ComposeLayoutTurn(question, taskTitles, commitmentTitles),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(question, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -187,6 +174,34 @@ internal sealed class DayLayoutAgent : IDayLayoutPlanner
         }
 
         return DayLayoutDerivation.Settled(suggestion);
+    }
+
+    /// <summary>Composes the turn one arrangement sends: the day's tasks and appointments, guarded and cut to what one call may carry.</summary>
+    /// <param name="question">The day, what is owed in it, and what is already fixed in it.</param>
+    /// <param name="egressGuard">Scans every title before any of it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        DayLayoutQuestion question,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        // A task's line and an appointment's title are somebody's own text and some of it was read out of their mail,
+        // so both are scanned like every other text this deployment sends.
+        var taskTitles = await egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            [.. question.Tasks.Select(static task => task.Title)],
+            cancellationToken);
+        var commitmentTitles = await egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            [.. question.Commitments.Select(static commitment => commitment.Title)],
+            cancellationToken);
+
+        return Bounded(
+            DayLayoutInstructions.ComposeLayoutTurn(question, taskTitles, commitmentTitles),
+            plan.MaximumRequestCharacters);
     }
 
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>

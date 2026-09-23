@@ -67,6 +67,19 @@ internal sealed partial class MimeAttachmentClassifier
             classifier.bodyBranchIsEncrypted);
     }
 
+    /// <summary>Names the textual parts that are a message's body, and whether that body is encrypted, measuring nothing.</summary>
+    /// <param name="message">The parsed message.</param>
+    /// <returns>The same body text parts and the same encryption verdict <see cref="ClassifyAsync" /> reports.</returns>
+    internal static (IReadOnlyList<TextPart> TextParts, bool IsEncrypted) FindBody(MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        var classifier = new MimeAttachmentClassifier();
+        classifier.WalkEntity(message.Body, isInBodyBranch: true);
+
+        return ([.. classifier.bodyBranchLeaves.OfType<TextPart>()], classifier.bodyBranchIsEncrypted);
+    }
+
     /// <summary>Names the parts a read reports as attachments, in the order that read lists them.</summary>
     /// <param name="message">The parsed message.</param>
     /// <returns>The attachment parts, in the walk order a link's position refers to.</returns>
@@ -419,9 +432,7 @@ internal sealed partial class MimeAttachmentClassifier
         MimeEntity entity,
         CancellationToken cancellationToken)
     {
-        var fileName = AttachmentFileName.TryNormalize(ReadDeclaredFileName(entity), out var normalizedFileName)
-            ? normalizedFileName
-            : (AttachmentFileName?)null;
+        var fileName = DeclaredFileNameOf(entity);
 
         await using var measured = new AttachmentContentMeasuringStream();
 
@@ -429,6 +440,12 @@ internal sealed partial class MimeAttachmentClassifier
 
         return new ExtractedEmailAttachment(fileName, entity.ContentType.MimeType, measured.WrittenOctets);
     }
+
+    /// <summary>Reads the name an attachment declared, in the form a read publishes it.</summary>
+    /// <param name="entity">One of the parts <see cref="FindAttachmentParts" /> returned.</param>
+    /// <returns>The normalized name, or <see langword="null" /> where the part declared none that normalizes.</returns>
+    internal static AttachmentFileName? DeclaredFileNameOf(MimeEntity entity) =>
+        AttachmentFileName.TryNormalize(ReadDeclaredFileName(entity), out var fileName) ? fileName : null;
 
     /// <summary>Reads the name the message declared, already decoded from its RFC 2047 or RFC 2231 form.</summary>
     private static string? ReadDeclaredFileName(MimeEntity entity) => entity switch

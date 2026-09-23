@@ -113,14 +113,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
 
         var endpoint = this.plan.Endpoint;
 
-        // The sentence is a prompt somebody wrote, so it is guarded like every other text that leaves this deployment:
-        // somebody looking for the message a colleague sent them a key in has put that key into the request.
-        var phraseText = await this.egressGuard.GuardAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            phrase.Text.Value,
-            cancellationToken);
-
-        var turn = MailSearchPhraseInstructions.ComposeReadingTurn(phraseText, phrase.AskedAt);
+        var turn = await ComposeTurnAsync(phrase, this.egressGuard, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -150,6 +143,26 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
         }
 
         return reading;
+    }
+
+    /// <summary>Composes the turn one reading sends: the sentence, guarded, beside the instant it was typed at.</summary>
+    /// <param name="phrase">The sentence and when it was typed.</param>
+    /// <param name="egressGuard">Scans the sentence before it is composed.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        MailSearchPhrase phrase,
+        SensitiveContentEgressGuard egressGuard,
+        CancellationToken cancellationToken)
+    {
+        // The sentence is a prompt somebody wrote, so it is guarded like every other text that leaves this deployment:
+        // somebody looking for the message a colleague sent them a key in has put that key into the request.
+        var phraseText = await egressGuard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            phrase.Text.Value,
+            cancellationToken);
+
+        return MailSearchPhraseInstructions.ComposeReadingTurn(phraseText, phrase.AskedAt);
     }
 
     /// <summary>How many constraints a reading produced, which is all a log may say about one.</summary>

@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.Discovery;
@@ -44,7 +45,11 @@ internal static class DiscoveryPlanningScenario
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             DiscoveryPlanningInstructions.Text,
-            DiscoveryPlanningInstructions.ComposePlanningTurn(scenario.Question, WholeMailbox, AskedAt, EmailKnowledgeBounds.Default),
+            (_, cancellationToken) => DiscoveryPlanningAgent.ComposeTurnAsync(
+                new MailQuestion(MailQuestionText.Create(scenario.Question), WholeMailbox, AskedAt),
+                EmailKnowledgeBounds.Default,
+                SensitiveContentEgressGuards.Inactive(),
+                cancellationToken),
             static (model, plan) => DiscoveryPlanningAgentComposition.Compose(
                 model,
                 plan,

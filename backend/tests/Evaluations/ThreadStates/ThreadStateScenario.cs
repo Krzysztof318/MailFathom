@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.ThreadStates;
@@ -34,20 +35,19 @@ internal static class ThreadStateScenario
     {
         ArgumentNullException.ThrowIfNull(scenario);
 
-        var messages = scenario.Messages;
+        var thread = scenario.Thread;
+        var messages = thread.Messages;
         var language = scenario.Language ?? MailAccountLanguage.English;
         var instruction = ThreadStateInstructions.TextFor(language);
 
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             instruction,
-            ThreadStateInstructions.ComposeThreadTurn(
-                scenario.Subject,
-                [.. messages.Select(static message => new GuardedThreadMessage(
-                    message.Position,
-                    message.AuthorDisplayName,
-                    message.SentAt,
-                    message.Text))]),
+            (plan, cancellationToken) => ThreadStateAgent.ComposeTurnAsync(
+                thread,
+                SensitiveContentEgressGuards.Inactive(),
+                plan,
+                cancellationToken),
             (model, plan) => ThreadStateAgentComposition.Compose(
                 model,
                 plan,

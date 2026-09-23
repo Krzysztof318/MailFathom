@@ -6,11 +6,10 @@ using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
-using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
+using MailFathom.Evaluations.AgentConversations;
 using MailFathom.Evaluations.Corpus;
 
 namespace MailFathom.Evaluations.Answering;
@@ -23,10 +22,10 @@ namespace MailFathom.Evaluations.Answering;
 /// as it says, and the words match the way a deployment's lexical search matches them, every word required unless
 /// <c>OR</c> offers an alternative. That last part is what keeps a lookup from flooding the run: admitting any message
 /// carrying any word fills a whole window with mail that barely matches and spends the run's retrieval allowance on
-/// the first lookup. It answers through the same
-/// <see cref="EmailKnowledgeLookup" /> a deployment's search returns, one passage per message, cut into the extracts
-/// <see cref="EmailSearchSnippetBounds.Default" /> allows and bounded the way <see cref="EmailKnowledgeBounds.Default" />
-/// bounds one.
+/// the first lookup. What it stands in for is the search window beneath the deployment's knowledge search: it answers
+/// with one match per message, cut into the extracts <see cref="EmailSearchSnippetBounds.Default" /> allows, and those
+/// matches become passages through <see cref="MailboxKnowledgeSearch.PassagesOf" /> under
+/// <see cref="EmailKnowledgeBounds.Default" />, as a deployment's become them.
 /// </para>
 /// <para>
 /// The corpus carries no server state, so every message reads as unread, unflagged, and carrying no keyword.
@@ -83,10 +82,11 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
             .OrderByDescending(static candidate => candidate.Score)
             .ThenByDescending(static candidate => candidate.Message.ReceivedAt)
             .Take(EmailKnowledgeBounds.Default.MaximumPassages)
-            .Select(candidate => PassageOf(candidate.Message, wanted))
-            .ToList();
+            .Select(candidate => MatchOf(candidate.Message, candidate.Score, wanted));
 
-        return Task.FromResult(EmailKnowledgeLookup.Unfiltered(found, EmailSearchRetrievalMode.Lexical));
+        return Task.FromResult(EmailKnowledgeLookup.Unfiltered(
+            MailboxKnowledgeSearch.PassagesOf(found, EmailKnowledgeBounds.Default),
+            EmailSearchRetrievalMode.Lexical));
     }
 
     private static bool Admits(CorpusMessage message, EmailKnowledgeQuery query) =>
@@ -149,36 +149,26 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
     /// deployment sends, so twenty of them spend a run's whole retrieval allowance on one lookup, and an extract cut from
     /// the start of a message rather than around the match misses the sentence that carries the answer.
     /// </remarks>
-    private static EmailKnowledgePassage PassageOf(CorpusMessage message, IReadOnlyList<string> wanted)
+    private static EmailSearchMatch MatchOf(CorpusMessage message, int score, IReadOnlyList<string> wanted)
     {
         var snippets = EmailSearchSnippetBounds.Default;
 
         // ponytail: one window per wanted word's first occurrence in a passage, scored by the words it carries — not
         // ts_headline's cover density; measure the ranking over the real search if an extract's exact words matter.
-        var fragments = message.Passages
-            .SelectMany(passage => wanted
-                .Select(term => passage.Text.IndexOf(term, StringComparison.OrdinalIgnoreCase))
-                .Where(static position => position >= 0)
-                .Select(position => WindowAround(passage.Text, position, snippets.WordsPerSnippet)))
-            .Distinct(StringComparer.Ordinal)
-            .OrderByDescending(fragment => wanted.Count(term => fragment.Contains(term, StringComparison.OrdinalIgnoreCase)))
-            .Take(snippets.SnippetsPerEmail)
-            .DefaultIfEmpty(message.Passages.Count is 0 ? string.Empty : WindowAround(message.Passages[0].Text, 0, snippets.WordsPerSnippet));
+        IReadOnlyList<string> fragments =
+        [
+            .. message.Passages
+                .SelectMany(passage => wanted
+                    .Select(term => passage.Text.IndexOf(term, StringComparison.OrdinalIgnoreCase))
+                    .Where(static position => position >= 0)
+                    .Select(position => WindowAround(passage.Text, position, snippets.WordsPerSnippet)))
+                .Distinct(StringComparer.Ordinal)
+                .OrderByDescending(fragment => wanted.Count(term => fragment.Contains(term, StringComparison.OrdinalIgnoreCase)))
+                .Take(snippets.SnippetsPerEmail)
+                .DefaultIfEmpty(message.Passages.Count is 0 ? string.Empty : WindowAround(message.Passages[0].Text, 0, snippets.WordsPerSnippet)),
+        ];
 
-        var text = string.Join('\n', fragments);
-        var limit = EmailKnowledgeBounds.Default.MaximumCharactersPerPassage;
-
-        return new EmailKnowledgePassage
-        {
-            StoredEmailId = message.Id,
-            AccountId = Account,
-            FolderAlias = Inbox,
-            Subject = message.Subject,
-            ReceivedAt = message.ReceivedAt,
-            SenderVerification = SenderVerification.NotEstablished,
-            MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
-            Text = text.Length > limit ? text[..limit] : text,
-        };
+        return new EmailSearchMatch(CorpusReaders.SummaryOf(message, thread: null), score, fragments);
     }
 
     /// <summary>Takes the words around a position, half before it and half from it.</summary>

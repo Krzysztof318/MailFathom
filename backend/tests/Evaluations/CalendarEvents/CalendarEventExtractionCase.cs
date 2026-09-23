@@ -5,6 +5,7 @@
 using MailFathom.AI.CalendarEvents;
 using MailFathom.Application.Calendar.Extraction;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.TestSupport;
 
 namespace MailFathom.Evaluations.CalendarEvents;
 
@@ -128,10 +129,12 @@ internal sealed record CalendarEventExtractionCase(
                 var read = message();
 
                 return new CalendarEventExtractionTurn(
-                    CalendarEventExtractionInstructions.ComposeMailTurn(
-                        read.Subject,
+                    (plan, cancellationToken) => CalendarEventExtractionAgent.ComposeMailTurnAsync(
+                        read.Enrichable,
                         read.ReceivedAt,
-                        [.. read.Passages.Select(static passage => passage.Text)]),
+                        SensitiveContentEgressGuards.Inactive(),
+                        plan,
+                        cancellationToken),
                     read.ReceivedAt,
                     CalendarEventExtraction.MaximumEvents);
             },
@@ -144,10 +147,21 @@ internal sealed record CalendarEventExtractionCase(
         Func<IReadOnlyList<ExtractedCalendarEvent>, string?> expectation) =>
         new(
             name,
-            () => new CalendarEventExtractionTurn(
-                CalendarEventExtractionInstructions.ComposeDescriptionTurn(sentence, Typed),
-                Typed,
-                CalendarEventExtractionAgent.MaximumEventsPerDescription),
+            () =>
+            {
+                var description = CalendarEventDescription.TryCreate(sentence, Typed, out var typed)
+                    ? typed
+                    : throw new InvalidOperationException($"Case {name} types a sentence no person could submit.");
+
+                return new CalendarEventExtractionTurn(
+                    (plan, cancellationToken) => CalendarEventExtractionAgent.ComposeDescriptionTurnAsync(
+                        description,
+                        SensitiveContentEgressGuards.Inactive(),
+                        plan,
+                        cancellationToken),
+                    description.WrittenAt,
+                    CalendarEventExtractionAgent.MaximumEventsPerDescription);
+            },
             expectation);
 
     /// <summary>Reads a day of the month the sentences are typed in, under the offset whoever typed them is standing in.</summary>

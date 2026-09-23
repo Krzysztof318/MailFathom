@@ -135,9 +135,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             return this.Withhold(MailBodyCleaningWithholding.AllowanceExhausted);
         }
 
-        var turn = Bounded(
-            MailBodyCleanupInstructions.ComposeOutlineTurn(await this.GuardedAsync(body, cancellationToken)),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(body, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -170,6 +168,21 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         return MailBodyCleaningProposal.Proposing(segments);
     }
 
+    /// <summary>Composes the turn one proposal sends: the outline, guarded and cut to what one call may carry.</summary>
+    /// <param name="body">The outline of the body being cleaned.</param>
+    /// <param name="egressGuard">Scans every text of the outline before any of it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        CleanableMailBody body,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken) =>
+        Bounded(
+            MailBodyCleanupInstructions.ComposeOutlineTurn(await GuardedAsync(body, egressGuard, cancellationToken)),
+            plan.MaximumRequestCharacters);
+
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
     /// <remarks>
     /// A bound rather than a refusal, and the trade here is the gentlest of the three passes that make it: what a cut costs
@@ -189,25 +202,28 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// index, the kind and the link count are this deployment's own readings of the markup and carry nothing a sender
     /// wrote.
     /// </remarks>
-    private async Task<CleanableMailBody> GuardedAsync(CleanableMailBody body, CancellationToken cancellationToken)
+    private static async Task<CleanableMailBody> GuardedAsync(
+        CleanableMailBody body,
+        SensitiveContentEgressGuard egressGuard,
+        CancellationToken cancellationToken)
     {
         // One outline is one payload, so it is reported as one operation: what an operator waits on is the whole of what
         // leaves before a message can be drawn, which a percentile over each block opening cannot say.
-        using var scan = this.egressGuard.BeginGuardedOperation(
+        using var scan = egressGuard.BeginGuardedOperation(
             SensitiveContentEgressPoint.ChatPrompt,
             cancellationToken);
 
-        var subject = await this.egressGuard.GuardOptionalAsync(
+        var subject = await egressGuard.GuardOptionalAsync(
             SensitiveContentEgressPoint.ChatPrompt,
             body.Subject,
             cancellationToken);
 
-        var senderName = await this.egressGuard.GuardOptionalAsync(
+        var senderName = await egressGuard.GuardOptionalAsync(
             SensitiveContentEgressPoint.ChatPrompt,
             body.SenderName,
             cancellationToken);
 
-        var openings = await this.egressGuard.GuardAllAsync(
+        var openings = await egressGuard.GuardAllAsync(
             SensitiveContentEgressPoint.ChatPrompt,
             [.. body.Blocks.Select(block => block.Opening)],
             cancellationToken);

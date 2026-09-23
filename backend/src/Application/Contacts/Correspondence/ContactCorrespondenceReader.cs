@@ -111,7 +111,7 @@ public sealed class ContactCorrespondenceReader
             return ContactCorrespondence.Nothing;
         }
 
-        var correspondedOnOrAfter = this.clock.GetUtcNow().AddDays(-ContactCorrespondenceBounds.WindowDays);
+        var correspondedOnOrAfter = ContactCorrespondenceBounds.WindowStartingBefore(this.clock.GetUtcNow());
         var addresses = AddressesOf(contact);
 
         var threads = await this.correspondenceIndex.ReadRecentThreadsAsync(

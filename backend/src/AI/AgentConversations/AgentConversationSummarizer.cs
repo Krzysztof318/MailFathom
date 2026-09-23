@@ -142,14 +142,28 @@ internal sealed class AgentConversationSummarizer : IAgentConversationSummarizer
 
         var agent = AgentConversationSummaryComposition.Compose(budgetedClient, model, this.instructionEnvelope, this.loggerFactory);
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-        var summary = response.Text?.Trim();
+        var summary = SummaryOf(response.Text)
+            ?? throw new ChatGenerationFailedException(endpoint.Alias, ChatGenerationFailure.AnswerEmpty);
+
+        AgentConversationEvents.LogCompacted(this.logger, endpoint.Alias, summary.Length);
+
+        return summary;
+    }
+
+    /// <summary>Reads what the model wrote as the summary a compaction keeps, or as none where it wrote nothing.</summary>
+    /// <param name="text">The text the model's turn carried.</param>
+    /// <returns>
+    /// The summary, trimmed and cut to what a compaction may keep, or <see langword="null" /> where nothing is left of it,
+    /// which a compaction fails as an empty answer.
+    /// </returns>
+    internal static string? SummaryOf(string? text)
+    {
+        var summary = text?.Trim();
 
         if (string.IsNullOrEmpty(summary))
         {
-            throw new ChatGenerationFailedException(endpoint.Alias, ChatGenerationFailure.AnswerEmpty);
+            return null;
         }
-
-        AgentConversationEvents.LogCompacted(this.logger, endpoint.Alias, summary.Length);
 
         return summary.Length <= AgentConversationSummaryInstructions.MaximumSummaryLength
             ? summary

@@ -5,23 +5,19 @@
 using MailFathom.Application.Contacts.Correspondence;
 using MailFathom.Application.Contacts.Relationship;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Emails;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Languages;
+using MailFathom.Infrastructure.Persistence.Contacts;
 
 namespace MailFathom.Evaluations.ContactRelationships;
 
 /// <summary>One person's correspondence in the corpus put to the relationship agent, and what the card read from it has to say.</summary>
 /// <remarks>
 /// <para>
-/// The correspondence is built the way the correspondence index answers for an opened contact: every conversation a
-/// message from or to the address belongs to, named by the most recent of those messages, and every file the address
-/// sent — each list newest first and cut to the index's <see cref="ContactCorrespondenceBounds.Threads" /> and
-/// <see cref="ContactCorrespondenceBounds.Documents" />. The index's recency window is deliberately not applied: it is
-/// measured back from the moment a contact is opened, so applying it here would make what a case measures depend on the
-/// day the run happens and would empty every case once the corpus is a year old. Its message-scan bound is not applied
-/// either, because the whole corpus is smaller than it. The turn carries subjects, file names, and instants and no message
-/// text, so an expectation asks only what those can settle.
+/// The correspondence is what the correspondence index answers for an opened contact, through the index's own queries
+/// run over <see cref="CorpusMailbox" />. The contact is opened at the newest message of that mailbox, so the index's
+/// recency window is applied at an instant that does not depend on the day the run happens. The turn carries subjects,
+/// file names, and instants and no message text, so an expectation asks only what those can settle.
 /// </para>
 /// <para>
 /// The mailbox the index reads is the corpus beside <see cref="WrittenCorpus" />, whose people share no address with the
@@ -163,45 +159,20 @@ internal sealed record ContactRelationshipCase(
         new("Mixed.PolishCorrespondenceForAnEnglishReader", "piotr.wawrzyniak@kamionka.test", NamesItsCases, UserLanguage.English),
     ];
 
-    /// <summary>Gets every conversation the mailbox holds: the corpus's first, then the written ones, the hostile ones, and the Polish ones.</summary>
-    /// <remarks>The Polish corpus comes last, so every conversation before it keeps the thread identifier its position derives.</remarks>
-    private static IEnumerable<IReadOnlyList<CorpusMessage>> Mailbox =>
-        CorpusMessage.Exchanges.Concat(WrittenCorpus.Exchanges).Concat(HostileMail.Exchanges).Concat(PolishCorpus.Exchanges);
-
-    /// <summary>Gets the correspondence as the correspondence index would answer it for this address.</summary>
+    /// <summary>Gets the correspondence as the correspondence index answers it for this address.</summary>
     public ContactCorrespondence Correspondence
     {
         get
         {
-            var threads = Mailbox
-                .Select(static (exchange, index) => (exchange, index))
-                .Where(conversation => conversation.exchange.Any(this.Names))
-                .Select(conversation =>
-                {
-                    var latest = conversation.exchange.Where(this.Names).MaxBy(static message => message.ReceivedAt)!;
+            IReadOnlyList<string> addresses = [CorpusMailbox.NormalizedAddressOf(this.Address)!];
+            var readable = CorpusMailbox.Stored.AsQueryable();
+            var correspondedOnOrAfter = ContactCorrespondenceBounds.WindowStartingBefore(CorpusMailbox.Newest);
 
-                    return new CorrespondingThread(
-                        EmailThreadId.Create(new Guid(conversation.index + 1, 1, 0, new byte[8])),
-                        latest.Id,
-                        latest.Subject,
-                        latest.ReceivedAt);
-                })
-                .OrderByDescending(static thread => thread.LastCorrespondedAt)
-                .Take(ContactCorrespondenceBounds.Threads);
-
-            var documents = Mailbox
-                .SelectMany(static exchange => exchange)
-                .Where(message => string.Equals(message.Sender, this.Address, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(static message => message.Attachments.Select((attachment, position) => new CorrespondingDocument(
-                    message.Id,
-                    position,
-                    attachment.FileName,
-                    attachment.DeclaredMediaType,
-                    message.ReceivedAt)))
-                .OrderByDescending(static document => document.ReceivedAt)
-                .Take(ContactCorrespondenceBounds.Documents);
-
-            return new ContactCorrespondence([.. threads], [.. documents]);
+            return new ContactCorrespondence(
+                ContactCorrespondenceIndex.ThreadsOf(
+                    ContactCorrespondenceIndex.ScannedThreadMessages(readable, addresses, correspondedOnOrAfter)),
+                ContactCorrespondenceIndex.DocumentsOf(
+                    ContactCorrespondenceIndex.RecentDocuments(readable, addresses, correspondedOnOrAfter)));
         }
     }
 
@@ -257,8 +228,4 @@ internal sealed record ContactRelationshipCase(
 
         return pointing.Any(statement => statement?.Sources.Contains(ContactRelationshipSource.Conversation(thread)) is true);
     }
-
-    private bool Names(CorpusMessage message) =>
-        string.Equals(message.Sender, this.Address, StringComparison.OrdinalIgnoreCase)
-        || message.Recipients.Contains(this.Address, StringComparer.OrdinalIgnoreCase);
 }

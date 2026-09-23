@@ -137,7 +137,9 @@ public sealed class MailBodyCleaning
     /// envelope sender where both are present — that is the order a reader sees them in, and a pasted block repeats
     /// whichever of them the forwarding system had.
     /// </remarks>
-    private static string? SenderOf(EmailContentHeaders headers)
+    /// <param name="headers">The headers the read published.</param>
+    /// <returns>The name or address the message is from, or <see langword="null" /> where it names no author.</returns>
+    internal static string? SenderOf(EmailContentHeaders headers)
     {
         var author = headers.Participants.FirstOrDefault(participant => participant.Role is EmailAddressRole.From)
             ?? headers.Participants.FirstOrDefault(participant => participant.Role is EmailAddressRole.Sender);
