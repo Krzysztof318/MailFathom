@@ -48,7 +48,7 @@ public sealed class PlannedMailRetrieval
         this.ledger = ledger;
     }
 
-    /// <summary>Runs the plan's lookups in order until enough distinct passages have been found or the plan runs out.</summary>
+    /// <summary>Runs the plan's lookups in order, giving each its share of the passages the plan calls enough.</summary>
     /// <param name="question">The question, whose scope bounds every lookup.</param>
     /// <param name="plan">The plan to run.</param>
     /// <param name="progress">Told how far the plan has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
@@ -56,6 +56,14 @@ public sealed class PlannedMailRetrieval
     /// <returns>What the run may answer from, with what it took to find it.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Every lookup the plan holds carried a filter this deployment refuses.</exception>
     /// <remarks>
+    /// <para>
+    /// Every lookup is admitted up to an equal share of <see cref="RetrievalPlan.SufficientPassages" /> first, and only
+    /// what that leaves unspent goes to the passages a lookup found beyond its share, taken rank by rank across the
+    /// lookups. So a later lookup's best passage is never crowded out by an earlier lookup's lower-ranked ones: a plan
+    /// lists several short wordings because it cannot know which one reaches the evidence, and the one that does is as
+    /// often the last as the first. Where the plan calls for fewer passages than it holds lookups, each lookup's share is
+    /// one and the lookups past that many are not run, since nothing they found could be admitted.
+    /// </para>
     /// <para>
     /// One refused lookup is skipped rather than fatal: the filters are derived from a question by a model, and a
     /// question is not unanswerable because one of several wordings named an address that is not one. A plan whose every
@@ -83,6 +91,8 @@ public sealed class PlannedMailRetrieval
 
         var found = new List<EmailKnowledgePassage>(plan.SufficientPassages);
         var alreadyFound = new HashSet<(Guid StoredEmailId, string Text)>();
+        var beyondShare = new List<IReadOnlyList<EmailKnowledgePassage>>(plan.Lookups.Count);
+        var share = Math.Max(1, plan.SufficientPassages / plan.Lookups.Count);
         var retrievalMode = EmailSearchRetrievalMode.Lexical;
         var lookupsRun = 0;
         var lookupsRefused = 0;
@@ -90,7 +100,7 @@ public sealed class PlannedMailRetrieval
 
         foreach (var lookup in plan.Lookups)
         {
-            EmailKnowledgeLookup retrieved;
+            EmailKnowledgeLookup? retrieved = null;
             try
             {
                 retrieved = await this.knowledgeSearch.FindPassagesAsync(question.Scope, lookup, cancellationToken);
@@ -99,38 +109,33 @@ public sealed class PlannedMailRetrieval
             {
                 lastRefusal = refusal;
                 lookupsRefused++;
-                await ReportAsync();
-
-                continue;
             }
 
-            // Taken from the first lookup that ran rather than from the last, because the mode describes how this
-            // deployment ranks and every lookup of one run is therefore ranked the same way.
-            if (lookupsRun is 0)
+            if (retrieved is not null)
             {
-                retrievalMode = retrieved.RetrievalMode;
-            }
-
-            lookupsRun++;
-
-            // Cut to what the plan still calls for before the ledger is asked, so a lookup returning twenty passages
-            // when two are wanted charges the run for two: the surplus was discarded a few lines below anyway, and
-            // charging for it would spend the mailbox's character ceiling on mail nothing was ever going to read.
-            List<EmailKnowledgePassage> candidates = [];
-            foreach (var passage in retrieved.Passages)
-            {
-                if (found.Count + candidates.Count >= plan.SufficientPassages)
+                // Taken from the first lookup that ran rather than from the last, because the mode describes how this
+                // deployment ranks and every lookup of one run is therefore ranked the same way.
+                if (lookupsRun is 0)
                 {
-                    break;
+                    retrievalMode = retrieved.RetrievalMode;
                 }
 
-                if (alreadyFound.Add((passage.StoredEmailId.Value, passage.Text)))
-                {
-                    candidates.Add(passage);
-                }
+                lookupsRun++;
+
+                // Cut to the lookup's share before the ledger is asked, so a lookup returning twenty passages charges
+                // the run for its share alone: what it found beyond that is held back uncharged, and reaches the ledger
+                // only if the rest of the plan leaves room for it.
+                var newlyFound = NotYetFound(retrieved.Passages, alreadyFound);
+                var admissible = Math.Min(newlyFound.Count, Math.Min(share, plan.SufficientPassages - found.Count));
+
+                beyondShare.Add(newlyFound[admissible..]);
+                found.AddRange(Admit(newlyFound[..admissible]));
             }
 
-            found.AddRange(this.ledger.AdmitPassages(candidates));
+            if (lookupsRun + lookupsRefused == plan.Lookups.Count && !this.ledger.RetrievalWasTruncated)
+            {
+                found.AddRange(Admit(RankByRank(beyondShare, alreadyFound, plan.SufficientPassages - found.Count)));
+            }
 
             await ReportAsync();
 
@@ -158,6 +163,39 @@ public sealed class PlannedMailRetrieval
             lookupsRun,
             lookupsRefused,
             plan.Lookups.Count,
-            Math.Min(found.Count, plan.SufficientPassages))) ?? Task.CompletedTask;
+            found.Count)) ?? Task.CompletedTask;
+
+        IReadOnlyList<EmailKnowledgePassage> Admit(IReadOnlyList<EmailKnowledgePassage> passages)
+        {
+            var admitted = this.ledger.AdmitPassages(passages);
+            alreadyFound.UnionWith(admitted.Select(IdentityOf));
+
+            return admitted;
+        }
     }
+
+    private static List<EmailKnowledgePassage> NotYetFound(
+        IReadOnlyList<EmailKnowledgePassage> passages,
+        HashSet<(Guid StoredEmailId, string Text)> alreadyFound) =>
+        [.. passages.Where(passage => !alreadyFound.Contains(IdentityOf(passage))).DistinctBy(IdentityOf)];
+
+    /// <summary>Takes what the lookups found beyond their shares, every lookup's first before any lookup's second.</summary>
+    /// <remarks>The sort is stable, so within one rank the plan's own order decides.</remarks>
+    private static List<EmailKnowledgePassage> RankByRank(
+        List<IReadOnlyList<EmailKnowledgePassage>> beyondShare,
+        HashSet<(Guid StoredEmailId, string Text)> alreadyFound,
+        int wanted) =>
+    [
+        .. beyondShare
+            .SelectMany(passages => passages.Select((passage, rank) => (Passage: passage, Rank: rank)))
+            .OrderBy(ranked => ranked.Rank)
+            .Select(ranked => ranked.Passage)
+            .Where(passage => !alreadyFound.Contains(IdentityOf(passage)))
+            .DistinctBy(IdentityOf)
+            .Take(wanted),
+    ];
+
+    /// <summary>What makes two passages one: the same extract of the same message, however many lookups reached it.</summary>
+    private static (Guid StoredEmailId, string Text) IdentityOf(EmailKnowledgePassage passage) =>
+        (passage.StoredEmailId.Value, passage.Text);
 }

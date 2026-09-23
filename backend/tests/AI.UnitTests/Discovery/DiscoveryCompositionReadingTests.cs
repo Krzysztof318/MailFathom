@@ -290,6 +290,62 @@ public sealed class DiscoveryCompositionReadingTests
         Assert.Equal("Figure revised", block.Entries[0].Summary.Value);
     }
 
+    /// <summary>One date a model could not give in full costs that event alone, never the answer and the events beside it.</summary>
+    [Theory]
+    [InlineData("\"13 October\"")]
+    [InlineData("\"2026-13-45\"")]
+    [InlineData("20261013")]
+    [InlineData("{ \"day\": 13 }")]
+    public void Read_AnEventWhoseDateCannotBeRead_DropsThatEventAndKeepsTheRest(string occurredAt)
+    {
+        // Arrange
+        var answer = $$"""
+            {
+              "answer": "The figure was revised twice.",
+              "confidence": "moderate",
+              "sources": ["s1"],
+              "events": [
+                { "occurredAt": {{occurredAt}}, "summary": "Figure proposed", "subject": "Renewal", "sources": ["s1"] },
+                { "occurredAt": "2026-03-02T09:30:00+00:00", "summary": "Figure revised", "subject": "Renewal", "sources": ["s1"] }
+              ]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.TrackChange, Sources("the figure was revised"));
+
+        // Assert
+        var block = Assert.IsType<TimelineBlock>(plan.Blocks[0]);
+        var entry = Assert.Single(block.Entries);
+        Assert.Equal("Figure revised", entry.Summary.Value);
+        Assert.Equal(PresentationSupport.Supported, block.Evidence.Support);
+    }
+
+    /// <summary>With its only event dropped, the answer is still the model's own words rather than the sentence about a run that read nothing.</summary>
+    [Fact]
+    public void Read_TheOnlyEventWhoseDateCannotBeRead_FallsBackToTheAnswerTheModelWrote()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "answer": "The figure was revised on 13 October.",
+              "confidence": "moderate",
+              "sources": ["s1"],
+              "events": [
+                { "occurredAt": "13 October", "summary": "Figure revised", "subject": "Renewal", "sources": ["s1"] }
+              ]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.TrackChange, Sources("the figure was revised"));
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal("The figure was revised on 13 October.", block.Text.Value);
+        Assert.Equal(PresentationSupport.Supported, block.Evidence.Support);
+    }
+
     /// <summary>Nothing here composes a course of events out of no events, so the honest answer takes its place.</summary>
     [Fact]
     public void Read_AQuestionAboutHowSomethingChangedAndNoDatedEvent_FallsBackToTheAnswerItself()

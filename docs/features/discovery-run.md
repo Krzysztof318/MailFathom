@@ -59,9 +59,14 @@ question. The plan is bounded before it runs:
   while the lookup itself still runs. The anchor names a wall clock with no offset, so a bound written back the same
   way is the asking person's own hour and is placed on their offset; a bound carrying `Z` or an offset was resolved
   against somebody else's day, and running it unbounded is nearer the question than running it against that day.
-- **`sufficientPassages` says when to stop**, and is clamped into what one retrieval may return — never below one, never
-  above the deployment's own passage ceiling. A run stops issuing lookups as soon as it holds that many distinct
-  passages, so a question the first search answers costs one search.
+- **`sufficientPassages` says how much is enough**, and is clamped into what one retrieval may return — never below
+  one, never above the deployment's own passage ceiling. It is divided between the lookups rather than spent by
+  whichever runs first: each lookup is admitted up to an equal share of it, and only what that leaves unspent goes to
+  the passages a lookup found beyond its share, taken rank by rank across the lookups. The plan's order
+  decides which wording is tried first, never which one gets the whole budget, so the one lookup that names the
+  distinctive word reaches the answer even when it is the last of four. A plan calling for fewer passages than it holds
+  lookups gives each lookup one and does not run the lookups past that many, since nothing they found could be
+  admitted. What a lookup found beyond what is admitted is neither charged to the run nor handed to the composition.
 - **A passage is counted once.** Two lookups finding the same extract of the same message contribute one passage, which
   is what stops a model from filling the budget by asking the same thing in four wordings.
 
@@ -156,8 +161,9 @@ a thin answer sees the mail the run actually read. And the material the model is
 for a question about change — given even where only one point of the change carries a date, the undated stages folded
 into the entry they led to — columns and rows for a comparison, and the answer alone otherwise. What it gives back is
 held to the contract — a column the catalogue does not hold is dropped, a row whose cells do not match the columns is
-dropped rather than padded, and a shape that ends up empty falls back to the answer itself rather than to an invented
-one.
+dropped rather than padded, an event whose date is not a full date — a day with no year, a sentence, a number — is
+dropped on its own while the answer and every other event are read as before, and a shape that ends up empty falls back
+to the answer itself rather than to an invented one.
 
 A question looking for documents is answered this way today as well. A passage carries the message it was cut from and
 not the attachment within it, so a gallery entry would name a file this run cannot resolve; an attachment nothing could

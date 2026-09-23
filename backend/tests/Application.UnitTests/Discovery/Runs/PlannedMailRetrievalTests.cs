@@ -64,9 +64,65 @@ public sealed class PlannedMailRetrievalTests
         Assert.Equal([selected], search.LastScope?.SelectedEmails);
     }
 
-    /// <summary>Enough is a ceiling on what one question reads, so the lookups behind it never run.</summary>
+    /// <summary>
+    /// The plan's order says which wording to try first, not which one gets the whole budget, so the one passage the last
+    /// lookup reached is not crowded out by the first lookup's lower-ranked ones.
+    /// </summary>
     [Fact]
-    public async Task RetrieveAsync_EnoughFoundByTheFirstLookup_LeavesTheRestOfThePlanUnrun()
+    public async Task RetrieveAsync_TheFirstLookupAloneReturningEnough_StillAdmitsTheLastLookupsPassage()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning(
+                "SurveyDesk confirmation",
+                ScriptedEmailKnowledgeSearch.Passage("first"),
+                ScriptedEmailKnowledgeSearch.Passage("second"),
+                ScriptedEmailKnowledgeSearch.Passage("third"))
+            .Returning("SurveyDesk spinning")
+            .Returning("SurveyDesk deployed", ScriptedEmailKnowledgeSearch.Passage("the queue-handling patch"));
+        var ledger = DiscoveryRuns.NewRunLedger();
+
+        // Act
+        var evidence = await new PlannedMailRetrieval(search, ledger).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 3, "SurveyDesk confirmation", "SurveyDesk spinning", "SurveyDesk deployed"),
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["first", "the queue-handling patch", "second"], evidence.Passages.Select(passage => passage.Text));
+        Assert.Equal(evidence.Passages.Sum(passage => passage.Text.Length), ledger.Read().RetrievedCharacters);
+    }
+
+    /// <summary>A share the other lookups left unspent goes to what a lookup found beyond its own, rather than to nothing.</summary>
+    [Fact]
+    public async Task RetrieveAsync_OneLookupFindingEverything_FillsTheSharesTheOthersLeftUnspent()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning(
+                "invoice",
+                ScriptedEmailKnowledgeSearch.Passage("first"),
+                ScriptedEmailKnowledgeSearch.Passage("second"),
+                ScriptedEmailKnowledgeSearch.Passage("third"),
+                ScriptedEmailKnowledgeSearch.Passage("fourth"),
+                ScriptedEmailKnowledgeSearch.Passage("fifth"))
+            .Returning("faktura");
+
+        // Act
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 4, "invoice", "faktura"),
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["first", "second", "third", "fourth"], evidence.Passages.Select(passage => passage.Text));
+    }
+
+    /// <summary>A plan calling for fewer passages than it holds lookups gives each one, and never runs a lookup nothing could be admitted from.</summary>
+    [Fact]
+    public async Task RetrieveAsync_FewerPassagesWantedThanLookupsPlanned_LeavesTheLookupsPastThatManyUnrun()
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
@@ -74,19 +130,19 @@ public sealed class PlannedMailRetrievalTests
                 "invoice",
                 ScriptedEmailKnowledgeSearch.Passage("first"),
                 ScriptedEmailKnowledgeSearch.Passage("second"))
-            .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("third"));
+            .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("third"))
+            .Returning("rachunek", ScriptedEmailKnowledgeSearch.Passage("fourth"));
 
         // Act
         var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
-            PlanOf(sufficientPassages: 2, "invoice", "faktura"),
+            PlanOf(sufficientPassages: 2, "invoice", "faktura", "rachunek"),
             progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(["invoice"], search.Lookups.Select(lookup => lookup.QueryText));
-        Assert.Equal(1, evidence.LookupsRun);
-        Assert.Equal(2, evidence.Passages.Count);
+        Assert.Equal(["invoice", "faktura"], search.Lookups.Select(lookup => lookup.QueryText));
+        Assert.Equal(["first", "third"], evidence.Passages.Select(passage => passage.Text));
     }
 
     /// <summary>Two wordings that reach the same extract found it once, which is what makes enough a count of evidence.</summary>
