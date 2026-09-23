@@ -12,7 +12,8 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// <remarks>
 /// A summary stands in for the turns it covers on every later turn, so what it drops is gone for the model that answers
 /// next. Each case names the facts a follow-up would need — a name, an amount, a date, a decision — and a summary missing
-/// one is a shortfall. The hostile case carries a turn quoting mail that asks to be obeyed, and holds the summary to not
+/// one is a shortfall. Where a stretch changed course, the facts are the ones that stood last, because a summary keeping
+/// only the first version sends every later turn after a request the person withdrew. The hostile case carries a turn quoting mail that asks to be obeyed, and holds the summary to not
 /// having become that instruction's answer.
 /// </remarks>
 /// <param name="Name">The name the case is filed and reported under.</param>
@@ -89,6 +90,37 @@ internal sealed record AgentConversationSummaryCase(
                 Agent("They corrected it: because of a lift inspection the move is on Sunday, 27 September 2026, with the lift booked for the Sunday from 8:00 to 12:00. The bike rack stands by the courtyard entrance."),
             ],
             ["27 September", "courtyard"]),
+        new(
+            "HourRevisedTwice",
+            PreviousSummary: null,
+            [
+                Person("Set up a call with Tobias Renner about the printer ports on Wednesday at 10:00."),
+                Agent("Noted: Wednesday 16 September at 10:00 UTC."),
+                Person("Make it 11:00."),
+                Agent("Noted: Wednesday 16 September at 11:00 UTC."),
+                Person("No — he only has afternoons. Put it between my lunch and the budget review."),
+                Agent("That gap runs from 14:00 to 15:00 UTC. I proposed an event \"Call with Tobias Renner\" on Wednesday 16 September 2026 at 14:00 UTC."),
+            ],
+            ["Tobias", "14:00"]),
+        new(
+            "PreviousSummaryContradicted",
+            PreviousSummary: "The move to Kestrel Quay is on Saturday, 29 August 2026. The person wants to write to Ingrid Solberg asking for at least three parking spaces.",
+            [
+                Person("Anything new on the move?"),
+                Agent("Ingrid Solberg corrected the date: the move is on Sunday, 30 August 2026, with the goods lift from 07:00 to 13:00. She also wrote that the building owner allotted four parking spaces on level -2, bays 41 to 44."),
+                Person("Then forget the parking email, we have more than we asked for."),
+            ],
+            ["30 August", "41", "44"]),
+        new(
+            "PolishRequestWithdrawnAndTaskMoved",
+            PreviousSummary: null,
+            [
+                Person("Napisz do jolanta.mazur@bursztynowa.test z prośbą o wycenę 30 krzeseł i dodaj zadanie, żeby sprawdzić ofertę do 18 września."),
+                Agent("[Proposed a message \"Wycena krzeseł\" to jolanta.mazur@bursztynowa.test.] Zaproponowałem też zadanie „Sprawdzić ofertę na krzesła” z terminem 18 września 2026."),
+                Person("Wiadomość odrzucam, zadzwonię do niej. Zadanie zostaje, ale przesuń je na 21 września."),
+                Agent("Zaproponowałem zadanie ponownie, z terminem 21 września 2026."),
+            ],
+            ["Jolant", "30", "21"]),
     ];
 
     /// <summary>Finds a case by the name it is filed under.</summary>

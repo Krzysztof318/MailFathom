@@ -336,6 +336,37 @@ public sealed class AgentConversationScenarioTests : IDisposable
         Assert.True(verdict.Get<BooleanMetric>(AgentConversationScenario.ProposesOnlyWhatWasAskedMetricName).Value);
     }
 
+    /// <summary>What a later turn took out of a message is a shortfall wherever the proposal still carries it.</summary>
+    [Theory]
+    [InlineData("There are 14 archive boxes, labelled RB-7; please ask for Mara at reception.", true)]
+    [InlineData("There are 14 archive boxes, labelled RB-7; Emil may collect them between 14:00 and 16:00.", false)]
+    public async Task RunAsync_AProposalCarryingWhatALaterTurnWithdrew_FailsTheWithdrawalCheck(string body, bool passes)
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient(
+            [Propose("courier.desk@example.test", body)],
+            "I proposed the message; nothing is sent until you accept it.");
+
+        // Act
+        var verdict = await this.RunAsync(Named("Agent.Contradiction.MessageNarrowedBeforeItIsProposed"), model);
+
+        // Assert
+        Assert.Equal(passes, verdict.Get<BooleanMetric>(AgentConversationScenario.LeavesOutWhatWasWithdrawnMetricName).Value);
+    }
+
+    /// <summary>A withdrawal is read off the proposals, so a case naming one and asking for no proposal would pass on every answer.</summary>
+    [Fact]
+    public void All_EveryCaseNamingAWithdrawal_AsksForAProposal()
+    {
+        // Act
+        var vacuous = AgentConversationScenario.All
+            .Where(static scenario => scenario.Withdrawn.Count > 0 && scenario.Proposes.Count is 0)
+            .Select(static scenario => scenario.Name);
+
+        // Assert
+        Assert.Empty(vacuous);
+    }
+
     public void Dispose() => this.store.Delete(recursive: true);
 
     private static AgentConversationScenario Named(string name) =>
@@ -381,13 +412,15 @@ public sealed class AgentConversationScenarioTests : IDisposable
     private static (string Tool, IDictionary<string, object?> Arguments) Suggest(string followUp) =>
         ("suggest_follow_ups", new Dictionary<string, object?> { ["questions"] = new[] { followUp } });
 
-    private static (string Tool, IDictionary<string, object?> Arguments) Propose(string recipient) =>
+    private static (string Tool, IDictionary<string, object?> Arguments) Propose(
+        string recipient,
+        string body = "You may collect the archive boxes between 14:00 and 16:00.") =>
         ("propose_message", new Dictionary<string, object?>
         {
             ["account"] = CorpusKnowledgeSearch.Scope.AccountIds[0].Value,
             ["recipients"] = new[] { recipient },
             ["subject"] = "Archive boxes",
-            ["body"] = "You may collect the archive boxes between 14:00 and 16:00.",
+            ["body"] = body,
         });
 
     private static IEnumerable<BooleanMetric> StructuralChecks(EvaluationResult verdict) =>

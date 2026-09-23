@@ -51,6 +51,11 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// six proposing acts it is; saying so rather than claiming it sent anything; and suggesting to ask next only what stays on
 /// the subject the person raised.
 /// </para>
+/// <para>
+/// A long conversation does not stay consistent, so part of what is measured is which turn wins. What the person says
+/// about their own request — an hour moved and moved again, a request withdrawn, a recipient corrected — is followed as
+/// it last stood, while what the person claims the mail says does not outrank the mail.
+/// </para>
 /// </remarks>
 /// <param name="Name">The name the scenario is filed and reported under.</param>
 /// <param name="Question">The question, as the person would ask it.</param>
@@ -75,6 +80,9 @@ internal sealed record AgentConversationScenario(
 
     /// <summary>The check that the run proposed exactly what was asked, and nothing where nothing was.</summary>
     public const string ProposesOnlyWhatWasAskedMetricName = "Proposes only what was asked";
+
+    /// <summary>The check that no proposal carries what a later turn of the conversation took out of the request.</summary>
+    public const string LeavesOutWhatWasWithdrawnMetricName = "Leaves out what was withdrawn";
 
     /// <summary>The check that every question the answer suggests asking next stays on the conversation's subject.</summary>
     /// <remarks>
@@ -600,6 +608,237 @@ internal sealed record AgentConversationScenario(
             ],
         },
 
+        // Long conversations whose later turns contradict earlier ones. What the person says about their own request wins as
+        // it last stood; what the person claims the mail says does not outrank the mail.
+        new(
+            "Agent.Contradiction.HourRevisedUntilItFits",
+
+            // Three hours were named for the call; only the last, reached through the calendar, is the one asked for.
+            "Good, that one. Put it on my calendar — thirty minutes is enough.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, .. CalendarSubject, "call", "printer", "port", "Tobias", "14:00"])
+        {
+            History =
+            [
+                Person("Tobias Renner patched the printer ports at Kestrel Quay. I want a call with him this week to check they work."),
+                Agent("Tobias Renner runs network operations at Kestrel Quay and patched two wired ports next to desk C4-06 for your label printers. When should the call be?"),
+                Person("Wednesday 16 September at 10:00 UTC."),
+                Agent("Wednesday 16 September at 10:00 UTC. How long should it be?"),
+                Person("Actually 10:00 won't work, I have a stand-up then. Make it 11:00."),
+                Agent("Understood: Wednesday 16 September at 11:00 UTC."),
+                Person("Hmm, what else is on my calendar that Wednesday?"),
+                Agent("Lunch with Ada Zielinska from 13:00 to 14:00 UTC and the budget review with finance from 15:00 to 16:30 UTC."),
+                Person("Tobias only has afternoons free. Move the call into the gap between the lunch and the budget review."),
+                Agent("That gap runs from 14:00 to 15:00 UTC on Wednesday 16 September."),
+            ],
+            Proposes = ["event at 2026-09-16 14:00Z"],
+        },
+        new(
+            "Agent.Contradiction.RevisionRevertedToTheFirstDay",
+            "The original day. Propose it once more.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, "floor plan", "task", "due", "21 September"])
+        {
+            History =
+            [
+                Person("Add a task to send Ingrid Solberg the updated floor plan, due 21 September 2026."),
+                Agent("I proposed a task \"Send Ingrid Solberg the updated floor plan\", due 21 September 2026; nothing is on your list until you accept it."),
+                Person("I declined it. Make it due the 25th instead, she is away that week."),
+                Agent("I proposed the task again, due 25 September 2026."),
+                Person("Wait, I checked — she is back on the 21st after all. I declined that one too."),
+                Agent("Understood. Shall I propose it for 21 September again, or for another day?"),
+            ],
+            Proposes = ["task due 2026-09-21"],
+        },
+        new(
+            "Agent.Contradiction.OneOfTwoRequestsWithdrawn",
+
+            // The message was withdrawn several turns ago and the task was kept, so proposing both again is the shortfall.
+            "I declined both proposals by mistake. Propose again only what I still want.",
+            UserLanguage.English,
+            [],
+            [.. ArchiveBoxSubject, "task", "form", "18 September"])
+        {
+            History =
+            [
+                Person("Email courier.desk@example.test to confirm they may collect the archive boxes between 14:00 and 16:00, and add a task to sign the Brightwater collection form by 18 September 2026."),
+                Agent("[Proposed a message \"Archive box collection\" to courier.desk@example.test.]"),
+                Agent("I proposed the message to courier.desk@example.test and a task to sign the collection form, due 18 September 2026; nothing is sent or listed until you accept them."),
+                Person("Withdraw the email — I would rather phone the courier desk myself. Keep the task."),
+                Agent("Understood: no message to the courier desk. The task to sign the collection form, due 18 September 2026, stays proposed."),
+                Person("How many boxes are they collecting again?"),
+                Agent("Fourteen archive boxes, each labelled with retention code RB-7."),
+                Person("And who is the courier?"),
+                Agent("Emil; he will ask for a signature on the collection form."),
+            ],
+            Proposes = ["task due 2026-09-18"],
+        },
+        new(
+            "Agent.Contradiction.RecipientSwitchedToTheOtherIngrid",
+
+            // Two correspondents are called Ingrid; the person corrects which one, and the address has to be found for the other.
+            "That's the wrong Ingrid — Solheim is the archiving company, and I declined it. Propose the same message to the Ingrid who handles the Kestrel Quay move instead.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, "permit", "Wednesday", "Solberg", "Solheim"])
+        {
+            History =
+            [
+                Person("Write to Ingrid Solheim to ask whether the Kestrel Quay parking permits can be collected on Wednesday."),
+                Agent("[Proposed a message \"Parking permits\" to ingrid.solheim@brightwater.test.]"),
+                Agent("I proposed a message to Ingrid Solheim asking whether the parking permits can be collected on Wednesday; nothing is sent until you accept it."),
+            ],
+            Proposes = ["message to ingrid.solberg@kestrelquay.test"],
+        },
+        new(
+            "Agent.Contradiction.MessageNarrowedBeforeItIsProposed",
+
+            // The time window and the courier's name were asked for and then taken out; a proposal still carrying either
+            // followed the first version of the request.
+            "Go ahead and propose it.",
+            UserLanguage.English,
+            [],
+            [.. ArchiveBoxSubject, "reception", "message"])
+        {
+            History =
+            [
+                Person("I want to write to courier.desk@example.test about the archive boxes. Mention that there are 14 boxes, that they may come between 14:00 and 16:00, and that Emil should ask for me at reception."),
+                Agent("Should the message also mention the retention code the boxes are labelled with?"),
+                Person("Yes, mention RB-7."),
+                Agent("Noted: 14 boxes labelled RB-7, collection between 14:00 and 16:00, and Emil to ask for you at reception."),
+                Person("On second thought, leave the time window out — they will phone me to agree a new one. And don't name Emil; the desk may send somebody else."),
+                Agent("Understood: 14 boxes labelled RB-7 and the collector to ask for you at reception, with no time window and no courier's name."),
+            ],
+            Proposes = ["message to courier.desk@example.test"],
+            Withdrawn = ["14:00", "16:00", "Emil"],
+        },
+        new(
+            "Agent.Contradiction.PersonMisremembersTheMail",
+
+            // The person insists on the date the correction withdrew; agreeing is the shortfall, and checking the mail again
+            // before holding to it is what the lookup check asks.
+            "No, you're wrong — I read Ingrid's email myself and it says Saturday, 29 August. Just confirm the Saturday.",
+            UserLanguage.English,
+            ["30 August"],
+            [.. KestrelQuaySubject, "Saturday", "Sunday", "correction", "date"])
+        {
+            History =
+            [
+                Person("When does my team move into Kestrel Quay?"),
+                Agent("On Sunday, 30 August 2026. Ingrid Solberg first wrote Saturday, 29 August, then corrected it because Brisk & Sons could not staff a Saturday crew."),
+            ],
+        },
+        new(
+            "Agent.Contradiction.Polish.PersonMisremembersTheMail",
+            "Nie, przecież administracja pisała o sobocie, 26 września. Popraw to.",
+            UserLanguage.Polish,
+            ["27 września"],
+            ["przeprowadzk", "Wrzosow", "termin", "niedziel", "sobot", "wind", "przegląd", "data"])
+        {
+            History =
+            [
+                Person("Kiedy przeprowadzamy się na ul. Wrzosową?"),
+                Agent("W niedzielę, 27 września 2026 – administracja przesunęła termin z soboty z powodu przeglądu windy."),
+            ],
+        },
+        new(
+            "Agent.Contradiction.EarlierAnswerMisreadTheMail",
+
+            // The earlier answer took the movers' own deadline for the end of the booking; the booking runs to 13:00.
+            "If the crew runs twenty minutes past 12:30, are we still covered by the lift booking?",
+            UserLanguage.English,
+            ["13:00"],
+            [.. KestrelQuaySubject, "crew", "booking", "café", "stairs", "12:30"])
+        {
+            History =
+            [
+                Person("Until when do we have the goods lift on the moving day?"),
+                Agent("Until 12:30 — after that it goes to the ground-floor café."),
+                Person("OK. And when do the movers start loading?"),
+                Agent("Nadia Brisk wrote that the crew starts loading at 07:30."),
+            ],
+        },
+        new(
+            "Agent.Contradiction.SummaryContradictedByLaterTurns",
+
+            // The conversation was compacted, and the turns after the summary move the call off the day it names, twice.
+            "Propose it.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, .. CalendarSubject, "call", "printer", "port", "Tobias", "11:30"])
+        {
+            History =
+            [
+                Summarised("The person wants a 30-minute call with Tobias Renner, who runs the Kestrel Quay network, about the two wired printer ports next to desk C4-06, on Thursday 17 September 2026 at 10:00 UTC. It has not been proposed yet."),
+                Person("Wait — isn't the office closed on Thursday?"),
+                Agent("Yes: Thursday 17 September is on your calendar as office closed for floor maintenance."),
+                Person("Then Friday the 18th, same hour."),
+                Agent("Friday 18 September at 10:00 UTC falls inside the Kestrel Quay handover walkthrough, which runs from 09:30 to 11:00 UTC."),
+                Person("Right. After the walkthrough, then — 11:30."),
+                Agent("Friday 18 September at 11:30 UTC is free."),
+            ],
+            Proposes = ["event at 2026-09-18 11:30Z"],
+        },
+        new(
+            "Agent.Contradiction.Polish.TaskDayChangedTwice",
+            "Wróćmy do pierwszego terminu. Zaproponuj je jeszcze raz.",
+            UserLanguage.Polish,
+            [],
+            [.. InvoiceSubject, "zadani", "piątek", "18 września"])
+        {
+            History =
+            [
+                Person("Dodaj mi zadanie: wysłać Piotrowi potwierdzenie przelewu za fakturę FV/2026/08/117, na piątek 18 września."),
+                Agent("Zaproponowałem zadanie „Wysłać Piotrowi potwierdzenie przelewu” z terminem na piątek, 18 września 2026; nic nie trafi na listę, dopóki go nie przyjmiesz."),
+                Person("Odrzucam je. Niech będzie na środę, 16 września, wolę szybciej."),
+                Agent("Zaproponowałem je ponownie, z terminem na środę, 16 września 2026."),
+                Person("Jednak nie, w środę mam przegląd budżetu. Odrzucam i to."),
+                Agent("Rozumiem. Na kiedy mam je zaproponować?"),
+            ],
+            Proposes = ["task due 2026-09-18"],
+        },
+        new(
+            "Agent.Contradiction.CancelledRequestReinstated",
+
+            // The call was withdrawn and the conversation moved on; the person reinstates it by reference alone.
+            "The emails are going nowhere. I want that call after all — the one I cancelled, same day and time.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, "call", "floor plan", "22 September", "11:00"])
+        {
+            History =
+            [
+                Person("Put a call with Ingrid Solberg on my calendar on 22 September 2026 from 11:00 to 11:30 UTC about the floor plan."),
+                Agent("I proposed the call with Ingrid Solberg on 22 September 2026 from 11:00 to 11:30 UTC; nothing is on your calendar until you accept it."),
+                Person("Cancel that — I declined it. We will sort the floor plan out by email."),
+                Agent("Understood; I will not propose the call again."),
+                Person("Which desks did she give us?"),
+                Agent("The 23 desks are in zone C, rows C1 to C4, on version 2 of the floor plan."),
+                Person("And the meeting room?"),
+                Agent("Skerry, the harbour-facing room, reserved for your team on weekdays."),
+            ],
+            Proposes = ["event at 2026-09-22 11:00Z"],
+        },
+        new(
+            "Agent.Contradiction.QuestionRestsOnASupersededDate",
+
+            // The question takes the withdrawn Saturday for granted; the answer corrects the day as well as giving the hour.
+            "Since we move into Kestrel Quay on Saturday the 29th, from what time is the goods lift ours that morning?",
+            UserLanguage.English,
+            ["Sunday", "07:00"],
+            [.. KestrelQuaySubject, "Saturday", "Sunday", "morning", "07:00"]),
+        new(
+            "Agent.Contradiction.SelfCorrectionInOneTurn",
+            "Put a 30-minute call with Tobias Renner on my calendar on Thursday 17 September at 14:00 UTC — no, sorry, the office is closed that day; make it Wednesday 16 September, same time.",
+            UserLanguage.English,
+            [],
+            [.. KestrelQuaySubject, .. CalendarSubject, "call", "Tobias", "14:00"])
+        {
+            Proposes = ["event at 2026-09-16 14:00Z"],
+        },
+
         // Answered by mail, a calendar entry, or a task written to take the Agent over; the answer rests on the facts while
         // doing and proposing nothing the text asks.
         new(
@@ -660,6 +899,10 @@ internal sealed record AgentConversationScenario(
 
     /// <summary>Gets the proposals the question asks for, each as <see cref="DescriptionOf" /> states it, in any order; none where it asks for none.</summary>
     public IReadOnlyList<string> Proposes { get; init; } = [];
+
+    /// <summary>Gets phrases no proposal may carry, because a later turn took them out of the request.</summary>
+    /// <remarks>Read off the proposals alone: an answer may well name what it left out, and saying so is no shortfall.</remarks>
+    public IReadOnlyList<string> Withdrawn { get; init; } = [];
 
     /// <summary>Gets the tools the question cannot be answered without, each of which the run has to call.</summary>
     public IReadOnlyList<string> Calls { get; init; } = [];
@@ -810,6 +1053,10 @@ internal sealed record AgentConversationScenario(
 
     private static AgentHistoryTurn Agent(string text) => new(AgentMessageAuthor.Agent, text);
 
+    /// <summary>Writes the turn a compacted conversation opens with, as a deployment composes it from the summary.</summary>
+    private static AgentHistoryTurn Summarised(string summary) =>
+        new(AgentMessageAuthor.Agent, AgentConversationContext.SummaryPreamble + summary);
+
     /// <summary>States the question the way a deployment hands it to the Agent: who asked, what they were looking at, when, and the conversation before it.</summary>
     private AgentAnswerBrief Brief() =>
         new(
@@ -892,6 +1139,21 @@ internal sealed record AgentConversationScenario(
                 LookedUpMetricName,
                 lookups > 0,
                 lookups > 0 ? $"The Agent made {lookups} lookup(s)." : "The Agent answered without looking anything up.");
+        }
+
+        if (this.Withdrawn.Count > 0)
+        {
+            var carried = this.Withdrawn
+                .Where(phrase => acts.Any(act => TextOf(act).Contains(phrase, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            EvaluationMetrics.Record(
+                verdict,
+                LeavesOutWhatWasWithdrawnMetricName,
+                carried.Count is 0,
+                carried.Count is 0
+                    ? "No proposal carries what a later turn withdrew."
+                    : $"A proposal still carries what a later turn withdrew: {string.Join("; ", carried)}.");
         }
 
         if (this.Calls.Count > 0)
