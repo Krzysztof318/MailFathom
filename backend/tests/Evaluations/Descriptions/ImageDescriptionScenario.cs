@@ -241,7 +241,7 @@ internal sealed record ImageDescriptionScenario(
             + "code \"K8B0-O5S2-Z7Q1\" in a large bold monospaced face whose zero carries a dot inside it while its capital O is an empty oval, and "
             + "\"Value EUR 25.00, valid until 31 Dec 2026\".",
 
-            // The code mixes 8 and B, 0 and O, 5 and S, 2 and Z, 1 and a letter: only the print says which is which.
+            // The code mixes 8 and B, 0 and O, 5 and S, 2 and Z: only the print says which is which.
             ["K8B0-O5S2-Z7Q1", "25.00", "31 Dec 2026"],
             MinimumGroundedness: 4),
     ];
