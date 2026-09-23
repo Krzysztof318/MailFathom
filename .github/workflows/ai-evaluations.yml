@@ -11,12 +11,18 @@ name: AI evaluations
 # than arriving on a timer or with a pull request.
 #
 # What keeps a run cheap is the store `backend/tests/Evaluations` writes: every answer it paid for is
-# cached by prompt, model, and parameters, and every verdict is kept so the report compares this run
-# with the ones before it. The store travels from one run to the next as the `ai-evaluations-store`
-# artefact — restored from the newest one that has not expired, uploaded again at the end — so an
-# unchanged prompt costs nothing however many runs follow. An artefact expires after 90 days, and each
-# run renews it; a store lost to a longer gap between runs costs one full run to rebuild and nothing
-# else.
+# cached by prompt, model, parameters, and the name, description, and schema of every tool the model
+# was offered, and every verdict is kept so the report compares this run with the ones before it. The
+# store travels from one run to the next as the `ai-evaluations-store` artefact — restored from the
+# newest one that has not expired, uploaded again at the end — so an unchanged prompt costs nothing
+# however many runs follow. An artefact expires after 90 days, and each run renews it; a store lost to
+# a longer gap between runs costs one full run to rebuild and nothing else.
+#
+# The key is computed by `Microsoft.Extensions.AI`, which does not promise it stays the same across its
+# releases, so a bump of that package can re-ask every case once. Anything else a run suspects the key
+# misses is answered by the `discard_cached_answers` input: it starts the run with an empty cache,
+# keeps the results the report compares against, and uploads a store holding only what that run paid
+# for.
 #
 # The artefact is readable by anyone who can read this repository's runs, which is why nothing in the
 # store is mail anybody received and why the judge is recorded only as `judge`: its model and the
@@ -57,6 +63,11 @@ on:
         description: 'Width every embedding is asked for and cut to; unset keeps each model at its own'
         required: false
         type: string
+      discard_cached_answers:
+        description: 'Start with an empty response cache, so every model and the judge are asked again; the result history is kept'
+        required: false
+        type: boolean
+        default: false
 
 # One run at a time for the whole workflow rather than per ref, because every run restores and
 # replaces the same store: two at once would each start from the same artefact, and whichever uploaded
@@ -131,11 +142,14 @@ jobs:
 
       # The newest store any run of this workflow uploaded, from whichever ref it ran on: a store only
       # ever gains entries keyed by what was asked, so one from another ref costs nothing here and
-      # saves whatever it already answered. None at all is the first run, not a failure.
+      # saves whatever it already answered. None at all is the first run, not a failure. A dispatch
+      # asking for fresh answers keeps the results and drops the cache, so the report still compares
+      # this run with earlier ones and the store uploaded at the end holds only what this run paid for.
       - name: Restore the evaluation store
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
+          DISCARD_CACHED_ANSWERS: ${{ inputs.discard_cached_answers }}
         run: |
           set -euo pipefail
 
@@ -153,6 +167,11 @@ jobs:
           gh api "repos/$REPOSITORY/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/store.zip"
           unzip -q "$RUNNER_TEMP/store.zip" -d "$store"
           echo "Restored the store from artefact $artifact."
+
+          if [ "$DISCARD_CACHED_ANSWERS" = true ]; then
+            rm -rf "$store/cache"
+            echo "Discarded every cached answer and verdict; the results are kept."
+          fi
 
       - name: Run the evaluations
         run: bash scripts/run-ai-evaluations.sh
