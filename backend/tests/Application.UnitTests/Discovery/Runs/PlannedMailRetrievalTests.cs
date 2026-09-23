@@ -65,19 +65,15 @@ public sealed class PlannedMailRetrievalTests
     }
 
     /// <summary>
-    /// The plan's order says which wording to try first, not which one gets the whole budget, so the one passage the last
-    /// lookup reached is not crowded out by the first lookup's lower-ranked ones.
+    /// The plan's order says which wording to try first, not which one gets the whole allowance, so the one passage the
+    /// last lookup reached is not crowded out by the first lookup's lower-ranked ones.
     /// </summary>
     [Fact]
     public async Task RetrieveAsync_TheFirstLookupAloneReturningEnough_StillAdmitsTheLastLookupsPassage()
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
-            .Returning(
-                "SurveyDesk confirmation",
-                ScriptedEmailKnowledgeSearch.Passage("first"),
-                ScriptedEmailKnowledgeSearch.Passage("second"),
-                ScriptedEmailKnowledgeSearch.Passage("third"))
+            .Returning("SurveyDesk confirmation", [.. PassagesNamed("first", "second", "third", "fourth", "fifth", "sixth", "seventh")])
             .Returning("SurveyDesk spinning")
             .Returning("SurveyDesk deployed", ScriptedEmailKnowledgeSearch.Passage("the queue-handling patch"));
         var ledger = DiscoveryRuns.NewRunLedger();
@@ -90,8 +86,35 @@ public sealed class PlannedMailRetrievalTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(["first", "the queue-handling patch", "second"], evidence.Passages.Select(passage => passage.Text));
+        Assert.Contains("the queue-handling patch", evidence.Passages.Select(passage => passage.Text));
         Assert.Equal(evidence.Passages.Sum(passage => passage.Text.Length), ledger.Read().RetrievedCharacters);
+    }
+
+    /// <summary>
+    /// A plan judging one extract enough still runs every wording it wrote, because which wording reaches the evidence is
+    /// what it could not know, and the one that does often ranks it behind other mail sharing its words.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveAsync_OnePassageJudgedEnoughOverFourLookups_HandsOverWhatOnlyTheLastLookupReached()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning("Halina Pettersen Solmere", [.. PassagesNamed("the hotel booking", "the conference agenda")])
+            .Returning("Solmere pickup", [.. PassagesNamed("the parking notice", "the shuttle timetable", "the Silverline Cars pickup")])
+            .Returning("Halina Pettersen booked")
+            .Returning("Solmere Airport", [.. PassagesNamed("the flight change", "the lounge voucher", "the baggage claim", "Silverline Cars confirmed the driver")]);
+
+        // Act
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 1, "Halina Pettersen Solmere", "Solmere pickup", "Halina Pettersen booked", "Solmere Airport"),
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(4, evidence.LookupsRun);
+        Assert.Contains("Silverline Cars confirmed the driver", evidence.Passages.Select(passage => passage.Text));
+        Assert.Contains("the Silverline Cars pickup", evidence.Passages.Select(passage => passage.Text));
     }
 
     /// <summary>A share the other lookups left unspent goes to what a lookup found beyond its own, rather than to nothing.</summary>
@@ -100,49 +123,42 @@ public sealed class PlannedMailRetrievalTests
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
-            .Returning(
-                "invoice",
-                ScriptedEmailKnowledgeSearch.Passage("first"),
-                ScriptedEmailKnowledgeSearch.Passage("second"),
-                ScriptedEmailKnowledgeSearch.Passage("third"),
-                ScriptedEmailKnowledgeSearch.Passage("fourth"),
-                ScriptedEmailKnowledgeSearch.Passage("fifth"))
+            .Returning("invoice", [.. PassagesNamed("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth")])
             .Returning("faktura");
 
         // Act
         var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
-            PlanOf(sufficientPassages: 4, "invoice", "faktura"),
+            PlanOf(sufficientPassages: 1, "invoice", "faktura"),
             progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(["first", "second", "third", "fourth"], evidence.Passages.Select(passage => passage.Text));
+        Assert.Equal(
+            ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"],
+            evidence.Passages.Select(passage => passage.Text));
     }
 
-    /// <summary>A plan calling for fewer passages than it holds lookups gives each one, and never runs a lookup nothing could be admitted from.</summary>
+    /// <summary>
+    /// Where the plan judges more extracts enough than every lookup is assured, the allowance follows the judgement, so a
+    /// question spanning years is not cut to what a narrow one would need.
+    /// </summary>
     [Fact]
-    public async Task RetrieveAsync_FewerPassagesWantedThanLookupsPlanned_LeavesTheLookupsPastThatManyUnrun()
+    public async Task RetrieveAsync_MorePassagesJudgedEnoughThanAssured_HandsOverThatMany()
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
-            .Returning(
-                "invoice",
-                ScriptedEmailKnowledgeSearch.Passage("first"),
-                ScriptedEmailKnowledgeSearch.Passage("second"))
-            .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("third"))
-            .Returning("rachunek", ScriptedEmailKnowledgeSearch.Passage("fourth"));
+            .Returning("invoice", [.. PassagesNamed([.. Enumerable.Range(1, 12).Select(number => $"invoice {number}")])]);
 
         // Act
         var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
-            PlanOf(sufficientPassages: 2, "invoice", "faktura", "rachunek"),
+            PlanOf(sufficientPassages: 10, "invoice"),
             progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(["invoice", "faktura"], search.Lookups.Select(lookup => lookup.QueryText));
-        Assert.Equal(["first", "third"], evidence.Passages.Select(passage => passage.Text));
+        Assert.Equal(10, evidence.Passages.Count);
     }
 
     /// <summary>Two wordings that reach the same extract found it once, which is what makes enough a count of evidence.</summary>
@@ -256,16 +272,13 @@ public sealed class PlannedMailRetrievalTests
         Assert.Equal(EmailSearchRetrievalMode.Lexical, evidence.RetrievalMode);
     }
 
-    /// <summary>A lookup returning more than the plan asked for is still bounded by what enough means.</summary>
+    /// <summary>A lookup returning more than the plan allows is still bounded by the allowance.</summary>
     [Fact]
-    public async Task RetrieveAsync_ALookupReturningMoreThanEnough_HandsOverOnlyWhatThePlanAskedFor()
+    public async Task RetrieveAsync_ALookupReturningMoreThanAllowed_HandsOverOnlyTheAllowance()
     {
         // Arrange
-        var search = new ScriptedEmailKnowledgeSearch().Returning(
-            "invoice",
-            ScriptedEmailKnowledgeSearch.Passage("first"),
-            ScriptedEmailKnowledgeSearch.Passage("second"),
-            ScriptedEmailKnowledgeSearch.Passage("third"));
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning("invoice", [.. PassagesNamed("first", "second", "third", "fourth", "fifth", "sixth")]);
 
         // Act
         var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
@@ -275,19 +288,16 @@ public sealed class PlannedMailRetrievalTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(["first", "second"], evidence.Passages.Select(passage => passage.Text));
+        Assert.Equal(["first", "second", "third", "fourth"], evidence.Passages.Select(passage => passage.Text));
     }
 
-    /// <summary>What a watcher is told it found never exceeds what the plan called enough, however much a lookup returned.</summary>
+    /// <summary>What a watcher is told it found never exceeds what the plan allows, however much a lookup returned.</summary>
     [Fact]
-    public async Task RetrieveAsync_ALookupReturningMoreThanEnough_ReportsNoMoreFoundThanThePlanAskedFor()
+    public async Task RetrieveAsync_ALookupReturningMoreThanAllowed_ReportsNoMoreFoundThanTheAllowance()
     {
         // Arrange
-        var search = new ScriptedEmailKnowledgeSearch().Returning(
-            "invoice",
-            ScriptedEmailKnowledgeSearch.Passage("first"),
-            ScriptedEmailKnowledgeSearch.Passage("second"),
-            ScriptedEmailKnowledgeSearch.Passage("third"));
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning("invoice", [.. PassagesNamed("first", "second", "third", "fourth", "fifth", "sixth")]);
         List<DiscoveryRetrievalProgress> reported = [];
 
         // Act
@@ -299,7 +309,7 @@ public sealed class PlannedMailRetrievalTests
 
         // Assert
         Assert.Equal(
-            [new DiscoveryRetrievalProgress(LookupsRun: 1, LookupsRefused: 0, LookupsPlanned: 1, PassagesFound: 2)],
+            [new DiscoveryRetrievalProgress(LookupsRun: 1, LookupsRefused: 0, LookupsPlanned: 1, PassagesFound: 4)],
             reported);
     }
 
@@ -364,6 +374,9 @@ public sealed class PlannedMailRetrievalTests
 
     private static MailQuestion Question(MailboxScope scope) =>
         new(MailQuestionText.Create("was the invoice attached"), scope, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.FromHours(2)));
+
+    private static IEnumerable<EmailKnowledgePassage> PassagesNamed(params string[] texts) =>
+        texts.Select(static text => ScriptedEmailKnowledgeSearch.Passage(text));
 
     private static RetrievalPlan PlanOf(int sufficientPassages, params string[] queries) => RetrievalPlan.Create(
         Bounds,

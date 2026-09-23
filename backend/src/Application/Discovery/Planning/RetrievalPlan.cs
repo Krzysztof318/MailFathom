@@ -18,7 +18,7 @@ namespace MailFathom.Application.Discovery.Planning;
 /// <para>
 /// Several lookups rather than one, because a question worth asking rarely matches one wording. Ordered rather than
 /// unordered, because the order settles which lookup's passage goes first where two share a rank — but never which
-/// lookup deserves the whole of <see cref="SufficientPassages" />, since each is given its share of it.
+/// lookup deserves the whole of <see cref="PassageAllowance" />, since each is given its share of it.
 /// </para>
 /// </remarks>
 public sealed record RetrievalPlan
@@ -31,29 +31,47 @@ public sealed record RetrievalPlan
     /// </remarks>
     public const int MaximumLookups = 6;
 
-    private RetrievalPlan(IReadOnlyList<EmailKnowledgeQuery> lookups, int sufficientPassages)
+    /// <summary>How many passages every lookup may hand over, whatever number of passages the plan called enough.</summary>
+    /// <remarks>
+    /// A plan writes several wordings because it cannot know which one the mail uses, and the one that does rarely
+    /// ranks the evidence first: the other messages sharing its words come before it. A model's judgement of how many
+    /// extracts would answer is routinely one, which on its own would hand over the first lookup's best passage and
+    /// never run the rest. Four is where the evaluation corpus stops losing evidence that a lookup of the plan reached,
+    /// and at the passage lengths a deployment cuts, four passages for each of the most lookups a plan may hold stay far
+    /// inside the characters one question may retrieve.
+    /// </remarks>
+    public const int PassagesAssuredPerLookup = 4;
+
+    private RetrievalPlan(IReadOnlyList<EmailKnowledgeQuery> lookups, int sufficientPassages, int passageAllowance)
     {
         this.Lookups = lookups;
         this.SufficientPassages = sufficientPassages;
+        this.PassageAllowance = passageAllowance;
     }
 
     /// <summary>Gets the lookups to run, in the order they are worth running.</summary>
     public IReadOnlyList<EmailKnowledgeQuery> Lookups { get; }
 
-    /// <summary>Gets the number of distinct passages at which the plan has found enough.</summary>
+    /// <summary>Gets the number of distinct passages the planning judged would answer the question.</summary>
     /// <remarks>
-    /// A ceiling on what one question reads rather than a target to reach, divided between the lookups rather than
-    /// spent by whichever runs first: each lookup is admitted up to its equal share, and what a lookup found beyond that
-    /// fills only what the others left unspent. A plan calling for fewer passages than it holds lookups gives each lookup
-    /// one and leaves the lookups past that many unrun, and one that never reaches this number answers from what it
-    /// found.
+    /// A judgement rather than the bound a run keeps to: <see cref="PassageAllowance" /> is that, and it only follows
+    /// this number where the number asks for more than every lookup is assured anyway.
     /// </remarks>
     public int SufficientPassages { get; }
+
+    /// <summary>Gets the number of distinct passages a run may hand over to answer from.</summary>
+    /// <remarks>
+    /// The larger of <see cref="SufficientPassages" /> and <see cref="PassagesAssuredPerLookup" /> for every lookup,
+    /// within what one retrieval may return. It is divided between the lookups rather than spent by whichever runs
+    /// first: each lookup is admitted up to its equal share, and what a lookup found beyond that fills only what the
+    /// others left unspent. So every lookup runs, and one that never reaches this number answers from what it found.
+    /// </remarks>
+    public int PassageAllowance { get; }
 
     /// <summary>Composes the plan a run retrieves by.</summary>
     /// <param name="retrievalBounds">What this deployment's retrieval will return at most, which bounds what enough can mean.</param>
     /// <param name="lookups">The lookups to run, in order, at least one and at most <see cref="MaximumLookups" />.</param>
-    /// <param name="sufficientPassages">The number of distinct passages at which the plan stops.</param>
+    /// <param name="sufficientPassages">The number of distinct passages the planning judged would answer the question.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentException">No lookup was given, more than <see cref="MaximumLookups" /> were, or one of them was <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sufficientPassages" /> is below one or above what <paramref name="retrievalBounds" /> returns.</exception>
@@ -85,7 +103,10 @@ public sealed record RetrievalPlan
         ArgumentOutOfRangeException.ThrowIfLessThan(sufficientPassages, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(sufficientPassages, retrievalBounds.MaximumPassages);
 
-        return new RetrievalPlan([.. lookups], sufficientPassages);
+        return new RetrievalPlan(
+            [.. lookups],
+            sufficientPassages,
+            Math.Min(retrievalBounds.MaximumPassages, Math.Max(sufficientPassages, lookups.Count * PassagesAssuredPerLookup)));
     }
 
     /// <inheritdoc />
