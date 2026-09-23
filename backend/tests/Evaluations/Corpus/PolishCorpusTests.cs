@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Evaluations.ReplyDrafts;
 using Xunit;
 
 namespace MailFathom.Evaluations.Corpus;
@@ -39,7 +38,7 @@ public sealed class PolishCorpusTests
         [
             .. PolishCorpus.All
                 .SelectMany(static message => message.Recipients.Append(message.Sender))
-                .Where(static address => !address.Equals(ReplyDraftScenario.MailboxAddress, StringComparison.OrdinalIgnoreCase))
+                .Where(static address => !address.Equals(CorpusMailbox.OwnerAddress, StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase),
         ];
 

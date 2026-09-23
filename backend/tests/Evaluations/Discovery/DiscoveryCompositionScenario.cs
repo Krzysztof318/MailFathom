@@ -19,6 +19,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Quality;
@@ -352,12 +353,18 @@ internal sealed record DiscoveryCompositionScenario(
 
         var (evidence, sources) = await this.RetrieveAsync(cancellationToken);
 
-        // A deployment guards each source before it composes the turn; the guard a scenario runs under is inactive
-        // and would hand back the same text, so the turn is composed from the sources as they were declared.
-        var turn = DiscoveryCompositionInstructions.ComposeCompositionTurn(
-            this.Question,
+        var runPlan = DiscoveryRunPlan.Compose(
             this.Intent,
-            [.. sources.Select(static source => new DiscoveryTurnSource(source.Citation.Id.Value, source.Citation.Label.Value, source.Extract))]);
+            RetrievalPlan.Create(EmailKnowledgeBounds.Default, [EmailKnowledgeQuery.ForText(this.Lookup)], sufficientPassages: 5));
+
+        // Composed as a deployment composes it, through a guard that is inactive and hands every source back as it was
+        // declared.
+        var turn = await DiscoveryCompositionAgent.ComposeTurnAsync(
+            new MailQuestion(MailQuestionText.Create(this.Question), CorpusKnowledgeSearch.Scope, ObservedAt),
+            runPlan,
+            sources,
+            SensitiveContentEgressGuards.Inactive(),
+            cancellationToken);
 
         var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
         var agent = DiscoveryCompositionAgentComposition.Compose(
@@ -366,10 +373,14 @@ internal sealed record DiscoveryCompositionScenario(
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
-        var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+        // A turn past the model's bound is never sent, and the reading is handed no composition, as a deployment hands
+        // it none.
+        var answer = DiscoveryCompositionAgent.FitsOneRequest(turn, plan)
+            ? await agent.RunAsync(turn, session: null, options: null, cancellationToken)
+            : null;
         var result = DiscoveryCompositionReading.Read(
-            answer.Text,
-            DiscoveryRunPlan.Compose(this.Intent, RetrievalPlan.Create(EmailKnowledgeBounds.Default, [EmailKnowledgeQuery.ForText(this.Lookup)], sufficientPassages: 5)),
+            DiscoveryCompositionAgent.CompositionOf(answer?.Text),
+            runPlan,
             sources,
             evidence,
             [new AccountCoverage(PresentationText.Create(CorpusKnowledgeSearch.Account.Value), PresentationFreshness.CurrentAt(ObservedAt), earliestReceivedAt: null, latestReceivedAt: null)]);
@@ -383,7 +394,7 @@ internal sealed record DiscoveryCompositionScenario(
             cancellationToken);
 
         this.HoldRatings(verdict);
-        this.Check(verdict, answer.Text, sources, result);
+        this.Check(verdict, answer?.Text, sources, result);
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend.Take());
 
         return verdict;

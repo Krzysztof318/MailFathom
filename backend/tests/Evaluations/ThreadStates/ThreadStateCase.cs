@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Infrastructure.Persistence.ThreadStates;
 
 namespace MailFathom.Evaluations.ThreadStates;
 
@@ -145,19 +146,38 @@ internal sealed record ThreadStateCase(
             MailAccountLanguage.English),
     ];
 
-    /// <summary>Gets the conversation's messages as a derivation is shown them, in the order they were written.</summary>
-    public IReadOnlyList<DerivableThreadMessage> Messages =>
-    [
-        .. this.Conversation().Select(static (message, position) => new DerivableThreadMessage(
-            message.Id,
-            position,
-            message.SenderName ?? message.Sender,
-            message.ReceivedAt,
-            message.Text)),
-    ];
+    /// <summary>Gets the conversation as the derivation pass hands it over: composed by the store from the rows it reads.</summary>
+    /// <remarks>
+    /// Each row carries what the store's query selects — the name a message was sent under and never its address, and
+    /// the text cut to the pass's bound — so the messages, their positions, the subject, and whether the conversation is
+    /// past the pass's bound are the store's own composition of them.
+    /// </remarks>
+    public DerivableThread Thread
+    {
+        get
+        {
+            var conversation = this.Conversation();
+            var thread = conversation[0].Id.Value;
+            StoredThreadStateStore.DerivableThreadMessageRow[] rows =
+            [
+                .. conversation.Select(message => new StoredThreadStateStore.DerivableThreadMessageRow(
+                    thread,
+                    message.Id.Value,
+                    message.Subject,
+                    message.SenderName,
+                    message.ReceivedAt,
+                    message.TextWithin(ThreadStateDerivationPass.MaximumCharactersPerMessage))),
+            ];
 
-    /// <summary>Gets the subject the conversation is read under, which is the one it was opened with.</summary>
-    public string Subject => this.Conversation()[0].Subject;
+            return StoredThreadStateStore.Compose(
+                new ThreadAwaitingStateRow(thread, rows.Length, conversation[^1].ReceivedAt),
+                new Dictionary<Guid, StoredThreadStateStore.DerivableThreadMessageRow[]> { [thread] = rows },
+                ThreadStateDerivationPass.MaximumMessagesPerThread);
+        }
+    }
+
+    /// <summary>Gets the conversation's messages as a derivation is shown them, in the order they were written.</summary>
+    public IReadOnlyList<DerivableThreadMessage> Messages => this.Thread.Messages;
 
     /// <summary>Finds a case by the name it is filed under.</summary>
     /// <param name="name">The case's name.</param>

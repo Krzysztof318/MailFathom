@@ -9,6 +9,7 @@ using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
 using MailFathom.Evaluations.Languages;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -63,6 +64,19 @@ public sealed class MailAnsweringScenarioTests : IDisposable
 
         // Assert
         Assert.False(verdict.Get<BooleanMetric>(MailAnsweringScenario.SearchedMetricName).Value);
+    }
+
+    [Fact]
+    public async Task RunAsync_AModelThatLooksUpAndWritesNothing_FailsTheAnswerCheck()
+    {
+        // Arrange
+        using var model = new ScriptedAnsweringChatClient(LumenfieldLookup, "   ");
+
+        // Act
+        var verdict = await this.RunAsync(KeywordTrap, model, executionName: "only");
+
+        // Assert
+        Assert.False(verdict.Get<BooleanMetric>(MailAnsweringScenario.AnsweredMetricName).Value);
     }
 
     [Fact]
@@ -210,6 +224,7 @@ public sealed class MailAnsweringScenarioTests : IDisposable
         [
             .. new[]
             {
+                MailAnsweringScenario.AnsweredMetricName,
                 MailAnsweringScenario.SearchedMetricName,
                 MailAnsweringScenario.CitesExistingMailMetricName,
                 MailAnsweringScenario.CitesRetrievedMailMetricName,
@@ -227,21 +242,7 @@ public sealed class MailAnsweringScenarioTests : IDisposable
             new ChatClientMetadata("planted-provider", new Uri("https://planted-judge-host.invalid/v1/"), "planted-judge-model"));
 
     private static ChatGenerationPlan PlanFor(IChatClient model) =>
-        ChatGenerationPlan.Create(
-            new ChatEndpoint(
-                "evaluation",
-                Address: null,
-                model.GetService<ChatClientMetadata>()?.DefaultModelId ?? "model-under-test",
-                ChatProviderApi.ChatCompletions,
-                PublishedModelName: string.Empty),
-            maximumOutputTokens: 1024,
-            temperature: null,
-            topP: null,
-            reasoningEffort: null,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 1024,
-            requestTimeout: TimeSpan.FromSeconds(30));
+        ModelsUnderTest.PlanFor(model.GetService<ChatClientMetadata>()?.DefaultModelId ?? "model-under-test");
 
     private async Task<EvaluationResult> RunAsync(
         MailAnsweringScenario scenario,

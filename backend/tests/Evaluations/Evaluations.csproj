@@ -67,6 +67,10 @@
          chunks, rather than from the raw body a reply carries its whole history in, and a body carried as markup alone
          is read from the text it displays. -->
     <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+    <!-- For the defaults a deployment declares: a model under test is planned from the chat model declaration a
+         deployment binds, and an embedding profile's metric and every other bound a scenario reads are the host's own
+         defaults, so no scenario restates a number the deployment owns. -->
+    <ProjectReference Include="..\..\src\Host\Host.csproj" />
     <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

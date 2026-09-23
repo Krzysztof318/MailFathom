@@ -137,10 +137,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }
 
-        var turn = Bounded(
-            ReplyDraftInstructions.ComposeDraftingTurn(
-                await this.GuardedTurnAsync(brief, cancellationToken)),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(brief, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -174,6 +171,22 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         return draft;
     }
 
+    /// <summary>Composes the turn one drafting sends: the brief, guarded and cut to what one call may carry.</summary>
+    /// <param name="brief">The correspondence, what the person selected and typed, and the language the draft is for.</param>
+    /// <param name="egressGuard">Scans every text somebody wrote before it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        ReplyDraftBrief brief,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken) =>
+        Bounded(
+            ReplyDraftInstructions.ComposeDraftingTurn(
+                await GuardedTurnAsync(brief, egressGuard, cancellationToken)),
+            plan.MaximumRequestCharacters);
+
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
     /// <remarks>
     /// A bound rather than a refusal, and the trade is the conversation's own derivation's: what a bounded turn loses
@@ -191,8 +204,9 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// scanned like every other text this deployment sends. The positions and the instants are this deployment's own
     /// and carry nothing anybody wrote, and an address is not offered because none is sent.
     /// </remarks>
-    private async Task<GuardedDraftingTurn> GuardedTurnAsync(
+    private static async Task<GuardedDraftingTurn> GuardedTurnAsync(
         ReplyDraftBrief brief,
+        SensitiveContentEgressGuard egressGuard,
         CancellationToken cancellationToken)
     {
         var sources = brief.Sources;
@@ -202,9 +216,9 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         {
             messages.Add(new GuardedDraftingMessage(
                 message.Position,
-                await this.GuardedOptionalAsync(message.AuthorDisplayName, cancellationToken),
+                await GuardedOptionalAsync(egressGuard, message.AuthorDisplayName, cancellationToken),
                 message.SentAt,
-                await this.GuardedAsync(message.Text, cancellationToken)));
+                await GuardedAsync(egressGuard, message.Text, cancellationToken)));
         }
 
         var people = new List<GuardedDraftingPerson>(sources.Participants.Count);
@@ -213,30 +227,36 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         {
             people.Add(new GuardedDraftingPerson(
                 participant.Position,
-                await this.GuardedOptionalAsync(participant.Address.DisplayName, cancellationToken)));
+                await GuardedOptionalAsync(egressGuard, participant.Address.DisplayName, cancellationToken)));
         }
 
         var styleSamples = new List<string>(sources.StyleSamples.Count);
 
         foreach (var sample in sources.StyleSamples)
         {
-            styleSamples.Add(await this.GuardedAsync(sample, cancellationToken));
+            styleSamples.Add(await GuardedAsync(egressGuard, sample, cancellationToken));
         }
 
         return new GuardedDraftingTurn(
-            await this.GuardedOptionalAsync(sources.Subject, cancellationToken),
+            await GuardedOptionalAsync(egressGuard, sources.Subject, cancellationToken),
             people,
             messages,
             styleSamples,
-            await this.GuardedOptionalAsync(brief.Selection, cancellationToken),
-            await this.GuardedOptionalAsync(brief.Instruction, cancellationToken));
+            await GuardedOptionalAsync(egressGuard, brief.Selection, cancellationToken),
+            await GuardedOptionalAsync(egressGuard, brief.Instruction, cancellationToken));
     }
 
-    private Task<string> GuardedAsync(string text, CancellationToken cancellationToken) =>
-        this.egressGuard.GuardAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
+    private static Task<string> GuardedAsync(
+        SensitiveContentEgressGuard egressGuard,
+        string text,
+        CancellationToken cancellationToken) =>
+        egressGuard.GuardAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
 
-    private Task<string?> GuardedOptionalAsync(string? text, CancellationToken cancellationToken) =>
-        this.egressGuard.GuardOptionalAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
+    private static Task<string?> GuardedOptionalAsync(
+        SensitiveContentEgressGuard egressGuard,
+        string? text,
+        CancellationToken cancellationToken) =>
+        egressGuard.GuardOptionalAsync(SensitiveContentEgressPoint.ChatPrompt, text, cancellationToken);
 
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
     /// <remarks>

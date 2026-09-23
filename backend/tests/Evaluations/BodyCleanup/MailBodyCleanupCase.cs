@@ -2,13 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Cleaning;
-using MailFathom.Application.EmailContent.Rendering;
-using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Domain.Access;
+using MailFathom.Evaluations.AgentConversations;
 using MailFathom.Evaluations.Corpus;
-using MailFathom.Infrastructure.Mail.Mime;
+using MailFathom.TestSupport;
 
 namespace MailFathom.Evaluations.BodyCleanup;
 
@@ -32,9 +31,6 @@ namespace MailFathom.Evaluations.BodyCleanup;
 /// <param name="Tempting">Words the block a model is tempted to drop opens with, which the case's own test finds in the outline.</param>
 internal sealed record MailBodyCleanupCase(string Name, int Position, string Tempting)
 {
-    /// <summary>The bound a reading pane reduces one body under.</summary>
-    private const int MaximumBodyCharacters = 100_000;
-
     /// <summary>Gets every case, in the order the report lists them.</summary>
     public static IReadOnlyList<MailBodyCleanupCase> All { get; } =
     [
@@ -57,24 +53,16 @@ internal sealed record MailBodyCleanupCase(string Name, int Position, string Tem
     /// <returns>The outline.</returns>
     public async Task<CleanableMailBody> DescribeAsync(CancellationToken cancellationToken)
     {
-        var message = this.Message;
-        var stored = new StoredEmailContent(
-            message.RawMime,
-            message.RawMime.Length,
-            SHA256.HashData(message.RawMime.Span));
+        var read = await CorpusReaders
+            .ContentReaderFor(AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead))
+            .ReadContentAsync(GetEmailContentRequest.Create([this.Message.Id]) with { IncludeMailDocument = true }, cancellationToken);
 
-        var rendered = await new MimeKitEmailContentRenderer(new EmailMimeExtractionOptions()).RenderAsync(
-            stored,
-            new EmailContentRenderingBounds(IncludeSanitizedHtml: false, MaximumBodyCharacters, MaximumBodyCharacters)
-            {
-                IncludeMailDocument = true,
-            },
-            cancellationToken);
-
-        var document = rendered.Rendering?.Document
+        var message = read.Emails[0].Content
+            ?? throw new InvalidOperationException($"Corpus message {this.Position} could not be read.");
+        var document = message.Body.Document
             ?? throw new InvalidOperationException($"Corpus message {this.Position} rendered no document.");
 
-        return MailBodyCleaningOutline.Describe(document, message.Subject, message.SenderName ?? message.Sender);
+        return MailBodyCleaningOutline.Describe(document, message.Headers.Subject, MailBodyCleaning.SenderOf(message.Headers));
     }
 
     /// <inheritdoc />

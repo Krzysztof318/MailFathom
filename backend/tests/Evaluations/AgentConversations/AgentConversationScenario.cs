@@ -24,6 +24,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Languages;
 using MailFathom.Evaluations.Reporting;
+using MailFathom.Host.Configuration.Answering;
 using MailFathom.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -103,6 +104,9 @@ internal sealed record AgentConversationScenario(
     /// the check.
     /// </remarks>
     public const string FollowUpsOnSubjectMetricName = "Follow-ups stay on the subject";
+
+    /// <summary>The check that the run ended with text a deployment presents rather than failing as an empty answer.</summary>
+    public const string AnsweredMetricName = "Produced an answer";
 
     /// <summary>The check that the run finished inside the bounds a deployment runs it under.</summary>
     public const string WithinBoundsMetricName = "Stayed within its bounds";
@@ -1135,18 +1139,32 @@ internal sealed record AgentConversationScenario(
             SensitiveContentEgressGuards.Inactive(),
             AskedAt);
         var store = new RecordingAgentConversationStore();
-        var (history, summary) = await this.CompactAsync(cachedModel, plan, cancellationToken);
-        var brief = this.Brief(history);
+        var question = this.AgentQuestion();
         await using var signals = new ClientSignals([], TimeProvider.System);
         using var journal = new AgentAnswerJournal(
-            brief.Question.Conversation,
-            brief.Question.User,
-            brief.Question.Answer,
-            brief.Question.OpenedAt,
+            question.Conversation,
+            question.User,
+            question.Answer,
+            question.OpenedAt,
             store,
             signals,
             new StatedUserLanguage(this.Language),
             TimeProvider.System);
+        var summarizer = new ModelAgentConversationSummarizer(cachedModel, plan);
+        var history = await AgentAnswering.ComposeHistoryAsync(
+            question,
+            this.Context(),
+            this.CompactedWithin ?? new MailAnsweringOptions().MaxConversationContextTokens,
+            summarizer,
+            journal,
+            cancellationToken);
+
+        if (this.CompactedWithin is { } budget && !summarizer.WasAsked)
+        {
+            throw new InvalidOperationException($"{this.Name} leaves nothing to compact within {budget} tokens.");
+        }
+
+        var brief = new AgentAnswerBrief(question, this.Language, history);
         var tools = new AgentConversationTools(
             journal,
             retrieval,
@@ -1156,8 +1174,14 @@ internal sealed record AgentConversationScenario(
         var called = new ConcurrentQueue<string>();
         IReadOnlyList<AITool> offered = [.. tools.Create().OfType<AIFunction>().Select(tool => new CalledFunction(tool, called))];
 
-        var messages = ChatConversationMapping.ToProviderConversation(AgentConversationAgent.ComposeMessages(brief, CorpusKnowledgeSearch.Scope));
+        var composed = AgentConversationAgent.ComposeMessages(brief, CorpusKnowledgeSearch.Scope);
+
+        // Refused rather than sent, as a deployment refuses it: a conversation past the model's bound fails the run.
+        ChatRequestBounds.RequireForAttempt(composed, plan);
+
+        var messages = ChatConversationMapping.ToProviderConversation(composed);
         var answer = await this.AskAsync(cachedModel, plan, offered, journal, runLedger, messages, cancellationToken);
+        var presented = AgentConversationAgent.Presentable(answer?.Text);
 
         var verdict = await scenarioRun.EvaluateAsync(
             [new ChatMessage(ChatRole.System, AgentConversationInstructions.TextFor(this.Language)), .. messages],
@@ -1167,8 +1191,8 @@ internal sealed record AgentConversationScenario(
 
         EvaluationMetrics.HoldToThreshold(verdict, IntentResolutionEvaluator.IntentResolutionMetricName, this.MinimumIntentResolution);
         EvaluationMetrics.HoldToThreshold(verdict, TaskAdherenceEvaluator.TaskAdherenceMetricName, this.MinimumTaskAdherence);
-        this.Check(verdict, answer, [.. called], store.Written);
-        this.CheckRemembered(verdict, answer?.Text ?? string.Empty, summary);
+        this.Check(verdict, answer, presented, [.. called], store.Written);
+        this.CheckRemembered(verdict, presented?.Value ?? string.Empty, summarizer.Summary);
         this.CheckFollowUps(verdict, tools.FollowUps);
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend.Take());
 
@@ -1227,62 +1251,18 @@ internal sealed record AgentConversationScenario(
                 new AgentMessageWritten(AgentMessageId.New(), turn.Author, PresentationText.Create(turn.Text), Scope: null) with { Sequence = index + 1 }),
         ]);
 
-    /// <summary>Compacts the history under the case's budget the way a deployment does before a turn, or sends it whole where the case states no budget.</summary>
-    /// <returns>The history the turn is composed from, and the summary the compaction wrote, if one was taken.</returns>
-    /// <remarks>
-    /// The plan and the composed history are the deployment's own. The summary is written by the compaction agent's own
-    /// composition and instruction, and kept to the same length a deployment keeps, over the model under test, because
-    /// the deployment's summariser opens a provider client of its own rather than taking one; a summary that comes back
-    /// empty is answered as a deployment answers a failed one, with as much recent history as fits.
-    /// </remarks>
-    private async Task<(IReadOnlyList<AgentHistoryTurn> History, string? Summary)> CompactAsync(
-        IChatClient model,
-        ChatGenerationPlan plan,
-        CancellationToken cancellationToken)
-    {
-        if (this.CompactedWithin is not { } budget)
-        {
-            return (this.History, null);
-        }
-
-        var context = this.Context();
-        var compaction = context.PlanCompaction(budget)
-            ?? throw new InvalidOperationException($"{this.Name} leaves nothing to compact within {budget} tokens.");
-        var summarizer = AgentConversationSummaryComposition.Compose(model, plan, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
-        var response = await summarizer.RunAsync(
-            AgentConversationSummaryInstructions.ComposeTurn(compaction.PreviousSummary, compaction.Turns),
-            session: null,
-            options: null,
-            cancellationToken);
-        var summary = response.Text?.Trim() ?? string.Empty;
-
-        if (summary.Length is 0)
-        {
-            return (context.ComposeWithin(budget, this.Question), summary);
-        }
-
-        var kept = summary.Length <= AgentConversationSummaryInstructions.MaximumSummaryLength
-            ? summary
-            : MailTextBounds.TruncateAtTextElementBoundary(summary, AgentConversationSummaryInstructions.MaximumSummaryLength);
-
-        return (context.ComposeFrom(new AgentConversationCompacted(AgentMessageId.New(), compaction.Through, kept, compaction.Carried)), kept);
-    }
-
-    /// <summary>States the question the way a deployment hands it to the Agent: who asked, what they were looking at, when, and the conversation before it.</summary>
-    private AgentAnswerBrief Brief(IReadOnlyList<AgentHistoryTurn> history) =>
+    /// <summary>States the question the way a deployment hands it to the Agent: who asked, what they were looking at, and when.</summary>
+    private AgentQuestion AgentQuestion() =>
         new(
-            new AgentQuestion(
-                AgentConversationId.New(),
-                SyntheticUser.Deployment,
-                PresentationText.Create(this.Question),
-                this.Conversation is { } conversation
-                    ? new AgentMessageScope(AgentScopeKind.Thread, CorpusReaders.ThreadOf(conversation).Value)
-                    : null,
-                AgentMessageId.New(),
-                OpenedAt: 1,
-                AskedAt),
-            this.Language,
-            history);
+            AgentConversationId.New(),
+            SyntheticUser.Deployment,
+            PresentationText.Create(this.Question),
+            this.Conversation is { } conversation
+                ? new AgentMessageScope(AgentScopeKind.Thread, CorpusReaders.ThreadOf(conversation).Value)
+                : null,
+            AgentMessageId.New(),
+            OpenedAt: 1,
+            AskedAt);
 
     /// <summary>Runs the Agent over the deployment's composition, inside the run bounds a deployment applies.</summary>
     /// <returns>The Agent's response, or <see langword="null" /> where the run reached its bounds before it answered.</returns>
@@ -1327,10 +1307,11 @@ internal sealed record AgentConversationScenario(
     private void Check(
         EvaluationResult verdict,
         ChatResponse? answer,
+        PresentationText? presented,
         IReadOnlyList<string> called,
         IReadOnlyList<AgentConversationEntry> written)
     {
-        var text = answer?.Text ?? string.Empty;
+        var text = presented?.Value ?? string.Empty;
         var missing = this.Evidence.Where(phrase => !text.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
         var acts = written.OfType<AgentActionProposed>().Select(static proposal => proposal.Act).ToList();
         var proposed = acts.Select(DescriptionOf).Order(StringComparer.OrdinalIgnoreCase).ToList();
@@ -1390,6 +1371,13 @@ internal sealed record AgentConversationScenario(
             proposedAsAsked
                 ? "The run proposed exactly what was asked."
                 : $"Asked for {(this.Proposes.Count is 0 ? "no proposal" : string.Join("; ", this.Proposes))}, the run proposed {(proposed.Count is 0 ? "nothing" : string.Join("; ", proposed))}.");
+        EvaluationMetrics.Record(
+            verdict,
+            AnsweredMetricName,
+            answer is null || presented is not null,
+            answer is null || presented is not null
+                ? "The run ended with an answer a block can carry, or reached its bounds first."
+                : "The run ended with no answer text, which a deployment fails as an empty answer.");
         EvaluationMetrics.Record(
             verdict,
             WithinBoundsMetricName,

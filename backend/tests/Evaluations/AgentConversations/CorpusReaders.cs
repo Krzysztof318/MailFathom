@@ -34,6 +34,7 @@ using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Evaluations.Answering;
 using MailFathom.Evaluations.Corpus;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.TestSupport;
 
@@ -55,14 +56,7 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// </remarks>
 internal static class CorpusReaders
 {
-    private static readonly OutgoingEmailBounds DeploymentBounds = new()
-    {
-        MaxRecipientCount = 50,
-        MaxBodyCharacters = 100_000,
-        MaxAttachmentCount = 10,
-        MaxAttachmentBytes = 10L * 1024 * 1024,
-        MaxMessageBytes = 25L * 1024 * 1024,
-    };
+    private static readonly OutgoingEmailBounds DeploymentBounds = new MailDeliveryOptions().ToOutgoingEmailBounds();
 
     private static readonly Lazy<IReadOnlyList<IReadOnlyList<CorpusMessage>>> Exchanges = new(static () =>
         [.. CorpusMessage.Exchanges, .. HostileMail.Exchanges, .. PolishCorpus.Exchanges]);
@@ -90,11 +84,7 @@ internal static class CorpusReaders
     /// <returns>The readers.</returns>
     public static AgentConversationReaders For(AccessAuthorization authorization, IEmailKnowledgeSearch search)
     {
-        var scope = new MailboxScopeResolver(
-            AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(CorpusKnowledgeSearch.Account)),
-            StubMailFolderParticipation.Mapping(new MailFolderIdentity(CorpusKnowledgeSearch.Account, CorpusKnowledgeSearch.Inbox)),
-            StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing);
+        var scope = ScopeFor(authorization);
         var summaries = new CorpusSummaries();
         var content = new CorpusContent();
         var renderer = new MimeKitEmailContentRenderer(new EmailMimeExtractionOptions());
@@ -103,18 +93,7 @@ internal static class CorpusReaders
         return new AgentConversationReaders(
             scope,
             search,
-            new EmailContentReader(
-                summaries,
-                new StubEmailThreadReader([.. Exchanges.Value.SelectMany(static exchange => ThreadedOf(exchange))]),
-                content,
-                renderer,
-                repairs,
-                scope,
-                new NoDownloadLinks(),
-                SensitiveContentEgressGuards.Inactive(),
-                new EmailContentReadOptions(),
-                new UnrecordedReads(),
-                authorization),
+            ContentReaderOver(scope, authorization),
             new MailThreadStateBrowser(PersonalAgenda.ThreadStateReader(), scope, SensitiveContentEgressGuards.Inactive(), authorization),
             new OwnCalendar(
                 authorization,
@@ -136,7 +115,17 @@ internal static class CorpusReaders
             authorization);
     }
 
-    private static EmailSummary SummaryOf(CorpusMessage message, EmailThreadId thread) =>
+    /// <summary>Composes the content reader a deployment would hand one person, under the grant they hold.</summary>
+    /// <param name="authorization">The grant the read acts under.</param>
+    /// <returns>The reader.</returns>
+    public static EmailContentReader ContentReaderFor(AccessAuthorization authorization) =>
+        ContentReaderOver(ScopeFor(authorization), authorization);
+
+    /// <summary>Reads one message as a listing shows it, from the one inbox every corpus message is delivered to.</summary>
+    /// <param name="message">The message.</param>
+    /// <param name="thread">The thread it is stored in, or <see langword="null" /> where the reader needs none.</param>
+    /// <returns>The summary.</returns>
+    internal static EmailSummary SummaryOf(CorpusMessage message, EmailThreadId? thread) =>
         new()
         {
             StoredEmailId = message.Id,
@@ -157,6 +146,27 @@ internal static class CorpusReaders
             ContentAvailability = StoredEmailContentAvailability.Available,
             RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
         };
+
+    private static MailboxScopeResolver ScopeFor(AccessAuthorization authorization) =>
+        new(
+            AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(CorpusKnowledgeSearch.Account)),
+            StubMailFolderParticipation.Mapping(new MailFolderIdentity(CorpusKnowledgeSearch.Account, CorpusKnowledgeSearch.Inbox)),
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing);
+
+    private static EmailContentReader ContentReaderOver(MailboxScopeResolver scope, AccessAuthorization authorization) =>
+        new(
+            new CorpusSummaries(),
+            new StubEmailThreadReader([.. Exchanges.Value.SelectMany(static exchange => ThreadedOf(exchange))]),
+            new CorpusContent(),
+            new MimeKitEmailContentRenderer(new EmailMimeExtractionOptions()),
+            new NoRepairs(),
+            scope,
+            new NoDownloadLinks(),
+            SensitiveContentEgressGuards.Inactive(),
+            new EmailContentReadOptions(),
+            new UnrecordedReads(),
+            authorization);
 
     private static IEnumerable<(EmailThreadId ThreadId, ThreadedEmailSummary Email)> ThreadedOf(IReadOnlyList<CorpusMessage> exchange) =>
         exchange.Select((message, position) => (ThreadOf(exchange), new ThreadedEmailSummary

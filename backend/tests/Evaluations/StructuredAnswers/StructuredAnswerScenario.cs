@@ -171,14 +171,15 @@ internal static class StructuredAnswerScenario
             cancellationToken);
 
         var agent = request.Compose(cachedModel, plan);
-        var answer = await agent.RunAsync(request.Turn, session: null, options: null, cancellationToken);
+        var turn = await request.ComposeTurnAsync(plan, cancellationToken);
+        var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
         var shortfall = request.Shortfall(answer.Text);
 
         // The instruction travels as the system turn so the judge grades an answer against the job the agent was given,
         // rather than faulting it for not doing what it was told not to. The answer goes as the model wrote it, because
         // every instruction here asks for one JSON object and a judge shown anything else grades the format.
         var verdict = await scenarioRun.EvaluateAsync(
-            [new ChatMessage(ChatRole.System, request.Instruction), new ChatMessage(ChatRole.User, request.Turn)],
+            [new ChatMessage(ChatRole.System, request.Instruction), new ChatMessage(ChatRole.User, turn)],
             new ChatResponse(new ChatMessage(ChatRole.Assistant, answer.Text)) { ModelId = modelName },
             cancellationToken: cancellationToken);
 

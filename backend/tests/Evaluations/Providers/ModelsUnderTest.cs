@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
+using MailFathom.Application.Chat;
+using MailFathom.Host.Configuration.Chat;
 
 namespace MailFathom.Evaluations.Providers;
 
@@ -12,6 +14,11 @@ namespace MailFathom.Evaluations.Providers;
 /// A list rather than one model, because comparing two models is the question this suite exists to answer in one run.
 /// Each becomes a <see cref="ChatGenerationPlan" /> built here, which is the declaration every agent takes through
 /// dependency injection — so the matrix is a loop over plans and needs no configuration file and no production change.
+/// </para>
+/// <para>
+/// Every plan is the one a deployment builds for a model that declares nothing but its name and its address: the output
+/// budget, the request bounds, and the timeout are <see cref="ChatModelDeclarationOptions" />' own defaults, so a
+/// verdict here is about what such a deployment would send and receive rather than about a budget of the suite's choosing.
 /// </para>
 /// <para>
 /// Every one of them is reached through <see cref="EvaluationEndpoint" />, which is also where the judge is reached:
@@ -25,10 +32,6 @@ internal static class ModelsUnderTest
 
     /// <summary>The variable carrying the reasoning effort every model under test is asked for, where the run declares one.</summary>
     public const string ReasoningEffortVariable = "MAILFATHOM_EVALUATION_REASONING_EFFORT";
-
-    /// <summary>The output budget one answer may occupy.</summary>
-    /// <remarks>Room for the structured answer an agent writes and the reasoning a reasoning model spends before it.</remarks>
-    private const int MaximumOutputTokens = 4096;
 
     /// <summary>Builds one plan per declared model.</summary>
     /// <returns>The plans, in the order the run declared the models.</returns>
@@ -61,29 +64,28 @@ internal static class ModelsUnderTest
                 $"{ReasoningEffortVariable} is not a single word a provider could read as a reasoning level.");
 
     /// <summary>Builds the plan one model is measured with.</summary>
+    /// <param name="model">The routed model name.</param>
+    /// <param name="address">The endpoint the model sits behind, or <see langword="null" /> for the provider's own default.</param>
+    /// <param name="reasoningEffort">The reasoning effort the run declares, or <see langword="null" /> where it declares none.</param>
+    /// <returns>The plan.</returns>
     /// <remarks>
     /// No sampling parameter is sent, for the reason the contract tests give: several current models refuse one outright,
     /// and what is measured is the request a deployment makes with nothing declared. A reasoning effort is sent only where
     /// the run declares one, which is the request a deployment declaring that effort makes.
     /// </remarks>
-    private static ChatGenerationPlan PlanFor(string model, Uri? address, string? reasoningEffort)
-    {
-        var endpoint = new ChatEndpoint(
-            "evaluation",
-            address,
-            model,
-            ChatProviderApi.ChatCompletions,
-            PublishedModelName: string.Empty);
+    public static ChatGenerationPlan PlanFor(string model, Uri? address = null, string? reasoningEffort = null) =>
+        new ChatModelDeclarationOptions
+        {
+            Alias = "evaluation",
+            Model = model,
+            Address = address?.AbsoluteUri ?? string.Empty,
+            ReasoningEffort = reasoningEffort,
+        }.ToPlan();
 
-        return ChatGenerationPlan.Create(
-            endpoint,
-            MaximumOutputTokens,
-            temperature: null,
-            topP: null,
-            reasoningEffort,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 4 * 1024 * 1024,
-            requestTimeout: TimeSpan.FromMinutes(2));
-    }
+    /// <summary>Refuses one turn past what the plan's model accepts, as a deployment's agent refuses it rather than sending it.</summary>
+    /// <param name="turn">The turn a scenario composed through the agent's own composition.</param>
+    /// <param name="plan">The plan the model is measured with.</param>
+    /// <exception cref="ChatGenerationFailedException">Thrown when the turn exceeds what the model declares.</exception>
+    public static void RequireOneTurn(string turn, ChatGenerationPlan plan) =>
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], plan);
 }

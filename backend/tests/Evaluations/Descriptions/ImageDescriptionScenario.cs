@@ -9,6 +9,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
+using MailFathom.Host.Configuration.Embeddings;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Quality;
@@ -52,9 +53,6 @@ internal sealed record ImageDescriptionScenario(
 
     /// <summary>The check that the description names everything the image has to be found by.</summary>
     public const string MentionsWhatItShowsMetricName = "Mentions what it shows";
-
-    /// <summary>The largest pixel grid a deployment describes by default, which every image here is far below.</summary>
-    private const long DeploymentPixelCeiling = 40_000_000;
 
     /// <summary>Gets every image the describer is measured on.</summary>
     public static IReadOnlyList<ImageDescriptionScenario> All { get; } =
@@ -240,7 +238,7 @@ internal sealed record ImageDescriptionScenario(
         var describer = new ImageAttachmentDescriber(
             new ScenarioChatModelClient(cachedModel, plan),
             plan,
-            DeploymentPixelCeiling,
+            new EmbeddingImageDescriptionOptions().MaxPixels,
             NullLogger<ImageAttachmentDescriber>.Instance);
 
         await using var image = File.OpenRead(this.ImagePath);

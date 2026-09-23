@@ -9,6 +9,7 @@ using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
 using MailFathom.Evaluations.Languages;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -126,14 +127,14 @@ public sealed class ReplyDraftScenarioTests : IDisposable
             var sources = scenario.Sources();
             var wrote = scenario.Conversation
                 .Select(static message => message.Sender)
-                .Where(static sender => sender != ReplyDraftScenario.MailboxAddress)
+                .Where(static sender => sender != CorpusMailbox.OwnerAddress)
                 .Select(static sender => sender.ToUpperInvariant())
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray();
 
             return (
-                AnswersCorrespondent: scenario.Conversation[^1].Sender != ReplyDraftScenario.MailboxAddress,
+                AnswersCorrespondent: scenario.Conversation[^1].Sender != CorpusMailbox.OwnerAddress,
                 Wrote: wrote,
                 Numbered: sources.Participants.Select(static person => person.Address.NormalizedAddress).Order(StringComparer.Ordinal).ToArray(),
                 Answered: sources.Messages[^1].StoredEmailId == scenario.Conversation[^1].Id);
@@ -179,17 +180,7 @@ public sealed class ReplyDraftScenarioTests : IDisposable
     private static ScriptedChatClient Model(string answer) =>
         new(answer, new ChatClientMetadata("scripted", defaultModelId: ModelUnderTest));
 
-    private static ChatGenerationPlan PlanFor(string model) =>
-        ChatGenerationPlan.Create(
-            new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
-            maximumOutputTokens: 1024,
-            temperature: null,
-            topP: null,
-            reasoningEffort: null,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 1024,
-            requestTimeout: TimeSpan.FromSeconds(30));
+    private static ChatGenerationPlan PlanFor(string model) => ModelsUnderTest.PlanFor(model);
 
     private async Task<EvaluationResult> RunAsync(ReplyDraftScenario scenario, IChatClient model)
     {

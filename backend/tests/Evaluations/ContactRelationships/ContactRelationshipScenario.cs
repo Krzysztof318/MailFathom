@@ -7,6 +7,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.Domain.Access;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.ContactRelationships;
@@ -36,17 +37,14 @@ internal static class ContactRelationshipScenario
         var language = scenario.Language ?? UserLanguage.English;
         var instruction = ContactRelationshipInstructions.TextFor(language);
 
-        var turn = new GuardedRelationshipTurn(
-            [.. correspondence.Threads.Select(static thread => new GuardedRelationshipConversation(thread.Subject, thread.LastCorrespondedAt))],
-            [.. correspondence.Documents.Select(static document => new GuardedRelationshipDocument(
-                document.FileName,
-                document.DeclaredMediaType,
-                document.ReceivedAt))]);
-
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             instruction,
-            ContactRelationshipInstructions.ComposeRelationshipTurn(turn),
+            (plan, cancellationToken) => ContactRelationshipAgent.ComposeTurnAsync(
+                correspondence,
+                SensitiveContentEgressGuards.Inactive(),
+                plan,
+                cancellationToken),
             (model, plan) => ContactRelationshipAgentComposition.Compose(
                 model,
                 plan,

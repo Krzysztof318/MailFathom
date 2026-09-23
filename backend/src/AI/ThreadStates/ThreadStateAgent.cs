@@ -152,14 +152,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
             return this.Withhold(ThreadStateWithholding.AllowanceExhausted);
         }
 
-        var turn = Bounded(
-            ThreadStateInstructions.ComposeThreadTurn(
-                await this.egressGuard.GuardOptionalAsync(
-                    SensitiveContentEgressPoint.ChatPrompt,
-                    thread.Subject,
-                    cancellationToken),
-                await this.GuardedMessagesAsync(thread.Messages, cancellationToken)),
-            this.plan.MaximumRequestCharacters);
+        var turn = await ComposeTurnAsync(thread, this.egressGuard, this.plan, cancellationToken);
 
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
@@ -192,6 +185,26 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
         return ThreadStateDerivation.Settled(entries);
     }
 
+    /// <summary>Composes the turn one derivation sends: the conversation, guarded and cut to what one call may carry.</summary>
+    /// <param name="thread">The conversation, with the messages the derivation reads.</param>
+    /// <param name="egressGuard">Scans the subject and every message before any of it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeTurnAsync(
+        DerivableThread thread,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken) =>
+        Bounded(
+            ThreadStateInstructions.ComposeThreadTurn(
+                await egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    thread.Subject,
+                    cancellationToken),
+                await GuardedMessagesAsync(thread.Messages, egressGuard, cancellationToken)),
+            plan.MaximumRequestCharacters);
+
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
     /// <remarks>
     /// A bound rather than a refusal, and it is the same trade the enrichment derivation makes: a refusal here would be
@@ -211,8 +224,9 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     /// quoting a key a colleague pasted has put that key into the request. The instant and the position are this
     /// deployment's own and carry nothing a sender wrote.
     /// </remarks>
-    private async Task<IReadOnlyList<GuardedThreadMessage>> GuardedMessagesAsync(
+    private static async Task<IReadOnlyList<GuardedThreadMessage>> GuardedMessagesAsync(
         IReadOnlyList<DerivableThreadMessage> messages,
+        SensitiveContentEgressGuard egressGuard,
         CancellationToken cancellationToken)
     {
         var guarded = new List<GuardedThreadMessage>(messages.Count);
@@ -221,12 +235,12 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
         {
             guarded.Add(new GuardedThreadMessage(
                 message.Position,
-                await this.egressGuard.GuardOptionalAsync(
+                await egressGuard.GuardOptionalAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     message.AuthorDisplayName,
                     cancellationToken),
                 message.SentAt,
-                await this.egressGuard.GuardAsync(
+                await egressGuard.GuardAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     message.Text,
                     cancellationToken)));

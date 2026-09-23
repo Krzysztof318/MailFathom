@@ -172,11 +172,7 @@ public sealed class MailReplyDrafting
             sources = ReplyDraftSources.Nothing;
         }
 
-        var brief = new ReplyDraftBrief(
-            sources,
-            Bounded(request.Selection, ReplyDraftRequest.MaximumSelectionLength),
-            instruction,
-            this.languages.LanguageOf(user));
+        var brief = BriefOf(sources, request, this.languages.LanguageOf(user));
 
         var draft = await this.writer.WriteAsync(brief, cancellationToken);
 
@@ -196,8 +192,33 @@ public sealed class MailReplyDrafting
 
         return scope.AccountIds.Count is 0
             ? null
-            : await this.sourceReader.ReadSourcesAsync(answeredEmailId, scope, this.Bounds(), cancellationToken);
+            : await this.sourceReader.ReadSourcesAsync(
+                answeredEmailId,
+                scope,
+                BoundsFor(this.derivesStyleFromSentMail),
+                cancellationToken);
     }
+
+    /// <summary>States what a drafting is asked: the sources, and what the person selected and typed, each cut to what a drafting may carry.</summary>
+    /// <param name="sources">What the reply is grounded in.</param>
+    /// <param name="request">What the person selected and typed.</param>
+    /// <param name="language">The language the person reads.</param>
+    /// <returns>The brief.</returns>
+    internal static ReplyDraftBrief BriefOf(ReplyDraftSources sources, ReplyDraftRequest request, UserLanguage language) =>
+        new(
+            sources,
+            Bounded(request.Selection, ReplyDraftRequest.MaximumSelectionLength),
+            Bounded(request.Instruction, ReplyDraftRequest.MaximumInstructionLength),
+            language);
+
+    /// <summary>States how much of the mailbox one drafting reads.</summary>
+    /// <param name="derivesStyleFromSentMail">Whether the deployment draws a reply's manner from the person's own sent mail.</param>
+    /// <returns>The bounds.</returns>
+    internal static ReplyDraftBounds BoundsFor(bool derivesStyleFromSentMail) => new(
+        MaximumMessages,
+        MaximumCharactersPerMessage,
+        derivesStyleFromSentMail ? MaximumStyleMessages : 0,
+        MaximumStyleCharactersPerMessage);
 
     /// <summary>Cuts what somebody typed down to what one drafting may carry of it.</summary>
     /// <remarks>
@@ -208,12 +229,6 @@ public sealed class MailReplyDrafting
         string.IsNullOrWhiteSpace(typed)
             ? null
             : MailTextBounds.TruncateAtTextElementBoundary(typed.Trim(), maximumLength);
-
-    private ReplyDraftBounds Bounds() => new(
-        MaximumMessages,
-        MaximumCharactersPerMessage,
-        this.derivesStyleFromSentMail ? MaximumStyleMessages : 0,
-        MaximumStyleCharactersPerMessage);
 
     /// <summary>Scans everything the draft would publish, under the point this surface is read on.</summary>
     /// <remarks>

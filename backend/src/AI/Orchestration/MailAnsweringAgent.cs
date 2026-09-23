@@ -240,7 +240,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
         var report = retrieval.Report;
 
-        if (string.IsNullOrWhiteSpace(response.Text))
+        if (AnswerOf(response.Text) is not { } answer)
         {
             // Logged before the failure is raised, because the failure names only that no text arrived, while the count
             // says whether the run had anything to answer from.
@@ -260,8 +260,13 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             MailAnsweringEvents.LogRetrievalCeilingReached(this.logger, endpoint.Alias, report.Passages.Count);
         }
 
-        return new MailAnswer(response.Text);
+        return answer;
     }
+
+    /// <summary>Reads what the model wrote as the answer a run returns, or as no answer where it wrote nothing.</summary>
+    /// <param name="text">The text the run's last turn carried.</param>
+    /// <returns>The answer, or <see langword="null" /> where the text is blank, which the run fails as an empty answer.</returns>
+    internal static MailAnswer? AnswerOf(string? text) => string.IsNullOrWhiteSpace(text) ? null : new MailAnswer(text);
 
     /// <summary>Composes the one turn a run sends: the instant the question was asked at, and the question itself.</summary>
     /// <remarks>
@@ -271,6 +276,9 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     /// absolute instants, as a date the model recalled rather than one it was given. Composed through one method so the
     /// bounds above are applied to the turn that is actually sent rather than to the question the anchor expands.
     /// </remarks>
-    private static string ComposeTurn(DateTimeOffset askedAt, string questionText) =>
+    /// <param name="askedAt">The instant the question was asked at.</param>
+    /// <param name="questionText">The question, as guarded for the provider.</param>
+    /// <returns>The turn.</returns>
+    internal static string ComposeTurn(DateTimeOffset askedAt, string questionText) =>
         $"{AgentTimeAnchor.Stated(askedAt)}\n\n{questionText}";
 }

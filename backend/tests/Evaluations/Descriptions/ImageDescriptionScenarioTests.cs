@@ -8,6 +8,7 @@ using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
 using MailFathom.Evaluations.Judging;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.Reporting;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -118,17 +119,7 @@ public sealed class ImageDescriptionScenarioTests : IDisposable
         new(answer, new ChatClientMetadata("scripted", defaultModelId: ModelUnderTest));
 
     /// <summary>A plan admitting the images, which the scenario's describer takes its octet ceiling from.</summary>
-    private static ChatGenerationPlan PlanFor(string model) =>
-        ChatGenerationPlan.Create(
-            new ChatEndpoint("evaluation", Address: null, model, ChatProviderApi.ChatCompletions, PublishedModelName: string.Empty),
-            maximumOutputTokens: 1024,
-            temperature: null,
-            topP: null,
-            reasoningEffort: null,
-            maximumMessagesPerRequest: 8,
-            maximumRequestCharacters: 64_000,
-            maximumRequestImageOctets: 1024 * 1024,
-            requestTimeout: TimeSpan.FromSeconds(30));
+    private static ChatGenerationPlan PlanFor(string model) => ModelsUnderTest.PlanFor(model);
 
     private async Task<EvaluationResult> RunAsync(ImageDescriptionScenario scenario, IChatClient model)
     {

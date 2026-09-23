@@ -95,15 +95,22 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
         // that sends it guards it there, under the egress point it actually crosses.
         var result = await this.searchReader.SearchWindowAsync(request, cancellationToken);
 
-        return EmailKnowledgeLookup.Unfiltered(
-            [
-                .. result.Matches
-                    .Select(this.ToPassage)
-                    .Where(static passage =>
-                        passage.Text.Length is not 0 || passage.AttachmentExtracts.Count is not 0),
-            ],
-            result.RetrievalMode);
+        return EmailKnowledgeLookup.Unfiltered(PassagesOf(result.Matches, this.bounds), result.RetrievalMode);
     }
+
+    /// <summary>Reads the matches a search returned into the passages a model receives, dropping every one that yielded no text.</summary>
+    /// <param name="matches">The matches, in the order the search ranked them.</param>
+    /// <param name="bounds">What one passage may carry.</param>
+    /// <returns>The passages, in the same order.</returns>
+    internal static IReadOnlyList<EmailKnowledgePassage> PassagesOf(
+        IEnumerable<EmailSearchMatch> matches,
+        EmailKnowledgeBounds bounds) =>
+    [
+        .. matches
+            .Select(match => ToPassage(match, bounds))
+            .Where(static passage =>
+                passage.Text.Length is not 0 || passage.AttachmentExtracts.Count is not 0),
+    ];
 
     /// <summary>Reads one match into the passage a model receives.</summary>
     /// <remarks>
@@ -113,7 +120,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     /// the model cannot read a word of. A message whose words live only in a file is the opposite case and is kept: its
     /// body extract is empty and its attachment extracts are the answer.
     /// </remarks>
-    private EmailKnowledgePassage ToPassage(EmailSearchMatch match)
+    private static EmailKnowledgePassage ToPassage(EmailSearchMatch match, EmailKnowledgeBounds bounds)
     {
         var summary = match.Summary;
 
@@ -126,8 +133,8 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             ReceivedAt = summary.ReceivedAt,
             SenderVerification = summary.SenderVerification,
             MachineAuthorship = summary.MachineAuthorship,
-            Text = this.Bounded(string.Join(SnippetSeparator, match.Snippets)),
-            AttachmentExtracts = [.. match.AttachmentMatches.Select(this.ToAttachmentExtract)],
+            Text = Bounded(string.Join(SnippetSeparator, match.Snippets), bounds),
+            AttachmentExtracts = [.. match.AttachmentMatches.Select(attachment => ToAttachmentExtract(attachment, bounds))],
         };
     }
 
@@ -138,12 +145,12 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     /// than more of the first. A message carrying more files than the search would report is already bounded above by
     /// the deployment's own snippet count.
     /// </remarks>
-    private EmailKnowledgeAttachmentExtract ToAttachmentExtract(EmailAttachmentMatch match) => new(
+    private static EmailKnowledgeAttachmentExtract ToAttachmentExtract(EmailAttachmentMatch match, EmailKnowledgeBounds bounds) => new(
         match.AttachmentPosition,
         match.FileName,
         match.Kind,
         match.Segment,
-        this.Bounded(string.Join(SnippetSeparator, match.Extracts)));
+        Bounded(string.Join(SnippetSeparator, match.Extracts), bounds));
 
     /// <summary>Cuts an extract to the size one passage may carry.</summary>
     /// <remarks>
@@ -151,9 +158,9 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     /// every script outside the basic plane, and a lone surrogate is not text: it survives no serialization the passage
     /// is about to cross, and what a provider would receive is a replacement character or a refused request.
     /// </remarks>
-    private string Bounded(string text)
+    private static string Bounded(string text, EmailKnowledgeBounds bounds)
     {
-        var limit = this.bounds.MaximumCharactersPerPassage;
+        var limit = bounds.MaximumCharactersPerPassage;
 
         if (text.Length <= limit)
         {

@@ -156,18 +156,7 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
             return this.Withhold(CalendarEventExtractionWithholding.AllowanceExhausted);
         }
 
-        // The subject and the passages are somebody's mail, so they are scanned like every other text this deployment
-        // sends: a message quoting a key a colleague pasted has put that key into the request.
-        var subject = await this.egressGuard.GuardOptionalAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            email.Subject,
-            cancellationToken);
-        var passages = await this.egressGuard.GuardAllAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            [.. email.Passages.Select(static passage => passage.Text)],
-            cancellationToken);
-
-        var turn = CalendarEventExtractionInstructions.ComposeMailTurn(subject, receivedAt, passages);
+        var turn = await ComposeMailTurnAsync(email, receivedAt, this.egressGuard, this.plan, cancellationToken);
         var answer = await this.AskAsync(turn, cancellationToken);
 
         if (answer is not { Text: { } answerText })
@@ -197,14 +186,7 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
             return this.Withhold(CalendarEventExtractionWithholding.AllowanceExhausted);
         }
 
-        // A sentence somebody typed is a prompt they wrote, and it is guarded exactly as mail is: what they are
-        // arranging with whom is as revealing as the message that arranged it.
-        var sentence = await this.egressGuard.GuardAsync(
-            SensitiveContentEgressPoint.ChatPrompt,
-            description.Text,
-            cancellationToken);
-
-        var turn = CalendarEventExtractionInstructions.ComposeDescriptionTurn(sentence, description.WrittenAt);
+        var turn = await ComposeDescriptionTurnAsync(description, this.egressGuard, this.plan, cancellationToken);
         var answer = await this.AskAsync(turn, cancellationToken);
 
         if (answer is not { Text: { } answerText })
@@ -220,6 +202,60 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
         CalendarEventExtractionEvents.LogDraftedFromDescription(this.logger, answer.Alias, events.Count);
 
         return CalendarEventExtraction.Settled(events);
+    }
+
+    /// <summary>Composes the turn a reading of one message sends: its subject and passages, guarded and cut to what one call may carry.</summary>
+    /// <param name="email">The message, with the passages the reading reads.</param>
+    /// <param name="receivedAt">When the message arrived, which every relative date in it is read against.</param>
+    /// <param name="egressGuard">Scans the subject and every passage before either is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeMailTurnAsync(
+        EnrichableEmail email,
+        DateTimeOffset receivedAt,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        // The subject and the passages are somebody's mail, so they are scanned like every other text this deployment
+        // sends: a message quoting a key a colleague pasted has put that key into the request.
+        var subject = await egressGuard.GuardOptionalAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            email.Subject,
+            cancellationToken);
+        var passages = await egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            [.. email.Passages.Select(static passage => passage.Text)],
+            cancellationToken);
+
+        return Bounded(
+            CalendarEventExtractionInstructions.ComposeMailTurn(subject, receivedAt, passages),
+            plan.MaximumRequestCharacters);
+    }
+
+    /// <summary>Composes the turn a reading of one typed sentence sends, guarded and cut to what one call may carry.</summary>
+    /// <param name="description">The sentence, and when it was written.</param>
+    /// <param name="egressGuard">Scans the sentence before it is composed.</param>
+    /// <param name="plan">The model the turn is sent to, whose request bound the turn is cut to.</param>
+    /// <param name="cancellationToken">Withdraws the scan.</param>
+    /// <returns>The turn.</returns>
+    internal static async Task<string> ComposeDescriptionTurnAsync(
+        CalendarEventDescription description,
+        SensitiveContentEgressGuard egressGuard,
+        ChatGenerationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        // A sentence somebody typed is a prompt they wrote, and it is guarded exactly as mail is: what they are
+        // arranging with whom is as revealing as the message that arranged it.
+        var sentence = await egressGuard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            description.Text,
+            cancellationToken);
+
+        return Bounded(
+            CalendarEventExtractionInstructions.ComposeDescriptionTurn(sentence, description.WrittenAt),
+            plan.MaximumRequestCharacters);
     }
 
     /// <summary>Cuts a turn down to what one call may carry, without splitting a character in half.</summary>
@@ -244,10 +280,8 @@ internal sealed class CalendarEventExtractionAgent : ICalendarEventExtractor
     /// because a reading that never reached the endpoint was withheld the same way as one the endpoint refused. A
     /// cancellation stays outside, being the caller withdrawing the work rather than a provider failing to answer.
     /// </remarks>
-    private async Task<ChatModelAnswer?> AskAsync(string composed, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        var turn = Bounded(composed, this.plan.MaximumRequestCharacters);
-
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
             this.plan.MaximumMessagesPerRequest,

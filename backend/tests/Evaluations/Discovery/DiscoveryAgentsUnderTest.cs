@@ -9,6 +9,8 @@ using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Retrieval;
+using MailFathom.Evaluations.Providers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -38,12 +40,17 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
     {
         ArgumentNullException.ThrowIfNull(question);
 
-        var agent = DiscoveryPlanningAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
-        var answer = await agent.RunAsync(
-            DiscoveryPlanningInstructions.ComposePlanningTurn(question.Text.Value, question.Scope, question.AskedAt, EmailKnowledgeBounds.Default),
-            session: null,
-            options: null,
+        var turn = await DiscoveryPlanningAgent.ComposeTurnAsync(
+            question,
+            EmailKnowledgeBounds.Default,
+            SensitiveContentEgressGuards.Inactive(),
             cancellationToken);
+
+        // Refused rather than cut, as the deployment's planner refuses it: a question past the model's bound fails the run.
+        ModelsUnderTest.RequireOneTurn(turn, generation);
+
+        var agent = DiscoveryPlanningAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
+        var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
         var reading = DiscoveryPlanReading.Read(answer.Text, question.Text, EmailKnowledgeBounds.Default, question.AskedAt);
         this.PlanWasRead = reading.WasRead;
@@ -64,16 +71,22 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
         ArgumentNullException.ThrowIfNull(evidence);
 
         var sources = DiscoveryComposedSources.Declare(evidence.Passages);
-        var turn = DiscoveryCompositionInstructions.ComposeCompositionTurn(
-            question.Text.Value,
-            plan.Intent,
-            [.. sources.Select(static source => new DiscoveryTurnSource(source.Citation.Id.Value, source.Citation.Label.Value, source.Extract))]);
+        var turn = await DiscoveryCompositionAgent.ComposeTurnAsync(
+            question,
+            plan,
+            sources,
+            SensitiveContentEgressGuards.Inactive(),
+            cancellationToken);
 
-        var agent = DiscoveryCompositionAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
-        var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+        // A turn past the model's bound is never sent, and the reading is handed no composition, as the deployment's
+        // composing agent hands it none.
+        if (DiscoveryCompositionAgent.FitsOneRequest(turn, generation))
+        {
+            var agent = DiscoveryCompositionAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
+            var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        // A blank answer reaches the reading as no answer, as it does from the deployment's composing agent.
-        this.Composition = string.IsNullOrWhiteSpace(answer.Text) ? null : answer.Text;
+            this.Composition = DiscoveryCompositionAgent.CompositionOf(answer.Text);
+        }
 
         return DiscoveryCompositionReading.Read(this.Composition, plan, sources, evidence, coverage);
     }

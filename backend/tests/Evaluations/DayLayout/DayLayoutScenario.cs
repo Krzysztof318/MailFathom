@@ -6,6 +6,7 @@ using MailFathom.AI.DayLayout;
 using MailFathom.AI.Orchestration;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.StructuredAnswers;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.DayLayout;
@@ -37,15 +38,16 @@ internal static class DayLayoutScenario
         var question = scenario.Question;
         var instruction = DayLayoutInstructions.Text;
 
-        // The lines are handed in as they stand, an egress guard being what a deployment puts between the store and
-        // this turn rather than part of what the agent is measured on.
+        // The lines pass an inactive guard, an egress guard being what a deployment puts between the store and this turn
+        // rather than part of what the agent is measured on.
         return new StructuredAnswerRequest(
             $"{Name}.{scenario.Name}",
             instruction,
-            DayLayoutInstructions.ComposeLayoutTurn(
+            (plan, cancellationToken) => DayLayoutAgent.ComposeTurnAsync(
                 question,
-                [.. question.Tasks.Select(static task => task.Title)],
-                [.. question.Commitments.Select(static commitment => commitment.Title)]),
+                SensitiveContentEgressGuards.Inactive(),
+                plan,
+                cancellationToken),
             (model, plan) => DayLayoutAgentComposition.Compose(
                 model,
                 plan,

@@ -142,6 +142,15 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
         ];
     }
 
+    /// <summary>Breaks a tie in distance the same way under every metric: dated mail before undated, newest first, then by identity.</summary>
+    /// <param name="ranked">Mail already ordered by its distance from the query.</param>
+    /// <returns>The same mail in a total order, so the ranking is the same on every run.</returns>
+    internal static IOrderedQueryable<StoredEmailEntity> NewestFirstAmongEqual(IOrderedQueryable<StoredEmailEntity> ranked) =>
+        ranked
+            .ThenBy(email => email.ReceivedAt == null)
+            .ThenByDescending(email => email.ReceivedAt)
+            .ThenByDescending(email => email.Id);
+
     /// <summary>Ranks the eligible emails nearest first, each measured by its own nearest passage of the chosen kind.</summary>
     /// <remarks>
     /// <para>
@@ -172,17 +181,14 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
         bool depicted,
         int limit) => distanceMetric switch
         {
-            EmbeddingDistanceMetric.Cosine => eligibleEmails
+            EmbeddingDistanceMetric.Cosine => NewestFirstAmongEqual(eligibleEmails
                 .OrderBy(email => email.Chunks
                     .Where(chunk => email.AttachmentTexts.Any(text =>
                         text.AttachmentPosition == chunk.AttachmentPosition
                         && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
-                    .Min(vector => vector.Embedding.CosineDistance(target)))
-                .ThenBy(email => email.ReceivedAt == null)
-                .ThenByDescending(email => email.ReceivedAt)
-                .ThenByDescending(email => email.Id)
+                    .Min(vector => vector.Embedding.CosineDistance(target))))
                 .Take(limit)
                 .Select(email => new StoredEmailVectorHitRow(
                     email.Id,
@@ -194,17 +200,14 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
                         .SelectMany(chunk => chunk.Embeddings)
                         .Where(vector => vector.EmbeddingProfileId == profileId)
                         .Min(vector => vector.Embedding.CosineDistance(target)))),
-            EmbeddingDistanceMetric.InnerProduct => eligibleEmails
+            EmbeddingDistanceMetric.InnerProduct => NewestFirstAmongEqual(eligibleEmails
                 .OrderBy(email => email.Chunks
                     .Where(chunk => email.AttachmentTexts.Any(text =>
                         text.AttachmentPosition == chunk.AttachmentPosition
                         && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
-                    .Min(vector => vector.Embedding.MaxInnerProduct(target)))
-                .ThenBy(email => email.ReceivedAt == null)
-                .ThenByDescending(email => email.ReceivedAt)
-                .ThenByDescending(email => email.Id)
+                    .Min(vector => vector.Embedding.MaxInnerProduct(target))))
                 .Take(limit)
                 .Select(email => new StoredEmailVectorHitRow(
                     email.Id,
@@ -216,17 +219,14 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
                         .SelectMany(chunk => chunk.Embeddings)
                         .Where(vector => vector.EmbeddingProfileId == profileId)
                         .Min(vector => vector.Embedding.MaxInnerProduct(target)))),
-            EmbeddingDistanceMetric.EuclideanDistance => eligibleEmails
+            EmbeddingDistanceMetric.EuclideanDistance => NewestFirstAmongEqual(eligibleEmails
                 .OrderBy(email => email.Chunks
                     .Where(chunk => email.AttachmentTexts.Any(text =>
                         text.AttachmentPosition == chunk.AttachmentPosition
                         && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
-                    .Min(vector => vector.Embedding.L2Distance(target)))
-                .ThenBy(email => email.ReceivedAt == null)
-                .ThenByDescending(email => email.ReceivedAt)
-                .ThenByDescending(email => email.Id)
+                    .Min(vector => vector.Embedding.L2Distance(target))))
                 .Take(limit)
                 .Select(email => new StoredEmailVectorHitRow(
                     email.Id,

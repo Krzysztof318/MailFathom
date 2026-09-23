@@ -53,6 +53,9 @@
     <!-- Every configuration section is bound into an internal options class, so the suite that records the published
          configuration key set has to name those classes to walk them. -->
     <InternalsVisibleTo Include="MailFathom.PublicSurfaces.UnitTests" />
+    <!-- The evaluation suite plans every model under test the way a deployment plans a model that declares nothing, and
+         reads every other default it measures under from the options class that owns it rather than a copy. -->
+    <InternalsVisibleTo Include="MailFathom.Evaluations" />
 
     <!--
       NSubstitute proxies a type at run time from a generated assembly, which the grants above do not name, so a
