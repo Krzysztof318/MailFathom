@@ -14,10 +14,12 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// <param name="calls">Each tool it calls, by name, with the arguments it passes; empty for a model that calls none.</param>
 /// <param name="answer">The text it answers with.</param>
 /// <param name="callsEveryTurn">Whether it makes its calls again on every turn and so never answers, which is a model that runs until its bounds stop it.</param>
+/// <param name="summary">What it writes when it is asked to compact a conversation, which is the one request offering it no tool; <see langword="null" /> for a run that never compacts.</param>
 internal sealed class ScriptedAgentChatClient(
     IReadOnlyList<(string Tool, IDictionary<string, object?> Arguments)> calls,
     string answer,
-    bool callsEveryTurn = false) : IChatClient
+    bool callsEveryTurn = false,
+    string? summary = null) : IChatClient
 {
     private const string ModelName = "scripted-agent-model";
 
@@ -28,7 +30,10 @@ internal sealed class ScriptedAgentChatClient(
         CancellationToken cancellationToken = default)
     {
         var called = messages.SelectMany(static message => message.Contents).OfType<FunctionResultContent>().Any();
-        var reply = calls.Count > 0 && (callsEveryTurn || !called)
+        var compacting = summary is not null && options?.Tools is not { Count: > 0 };
+        var reply = compacting
+            ? new ChatMessage(ChatRole.Assistant, summary)
+            : calls.Count > 0 && (callsEveryTurn || !called)
             ? new ChatMessage(
                 ChatRole.Assistant,
                 [.. calls.Select(static (call, index) => new FunctionCallContent($"call-{index}", call.Tool, call.Arguments))])

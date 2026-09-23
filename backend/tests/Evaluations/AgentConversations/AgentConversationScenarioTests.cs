@@ -21,6 +21,9 @@ namespace MailFathom.Evaluations.AgentConversations;
 /// <remarks>Free, and therefore not gated on the run switch; it writes a real store to a temporary directory, because a run is filed there.</remarks>
 public sealed class AgentConversationScenarioTests : IDisposable
 {
+    private const string FullSummary =
+        "The person is planning a housewarming at Kestrel Quay with a ceiling of 1,375 EUR, moved from Thursday 1 October to Friday 30 October 2026 at 16:00 UTC in Skerry; Pia Lindahl caters a vegan menu, and the cake order from Bakery Hvit has the code word MARIGOLD-58.";
+
     private static readonly AgentConversationScenario Proposing = Named("Agent.ProposesWithoutSending");
 
     private static readonly AgentConversationScenario Quoting = Named("Agent.QuotesMailUntranslated");
@@ -336,6 +339,103 @@ public sealed class AgentConversationScenarioTests : IDisposable
         Assert.True(verdict.Get<BooleanMetric>(AgentConversationScenario.ProposesOnlyWhatWasAskedMetricName).Value);
     }
 
+    /// <summary>What a later turn took out of a message is a shortfall wherever the proposal still carries it.</summary>
+    [Theory]
+    [InlineData("There are 14 archive boxes, labelled RB-7; please ask for Mara at reception.", true)]
+    [InlineData("There are 14 archive boxes, labelled RB-7; Emil may collect them between 14:00 and 16:00.", false)]
+    public async Task RunAsync_AProposalCarryingWhatALaterTurnWithdrew_FailsTheWithdrawalCheck(string body, bool passes)
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient(
+            [Propose("courier.desk@example.test", body)],
+            "I proposed the message; nothing is sent until you accept it.");
+
+        // Act
+        var verdict = await this.RunAsync(Named("Agent.Contradiction.MessageNarrowedBeforeItIsProposed"), model);
+
+        // Assert
+        Assert.Equal(passes, verdict.Get<BooleanMetric>(AgentConversationScenario.LeavesOutWhatWasWithdrawnMetricName).Value);
+    }
+
+    /// <summary>A withdrawal is read off the proposals, so a case naming one and asking for no proposal would pass on every answer.</summary>
+    [Fact]
+    public void All_EveryCaseNamingAWithdrawal_AsksForAProposal()
+    {
+        // Act
+        var vacuous = AgentConversationScenario.All
+            .Where(static scenario => scenario.Withdrawn.Count > 0 && scenario.Proposes.Count is 0)
+            .Select(static scenario => scenario.Name);
+
+        // Assert
+        Assert.Empty(vacuous);
+    }
+
+    public static TheoryData<string> CompactedCases { get; } =
+        new(AgentConversationScenario.All.Where(static scenario => scenario.CompactedWithin is not null).Select(static scenario => scenario.Name));
+
+    /// <summary>A compacted case measures compaction only where a deployment would compact it and what it asks for falls in the part a summary replaces.</summary>
+    [Theory]
+    [MemberData(nameof(CompactedCases))]
+    public void All_ACompactedCase_OutgrowsItsBudgetAndLeavesWhatItRemembersToTheSummary(string caseName)
+    {
+        // Arrange
+        var scenario = Named(caseName);
+        var budget = scenario.CompactedWithin!.Value;
+        var context = scenario.Context();
+
+        // Act
+        var plan = context.PlanCompaction(budget);
+
+        // Assert
+        Assert.True(context.EstimateTokens(scenario.History, scenario.Question) > budget, $"{caseName} fits {budget} tokens, so a deployment would send it whole.");
+        Assert.NotNull(plan);
+
+        var summarised = string.Join('\n', plan.Turns.Select(static turn => turn.Text));
+        var verbatim = string.Join('\n', scenario.History.Skip((int)plan.Through).Select(static turn => turn.Text));
+
+        Assert.All(scenario.Remembered, phrase => Assert.Contains(phrase, summarised, StringComparison.OrdinalIgnoreCase));
+        Assert.All(scenario.Remembered, phrase => Assert.DoesNotContain(phrase, verbatim, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A remembered phrase is worth checking only where the conversation is its one source, so a lookup cannot stand in for a lost summary.</summary>
+    [Fact]
+    public void All_EveryRememberedPhrase_IsStatedByItsConversationAndByNoMessageOrAgenda()
+    {
+        // Arrange
+        string[] sources = [.. AgentConversationScenario.Mailbox.Select(static message => message.GroundingText), .. PersonalAgenda.Texts];
+
+        // Act
+        var unsound = AgentConversationScenario.All
+            .SelectMany(static scenario => scenario.Remembered.Select(phrase => (scenario, phrase)))
+            .Where(pair =>
+                !pair.scenario.History.Any(turn => turn.Text.Contains(pair.phrase, StringComparison.OrdinalIgnoreCase))
+                || sources.Any(source => source.Contains(pair.phrase, StringComparison.OrdinalIgnoreCase)))
+            .Select(static pair => $"{pair.scenario.Name}: {pair.phrase}");
+
+        // Assert
+        Assert.Empty(unsound);
+    }
+
+    /// <summary>A fact lost in compaction and a fact the answer left out are two defects in two agents, so each is recorded apart.</summary>
+    [Theory]
+    [InlineData(FullSummary, "The ceiling is 1,375 EUR, and the party is on Friday 30 October.", true, true)]
+    [InlineData("A housewarming at Kestrel Quay is being planned; the person then asked about mail.", "The ceiling is 1,375 EUR, and the party is on Friday 30 October.", false, true)]
+    [InlineData(FullSummary, "I no longer have the details of the housewarming.", true, false)]
+    public async Task RunAsync_ACompactedConversation_RecordsWhichStageLostWhatWasSettled(string summary, string answer, bool summaryKeeps, bool answerKeeps)
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient([], answer, summary: summary);
+
+        // Act
+        var verdict = await this.RunAsync(Named("Agent.Compaction.RemembersWhatWasSettledEarly"), model);
+
+        // Assert
+        Assert.Equal(
+            (summaryKeeps, answerKeeps),
+            (verdict.Get<BooleanMetric>(AgentConversationScenario.CompactionKeepsWhatWasSettledMetricName).Value,
+                verdict.Get<BooleanMetric>(AgentConversationScenario.KeepsWhatTheConversationSettledMetricName).Value));
+    }
+
     public void Dispose() => this.store.Delete(recursive: true);
 
     private static AgentConversationScenario Named(string name) =>
@@ -381,13 +481,15 @@ public sealed class AgentConversationScenarioTests : IDisposable
     private static (string Tool, IDictionary<string, object?> Arguments) Suggest(string followUp) =>
         ("suggest_follow_ups", new Dictionary<string, object?> { ["questions"] = new[] { followUp } });
 
-    private static (string Tool, IDictionary<string, object?> Arguments) Propose(string recipient) =>
+    private static (string Tool, IDictionary<string, object?> Arguments) Propose(
+        string recipient,
+        string body = "You may collect the archive boxes between 14:00 and 16:00.") =>
         ("propose_message", new Dictionary<string, object?>
         {
             ["account"] = CorpusKnowledgeSearch.Scope.AccountIds[0].Value,
             ["recipients"] = new[] { recipient },
             ["subject"] = "Archive boxes",
-            ["body"] = "You may collect the archive boxes between 14:00 and 16:00.",
+            ["body"] = body,
         });
 
     private static IEnumerable<BooleanMetric> StructuralChecks(EvaluationResult verdict) =>
