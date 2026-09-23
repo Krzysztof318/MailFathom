@@ -47,7 +47,9 @@ internal static class DiscoveryCompositionInstructions
 
         "answer" is what the extracts say in reply to the question, in the language the question was asked in, at most
         {PresentationText.MaxLength} characters. Write only what an extract states. Never fill a gap with what is
-        likely, customary, or implied by the shape of the question.
+        likely, customary, or implied by the shape of the question. Words quoted from an extract stay in the language
+        they were written in, and a quotation never stands alone as the answer: say in the question's language what
+        the quoted words are, and quote them inside that sentence.
 
         "sources" is an array of the names — "s1", "s2" — of the extracts your answer rests on, at most
         {PresentationEvidence.MaxCitations} of them. **Leave it empty when the extracts do not answer the
@@ -61,11 +63,15 @@ internal static class DiscoveryCompositionInstructions
         "conflict" is how you report extracts that contradict each other. Do not choose between them and do not average
         them. Give one object per side, each with a "statement" saying what that side says and a "sources" array naming
         the extracts saying it, at most {PresentationEvidence.MaxConflictingClaims} sides in all. Leave it out where the
-        extracts agree; two sides at least are needed for a disagreement.
+        extracts agree; two sides at least are needed for a disagreement. A later message that corrects or withdraws
+        what an earlier one said is not a disagreement: answer with what the correction says, name the earlier
+        statement as the one it replaced, and leave "conflict" out.
 
         "events" is for a question about how something changed over time. Give one object per dated event, in the order
         the answer reads in, each with an ISO 8601 "occurredAt", a "summary" of what happened, a "subject" naming what
-        it happened to, and a "sources" array. At most {TimelineBlock.MaxEntries}.
+        it happened to, and a "sources" array. At most {TimelineBlock.MaxEntries}. Give an event even where only one
+        point in the change carries a date, and fold the stages that carry none into the "summary" of the dated event
+        they led to, rather than leaving "events" out.
 
         "columns" and "rows" are for a question comparing offers, terms, or versions. "columns" names what is compared,
         from this list and no other: {ColumnNames}. At most {FactTableBlock.MaxColumns}, each named once. "rows" is an

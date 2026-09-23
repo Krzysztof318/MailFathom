@@ -88,6 +88,28 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             query);
     }
 
+    /// <summary>
+    /// Every word of a lexical lookup is required and none is stemmed, so a model that is not told writes the question
+    /// itself in the nominative and reads the empty result as a mailbox without the answer.
+    /// </summary>
+    [Fact]
+    public void SearchTool_TheQueryArgument_StatesHowItsWordsAreMatched()
+    {
+        // Arrange
+        var tool = ToolOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        var description = tool.JsonSchema
+            .GetProperty("properties")
+            .GetProperty(ScopedMailKnowledgeRetrieval.QueryArgumentName)
+            .GetProperty("description")
+            .GetString();
+
+        // Assert
+        Assert.NotNull(description);
+        Assert.Contains(EmailSearchQueryText.MatchingDescription, description, StringComparison.Ordinal);
+    }
+
     /// <summary>A lookup that narrows by nothing is the shape every lookup had before the filters existed, and it still works.</summary>
     [Fact]
     public async Task SearchTool_ALookupNamingOnlyItsQuery_ReachesTheRetrievalWithNoNarrowing()

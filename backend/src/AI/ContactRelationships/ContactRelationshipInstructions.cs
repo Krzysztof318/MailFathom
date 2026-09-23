@@ -114,7 +114,7 @@ internal static class ContactRelationshipInstructions
         foreach (var conversation in turn.Conversations)
         {
             text.Append(CultureInfo.InvariantCulture, $"{position}. Conversation: {conversation.Subject ?? "(no subject)"}\n");
-            text.Append(CultureInfo.InvariantCulture, $"   Last message from them: {Written(conversation.LastCorrespondedAt)}\n\n");
+            text.Append(CultureInfo.InvariantCulture, $"   Last message naming them, from them or to them: {Written(conversation.LastCorrespondedAt)}\n\n");
             position++;
         }
 

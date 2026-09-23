@@ -269,6 +269,32 @@ internal sealed partial record MailAnsweringScenario(
             MinimumIntentResolution: 4,
             MinimumTaskAdherence: 4,
             MailAccountLanguage.English),
+        new(
+            "MailAnswering.Mixed.EnglishQuestionAboutAnInflectedWord",
+
+            // The mail writes the street only as "Wrzosowej" and "Wrzosową", so a lookup for the "Wrzosowa" asked about
+            // finds nothing until it offers another form of the word or the words the message itself carries.
+            "When can we collect the access cards for the new building on Wrzosowa Street?",
+            ["9:00 do 15:00"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.English),
+        new(
+            "MailAnswering.Mixed.PolishRequestToQuoteEnglishMail",
+
+            // Asked for the exact words, the answer still has to be Polish around an English quotation left as written.
+            "Zacytuj dokładnie komunikat błędu, który pokazał LumenDesk, gdy nie udał się eksport przefiltrowanego projektu.",
+            ["permitted buffer size"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.Polish),
+        new(
+            "MailAnswering.Mixed.EnglishRequestToQuotePolishMail",
+            "Quote exactly the error message the quarterly report export showed in ticket #4821.",
+            ["Przekroczono limit rozmiaru pliku"],
+            MinimumIntentResolution: 4,
+            MinimumTaskAdherence: 4,
+            MailAccountLanguage.English),
     ];
 
     /// <summary>Gets the mailbox the question is asked over: the mixed one for a question holding its answer to a language, the English one otherwise.</summary>

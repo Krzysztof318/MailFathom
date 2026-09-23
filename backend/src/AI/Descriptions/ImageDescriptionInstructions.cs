@@ -49,6 +49,14 @@ public static class ImageDescriptionInstructions
         Add a sentence about the layout, the letterhead, the stamps, the handwriting, or the pictures on the page only
         where those say something the text does not.
 
+        Copy the words character for character, because somebody will search for exactly those characters. Keep every
+        digit of a number and every letter of a code, even where a long one repeats itself; keep the spaces, hyphens,
+        and capitals a word or an identifier is printed with; and never correct a spelling, complete a word, or join
+        or split words differently from the print. Tell apart the characters that look alike — 0 and O, 1 and l and I,
+        5 and S, 8 and B — by what the print shows rather than by what would be usual. Read text that is turned
+        sideways or upside down in its own direction, keeping its words as they are printed. Keep the words in the
+        language they are printed in, with every accent and diacritic, and never translate them.
+
         Otherwise, name what is visible: the people, objects, places, charts, and products in the picture, and the
         relationships between them. Describe only what is in the picture, and say plainly when something is unclear
         rather than guessing at it.

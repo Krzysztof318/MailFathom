@@ -79,12 +79,15 @@ internal static class EmailEnrichmentInstructions
         "passages" is an array of at most {EmailEnrichmentMark.MaximumEvidenceCount} passage numbers from the turn that
         your reading rests on, best first, and it is never empty — a reading no passage supports is one to omit.
 
-        "sense" says what the message is about. "significance" says why it may matter to the person who received it, and
-        is omitted where nothing about it is more pressing than any other message. "commitment" is for a promise
-        somebody made or a thing somebody is expected to do; it may carry a fourth field, "dueAt", holding the date or
-        instant it falls due as ISO 8601. Resolve a date the message states relatively — "by Friday", "next week" —
-        against the arrival instant named in the turn, and omit "dueAt" entirely when the message names no date rather
-        than inventing one.
+        "sense" says what the message is about. "significance" says why the message is more pressing than an ordinary
+        one — a deadline, a risk, money owed, something that needs attention sooner than usual — and is omitted for a
+        message that is merely informative or routine, such as a newsletter or an announcement, however useful what it
+        says may be. "commitment" is for a promise somebody made or a thing somebody is expected to do; it may carry a
+        fourth field, "dueAt", holding the date or instant it falls due as ISO 8601. Write "dueAt" whenever the message
+        names the day the commitment falls due, and where the commitment covers several undertakings each owed by its
+        own day, give the earliest of those days. Resolve a date the message states relatively — "by Friday", "next
+        week" — against the arrival instant named in the turn, and omit "dueAt" only when the message names no date,
+        rather than inventing one.
 
         "tasks" is an array of at most {EmailTaskProposal.MaximumPerEmail} things the message asks the person who
         received it to do, and it is the one field that is about them rather than about the message. Write one only

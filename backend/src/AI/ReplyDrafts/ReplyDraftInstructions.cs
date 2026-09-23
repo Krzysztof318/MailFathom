@@ -71,7 +71,9 @@ internal static class ReplyDraftInstructions
         alone: no subject line, no "To:", no quoted history, and no note to the person about what you did. Write it in
         the language the conversation is written in, because that is what the person receiving it reads; where the turn
         carries no conversation, write it in {language}. Either way, an instruction asking for a particular language
-        outranks both — it is the one thing the person said about the message themselves.
+        outranks both — it is the one thing the person said about the message themselves. The language the request
+        itself is written in is not such an instruction: a request written in one language about a conversation held in
+        another is answered in the conversation's.
 
         "claims" is an array of at most {ReplyDraft.MaximumClaims} objects, one for each thing the reply asserts that
         somebody could be wrong about — a price, a quantity, a date, a deadline, a name, a commitment either side made.

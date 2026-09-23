@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Search;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using ModelContextProtocol.Protocol;
@@ -148,6 +149,26 @@ public sealed class SearchEmailsToolMetadataTests
             "in the language it was written in rather than the language of your request",
             queryText,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every word of a lexical search is required and none is stemmed, so a caller that is not told writes the question
+    /// itself in the nominative and reads the empty window as a mailbox without the answer.
+    /// </summary>
+    [Fact]
+    public void AddMailFathomServer_DescribesHowTheWordsOfTheQueryTextAreMatched()
+    {
+        // Arrange, Act
+        var queryText = AdvertisedSearchEmailsTool()
+            .InputSchema
+            .GetProperty("properties")
+            .GetProperty("queryText")
+            .GetProperty("description")
+            .GetString();
+
+        // Assert
+        Assert.NotNull(queryText);
+        Assert.Contains(EmailSearchQueryText.MatchingDescription, queryText, StringComparison.Ordinal);
     }
 
     /// <summary>An argument nobody can interpret is an argument a model guesses at, so every one carries its own description.</summary>

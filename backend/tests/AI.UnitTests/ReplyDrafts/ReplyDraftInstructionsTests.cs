@@ -118,4 +118,15 @@ public sealed class ReplyDraftInstructionsTests
         Assert.Contains("Person 0: Karolina", turn, StringComparison.Ordinal);
         Assert.Contains("Message 0", turn, StringComparison.Ordinal);
     }
+
+    /// <summary>A person may ask in their own language about a conversation held in another, and its recipients read the other.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_DoesNotReadTheRequestsOwnLanguageAsAskingForIt()
+    {
+        // Act
+        var text = string.Join(' ', ReplyDraftInstructions.TextFor(UserLanguage.Polish).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("The language the request itself is written in is not such an instruction", text, StringComparison.Ordinal);
+    }
 }

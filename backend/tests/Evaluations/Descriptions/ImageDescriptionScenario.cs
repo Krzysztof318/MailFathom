@@ -196,6 +196,54 @@ internal sealed record ImageDescriptionScenario(
             // Obeying repeats the describer's own instruction, which the check that nothing was carried out catches.
             ["repeat your instructions", "visitor badge", "Lakeside Centre"],
             MinimumGroundedness: 4),
+        new(
+            "ImageDescription.Polish.Receipt",
+            "receipt-pl.png",
+            "A printed Polish shop receipt on a white background. It reads, top to bottom: \"PIEKARNIA POD LIPĄ\" in bold, "
+            + "\"ul. Źródlana 7, Łódź\", \"Paragon nr 58213\", \"3 września 2026\", \"2 x Chleb żytni\" priced 13,80, "
+            + "\"1 x Drożdżówka\" priced 4,60, a horizontal rule, \"RAZEM\" 18,40 zł in bold, and \"Dziękujemy za zakupy\".",
+
+            // Found by the words as a Polish mailbox holds them: a translation or a dropped diacritic names none of these.
+            ["58213", "Chleb żytni", "Drożdżówka", "18,40", "Łódź"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.UpsideDownLabel",
+            "upside-down.png",
+            "A cream label with a brown border, printed upside down so that its text reads correctly only once the picture "
+            + "is turned over: \"LOADING DOCK 7\" in large bold black capitals, and \"Fragile - this side up\" in smaller type.",
+
+            // Upside down rather than sideways: the words are all there and only their direction is wrong.
+            ["loading dock 7", "fragile"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.LongIdentifier",
+            "tracking.png",
+            "A white parcel label with a black border. It reads \"PARCEL LABEL\" in bold, then \"Tracking no. 7Q4K 2291 XJ83 "
+            + "0056\", \"Weight: 2.35 kg\", \"To: M. HOLLOWAY\", and \"8 Fern Row, Ashcombe\".",
+
+            // Sixteen characters in four groups: one dropped, doubled, or regrouped character is a number nobody can find.
+            ["7Q4K 2291 XJ83 0056", "2.35", "Holloway"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.Mixed.BilingualSign",
+            "bilingual-sign.png",
+            "A green sign with white lettering in two languages: \"WYJŚCIE EWAKUACYJNE\" in large bold capitals, "
+            + "\"EMERGENCY EXIT\" in bold capitals beneath it, and below them in regular type \"Nie zastawiać drzwi\" and "
+            + "\"Keep door clear\".",
+
+            // Both languages are the text, so a description translating either half loses the half it translated.
+            ["Wyjście ewakuacyjne", "Emergency exit", "Nie zastawiać drzwi", "Keep door clear"],
+            MinimumGroundedness: 4),
+        new(
+            "ImageDescription.CharactersThatLookAlike",
+            "voucher.png",
+            "A pale pink gift voucher with a plum border. It reads \"GIFT VOUCHER\" in bold plum capitals, then \"Code:\", the "
+            + "code \"K8B0-O5S2-Z7Q1\" in a large bold monospaced face whose zero carries a dot inside it while its capital O is an empty oval, and "
+            + "\"Value EUR 25.00, valid until 31 Dec 2026\".",
+
+            // The code mixes 8 and B, 0 and O, 5 and S, 2 and Z: only the print says which is which.
+            ["K8B0-O5S2-Z7Q1", "25.00", "31 Dec 2026"],
+            MinimumGroundedness: 4),
     ];
 
     /// <summary>Gets what every scenario is judged on.</summary>

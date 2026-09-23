@@ -908,7 +908,10 @@ fragment narrows which emails are eligible, and the query text is what the eligi
 The query text is matched rather than translated, and the argument description says so, because the caller writing it is
 the only party that knows which languages a question could be about. One text search configuration serves the whole
 index — `simple` by default, which neither stems a word nor drops a stop word — so a mailbox holding several languages
-is reached by a search per language rather than by one search in the language of the request. [Mail answering § A
+is reached by a search per language rather than by one search in the language of the request. The same description
+says what that configuration does to a search's words: every one of them is required, and none is stemmed, so a language
+that inflects its words writes one word in several forms, which a caller offers with `OR` or avoids by searching for a
+name or a number that does not change. [Mail answering § A
 question in one language, mail in another](mail-answering.md#a-question-in-one-language-mail-in-another) records what
 `ask_mail` does about the same fact on a caller's behalf.
 

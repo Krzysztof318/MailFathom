@@ -46,7 +46,10 @@ the block catalogue closed — a model cannot name a block a client has no rende
 ## What retrieval is allowed to do
 
 The searches the model proposes are a plan, not commands. Each becomes an ordinary knowledge lookup, run in order
-against the same retrieval the rest of the system uses, and the plan is bounded before it runs:
+against the same retrieval the rest of the system uses. The model never sees what a lookup found and nothing is searched
+again, so it is told how the words of a lookup are matched — every word required, none stemmed — and asked for several
+lookups of two or three distinctive words each, the most distinctive first, rather than one lookup restating the
+question. The plan is bounded before it runs:
 
 - **At most six lookups.** More than that is a model misjudging a question rather than a question that needs them, so
   the surplus is dropped and the first six run.
@@ -139,7 +142,9 @@ mail it names rather than from mail a reader has no way to reach.
   nothing carries a sentence about the run rather than the model's own prose, because an unsupported block's prose
   would be exactly the sentence nobody wrote.
 - **The disagreement is kept as a disagreement.** Where the model reports two or more sides, each naming sources it was
-  actually offered, the block carries every side with its own citations rather than one figure the run chose.
+  actually offered, the block carries every side with its own citations rather than one figure the run chose. A later
+  message correcting or withdrawing an earlier one is not a disagreement: the model is told to answer with the
+  correction and name what it replaced.
 - **The confidence is capped by the support**, on the definition that page states, so a model cannot report a settled
   answer over a contradiction, over sources that are all behind, or over no source at all.
 - **The freshness of a block is the freshness of the accounts its own sources came from**, reduced to the worst of them:
@@ -148,7 +153,8 @@ mail it names rather than from mail a reader has no way to reach.
 
 **The evidence list is built from what retrieval returned rather than from what the model cited**, so a reader checking
 a thin answer sees the mail the run actually read. And the material the model is asked for follows the intent: events
-for a question about change, columns and rows for a comparison, and the answer alone otherwise. What it gives back is
+for a question about change — given even where only one point of the change carries a date, the undated stages folded
+into the entry they led to — columns and rows for a comparison, and the answer alone otherwise. What it gives back is
 held to the contract — a column the catalogue does not hold is dropped, a row whose cells do not match the columns is
 dropped rather than padded, and a shape that ends up empty falls back to the answer itself rather than to an invented
 one.

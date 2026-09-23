@@ -34,6 +34,19 @@ public sealed record EmailSearchQueryText
     /// </remarks>
     public const int MaximumLength = 512;
 
+    /// <summary>How the words of a query are matched, written for whoever writes one.</summary>
+    /// <remarks>
+    /// Stated once, here, because every surface a query is written through — a published tool, an agent's lookup, a
+    /// plan's search — is read by a model that otherwise writes the question itself as the query. Under
+    /// <c>websearch_to_tsquery</c> every word is required and the default text search configuration stems nothing, so a
+    /// six-word lookup in the nominative misses the one message that carries four of the words in another case.
+    /// </remarks>
+    public const string MatchingDescription =
+        "Lexical matching requires every word, so two or three distinctive words — a name, a number, a place, a rare "
+        + "term — reach more mail than a sentence does. Words match as they are written, without stemming: a language "
+        + "that inflects its words, such as Polish, writes one word in several forms (Warszawa, Warszawy, Warszawie), so "
+        + "offer the forms or the translations you expect with OR, or search by a name or a number that does not change.";
+
     private EmailSearchQueryText(string value) => this.Value = value;
 
     /// <summary>Gets the query text as it will reach the full-text parser.</summary>

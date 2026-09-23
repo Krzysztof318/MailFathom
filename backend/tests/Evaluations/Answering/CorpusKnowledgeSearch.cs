@@ -171,11 +171,15 @@ internal sealed partial class CorpusKnowledgeSearch(IReadOnlyList<CorpusMessage>
         return new EmailSearchMatch(CorpusReaders.SummaryOf(message, thread: null), score, fragments);
     }
 
-    /// <summary>Takes the words around a position, half before it and half from it.</summary>
+    /// <summary>Takes the words around a position, a third before it and the rest from it.</summary>
+    /// <remarks>
+    /// A matched word usually opens the clause that answers, so a window split evenly cut the fact it was found for
+    /// halfway through its sentence and a model was graded for quoting what it was shown.
+    /// </remarks>
     private static string WindowAround(string text, int position, int words)
     {
-        var before = text[..position].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).TakeLast(words / 2);
-        var after = text[position..].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Take(words - (words / 2));
+        var before = text[..position].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).TakeLast(words / 3);
+        var after = text[position..].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Take(words - (words / 3));
 
         return string.Join(' ', before.Concat(after));
     }

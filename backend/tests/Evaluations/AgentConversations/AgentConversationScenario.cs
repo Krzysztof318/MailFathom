@@ -207,11 +207,29 @@ internal sealed record AgentConversationScenario(
             UserLanguage.English,
             ["IC 5310", "7:15"],
             ["Gdańsk", "Gdansk", "train", "IC", "Warsaw", "trip", "hotel", "return", "ticket", "journey"]),
+        new(
+            "Agent.Answers.Mixed.EnglishQuestionAboutAnInflectedWord",
+
+            // The mail writes the street only as "Wrzosowej" and "Wrzosową", never as the "Wrzosowa" the question uses, so
+            // the lookup that finds it offers another form, a stem, or words of the message itself rather than the name.
+            "When can we collect the access cards for the new building on Wrzosowa Street?",
+            UserLanguage.English,
+            ["9:00", "15:00"],
+            ["access", "card", "Wrzosow", "building", "reception", "collect", "move", "office", "pick"]),
+        new(
+            "Agent.Mixed.QuotesPolishMailToAnEnglishQuestion",
+
+            // The mirror of QuotesMailUntranslated: the person reads English and the message is Polish, so the answer is
+            // English and the quotation is not.
+            "Quote exactly the error message the quarterly report export showed in ticket #4821.",
+            UserLanguage.English,
+            ["Przekroczono limit rozmiaru pliku"],
+            ["4821", "export", "report", "error", "RaportPro", "ticket", "3.2.1", "eksport", "raport", "fix", "version"]),
 
         // Reading a whole conversation, asked about one the person is looking at or one a search finds.
         new(
             "Agent.Thread.SummarisesTheConversationInView",
-            "Summarise where this conversation stands.",
+            "Read this conversation and tell me in your own words what it settled.",
             UserLanguage.English,
             ["30 August"],
             KestrelQuaySubject)
