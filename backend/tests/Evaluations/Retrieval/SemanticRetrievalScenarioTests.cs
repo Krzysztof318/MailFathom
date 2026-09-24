@@ -146,7 +146,7 @@ public sealed class SemanticRetrievalScenarioTests : IDisposable
         var failure = Assert.Throws<InvalidOperationException>(() => EmbeddingModelsUnderTest.ParseDimension(declared));
 
         // Assert
-        Assert.Contains(EmbeddingModelsUnderTest.DimensionVariable, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(EvaluationDeclaration.Variable, failure.Message, StringComparison.Ordinal);
     }
 
     public void Dispose() => this.store.Delete(recursive: true);

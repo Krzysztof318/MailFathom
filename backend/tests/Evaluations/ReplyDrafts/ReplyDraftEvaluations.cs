@@ -45,7 +45,7 @@ public sealed class ReplyDraftEvaluations
         var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.For(ChatCapability.ReplyDrafting).Select(model => MeasureAsync(judge, model, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
@@ -54,14 +54,15 @@ public sealed class ReplyDraftEvaluations
     /// <summary>Puts every scenario to one model and names what it fell short on.</summary>
     private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
-        ChatGenerationPlan plan,
+        ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions)
     {
+        var plan = modelUnderTest.Plan;
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
+        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, ReplyDraftScenario.Evaluators);
@@ -72,7 +73,7 @@ public sealed class ReplyDraftEvaluations
             shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
                 reporting,
                 scenario.Name,
-                plan.Endpoint.RoutedModelName,
+                modelUnderTest.Name,
                 repetitions,
                 async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
                     reporting,

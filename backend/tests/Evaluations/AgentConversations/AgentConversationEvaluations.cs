@@ -52,7 +52,7 @@ public sealed class AgentConversationEvaluations
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
         var repetitions = EvaluationRepetitions.Declared();
-        var plans = ModelsUnderTest.Plans();
+        var models = ModelsUnderTest.For(ChatCapability.Agent);
         var scenarios = AgentConversationScenario.All;
         var shortfalls = new IReadOnlyList<string>[scenarios.Count];
 
@@ -63,7 +63,7 @@ public sealed class AgentConversationEvaluations
             async (index, cancellationToken) =>
             {
                 var modelShortfalls = await Task.WhenAll(
-                    [.. plans.Select(plan => MeasureAsync(scenarios[index], judge, plan, apiKey, repetitions, cancellationToken))]);
+                    [.. models.Select(model => MeasureAsync(scenarios[index], judge, model, apiKey, repetitions, cancellationToken))]);
 
                 shortfalls[index] = [.. modelShortfalls.SelectMany(static modelShortfall => modelShortfall)];
             });
@@ -76,15 +76,16 @@ public sealed class AgentConversationEvaluations
     private static async Task<IReadOnlyList<string>> MeasureAsync(
         AgentConversationScenario scenario,
         JudgeDeclaration judge,
-        ChatGenerationPlan plan,
+        ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions,
         CancellationToken cancellationToken)
     {
+        var plan = modelUnderTest.Plan;
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
+        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, AgentConversationScenario.Evaluators);
@@ -92,7 +93,7 @@ public sealed class AgentConversationEvaluations
         return await EvaluationRepetitions.MeasureAsync(
             reporting,
             scenario.Name,
-            plan.Endpoint.RoutedModelName,
+            modelUnderTest.Name,
             repetitions,
             async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
                 reporting,

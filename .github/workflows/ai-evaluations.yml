@@ -4,11 +4,21 @@
 
 name: AI evaluations
 
-# Measures what the agents answer, against the models a dispatch names — or `vars.EVALUATION_MODELS`
-# where it names none, and `vars.CHAT_PROVIDER_MODEL` the integration tests use where neither does —
-# judged by the one model `vars.JUDGE_PROVIDER_MODEL` pins. Dispatch is the only
-# way it starts: a run calls real providers and spends credit, so what a run costs is asked for rather
-# than arriving on a timer or with a pull request.
+# Measures what the agents answer, against the models a dispatch declares — or the `vars.CHAT_PROVIDER_MODEL` the
+# integration tests use where it declares none — judged by the one model `vars.JUDGE_PROVIDER_MODEL` pins. Dispatch is
+# the only way it starts: a run calls real providers and spends credit, so what a run costs is asked for rather than
+# arriving on a timer or with a pull request.
+#
+# A dispatch declares its run in the `evaluation` input, one line of flow-style YAML, rather than in an input per
+# setting: a dispatch carries few inputs, each one line, so a new setting is a new key in the block rather than a new
+# input. `MainModel` names the model every agent runs on, and each agent may name its own under the key its `Chat`
+# section uses — `ImageDescription`, `DiscoveryPlanning`, `Agent`, and the rest — which falls back to the main model as a
+# deployment's does. A role takes one model or a list, and an evaluation runs once per model of the agent it measures, so
+# `{MainModel: model-a, ImageDescription: [model-b, model-c]}` runs the image evaluations twice and everything else once.
+# A model is its routed name, or a mapping with the keys a deployment's `Chat:Models` declaration uses for what a request
+# asks for — `Model`, `Alias`, `Api`, `ReasoningEffort`, `Temperature`, `TopP`, `ExtraHeaders`, `AdditionalProperties`.
+# The block also takes `Ref`, `Repetitions`, `EmbeddingModels`, and `EmbeddingDimension`, and a key it does not know
+# fails the run. It is shown to anyone who can read the run, so nothing private belongs in it — a header value included.
 #
 # What keeps a run cheap is the store `backend/tests/Evaluations` writes: every answer it paid for is
 # cached by prompt, model, parameters, and the name, description, and schema of every tool the model
@@ -30,37 +40,15 @@ name: AI evaluations
 # a failure message. The one place both appear is the evaluation step's log header, which prints every
 # `env:` value it is handed and masks only the secrets.
 #
-# Each case is asked of each model as many times as a dispatch's `repetitions` input — or
-# `vars.EVALUATION_REPETITIONS` where it names none — declares, and once where neither does. A model's
-# answer varies between calls, so a model is held to the share of those repetitions that passed rather
-# than to one answer, and the report shows that share per case and per model beside what the
-# repetitions cost together. Each repetition is its own cached answer, so a repeated run over an
-# unchanged prompt still costs nothing.
+# Each case is asked of each model as many times as the block's `Repetitions` declares, and once where it declares none.
+# A model's answer varies between calls, so a model is held to the share of those repetitions that passed rather than to
+# one answer, and the report shows that share per case and per model beside what the repetitions cost together. Each
+# repetition is its own cached answer, so a repeated run over an unchanged prompt still costs nothing.
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Branch, tag, or commit SHA, full or abbreviated, to evaluate'
-        required: false
-        type: string
-      models:
-        description: 'Models under test, separated by commas; defaults to the EVALUATION_MODELS variable, then to the one the integration tests reach'
-        required: false
-        type: string
-      repetitions:
-        description: 'How many times each case is asked of each model, from 1 to 20; defaults to the EVALUATION_REPETITIONS variable, or 1'
-        required: false
-        type: string
-      reasoning_effort:
-        description: 'Reasoning effort every model under test is asked for, such as low or high; unset sends none'
-        required: false
-        type: string
-      embedding_models:
-        description: 'Embedding models under test, separated by commas; defaults to the one the integration tests reach'
-        required: false
-        type: string
-      embedding_dimension:
-        description: 'Width every embedding is asked for and cut to; unset keeps each model at its own'
+      evaluation:
+        description: 'The run as one line of flow-style YAML, such as {Ref: main, MainModel: {Model: vendor/model, ReasoningEffort: medium}, ImageDescription: [model-a, model-b]}'
         required: false
         type: string
       discard_cached_answers:
@@ -99,18 +87,28 @@ jobs:
       DOTNET_NOLOGO: '1'
       NUGET_XMLDOC_MODE: skip
     steps:
-      # `actions/checkout` reads a ref as a branch or a tag name unless it is a full forty-character SHA, so an abbreviated
-      # SHA handed to it straight would fail to fetch. The commits API resolves a branch, a tag, and a full or abbreviated SHA to
-      # the one commit it names, and the checkout is then always of a full SHA. The input reaches the shell through the
-      # environment rather than the script text, so a ref cannot write shell of its own.
+      # The block's `Ref` is read here, before any of the repository exists to read it with, and by the key's name alone,
+      # without regard to case, as the suite reads every other key. `actions/checkout` reads a ref as a branch or a tag
+      # name unless it is a full forty-character SHA, so an abbreviated SHA handed to it straight would fail to fetch. The
+      # commits API resolves a branch, a tag, and a full or abbreviated SHA to the one commit it names, and the checkout is
+      # then always of a full SHA. The input reaches the shell through the environment rather than the script text, so a
+      # ref cannot write shell of its own.
       - name: Resolve the commit to evaluate
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          REQUESTED_REF: ${{ inputs.ref }}
+          EVALUATION: ${{ inputs.evaluation }}
         run: |
           set -euo pipefail
+
+          REQUESTED_REF=''
+
+          if [ -n "$EVALUATION" ] \
+            && ! REQUESTED_REF=$(printf '%s' "$EVALUATION" | yq -r '[to_entries[] | select(.key | test("(?i)^ref$")) | .value][0] // ""'); then
+            echo "::error::The evaluation input is not a YAML mapping."
+            exit 1
+          fi
 
           if [ -z "$REQUESTED_REF" ]; then
             echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
@@ -179,13 +177,10 @@ jobs:
         run: bash scripts/run-ai-evaluations.sh
         env:
           MAILFATHOM_AI_EVALUATIONS: 'true'
-          # Where neither a dispatch nor `vars.EVALUATION_MODELS` names a model, the one the `Integration tests` workflow
-          # already reaches is measured, so a repository configured for those tests can run this one as it stands.
-          MAILFATHOM_EVALUATION_MODELS: ${{ inputs.models || vars.EVALUATION_MODELS || vars.CHAT_PROVIDER_MODEL }}
-          MAILFATHOM_EVALUATION_REPETITIONS: ${{ inputs.repetitions || vars.EVALUATION_REPETITIONS }}
-          # How hard every model under test reasons. Unset sends no reasoning parameter, which is how a deployment
-          # declaring none calls a model; the judge's own effort is declared apart below.
-          MAILFATHOM_EVALUATION_REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          MAILFATHOM_EVALUATION: ${{ inputs.evaluation }}
+          # Where the block names no `MainModel`, the one the `Integration tests` workflow already reaches is measured, so
+          # a repository configured for those tests can run this one as it stands.
+          MAILFATHOM_CHAT_MODEL: ${{ vars.CHAT_PROVIDER_MODEL }}
           MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
           MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
           # The judge answers from the same endpoint and the same key as the models under test, so the
@@ -194,9 +189,9 @@ jobs:
           # How hard the judge reasons. Unset sends no reasoning parameter and leaves the provider's default.
           MAILFATHOM_JUDGE_REASONING_EFFORT: ${{ vars.JUDGE_REASONING_EFFORT }}
           # The embedding models answer from the endpoint and key a deployment's embedding provider is reached with,
-          # which the provider-contract tests already read, rather than from the chat endpoint.
-          MAILFATHOM_EVALUATION_EMBEDDING_MODELS: ${{ inputs.embedding_models || vars.EMBEDDING_PROVIDER_ROUTED_MODEL || vars.EMBEDDING_PROVIDER_MODEL }}
-          MAILFATHOM_EVALUATION_EMBEDDING_DIMENSION: ${{ inputs.embedding_dimension }}
+          # which the provider-contract tests already read, rather than from the chat endpoint; where the block names no
+          # `EmbeddingModels`, the model the integration tests reach is measured.
+          MAILFATHOM_EMBEDDING_MODEL: ${{ vars.EMBEDDING_PROVIDER_ROUTED_MODEL || vars.EMBEDDING_PROVIDER_MODEL }}
           MAILFATHOM_EMBEDDING_ADDRESS: ${{ vars.EMBEDDING_PROVIDER_ADDRESS }}
           MAILFATHOM_EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_PROVIDER_API_KEY }}
 

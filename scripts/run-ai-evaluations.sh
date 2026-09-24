@@ -10,18 +10,20 @@ set -euo pipefail
 # never runs on a pull request.
 #
 # Without MAILFATHOM_AI_EVALUATIONS=true the paid scenarios skip, and what runs is only the free proof
-# of what the store holds. With it, the run needs MAILFATHOM_EVALUATION_MODELS, MAILFATHOM_CHAT_API_KEY,
-# and MAILFATHOM_JUDGE_MODEL, and fails naming whichever is missing. The judge answers from the same
-# endpoint and the same key as the models under test, so its model is all that is declared apart —
-# beside MAILFATHOM_JUDGE_REASONING_EFFORT, which a run may leave unset to send the judge no reasoning
-# parameter at all. MAILFATHOM_EVALUATION_REPETITIONS says how many times each case is asked of each
-# model, from 1 to 20, and a run that leaves it unset asks each case once. MAILFATHOM_EVALUATION_REASONING_EFFORT
-# states how hard every model under test reasons, and a run that leaves it unset sends none.
+# of what the store holds. With it, the run needs MAILFATHOM_CHAT_API_KEY and MAILFATHOM_JUDGE_MODEL, and
+# fails naming whichever is missing. The judge answers from the same endpoint and the same key as the
+# models under test, so its model is all that is declared apart — beside MAILFATHOM_JUDGE_REASONING_EFFORT,
+# which a run may leave unset to send the judge no reasoning parameter at all.
 #
-# The retrieval scenario measures embedding models rather than chat models, so it reads its own:
-# MAILFATHOM_EVALUATION_EMBEDDING_MODELS and MAILFATHOM_EMBEDDING_API_KEY, which a requested run cannot
-# proceed without, beside MAILFATHOM_EMBEDDING_ADDRESS and MAILFATHOM_EVALUATION_EMBEDDING_DIMENSION, which
-# it may leave unset for the provider's own address and each model's own width.
+# MAILFATHOM_EVALUATION declares the run as one YAML block, which is one line in flow style:
+# {MainModel: {Model: vendor/model, ReasoningEffort: medium}, ImageDescription: [model-a, model-b]}.
+# MainModel is the model every agent runs on and each agent may name its own under its Chat key; a role
+# takes one model or a list, and an evaluation runs once per model of the agent it measures. The block also
+# takes Repetitions, from 1 to 20, and EmbeddingModels and EmbeddingDimension for the retrieval scenario.
+# Where it names no MainModel, MAILFATHOM_CHAT_MODEL is measured, and the run fails naming both when
+# neither is set; where it names no EmbeddingModels, MAILFATHOM_EMBEDDING_MODEL is. The retrieval scenario
+# reaches its models with MAILFATHOM_EMBEDDING_API_KEY, which a requested run cannot proceed without, and
+# MAILFATHOM_EMBEDDING_ADDRESS, which it may leave unset for the provider's own address.
 #
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it

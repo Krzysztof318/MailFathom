@@ -30,19 +30,36 @@ internal sealed class ProviderChatClient : DelegatingChatClient
         this.credential = credential;
     }
 
+    /// <summary>Gets the headers every request carries beside the key, which is what the response cache keys an answer by beside the plan.</summary>
+    public IReadOnlyList<ProviderEndpointHeader> ExtraHeaders => this.credential.ExtraHeaders;
+
+    /// <summary>Opens a client over the model a run measures.</summary>
+    /// <param name="model">The model, whose plan names where requests go and whose headers every request carries.</param>
+    /// <param name="apiKey">The key the provider authenticates the requests with.</param>
+    /// <param name="spend">What every answer's tokens and charge are recorded against.</param>
+    /// <returns>The client, which the caller disposes.</returns>
+    public static ProviderChatClient Open(ModelUnderTest model, string apiKey, SpendMeter spend)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        return Open(model.Plan.Endpoint, apiKey, model.Plan.RequestTimeout, spend, model.ExtraHeaders);
+    }
+
     /// <summary>Opens a client over one endpoint.</summary>
     /// <param name="endpoint">Where requests go and which model they are routed to.</param>
     /// <param name="apiKey">The key the provider authenticates the requests with.</param>
     /// <param name="requestTimeout">How long one request may take before it is abandoned.</param>
     /// <param name="spend">What every answer's tokens and charge are recorded against.</param>
+    /// <param name="extraHeaders">The headers every request carries beside the key, or <see langword="null" /> for none.</param>
     /// <returns>The client, which the caller disposes.</returns>
     public static ProviderChatClient Open(
         ChatEndpoint endpoint,
         string apiKey,
         TimeSpan requestTimeout,
-        SpendMeter spend)
+        SpendMeter spend,
+        IReadOnlyList<ProviderEndpointHeader>? extraHeaders = null)
     {
-        var credential = ProviderEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null);
+        var credential = ProviderEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null, extraHeaders);
         var transport = ProviderSpendHandler.MeteredTransport(spend, requestTimeout);
 
         try

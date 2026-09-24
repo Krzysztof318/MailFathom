@@ -28,22 +28,31 @@ public sealed class DiscoveryEndToEndEvaluations
         // Arrange
         var apiKey = EvaluationEndpoint.ApiKey();
         var repetitions = EvaluationRepetitions.Declared();
+        var pairings = EvaluationDeclaration.Read().PairingsFor(ChatCapability.DiscoveryPlanning, ChatCapability.DiscoveryComposition);
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey, repetitions))]);
+        var shortfalls = await Task.WhenAll([.. pairings.Select(pairing => MeasureAsync(pairing.First, pairing.Second, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
-    /// <summary>Runs every scenario under one model and names what it fell short on.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(ChatGenerationPlan plan, string apiKey, int repetitions)
+    /// <summary>Runs every scenario under one pairing of a planning and a composing model and names what it fell short on.</summary>
+    /// <remarks>A pairing of one model with itself opens one client, which is the run a deployment naming neither agent makes.</remarks>
+    private static async Task<IReadOnlyList<string>> MeasureAsync(
+        ModelUnderTest planning,
+        ModelUnderTest composition,
+        string apiKey,
+        int repetitions)
     {
         var modelSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
+        using var planningModel = ProviderChatClient.Open(planning, apiKey, modelSpend);
+        using var separateCompositionModel = ReferenceEquals(planning, composition) ? null : ProviderChatClient.Open(composition, apiKey, modelSpend);
 
+        var compositionModel = separateCompositionModel ?? planningModel;
         var reporting = EvaluationStore.OpenUnjudged(DiscoveryEndToEndScenario.Evaluators);
+        var name = DiscoveryEndToEndScenario.NameOf(planning.Plan, composition.Plan);
         List<string> shortfalls = [];
 
         foreach (var scenario in DiscoveryEndToEndScenario.All)
@@ -51,12 +60,14 @@ public sealed class DiscoveryEndToEndEvaluations
             shortfalls.AddRange(await EvaluationRepetitions.MeasureAsync(
                 reporting,
                 scenario.Name,
-                plan.Endpoint.RoutedModelName,
+                name,
                 repetitions,
                 async repetition => [.. scenario.ShortfallsOf(await scenario.RunAsync(
                     reporting,
-                    model,
-                    plan,
+                    planningModel,
+                    planning.Plan,
+                    compositionModel,
+                    composition.Plan,
                     repetition,
                     modelSpend,
                     TestContext.Current.CancellationToken))],

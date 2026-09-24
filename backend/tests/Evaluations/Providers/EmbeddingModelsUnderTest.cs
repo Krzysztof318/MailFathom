@@ -20,11 +20,9 @@ namespace MailFathom.Evaluations.Providers;
 /// </remarks>
 internal static class EmbeddingModelsUnderTest
 {
-    /// <summary>The variable carrying the models, separated by commas, whitespace, or line breaks.</summary>
-    public const string ModelsVariable = "MAILFATHOM_EVALUATION_EMBEDDING_MODELS";
-
-    /// <summary>The variable carrying the width every vector is cut to, where the run asks for one.</summary>
-    public const string DimensionVariable = "MAILFATHOM_EVALUATION_EMBEDDING_DIMENSION";
+    /// <summary>The variable carrying the model measured where the run's block names no <c>EmbeddingModels</c>.</summary>
+    /// <remarks>The model the provider-contract tests reach, so a repository configured for them can run this as it stands.</remarks>
+    public const string ModelVariable = "MAILFATHOM_EMBEDDING_MODEL";
 
     /// <summary>The variable carrying the address every embedding request goes to.</summary>
     public const string AddressVariable = "MAILFATHOM_EMBEDDING_ADDRESS";
@@ -37,18 +35,14 @@ internal static class EmbeddingModelsUnderTest
     /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the run declared no model or a width that is not one.</exception>
     public static IReadOnlyList<EmbeddingModelUnderTest> Declared()
     {
-        var models = AiEvaluationRun.Required(ModelsVariable)
-            .Split([',', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        if (models.Length is 0)
-        {
-            throw new InvalidOperationException($"{ModelsVariable} names no model to measure.");
-        }
+        var declaration = EvaluationDeclaration.Read();
+        IReadOnlyList<string> models = declaration.EmbeddingModels.Count > 0
+            ? declaration.EmbeddingModels
+            : [AiEvaluationRun.Required(ModelVariable)];
 
         var address = AiEvaluationRun.Optional(AddressVariable) is { } declared ? new Uri(declared, UriKind.Absolute) : null;
-        var dimension = ParseDimension(AiEvaluationRun.Optional(DimensionVariable));
 
-        return [.. models.Distinct(StringComparer.Ordinal).Select(model => new EmbeddingModelUnderTest(model, address, dimension))];
+        return [.. models.Distinct(StringComparer.Ordinal).Select(model => new EmbeddingModelUnderTest(model, address, declaration.EmbeddingDimension))];
     }
 
     /// <summary>Reads the key every embedding request is authenticated with.</summary>
@@ -57,7 +51,7 @@ internal static class EmbeddingModelsUnderTest
     public static string ApiKey() => AiEvaluationRun.Required(ApiKeyVariable);
 
     /// <summary>Reads a declared width.</summary>
-    /// <param name="declared">The declaration, or <see langword="null" /> where the run made none.</param>
+    /// <param name="declared">The <c>EmbeddingDimension</c> the run's block declares, or <see langword="null" /> where it declares none.</param>
     /// <returns>The width, or <see langword="null" /> where the run keeps each model's own.</returns>
     /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the declaration is not a positive whole number.</exception>
     public static int? ParseDimension(string? declared)
@@ -69,6 +63,6 @@ internal static class EmbeddingModelsUnderTest
 
         return int.TryParse(declared.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var dimension) && dimension > 0
             ? dimension
-            : throw new InvalidOperationException($"{DimensionVariable} must be a positive whole number.");
+            : throw new InvalidOperationException($"{EvaluationDeclaration.Variable} declares an EmbeddingDimension that is not a positive whole number.");
     }
 }

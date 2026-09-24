@@ -1122,7 +1122,7 @@ internal sealed record AgentConversationScenario(
     /// <summary>Asks the question of one model, checks the answer, the tools, and the proposals, has the judge grade it, and files the verdict.</summary>
     /// <param name="reporting">The run's store, judge, and name.</param>
     /// <param name="model">The model under test's client.</param>
-    /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="plan">The plan the model is measured with, whose alias is what the result is filed under.</param>
     /// <param name="repetition">Which repetition of the case this is, counted from one.</param>
     /// <param name="modelSpend">What reaching that model has cost.</param>
     /// <param name="judgeSpend">What reaching the judge has cost.</param>
@@ -1141,7 +1141,7 @@ internal sealed record AgentConversationScenario(
         SpendMeter judgeSpend,
         CancellationToken cancellationToken)
     {
-        var modelName = plan.Endpoint.RoutedModelName;
+        var modelName = plan.Endpoint.Alias;
         var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(this.Name, iterationName, cancellationToken: cancellationToken);

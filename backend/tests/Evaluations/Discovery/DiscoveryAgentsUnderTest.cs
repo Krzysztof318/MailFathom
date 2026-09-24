@@ -17,16 +17,22 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MailFathom.Evaluations.Discovery;
 
-/// <summary>Both Discover agents over one model under test, as the two halves a run is joined through.</summary>
+/// <summary>Both Discover agents over the models under test, as the two halves a run is joined through.</summary>
 /// <remarks>
 /// Each half composes its turn, its agent, and its reading the way a deployment's does, so the run they are joined into
 /// follows the plan a deployment would follow and returns the result a deployment would return. What each leaves out is
 /// what decides whether its call happens rather than what it answers — the ledgers, the egress guard, and the fallback
 /// chain — which is the same line every other scenario here draws.
 /// </remarks>
-/// <param name="model">The model under test, already behind the run's response cache.</param>
-/// <param name="generation">The generation plan both agents are composed with, which is what keeps them on one model.</param>
-internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGenerationPlan generation)
+/// <param name="planningModel">The model the planning agent is asked through, already behind the run's response cache.</param>
+/// <param name="planningGeneration">The generation plan the planning agent is composed with.</param>
+/// <param name="compositionModel">The model the composing agent is asked through, already behind the run's response cache.</param>
+/// <param name="compositionGeneration">The generation plan the composing agent is composed with.</param>
+internal sealed class DiscoveryAgentsUnderTest(
+    IChatClient planningModel,
+    ChatGenerationPlan planningGeneration,
+    IChatClient compositionModel,
+    ChatGenerationPlan compositionGeneration)
     : IDiscoveryRunPlanner, IDiscoveryResultComposer
 {
     /// <summary>Gets whether the planning answer was read as a plan, or <see langword="null" /> before the plan was asked for.</summary>
@@ -48,9 +54,9 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
             cancellationToken);
 
         // Refused rather than cut, as the deployment's planner refuses it: a question past the model's bound fails the run.
-        ModelsUnderTest.RequireOneTurn(turn, generation);
+        ModelsUnderTest.RequireOneTurn(turn, planningGeneration);
 
-        var agent = DiscoveryPlanningAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
+        var agent = DiscoveryPlanningAgentComposition.Compose(planningModel, planningGeneration, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
         var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
         var reading = DiscoveryPlanReading.Read(answer.Text, question.Text, EmailKnowledgeBounds.Default, question.AskedAt);
@@ -82,9 +88,9 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
 
         // A turn past the model's bound is never sent, and the reading is handed no composition, as the deployment's
         // composing agent hands it none.
-        if (DiscoveryCompositionAgent.FitsOneRequest(turn, generation))
+        if (DiscoveryCompositionAgent.FitsOneRequest(turn, compositionGeneration))
         {
-            var agent = DiscoveryCompositionAgentComposition.Compose(model, generation, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
+            var agent = DiscoveryCompositionAgentComposition.Compose(compositionModel, compositionGeneration, new EmptyAgentInstructionEnvelope(), NullLoggerFactory.Instance);
             var answer = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
             this.Composition = DiscoveryCompositionAgent.CompositionOf(answer.Text);

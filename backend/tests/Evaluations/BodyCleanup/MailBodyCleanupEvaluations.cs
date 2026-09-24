@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.Evaluations.StructuredAnswers;
 using Xunit;
 
@@ -29,6 +30,7 @@ public sealed class MailBodyCleanupEvaluations
 
         // Act
         var shortfalls = await StructuredAnswerScenario.MeasureEveryDeclaredModelAsync(
+            ChatCapability.BodyCleanup,
             request,
             TestContext.Current.CancellationToken);
 

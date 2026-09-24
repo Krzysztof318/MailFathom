@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Enrichment;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
@@ -58,7 +59,7 @@ public sealed class EvaluationRepetitionsTests : IDisposable
         var failure = Assert.Throws<InvalidOperationException>(() => EvaluationRepetitions.Parse(declared));
 
         // Assert
-        Assert.Contains(EvaluationRepetitions.RepetitionsVariable, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(EvaluationDeclaration.Variable, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
