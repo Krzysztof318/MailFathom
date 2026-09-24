@@ -121,6 +121,7 @@ public sealed class EmailSearchQueryTextTests
     [InlineData("\"Suite 310\"  INV-4827", "\"Suite 310\" or INV-4827", null)]
     [InlineData("Wrzosowa OR Wrzosową or Wrzosowej", "Wrzosowa or Wrzosową or Wrzosowej", null)]
     [InlineData("invoice -draft", "invoice", "draft")]
+    [InlineData("invoice OR update -or", "invoice or update", "or")]
     [InlineData("kestrel -\"quay move\" -draft parking", "kestrel or parking", "\"quay move\" or draft")]
     [InlineData("invoice \"unclosed phrase", "invoice or \"unclosed phrase", null)]
     [InlineData("invoice - \"\" -", "invoice", null)]

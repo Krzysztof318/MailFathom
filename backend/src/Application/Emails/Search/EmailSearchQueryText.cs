@@ -127,12 +127,14 @@ public sealed record EmailSearchQueryText
     /// <summary>Splits a query into the words and phrases it matches and the ones it excludes, each joined by <c>or</c>.</summary>
     /// <remarks>
     /// A quoted phrase stays one term, a leading minus marks an excluded term, and an <c>OR</c> the query already carried
-    /// is dropped, since every term is joined by one anyway. A query that excludes and matches nothing else is matched as
+    /// is dropped, since every term is joined by one anyway — while an excluded "or" is a word somebody excluded and stays. A query that excludes and matches nothing else is matched as
     /// written, which is what every word required would have done with it.
     /// </remarks>
     private static (string Matched, string? Excluded) AnyWordTerms(string text)
     {
-        var terms = Terms(text).Where(static term => !term.Text.Equals("or", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var terms = Terms(text)
+            .Where(static term => term.Excluded || !term.Text.Equals("or", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
         var matched = terms.Where(static term => !term.Excluded).Select(static term => term.Text).ToArray();
         var excluded = terms.Where(static term => term.Excluded).Select(static term => term.Text).ToArray();
 
