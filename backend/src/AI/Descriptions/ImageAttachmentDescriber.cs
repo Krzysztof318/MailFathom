@@ -185,7 +185,7 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
                 return this.Refused(ImageDescriptionRefusal.ProviderRefused);
             }
 
-            var description = answer.Text.Trim();
+            var (isTranscription, description) = ReadMarkedAnswer(answer.Text);
 
             if (description.Length == 0)
             {
@@ -204,12 +204,46 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
                 ImageDescriptionEvents.LogDescribed(this.logger, header.Format, description.Length);
             }
 
-            return ImageAttachmentDescription.Described(description);
+            return isTranscription
+                ? ImageAttachmentDescription.Transcribed(description)
+                : ImageAttachmentDescription.Described(description);
         }
         catch (ChatGenerationFailedException failure)
         {
             return this.Refused(ToRefusal(failure.Failure));
         }
+    }
+
+    /// <summary>Separates the line naming what the answer is from the answer itself.</summary>
+    /// <returns>Whether the model marked the answer as a transcription, and the answer without its marker.</returns>
+    /// <remarks>
+    /// Read leniently, because a model asked for a bare word on the first line will sometimes emphasize it, follow it
+    /// with a colon, or carry on writing after the colon on the same line; each of those is still the model saying
+    /// which of the two it wrote. An answer whose first line is neither word is kept whole and read as a description,
+    /// which is the lower-ranked of the two — so a model that ignored the format loses nothing it wrote and promotes
+    /// nothing into written text.
+    /// </remarks>
+    internal static (bool IsTranscription, string Text) ReadMarkedAnswer(string answer)
+    {
+        var trimmed = answer.Trim();
+        var lineEnd = trimmed.IndexOf('\n', StringComparison.Ordinal);
+        var firstLine = lineEnd < 0 ? trimmed : trimmed[..lineEnd];
+        var rest = lineEnd < 0 ? string.Empty : trimmed[(lineEnd + 1)..];
+        var colon = firstLine.IndexOf(':', StringComparison.Ordinal);
+        var marker = (colon < 0 ? firstLine : firstLine[..colon]).Trim().Trim('*', '#', '_', '`', ' ', '\t', '\r');
+        var sameLineText = colon < 0 ? string.Empty : firstLine[(colon + 1)..].Trim().TrimStart('*', '_', '`');
+
+        var isTranscription = marker.Equals(ImageDescriptionInstructions.TranscriptionMarker, StringComparison.OrdinalIgnoreCase);
+        var isDescription = marker.Equals(ImageDescriptionInstructions.DescriptionMarker, StringComparison.OrdinalIgnoreCase);
+
+        if (!isTranscription && !isDescription)
+        {
+            return (false, trimmed);
+        }
+
+        var text = sameLineText.Length == 0 ? rest : $"{sameLineText}\n{rest}";
+
+        return (isTranscription, text.Trim());
     }
 
     /// <summary>Reads a chat failure into the reason recorded against the attachment.</summary>

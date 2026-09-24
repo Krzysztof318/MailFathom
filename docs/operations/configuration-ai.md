@@ -363,16 +363,24 @@ why nothing turns it on for you.
 It needs a chat endpoint as well as this key. An instance that declared none describes nothing whatever this says, and
 reports that as the reason rather than as a failure.
 
-**A picture carrying words is transcribed rather than described.** Most image attachments in mail are scans,
-photographed pages, screenshots, and receipts, and what somebody searching for one of those types is a number, a date,
-or a name printed on it — never "a scanned invoice". So the instruction asks for the text itself, read out in full and
-in order with its numbers and identifiers unchanged, and leaves the description to whatever the text does not already
-say. Unchanged is meant character for character: every digit of a long number, the spacing and hyphens an identifier is
+**The model decides whether a picture is a document to transcribe or a picture to describe.** Most image attachments
+in mail are scans, photographed pages, screenshots, and receipts, and what somebody searching for one of those types is
+a number, a date, or a name printed on it — never "a scanned invoice". So a picture whose purpose is its writing — an
+invoice, a receipt, a letter, a form, a handwritten note, a page mixing print and handwriting — is transcribed: the
+text read out in full and in order with its numbers and identifiers unchanged. A photograph, a bare logo, or a chart is
+described in a few noun-rich sentences instead. The answer names which on its first line, and the two are stored and
+ranked differently: a transcription is a document's text, searched by word and ranked with written mail, while a
+description reaches the vector index alone and ranks below every written match. Unchanged is meant character for character: every digit of a long number, the spacing and hyphens an identifier is
 printed with, the difference between characters a font draws alike such as 0 and O, text turned sideways or upside down
 read in its own direction, and the words kept in the language they are printed in, diacritics and all, rather than
 translated — a search for the characters on the page has to find them in the description. That is the model reading what it was shown; nothing here rasterizes a page or reaches a recognition engine, so a
-model that cannot read the page writes what it can see instead, and a dedicated OCR step for documents nothing else
-reads stays worth having.
+model that cannot read the page writes what it can see instead.
+
+**A document's pictures are read too.** With this on, the pictures inside a PDF page that carries no text layer, a Word
+document, and a presentation are sent to the same model, at most `MaxPicturesPerDocument` of them per document and each
+counted as one description call; [Attachment text extraction § pictures inside a
+document](../features/attachment-text-extraction.md#pictures-inside-a-document) says which pictures qualify and what
+their words become.
 
 **What has landed is the mechanism and its bounds**: the port that turns one image attachment into text or into a
 recorded reason, the allow-list, the size and grid ceilings, and this switch — and the account run's attachment stage
@@ -380,8 +388,7 @@ now offers pictures to it. **Turning this on sends mail's images to the chat pro
 message the attachment stage reaches, from the moment `Embeddings:AttachmentText:Enabled` is on as well; with that
 second switch off nothing here is reached and this one changes nothing. What a description becomes once it is produced
 — a passage, an embedding, a place in a ranked result — is
-[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md);
-the passage and the embedding are delivered and the ranking is not, and no tool or client route answers with one yet.
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md).
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -389,6 +396,7 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 | `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent. A value outside the range stops the start, naming this key | restart |
 | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | long | `0` | zero or positive; the description calls one period may make. `0` declares no ceiling at all, which is the default and means an enabled feature can produce a bill nobody agreed to. Counted in calls rather than in characters, because a chat provider prices a picture per request rather than per word | restart |
 | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerUser` | long | `0` | zero or positive, and at most `MaxDescriptionsPerPeriod` where that is set; the calls one period may make for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants | restart |
+| `Embeddings:ImageDescription:MaxPicturesPerDocument` | int | `10` | 0 – 100; the most pictures read out of **one** document attachment — a PDF, a Word document, or a presentation. `0` reads none, leaving image attachments the only pictures sent. Each picture read is one description call against the ceilings above | restart |
 | `Embeddings:ImageDescription:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a chat provider whose quota is stated per minute; a caller takes the next free slot and waits for it, and it paces this workload alone rather than sharing the embedding provider's rate. **The deployment's, not each replica's**, on its own marker row beside the embedding workload's | restart |
 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership

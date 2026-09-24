@@ -53,6 +53,13 @@ internal sealed class EmbeddingImageDescriptionOptions
     /// </remarks>
     public const int GreatestRequestsPerMinute = 100_000;
 
+    /// <summary>How many pictures inside one document are read where none is declared.</summary>
+    public const int DefaultMaxPicturesPerDocument = 10;
+
+    /// <summary>The most pictures inside one document an operator may declare.</summary>
+    /// <remarks>Every picture is a chat call, and the period ceiling is checked between messages rather than inside one, so this is what bounds how far one message may run past it.</remarks>
+    public const int GreatestMaxPicturesPerDocument = 100;
+
     /// <summary>Gets or sets whether an image attachment is sent to the chat provider to be described.</summary>
     public bool Enabled { get; set; }
 
@@ -104,6 +111,23 @@ internal sealed class EmbeddingImageDescriptionOptions
     /// </remarks>
     public int MaxRequestsPerMinute { get; set; }
 
+    /// <summary>Gets or sets how many pictures inside one PDF, Word document, or presentation are read, or zero to read none.</summary>
+    /// <remarks>
+    /// <para>
+    /// A scanned PDF is a picture of each page and nothing else, and a report often carries a pasted scan of an
+    /// invoice, so with image description on the pictures inside a document are read exactly as an image attachment
+    /// is: a picture of a document is transcribed into the document's text, and a document that yielded no written
+    /// words at all is described instead. Only a PDF page without a text layer has its images read, so a searchable
+    /// scan does not send its pages twice.
+    /// </para>
+    /// <para>
+    /// Every picture read is one description call against <see cref="MaxDescriptionsPerPeriod" />, and it discloses the
+    /// picture to the chat endpoint exactly as an image attachment does. Zero keeps image description to image
+    /// attachments alone.
+    /// </para>
+    /// </remarks>
+    public int MaxPicturesPerDocument { get; set; } = DefaultMaxPicturesPerDocument;
+
     /// <summary>Reports everything an operator must fix before this block can be used.</summary>
     /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
     /// <remarks>
@@ -136,6 +160,11 @@ internal sealed class EmbeddingImageDescriptionOptions
         if (this.MaxDescriptionsPerPeriod != 0 && this.MaxDescriptionsPerPeriodPerUser > this.MaxDescriptionsPerPeriod)
         {
             yield return $"{Key(nameof(this.MaxDescriptionsPerPeriodPerUser))} — a per-user ceiling is at most {nameof(this.MaxDescriptionsPerPeriod)}. Above it, it bounds nothing the deployment's own ceiling has not already bound, which reads as a limit somebody chose and refuses nothing.";
+        }
+
+        if (this.MaxPicturesPerDocument is < 0 or > GreatestMaxPicturesPerDocument)
+        {
+            yield return $"{Key(nameof(this.MaxPicturesPerDocument))} — a document's picture count is between 0 and {GreatestMaxPicturesPerDocument}. Zero reads none, which keeps image description to image attachments; more than that turns one message into a run of chat calls the period ceiling cannot stop part of the way through.";
         }
 
         if (this.MaxRequestsPerMinute is < 0 or > GreatestRequestsPerMinute)

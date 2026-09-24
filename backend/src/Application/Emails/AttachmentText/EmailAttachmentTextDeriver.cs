@@ -28,7 +28,10 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// <see cref="AttachmentTextExtractionOutcome.FormatNotRecognized" /> for anything whose media type and file name name
 /// no document format, before it buffers an octet — so a picture reaches the describer by falling through that answer
 /// rather than by a second copy of the format table kept in this file. Everything else the extractor answers is final,
-/// including a document it declines to read: a spreadsheet nothing parses is not then offered to a vision model.
+/// including a document it declines to read: a spreadsheet nothing parses is not then offered to a vision model. What
+/// a document it did read hands back beside its text are the pictures inside it, where the deployment reads pictures,
+/// and those reach the describer here one at a time — a scanned PDF's page is a picture of an invoice exactly as a
+/// JPEG attachment is.
 /// </para>
 /// <para>
 /// <b>Nothing reaches a mail server.</b> The octets are the stored raw MIME, read through the content store, and the
@@ -256,11 +259,7 @@ public sealed class EmailAttachmentTextDeriver
 
                 derived.Add(read.Text);
                 extractedOctets += read.ExtractedOctetCount;
-
-                if (read.ReachedProvider)
-                {
-                    providerDescriptions++;
-                }
+                providerDescriptions += read.ProviderCallCount;
             }
         }
 
@@ -320,13 +319,13 @@ public sealed class EmailAttachmentTextDeriver
     }
 
     /// <summary>Reads one opened attachment as a document, falling through to a description where it is not one.</summary>
-    /// <returns>What to store, what a parser was handed for it, and whether a request left this deployment for the chat provider.</returns>
+    /// <returns>What to store, what a parser was handed for it, and how many requests left this deployment for the chat provider.</returns>
     /// <remarks>
     /// The octet count is what the extraction ceiling is charged, so it is the extractor's own answer rather than the
     /// attachment's declared size: a picture and a format nothing here parses are stepped over from the declaration
     /// alone, and charging their size to a ceiling counted in parser input would let one workload spend the other's.
     /// </remarks>
-    private async Task<(DerivedAttachmentText Text, long ExtractedOctetCount, bool ReachedProvider)> ReadAsync(
+    private async Task<(DerivedAttachmentText Text, long ExtractedOctetCount, int ProviderCallCount)> ReadAsync(
         int position,
         IOpenedEmailAttachment attachment,
         MailAccountId account,
@@ -341,12 +340,13 @@ public sealed class EmailAttachmentTextDeriver
 
         if (extracted.Outcome is not AttachmentTextExtractionOutcome.FormatNotRecognized)
         {
+            var pictureReadings = await this.ReadPicturesAsync(extracted.Text?.Pictures ?? [], cancellationToken);
             var text = await this.RedactAsync(
-                DerivedAttachmentText.FromExtraction(position, mediaType, fileName, extracted),
+                DerivedAttachmentText.FromExtraction(position, mediaType, fileName, extracted, pictureReadings),
                 account,
                 cancellationToken);
 
-            return (text, extractedOctets, ReachedProvider: false);
+            return (text, extractedOctets, pictureReadings.Count(picture => picture.Reading.ReachedProvider));
         }
 
         var described = await this.DescribeAsync(attachment, mediaType, cancellationToken);
@@ -357,7 +357,33 @@ public sealed class EmailAttachmentTextDeriver
                 account,
                 cancellationToken),
             extractedOctets,
-            described.ReachedProvider);
+            described.ReachedProvider ? 1 : 0);
+    }
+
+    /// <summary>Asks the model to read each picture a document carries, one paced call at a time.</summary>
+    /// <remarks>
+    /// The describer applies every refusal it applies to an image attachment, and a picture it refuses simply adds
+    /// nothing: the document's own words are stored whatever became of its pictures. The extractor copies pictures out
+    /// only where the deployment reads them, so a deployment with image description off never reaches a call here.
+    /// </remarks>
+    private async Task<IReadOnlyList<EmbeddedPictureReading>> ReadPicturesAsync(
+        IReadOnlyList<EmbeddedAttachmentPicture> pictures,
+        CancellationToken cancellationToken)
+    {
+        var readings = new List<EmbeddedPictureReading>(pictures.Count);
+
+        foreach (var picture in pictures)
+        {
+            await this.descriptionPacer.WaitForSlotAsync(cancellationToken);
+
+            using var octets = new MemoryStream(picture.Octets.ToArray(), writable: false);
+
+            readings.Add(new EmbeddedPictureReading(
+                picture.PageNumber,
+                await this.describer.DescribeAsync(picture.MediaType, octets, cancellationToken)));
+        }
+
+        return readings;
     }
 
     /// <summary>Buffers one attachment's octets and asks what the picture shows.</summary>

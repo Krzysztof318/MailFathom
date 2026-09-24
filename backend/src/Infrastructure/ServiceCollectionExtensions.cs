@@ -943,7 +943,8 @@ public static class ServiceCollectionExtensions
         // a value read once and the three parsers it composes carry no state of their own.
         services.AddScoped<IAttachmentTextExtractor>(provider => new BoundedAttachmentTextExtractor(
             provider.GetRequiredService<AttachmentTextExtractionOptions>(),
-            provider.GetRequiredService<TimeProvider>()));
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<BoundedAttachmentTextExtractor>>()));
         // Both halves of the attachment capability, registered as singletons because neither holds anything a scope
         // owns: the key behind a signature is resolved per operation and erased with it, exactly as the encryptor's is.
         // The settings arrive as a value because where this deployment publishes itself is a restart-level fact.

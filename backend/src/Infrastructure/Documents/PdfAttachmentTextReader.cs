@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Extraction.Attachments;
+using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace MailFathom.Infrastructure.Documents;
@@ -35,8 +37,15 @@ namespace MailFathom.Infrastructure.Documents;
 /// costs a recorded boundary whether or not it carried a word, so the number of them a sender may declare is bounded
 /// before the walk rather than left to the input ceiling.
 /// </para>
+/// <para>
+/// A page carrying no text layer is where a scanner put a picture of the page, so where the deployment reads pictures
+/// the images drawn on such a page are kept for a model to read. A page that does carry text keeps its text and nothing
+/// else: a searchable scan already holds its words there, and reading the page image again would send a picture to say
+/// what the document already said. Only an image stored as a JPEG stream is kept, because that stream is an image file
+/// as it stands; every other filter would have to be decoded here first, and nothing on this path decodes a picture.
+/// </para>
 /// </remarks>
-internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions options)
+internal sealed partial class PdfAttachmentTextReader(AttachmentTextExtractionOptions options, ILogger logger)
 {
     /// <summary>Reads one PDF attachment.</summary>
     /// <param name="content">The attachment's octets, positioned at the start.</param>
@@ -48,6 +57,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
         var pagesWithoutText = new List<int>();
         var segments = new List<AttachmentTextSegment>();
+        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerDocument);
 
         using var document = PdfDocument.Open(content, ReadOnlyParsingOptions());
 
@@ -70,11 +80,13 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
             // here would move every passage after it onto a page it was not read from.
             segments.Add(new AttachmentTextSegment(AttachmentTextSegmentKind.Page, page, Label: null, text.Length));
 
-            var pageText = ContentOrderTextExtractor.GetText(document.GetPage(page));
+            var pdfPage = document.GetPage(page);
+            var pageText = ContentOrderTextExtractor.GetText(pdfPage);
 
             if (string.IsNullOrWhiteSpace(pageText))
             {
                 pagesWithoutText.Add(page);
+                this.OfferPictures(pdfPage, page, pictures, cancellationToken);
                 continue;
             }
 
@@ -82,8 +94,54 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
             text.EndLine();
         }
 
-        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText, segments);
+        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText, segments)
+        {
+            Pictures = pictures.Pictures,
+        };
     }
+
+    /// <summary>Offers every image drawn on one page, as the document stores it, to the collector.</summary>
+    /// <remarks>
+    /// <para>
+    /// The allowance and the caller's deadline are both checked per image rather than per page, because the number of
+    /// images one page draws is the sender's and nothing else bounds it.
+    /// </para>
+    /// <para>
+    /// A page whose images the library cannot enumerate keeps the rest of the document readable: losing one scanned page
+    /// is a smaller loss than reporting a document whose text layer read cleanly as malformed. The failure is logged by
+    /// its type alone, since a parser's message can quote the document it was reading.
+    /// </para>
+    /// </remarks>
+    private void OfferPictures(
+        Page page,
+        int pageNumber,
+        EmbeddedPictureCollector pictures,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var image in page.GetImages())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!pictures.WantsMore)
+                {
+                    return;
+                }
+
+                pictures.Offer(pageNumber, image.RawMemory.Span);
+            }
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException and not OutOfMemoryException)
+        {
+            LogPicturesUnreadable(logger, pageNumber, failure.GetType().Name);
+        }
+    }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The images on page {PageNumber} of a PDF attachment could not be read ({FailureType}); that page's pictures are not sent to the describer, and the rest of the document is read as usual.")]
+    private static partial void LogPicturesUnreadable(ILogger logger, int pageNumber, string failureType);
 
     /// <summary>Builds the options every PDF here is opened under.</summary>
     /// <remarks>

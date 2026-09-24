@@ -11,11 +11,13 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// rules that a description reaches the vector index and nothing else, so a
 /// <see cref="ImageDescription" /> row is embedded and never written into the lexical index, while a
 /// <see cref="Document" /> row joins both. Searching for a word by the letters it is written in should never return a
-/// file in which nobody wrote it and a model guessed it.
+/// file in which nobody wrote it and a model guessed it. A picture of a document is the other case: its words were
+/// written by somebody and the model only read them out, so a transcription is a <see cref="Document" /> row and is
+/// searched as one.
 /// </remarks>
 public enum AttachmentTextKind
 {
-    /// <summary>The words are the file's own, read out of it by a parser.</summary>
+    /// <summary>The words are the file's own, read out of it by a parser or transcribed by a model from a picture of a page.</summary>
     Document = 0,
 
     /// <summary>The words are a model's description of what a picture shows, which nobody wrote.</summary>

@@ -878,8 +878,16 @@ internal static class HostComposition
         });
         // A singleton for the reason the other ceilings are: what one attachment may cost to parse is an answer about
         // this installation rather than about a work unit, and the extractor that reads it holds nothing between calls.
+        // The pictures inside a document are copied out only where the operator turned image description on; an
+        // instance that did so without declaring a chat endpoint has them refused by the inactive describer before
+        // anything leaves, exactly as it refuses an image attachment.
         builder.Services.AddSingleton(provider =>
-            provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.AttachmentText.ToExtractionOptions());
+        {
+            var settings = provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value;
+
+            return settings.AttachmentText.ToExtractionOptions(
+                settings.ImageDescription.Enabled ? settings.ImageDescription.MaxPicturesPerDocument : 0);
+        });
         // The message and run ceilings beside it, and a singleton for the same reason. What they bound is the pass that
         // walks a mailbox rather than one extraction, but they are as much a statement about this installation.
         builder.Services.AddSingleton(provider =>

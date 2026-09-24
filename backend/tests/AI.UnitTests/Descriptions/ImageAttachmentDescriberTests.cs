@@ -94,6 +94,62 @@ public sealed class ImageAttachmentDescriberTests
         Assert.Equal(Png(width: 640, height: 480), turn.Image.Content.ToArray());
     }
 
+    /// <summary>An answer the model marked as a transcription is returned as one, without the line that marked it.</summary>
+    [Fact]
+    public async Task DescribeAsync_AnAnswerMarkedAsATranscription_ReturnsTheWordsAsATranscription()
+    {
+        // Arrange
+        var provider = new ScriptedChatModelClient()
+            .Answering(RequestMarker, "TRANSCRIPTION\nFAKTURA VAT nr FV/2026/09/0417\nRazem: 1 845,60 zł");
+        var describer = Describer(provider);
+        using var content = new MemoryStream(Png(width: 640, height: 480));
+
+        // Act
+        var reading = await describer.DescribeAsync("image/png", content, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(reading.IsTranscription);
+        Assert.Equal("FAKTURA VAT nr FV/2026/09/0417\nRazem: 1 845,60 zł", reading.Text);
+    }
+
+    /// <summary>An answer that is only the marker carries nothing to store, which is the provider refusing rather than describing.</summary>
+    [Fact]
+    public async Task DescribeAsync_AnAnswerThatIsOnlyTheMarker_IsRefused()
+    {
+        // Arrange
+        var provider = new ScriptedChatModelClient().Answering(RequestMarker, "DESCRIPTION\n  ");
+        var describer = Describer(provider);
+        using var content = new MemoryStream(Png(width: 640, height: 480));
+
+        // Act
+        var reading = await describer.DescribeAsync("image/png", content, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ImageDescriptionRefusal.ProviderRefused, reading.Refusal);
+    }
+
+    /// <summary>The marker is read however a model decorates it, and an answer carrying no marker stays a description, whole.</summary>
+    [Theory]
+    [InlineData("TRANSCRIPTION\nInvoice 42", true, "Invoice 42")]
+    [InlineData("**Transcription**\n\nInvoice 42", true, "Invoice 42")]
+    [InlineData("TRANSCRIPTION: Invoice 42\nTotal 10", true, "Invoice 42\nTotal 10")]
+    [InlineData("# DESCRIPTION\r\nA red toy car.", false, "A red toy car.")]
+    [InlineData("description:\nA red toy car.", false, "A red toy car.")]
+    [InlineData("A red toy car on a wooden floor.", false, "A red toy car on a wooden floor.")]
+    [InlineData("Transcriptions are not requested here.\nMore text", false, "Transcriptions are not requested here.\nMore text")]
+    public void ReadMarkedAnswer_AnyAnswer_SeparatesTheMarkerFromTheWords(
+        string answer,
+        bool expectedTranscription,
+        string expectedText)
+    {
+        // Act
+        var (isTranscription, text) = ImageAttachmentDescriber.ReadMarkedAnswer(answer);
+
+        // Assert
+        Assert.Equal(expectedTranscription, isTranscription);
+        Assert.Equal(expectedText, text.ReplaceLineEndings("\n"));
+    }
+
     /// <summary>The media type sent is read from the octets, because the one the part declared belongs to whoever composed the mail.</summary>
     [Fact]
     public async Task DescribeAsync_APartDeclaringOneFormatAndCarryingAnother_SendsWhatTheOctetsAre()

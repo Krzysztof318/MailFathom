@@ -29,4 +29,13 @@ public sealed record ExtractedAttachmentText(
     string Text,
     int PageCount,
     IReadOnlyList<int> PagesWithoutText,
-    IReadOnlyList<AttachmentTextSegment> Segments);
+    IReadOnlyList<AttachmentTextSegment> Segments)
+{
+    /// <summary>Gets the pictures the document carries that a model may read, in reading order.</summary>
+    /// <remarks>
+    /// Empty unless <see cref="AttachmentTextExtractionOptions.MaxPicturesPerDocument" /> admits any, which is the case
+    /// only where the deployment turned image description on. A scanned page is the picture this exists for: a PDF
+    /// whose pages carry no text layer is one image per page, and those images are the whole of what it says.
+    /// </remarks>
+    public IReadOnlyList<EmbeddedAttachmentPicture> Pictures { get; init; } = [];
+}

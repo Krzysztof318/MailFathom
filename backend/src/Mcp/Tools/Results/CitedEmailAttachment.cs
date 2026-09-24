@@ -26,7 +26,7 @@ internal sealed record CitedEmailAttachment
     public string? FileName { get; init; }
 
     /// <summary>Gets who wrote the words the answer drew on.</summary>
-    [Description("Where the words came from: 'document' when they are the file's own, read out of it by a parser; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote. A claim resting on an imageDescription rests on a guess about an image, and is worth saying so when reporting it.")]
+    [Description("Where the words came from: 'document' when they are the file's own, read out of it by a parser or transcribed by a model from a picture of a page such as a scanned invoice; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote. A claim resting on an imageDescription rests on a guess about an image, and is worth saying so when reporting it.")]
     public required AttachmentMatchSource Source { get; init; }
 
     /// <summary>Gets what the place inside the file is, or <see langword="null" /> where the reading recorded no boundaries.</summary>

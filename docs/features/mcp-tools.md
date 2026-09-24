@@ -977,7 +977,9 @@ thing about why a message it expected is missing.
 
 Neither mode reaches a chat model, rewrites the query, or expands it; under `hybrid` the query is embedded and compared,
 never interpreted. A document attachment's own words are searchable under both, on the same terms the body is, where the
-deployment turned attachment reading on; a picture's description is reachable under `hybrid` alone, because no word a
+deployment turned attachment reading on, and so are the words a model transcribed from a picture of a document — a
+scanned invoice, a photographed receipt — which are reported with a `source` of `document`; a picture's description is
+reachable under `hybrid` alone, because no word a
 caller writes is ever matched against a sentence a model composed. An attachment MailFathom could not read is absent
 under either mode rather than reported as searched and empty.
 

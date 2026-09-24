@@ -942,7 +942,8 @@ An attachment MailFathom could not read — encrypted, corrupt, unsupported, or 
 than present and empty, exactly as it is from the MCP tools.
 
 **`source` says who wrote the words, and `isDepictedMatch` says whether that is the whole story.** `Document` is the
-file's own text, read out of it by a parser and reachable by word and by meaning alike; `ImageDescription` is a model's
+file's own text, read out of it by a parser or transcribed by a model from a picture of a page such as a scanned
+invoice, and reachable by word and by meaning alike; `ImageDescription` is a model's
 account of what a picture shows, which nobody wrote and which is reachable by meaning alone, so its `extracts` carry
 the description itself rather than fragments cut around the query. `isDepictedMatch` is `true` only when a description
 is the entire reason the message is in the list: every such result sits below every result a query word or written text

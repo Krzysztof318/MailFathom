@@ -56,6 +56,62 @@ internal static class DocumentFixtures
         return builder.Build();
     }
 
+    /// <summary>Builds a PDF of one page drawing the picture given, optionally over a line of text.</summary>
+    /// <param name="jpeg">The picture, stored as the page's JPEG image stream.</param>
+    /// <param name="line">The line the page carries as text, or empty for a scanned page with no text layer.</param>
+    /// <returns>The document's octets.</returns>
+    public static byte[] PdfDrawing(byte[] jpeg, string line = "")
+    {
+        using var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(PageSize.A4);
+
+        if (line.Length > 0)
+        {
+            page.AddText(line, 12, new PdfPoint(20, page.PageSize.Top - 40), font);
+        }
+
+        page.AddJpeg(jpeg, new PdfRectangle(20, 20, 420, 620));
+
+        return builder.Build();
+    }
+
+    /// <summary>Builds a JPEG whose frame header is complete enough for a PDF writer to embed, and which carries no pixels.</summary>
+    /// <param name="width">The declared width.</param>
+    /// <param name="height">The declared height.</param>
+    /// <param name="variant">A byte that makes two otherwise equal pictures different files.</param>
+    /// <returns>The picture's octets.</returns>
+    public static byte[] FramedJpeg(int width, int height, byte variant = 0) =>
+    [
+        0xFF, 0xD8,
+        0xFF, 0xFE, 0x00, 0x03, variant,
+        0xFF, 0xC0, 0x00, 0x11, 0x08,
+        (byte)(height >> 8), (byte)(height & 0xFF),
+        (byte)(width >> 8), (byte)(width & 0xFF),
+        0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+        0xFF, 0xD9,
+    ];
+
+    /// <summary>Builds an archive of the named parts, each holding the octets given for it.</summary>
+    /// <param name="parts">The parts, named as they are inside the package.</param>
+    /// <returns>The archive's octets.</returns>
+    public static byte[] BinaryPackage(params (string Name, byte[] Content)[] parts)
+    {
+        using var written = new MemoryStream();
+
+        using (var archive = new ZipArchive(written, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, content) in parts)
+            {
+                using var entry = archive.CreateEntry(name).Open();
+
+                entry.Write(content);
+            }
+        }
+
+        return written.ToArray();
+    }
+
     /// <summary>Builds a word-processing package whose body carries the paragraphs given.</summary>
     /// <param name="paragraphs">The paragraphs, in order.</param>
     /// <returns>The package's octets.</returns>

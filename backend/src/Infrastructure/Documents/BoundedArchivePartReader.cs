@@ -60,6 +60,28 @@ internal sealed class BoundedArchivePartReader(AttachmentTextExtractionOptions o
             PartReaderSettings());
     }
 
+    /// <summary>Copies one archive part out whole, under the container's shared inflation budget.</summary>
+    /// <param name="entry">The part to copy, which is a picture rather than markup.</param>
+    /// <param name="budget">What the whole container has left to inflate to.</param>
+    /// <returns>The part's inflated octets.</returns>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the part inflates past the budget or the ratio.</exception>
+    public byte[] ReadPartOctets(ZipArchiveEntry entry, DecompressionBudget budget)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(budget);
+
+        using var part = new BoundedInflationStream(
+            entry.Open(),
+            budget.HonestCompressedLength(entry.CompressedLength),
+            budget,
+            options.MaxDecompressionRatio);
+        using var copy = new MemoryStream();
+
+        part.CopyTo(copy);
+
+        return copy.ToArray();
+    }
+
     /// <summary>Advances a reader one node, refusing an element tree nested past the configured depth.</summary>
     /// <param name="reader">The part being walked.</param>
     /// <param name="cancellationToken">Cancels the walk between elements, which is where the timeout is observed.</param>

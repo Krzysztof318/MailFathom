@@ -7,6 +7,8 @@ using System.Xml;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Infrastructure.Documents;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -1084,7 +1086,7 @@ public sealed class BoundedAttachmentTextExtractorTests
             beforeWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
 
         // Act
-        var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
+        var result = await new BoundedAttachmentTextExtractor(bounds, clock, NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 
@@ -1117,7 +1119,7 @@ public sealed class BoundedAttachmentTextExtractorTests
             afterWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
 
         // Act
-        var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
+        var result = await new BoundedAttachmentTextExtractor(bounds, clock, NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 
@@ -1140,7 +1142,7 @@ public sealed class BoundedAttachmentTextExtractorTests
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider()).ExtractTextAsync(
+            new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider(), NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
                 attachment,
                 caller.Token));
     }
@@ -1497,6 +1499,148 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(0, segment.StartOffset);
     }
 
+    /// <summary>A scanned page carries no text layer, so where pictures are read the image drawn on it is kept as it is stored.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfPageWithNoTextLayer_KeepsThePictureDrawnOnIt()
+    {
+        // Arrange
+        var scan = DocumentFixtures.FramedJpeg(width: 1240, height: 1754);
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "scan.pdf",
+            DocumentFixtures.PdfDrawing(scan));
+
+        // Act
+        var result = await ExtractAsync(attachment, ReadingPictures());
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        var picture = Assert.Single(result.Text!.Pictures);
+        Assert.Equal(1, picture.PageNumber);
+        Assert.Equal("image/jpeg", picture.MediaType);
+        Assert.Equal(scan, picture.Octets.ToArray());
+    }
+
+    /// <summary>A page that carries text keeps its text and nothing else, so a searchable scan is not read twice.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfPageCarryingText_KeepsNoPicture()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "searchable.pdf",
+            DocumentFixtures.PdfDrawing(DocumentFixtures.FramedJpeg(1240, 1754), "Invoice FV/0417"));
+
+        // Act
+        var result = await ExtractAsync(attachment, ReadingPictures());
+
+        // Assert
+        Assert.Contains("Invoice FV/0417", result.Text?.Text, StringComparison.Ordinal);
+        Assert.Empty(result.Text!.Pictures);
+    }
+
+    /// <summary>A deployment that does not read pictures copies none out, whatever the document holds.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ADeploymentReadingNoPictures_KeepsNone()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "scan.pdf",
+            DocumentFixtures.PdfDrawing(DocumentFixtures.FramedJpeg(1240, 1754)));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Empty(result.Text!.Pictures);
+    }
+
+    /// <summary>
+    /// A word-processing document's pictures are kept once each, in part order, and a picture too small to carry a page
+    /// — a logo, an icon — spends none of the allowance.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWordDocumentCarryingPictures_KeepsEachPageSizedPictureOnce()
+    {
+        // Arrange
+        var pastedScan = DocumentFixtures.FramedJpeg(1200, 1600);
+        var content = DocumentFixtures.BinaryPackage(
+            ("word/document.xml", Encoding.UTF8.GetBytes(WordPart("See the attached scan."))),
+            ("word/media/image1.jpeg", pastedScan),
+            ("word/media/image2.jpeg", pastedScan),
+            ("word/media/image3.png", SyntheticImages.Png(120, 40)));
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "report.docx",
+            content);
+
+        // Act
+        var result = await ExtractAsync(attachment, ReadingPictures());
+
+        // Assert
+        var picture = Assert.Single(result.Text!.Pictures);
+        Assert.Equal(1, picture.PageNumber);
+        Assert.Equal(pastedScan, picture.Octets.ToArray());
+    }
+
+    /// <summary>A slide's pictures are the ones its relationships name, and each is kept against the slide it sits on.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_APresentationCarryingPictures_KeepsEachAgainstItsSlide()
+    {
+        // Arrange
+        var photo = DocumentFixtures.FramedJpeg(1600, 900, variant: 1);
+        var unused = DocumentFixtures.FramedJpeg(1600, 900, variant: 2);
+        var content = DocumentFixtures.BinaryPackage(
+            ("ppt/slides/slide1.xml", Encoding.UTF8.GetBytes(Slide("Quarterly review"))),
+            ("ppt/slides/slide2.xml", Encoding.UTF8.GetBytes(Slide("Site photo"))),
+            ("ppt/slides/_rels/slide2.xml.rels", Encoding.UTF8.GetBytes("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.jpeg"/>
+                  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="https://example.test/remote.jpeg" TargetMode="External"/>
+                </Relationships>
+                """)),
+            ("ppt/media/image1.jpeg", photo),
+            ("ppt/media/image2.jpeg", unused));
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "review.pptx",
+            content);
+
+        // Act
+        var result = await ExtractAsync(attachment, ReadingPictures());
+
+        // Assert
+        var picture = Assert.Single(result.Text!.Pictures);
+        Assert.Equal(2, picture.PageNumber);
+        Assert.Equal(photo, picture.Octets.ToArray());
+    }
+
+    /// <summary>The allowance stops the copying, so a document of many pictures sends no more than the deployment admits.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_MorePicturesThanTheAllowance_KeepsOnlyTheAllowance()
+    {
+        // Arrange
+        var content = DocumentFixtures.BinaryPackage(
+        [
+            ("word/document.xml", Encoding.UTF8.GetBytes(WordPart("Photos"))),
+            .. Enumerable.Range(1, 5).Select(number => (
+                $"word/media/image{number}.jpeg",
+                DocumentFixtures.FramedJpeg(800, 600, variant: (byte)number))),
+        ]);
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "photos.docx",
+            content);
+
+        // Act
+        var result = await ExtractAsync(attachment, ReadingPictures(maxPictures: 2));
+
+        // Assert
+        Assert.Equal(2, result.Text!.Pictures.Count);
+    }
+
     /// <summary>Writes one text in the named encoding, opened by that encoding's own byte-order mark.</summary>
     private static byte[] MarkedText(string encoding, string text)
     {
@@ -1531,6 +1675,15 @@ public sealed class BoundedAttachmentTextExtractorTests
 
     private static AttachmentTextExtractionOptions Bounds() => new();
 
+    private static AttachmentTextExtractionOptions ReadingPictures(int maxPictures = 10) =>
+        new() { MaxPicturesPerDocument = maxPictures };
+
+    /// <summary>Builds one slide part carrying a single line.</summary>
+    private static string Slide(string line) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:p><a:r><a:t>{line}</a:t></a:r></a:p></sld>
+        """;
+
     /// <summary>Reads one attachment under a clock that only moves where a test moves it.</summary>
     /// <remarks>
     /// The subject turns whatever clock it is given into a live deadline, so a real one would let a loaded runner
@@ -1540,7 +1693,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     private static Task<AttachmentTextExtractionResult> ExtractAsync(
         FakeOpenedEmailAttachment attachment,
         AttachmentTextExtractionOptions? bounds = null) =>
-        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), new FakeTimeProvider()).ExtractTextAsync(
+        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), new FakeTimeProvider(), NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 }
