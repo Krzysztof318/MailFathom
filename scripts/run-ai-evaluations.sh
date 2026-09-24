@@ -81,4 +81,33 @@ else
   printf 'The store holds no results yet, so there is no report to render.\n' >&2
 fi
 
+# A model's answer varies between calls, so a few scenarios falling short is the measurement rather
+# than a defect, and only a pass rate under this floor fails the run. The rate counts the paid
+# `<Subject>Evaluations` classes alone: the free tests beside them are deterministic, so any one of
+# them failing still fails the run, and counted in they would hold the rate near 100%. Exit code 2 is
+# the test platform's "at least one test failed"; every other code is carried as it is.
+required_pass_percentage=85
+
+if [[ "$test_exit_code" -eq 2 ]] && trx_files=("$output_directory"/results/*.trx) && [[ -f "${trx_files[0]}" ]]; then
+  read -r free_failed paid_passed paid_executed < <(
+    grep -ho '<UnitTestResult testName="[^"]*" outcome="[A-Za-z]*"' "${trx_files[@]}" |
+      sed -E 's/^<UnitTestResult testName="([^"(]*)[^"]*" outcome="([A-Za-z]*)"$/\1 \2/' |
+      awk '
+        $2 == "NotExecuted" { next }
+        {
+          class = $1
+          sub(/\.[^.]*$/, "", class)
+          if (class ~ /Evaluations$/) { paid_executed++; if ($2 == "Passed") paid_passed++ }
+          else if ($2 != "Passed") free_failed++
+        }
+        END { print free_failed + 0, paid_passed + 0, paid_executed + 0 }')
+
+  printf '%d of %d evaluation scenarios passed, and %d free tests failed; the run fails under %d%% or on any free failure.\n' \
+    "$paid_passed" "$paid_executed" "$free_failed" "$required_pass_percentage"
+
+  if (( free_failed == 0 && paid_executed > 0 && paid_passed * 100 >= required_pass_percentage * paid_executed )); then
+    test_exit_code=0
+  fi
+fi
+
 exit "$test_exit_code"
