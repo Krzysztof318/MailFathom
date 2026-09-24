@@ -20,11 +20,11 @@ namespace MailFathom.Evaluations.Retrieval;
 /// No model is asked: every metric is computed from the ranks, so this evaluator needs no chat configuration.
 /// </para>
 /// </remarks>
-/// <param name="floorsRecall">
-/// Whether recall at <see cref="FlooredDepth" /> fails under <see cref="MinimumRecall" />. A ranking that is a baseline
-/// to compare others against rather than a model to hold to a bar is reported without one.
+/// <param name="recallFloor">
+/// The recall at <see cref="FlooredDepth" /> below which the ranking fails, or <see langword="null" /> for a ranking that
+/// is a candidate or a baseline to compare others against rather than one to hold to a bar.
 /// </param>
-internal sealed class RetrievalEvaluator(bool floorsRecall) : IEvaluator
+internal sealed class RetrievalEvaluator(double? recallFloor) : IEvaluator
 {
     /// <summary>The name the mean reciprocal rank is reported under.</summary>
     public const string MeanReciprocalRankMetricName = "Mean reciprocal rank";
@@ -32,7 +32,7 @@ internal sealed class RetrievalEvaluator(bool floorsRecall) : IEvaluator
     /// <summary>The depth whose recall is held to the floor.</summary>
     public const int FlooredDepth = 20;
 
-    /// <summary>The lowest recall at <see cref="FlooredDepth" /> a model may reach.</summary>
+    /// <summary>The lowest recall at <see cref="FlooredDepth" /> a ranking a deployment serves may reach.</summary>
     public const double MinimumRecall = 0.8;
 
     /// <summary>Gets the depths recall is reported at.</summary>
@@ -80,14 +80,14 @@ internal sealed class RetrievalEvaluator(bool floorsRecall) : IEvaluator
             recall,
             string.Create(CultureInfo.InvariantCulture, $"The mean over cases of the share of their evidence ranked within the first {depth} messages."));
 
-        if (floorsRecall && depth is FlooredDepth)
+        if (recallFloor is { } floor && depth is FlooredDepth)
         {
             metric.Interpretation = new EvaluationMetricInterpretation(
-                recall >= MinimumRecall ? EvaluationRating.Good : EvaluationRating.Unacceptable,
-                failed: recall < MinimumRecall,
+                recall >= floor ? EvaluationRating.Good : EvaluationRating.Unacceptable,
+                failed: recall < floor,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{recall:P0} against a floor of {MinimumRecall:P0}; evidence missed: {Missed(measurement, depth)}."));
+                    $"{recall:P0} against a floor of {floor:P0}; evidence missed: {Missed(measurement, depth)}."));
         }
 
         return metric;

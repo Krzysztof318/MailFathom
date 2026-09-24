@@ -1834,15 +1834,20 @@ What it leaves out is the lexical half of a hybrid search: fusing with the in-me
 
 It creates a database of its own on that server, brings it to the schema the migrations produce, and stores the mailbox in it: each message is read from its raw MIME by the reader synchronization reads it with, and its row, its search document, and its passages are written by the mapping and writers a stored message is written through, under the text search configuration a deployment defaults to. The corpus was never delivered and carries no `Received` header, so a message's arrival is the date it was written, as in every other scenario. The database is dropped when the scenario ends, so the server keeps nothing it did not already hold.
 
-Three rankings are filed, each with the four figures [Measuring semantic retrieval](#measuring-semantic-retrieval) describes:
+Three scenarios are filed, each ranking with the four figures [Measuring semantic retrieval](#measuring-semantic-retrieval) describes:
 
-| Scenario | Ranking | Held to the floor |
-|---|---|---|
-| `Retrieval.PostgreSQL.Lexical` | The full-text index alone, as an instance with no embedding profile serves it, read into the window a search returns when its caller names no limit | No |
-| `Retrieval.PostgreSQL.Semantic` | pgvector alone, over each declared model's vectors served as the active profile | Yes |
-| `Retrieval.PostgreSQL.Hybrid` | Both, each read as deep as a deployment's search reads the halves of a fusion and fused by the production fusion into that window | Yes |
+| Scenario | Filed under | Ranking | Held to a floor |
+|---|---|---|---|
+| `Retrieval.PostgreSQL.Lexical` | `all-words keywords` | The full-text index alone, as an instance with no embedding profile serves it, over each case's keyword query, read into the window a search returns when its caller names no limit | Yes, 80% at 20 |
+| `Retrieval.PostgreSQL.Lexical` | `all-words question` | The same ranking over the question as written | No |
+| `Retrieval.PostgreSQL.Lexical` | `any-word keywords`, `any-word question` | A candidate no deployment runs: any of the query's words matches and `ts_rank_cd` orders, over each input | No |
+| `Retrieval.PostgreSQL.Semantic` | each model's name | pgvector alone, over each declared model's vectors served as the active profile | Yes, 80% at 20 |
+| `Retrieval.PostgreSQL.Hybrid` | each model's name | Both, each read as deep as a deployment's search reads the halves of a fusion and fused by the production fusion into that window, over the question | Yes, 80% at 20 |
+| `Retrieval.PostgreSQL.Hybrid` | each model's name followed by `any-word` | The same fusion with the candidate as its lexical half | No |
 
-A question reaches the full-text index as written, which is what a person types into the search box, and every word of it is required there, so the lexical figure is a baseline a different lexical ranking is measured against rather than a bar, and is filed as `full-text` where a model's name would stand. The semantic and hybrid figures are filed under each model's name and held to the same floor as the in-memory figure, which the semantic one can be read beside. Each model is served in turn over the one database, since a deployment serves one profile at a time, and its vectors go through the store's cache under `Retrieval.PostgreSQL.Semantic`, so a repeated run costs nothing.
+Each case carries two inputs. The question is what the vectors are asked and what the semantic figures rest on. The keyword query is what a model writes from that question when it searches, two or three distinctive words with word forms and translations offered through `OR`, as `EmailSearchQueryText.MatchingDescription` asks of every model that writes one; `RetrievalCases` holds it, written from the question alone rather than from the evidence. The deployment's full-text ranking requires every word, so it reaches almost nothing on a sentence, and the figure it is held to is the one over the keyword queries a deployment is actually sent: a lexical half that reaches nothing there fails the run rather than being filed green.
+
+The candidate is measured so a change to the lexical ranking can rest on numbers. It matches any word, which lets a sentence reach the index, and it lets every common word match too, because the default text search configuration stems nothing and removes no word and neither ranking function weights a word by how rare it is; the any-word figures, alone and fused, are what show whether that trade pays. The semantic and hybrid figures are filed under each model's name, and the floored ones are held to the same floor as the in-memory figure, which the semantic one can be read beside. Each model is served in turn over the one database, since a deployment serves one profile at a time, and its vectors go through the store's cache under `Retrieval.PostgreSQL.Semantic`, so a repeated run costs nothing.
 
 ### Continuous integration
 
