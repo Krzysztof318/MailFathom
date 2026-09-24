@@ -84,8 +84,27 @@ public sealed class EvaluationRepetitionsTests : IDisposable
 
         // Assert
         Assert.Equal(
-            [$"{Scenario} under {Model}: 1 of 3 repetition(s) fell short.", "  repetition 2: missed the point"],
+            [
+                $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 0 of its 3 answer(s) were read from the cache.",
+                "  repetition 2: missed the point",
+            ],
             shortfalls);
+    }
+
+    [Fact]
+    public async Task MeasureAsync_ACaseFallingShortOnAnswersReadBack_NamesHowManyCameFromTheCache()
+    {
+        // Arrange
+        using var model = ScriptedStructuredAnswerRun.Model("{}");
+        await this.MeasureAsync("first", model, fallingShort: [2], repetitions: 3);
+
+        // Act
+        var shortfalls = await this.MeasureAsync("second", model, fallingShort: [2], repetitions: 3);
+
+        // Assert
+        Assert.Equal(
+            $"{Scenario} under {Model}: 1 of 3 repetition(s) fell short; 3 of its 3 answer(s) were read from the cache.",
+            shortfalls[0]);
     }
 
     [Fact]
@@ -133,17 +152,48 @@ public sealed class EvaluationRepetitionsTests : IDisposable
     }
 
     [Fact]
-    public async Task MeasureAsync_ACaseThatFellShort_AsksEveryRepetitionAgainOnTheNextRun()
+    public async Task MeasureAsync_ACaseThatFellShort_ReadsEveryRepetitionBackOnTheNextRun()
     {
         // Arrange
         using var model = ScriptedStructuredAnswerRun.Model("{}");
         await this.MeasureAsync("first", model, fallingShort: [3], repetitions: 3);
 
         // Act
-        await this.MeasureAsync("second", model, fallingShort: [], repetitions: 3);
+        await this.MeasureAsync("second", model, fallingShort: [3], repetitions: 3);
 
         // Assert
-        Assert.Equal(6, model.Requests);
+        Assert.Equal(3, model.Requests);
+    }
+
+    [Fact]
+    public async Task MeasureAsync_AFirstRun_FilesEveryRepetitionsAnswerAsAskedAfresh()
+    {
+        // Arrange
+        using var model = ScriptedStructuredAnswerRun.Model("{}");
+
+        // Act
+        await this.MeasureAsync("only", model, fallingShort: [], repetitions: 2);
+        var read = await this.FiledAsync("only", 2, EvaluationRepetitions.CachedAnswersMetricName);
+        var asked = await this.FiledAsync("only", 2, EvaluationRepetitions.AskedAnswersMetricName);
+
+        // Assert
+        Assert.Equal([(0d, 1d), (0d, 1d)], read.Zip(asked, static (cached, fresh) => (cached.Value!.Value, fresh.Value!.Value)));
+    }
+
+    [Fact]
+    public async Task MeasureAsync_ARepeatedRun_FilesEveryRepetitionsAnswerAsReadFromTheCache()
+    {
+        // Arrange
+        using var model = ScriptedStructuredAnswerRun.Model("{}");
+        await this.MeasureAsync("first", model, fallingShort: [], repetitions: 2);
+
+        // Act
+        await this.MeasureAsync("second", model, fallingShort: [], repetitions: 2);
+        var read = await this.FiledAsync("second", 2, EvaluationRepetitions.CachedAnswersMetricName);
+        var asked = await this.FiledAsync("second", 2, EvaluationRepetitions.AskedAnswersMetricName);
+
+        // Assert
+        Assert.Equal([(1d, 0d), (1d, 0d)], read.Zip(asked, static (cached, fresh) => (cached.Value!.Value, fresh.Value!.Value)));
     }
 
     [Fact]

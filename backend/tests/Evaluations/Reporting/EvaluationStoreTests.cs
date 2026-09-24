@@ -14,15 +14,13 @@ using Xunit;
 
 namespace MailFathom.Evaluations.Reporting;
 
-/// <summary>Proves a scenario a model fell short on is asked again, and that every other scenario stays paid for.</summary>
+/// <summary>Proves an answer is read back only under the request it was given for, and that each answer is tallied by where it came from.</summary>
 /// <remarks>
 /// Free: the model is scripted, and the store is written to a temporary directory for the reason
 /// <see cref="EmailEnrichmentScenarioTests" /> gives, since what a later run reads back is what the store kept.
 /// </remarks>
 public sealed class EvaluationStoreTests : IDisposable
 {
-    private const string FellShort = "Scenario.FellShort";
-
     private const string Held = "Scenario.Held";
 
     private const string SearchSchema = """{"type":"object","properties":{"query":{"type":"string"}}}""";
@@ -30,30 +28,19 @@ public sealed class EvaluationStoreTests : IDisposable
     private readonly DirectoryInfo store = Directory.CreateTempSubdirectory("mailfathom-evaluations-");
 
     [Fact]
-    public async Task ForgetAsync_AScenarioAnsweredOnAnEarlierRun_AsksTheModelAgainAndKeepsTheOtherScenarioCached()
+    public async Task CacheOverAsync_AQuestionAskedTwice_TalliesOneAnswerAskedAfreshAndOneReadFromTheCache()
     {
         // Arrange
-        await this.AskEveryScenarioAsync("earlier", forget: null);
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var iterationName = EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1);
 
         // Act
-        await this.AskEveryScenarioAsync("retry", forget: FellShort);
-        var later = await this.AskEveryScenarioAsync("later", forget: null);
+        await ReachesTheModelAsync(reporting, Held);
+        await ReachesTheModelAsync(reporting, Held);
+        var tally = EvaluationStore.TallyOf(reporting, Held, iterationName);
 
         // Assert
-        Assert.Equal([FellShort], later);
-    }
-
-    [Fact]
-    public async Task ForgetAsync_AScenarioAnsweredOnThisRun_AsksTheModelAgainOnTheNextAndKeepsTheOtherScenarioCached()
-    {
-        // Arrange
-        await this.AskEveryScenarioAsync("first", forget: FellShort);
-
-        // Act
-        var next = await this.AskEveryScenarioAsync("next", forget: null);
-
-        // Assert
-        Assert.Equal([FellShort], next);
+        Assert.Equal((1, 1), (tally.Read, tally.Asked));
     }
 
     [Fact]
@@ -187,32 +174,6 @@ public sealed class EvaluationStoreTests : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => this.store.Delete(recursive: true);
-
-    /// <summary>Asks both scenarios in one run, forgetting one if named, and names the scenarios that reached the model.</summary>
-    private async Task<IReadOnlyList<string>> AskEveryScenarioAsync(string executionName, string? forget)
-    {
-        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, executionName, []);
-        List<string> reached = [];
-
-        foreach (var scenarioName in new[] { FellShort, Held })
-        {
-            if (await ReachesTheModelAsync(reporting, scenarioName))
-            {
-                reached.Add(scenarioName);
-            }
-        }
-
-        if (forget is not null)
-        {
-            await EvaluationStore.ForgetAsync(
-                reporting,
-                forget,
-                EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1),
-                TestContext.Current.CancellationToken);
-        }
-
-        return reached;
-    }
 
     /// <summary>Asks one scenario through the run's cache and says whether the question reached the model.</summary>
     [SuppressMessage(

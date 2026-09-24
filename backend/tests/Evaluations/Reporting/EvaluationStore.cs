@@ -112,27 +112,13 @@ internal static class EvaluationStore
             ResponseCacheAt(root),
             executionName: executionName);
 
-    /// <summary>Removes every answer and every verdict a scenario cached under one iteration, so the next run asks again.</summary>
+    /// <summary>Gets how many answers the model under test gave under one scenario and iteration were read from the cache, and how many were asked afresh.</summary>
     /// <param name="reporting">The store the scenario ran in, opened here.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
     /// <param name="iterationName">The iteration the answers are filed under, which names the model and the repetition.</param>
-    /// <param name="cancellationToken">Withdraws the removal.</param>
-    /// <returns>A task that completes once the entries are gone.</returns>
-    /// <remarks>
-    /// Called where a model fell short of the share <see cref="EvaluationRepetitions" /> holds it to. Left cached, the
-    /// answers would be what every later run reads back, so one sample would decide them all however the model answers
-    /// when asked again. The verdict already filed stays in the result store, so the report still shows the run that fell
-    /// short.
-    /// </remarks>
-    public static Task ForgetAsync(
-        ReportingConfiguration reporting,
-        string scenarioName,
-        string iterationName,
-        CancellationToken cancellationToken) =>
-        ((RecallingResponseCacheProvider)reporting.ResponseCacheProvider!).ForgetAsync(
-            scenarioName,
-            iterationName,
-            cancellationToken);
+    /// <returns>The tally, counted over every model call made through <see cref="CacheOverAsync" /> in this run.</returns>
+    public static CachedAnswerTally TallyOf(ReportingConfiguration reporting, string scenarioName, string iterationName) =>
+        ((TallyingResponseCacheProvider)reporting.ResponseCacheProvider!).TallyFor(scenarioName, iterationName);
 
     /// <summary>Turns a model's name and a repetition into a name the store can file a result under.</summary>
     /// <param name="modelName">The routed name of the model under test.</param>
@@ -178,7 +164,7 @@ internal static class EvaluationStore
     {
         var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
 
-        return new ToolKeyedCachingChatClient(model, cache)
+        return new ToolKeyedCachingChatClient(model, cache, TallyOf(reporting, scenarioName, iterationName))
         {
             CacheKeyAdditionalValues = CacheIdentityOf(plan, model.GetService<ProviderChatClient>()?.ExtraHeaders ?? []),
         };
@@ -201,6 +187,6 @@ internal static class EvaluationStore
         .. extraHeaders.Select(static header => $"{header.Name}: {header.Value}"),
     ];
 
-    private static RecallingResponseCacheProvider ResponseCacheAt(string root) =>
+    private static TallyingResponseCacheProvider ResponseCacheAt(string root) =>
         new(new DiskBasedResponseCacheProvider(root, AnswerLifetime));
 }

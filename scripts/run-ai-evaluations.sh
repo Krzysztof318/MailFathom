@@ -85,6 +85,20 @@ else
   printf 'The store holds no results yet, so there is no report to render.\n' >&2
 fi
 
+# A case keeps its cached answers whatever its verdict, so a run read from the cache replays the
+# sample an earlier run drew rather than measuring the model again. Saying how much of this run was
+# replayed is what keeps it from being compared with a run whose answers were asked afresh. The two
+# metrics are the ones `EvaluationRepetitions` files on every repetition.
+execution_results="$MAILFATHOM_AI_EVALUATIONS_STORE/results/$MAILFATHOM_AI_EVALUATIONS_EXECUTION"
+if [[ -d "$execution_results" ]]; then
+  read -r cached_answers asked_answers < <(
+    find "$execution_results" -name '*.json' -exec jq -r \
+      '[.evaluationResult.metrics["Answers read from the cache"].value // 0, .evaluationResult.metrics["Answers asked afresh"].value // 0] | @tsv' {} + |
+      awk '{ cached += $1; asked += $2 } END { print cached + 0, asked + 0 }')
+  printf '%d answers of the models under test were read from the cache and %d were asked afresh.\n' \
+    "$cached_answers" "$asked_answers"
+fi
+
 # A model's answer varies between calls, so a few scenarios falling short is the measurement rather
 # than a defect, and only a pass rate under this floor fails the run. The rate counts the paid
 # `<Subject>Evaluations` classes alone: the free tests beside them are deterministic, so any one of

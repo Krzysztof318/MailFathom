@@ -7,15 +7,19 @@ using Microsoft.Extensions.Caching.Distributed;
 
 namespace MailFathom.Evaluations.Reporting;
 
-/// <summary>A response cache that files an answer under the tools the model was offered as well as under the request.</summary>
+/// <summary>A response cache that files an answer under the tools the model was offered as well as under the request, and tallies where each answer came from.</summary>
 /// <param name="model">The model under test.</param>
 /// <param name="cache">The cache the answers live in.</param>
+/// <param name="tally">Counts each answer as read from the cache or asked of the model.</param>
 /// <remarks>
 /// <see cref="ChatOptions.Tools" /> is left out of the JSON the library hashes into a key, so a changed tool name,
 /// description, or parameter schema would otherwise read back the answer the model gave to the old definitions. A request
 /// offered no tools hands the library exactly the values it would hash without this type, so its key is unchanged.
 /// </remarks>
-internal sealed class ToolKeyedCachingChatClient(IChatClient model, IDistributedCache cache)
+internal sealed class ToolKeyedCachingChatClient(
+    IChatClient model,
+    IDistributedCache cache,
+    CachedAnswerTally tally)
     : DistributedCachingChatClient(model, cache)
 {
     /// <inheritdoc />
@@ -26,6 +30,16 @@ internal sealed class ToolKeyedCachingChatClient(IChatClient model, IDistributed
         options?.Tools is { Count: > 0 } tools
             ? base.GetCacheKey(messages, options, [.. additionalValues, .. tools.SelectMany(Identity)])
             : base.GetCacheKey(messages, options, additionalValues);
+
+    /// <inheritdoc />
+    protected override async Task<ChatResponse?> ReadCacheAsync(string key, CancellationToken cancellationToken)
+    {
+        var cached = await base.ReadCacheAsync(key, cancellationToken);
+
+        tally.Count(readFromCache: cached is not null);
+
+        return cached;
+    }
 
     private static IEnumerable<object?> Identity(AITool tool) =>
         tool is AIFunctionDeclaration function
