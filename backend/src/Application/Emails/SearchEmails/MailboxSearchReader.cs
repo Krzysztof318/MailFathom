@@ -75,7 +75,7 @@ public sealed class MailboxSearchReader
     /// about to predict what a search returns.
     /// </para>
     /// </remarks>
-    private const int FusionCandidateDepthMultiplier = 4;
+    internal const int FusionCandidateDepthMultiplier = 4;
 
     private readonly IEmailSearchIndexReader searchIndexReader;
     private readonly IEmailAttachmentMatchReader attachmentMatchReader;
