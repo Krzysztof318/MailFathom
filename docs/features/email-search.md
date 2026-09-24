@@ -57,6 +57,8 @@ nobody wrote, and matching them as though somebody had is exactly what
 refuses. The exclusion is in the database rather than in a writer: the generated column produces a vector for a
 document's text and nothing at all for a description, so a word occurring only in a description returns no lexical
 match whatever a later writer does with the row. A depicted match reaches retrieval through the vector index alone.
+A picture the model *transcribed* — a scanned invoice, a receipt, a handwritten note — is not a description: its words
+were written by somebody, so it is stored as a document's text and matched and ranked as one.
 
 **Both halves are read.** A document's own words take part in the lexical ranking on the same terms the body does — a
 message is eligible when either its own vector or one of its attachments' matches, and its rank is the message's own
@@ -222,8 +224,9 @@ An instance that has activated an embedding profile ranks twice and combines the
   returned, so agreement between them can be observed at all rather than only inside the window.
 
 The semantic half is **two** orderings rather than one, and the difference between them is what a passage was cut from.
-A passage of a message's own text or of a document attachment is *written*; a model's account of a picture is
-*depicted*. Both are read from one eligible set under one distance metric, and each passage is placed in one of the two
+A passage of a message's own text, of a document attachment, or of a picture the model transcribed is *written*; a
+model's account of what a picture shows is *depicted*. So an invoice photographed as a JPEG ranks among the written
+results by what it says, and a photograph of a toy car stays in the depicted tail. Both are read from one eligible set under one distance metric, and each passage is placed in one of the two
 by the kind recorded on its attachment row rather than by anything a caller sent.
 
 - **The written ranking enters fusion unchanged**, so nothing above changes for a message a person wrote words in.

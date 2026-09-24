@@ -23,8 +23,19 @@ public sealed class ImageDescriptionInstructionsTests
     public void Text_TheInstruction_AsksForTheWordsCharacterForCharacter()
     {
         // Assert
-        Assert.Contains("Copy the words character for character", Instruction, StringComparison.Ordinal);
+        Assert.Contains("Copy every word you write out of the picture character for character", Instruction, StringComparison.Ordinal);
         Assert.Contains("never correct a spelling, complete a word", Instruction, StringComparison.Ordinal);
+    }
+
+    /// <summary>The describer reads the kind of answer from its first line, so the instruction has to ask for exactly that line.</summary>
+    [Fact]
+    public void Text_TheInstruction_AsksForTheKindOfAnswerOnItsFirstLine()
+    {
+        // Assert
+        Assert.Contains(
+            $"one line holding exactly {ImageDescriptionInstructions.TranscriptionMarker} or {ImageDescriptionInstructions.DescriptionMarker}",
+            Instruction,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Characters a font draws alike are exactly the ones a guess gets wrong in a code.</summary>

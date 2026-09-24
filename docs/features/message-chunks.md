@@ -152,7 +152,7 @@ unchanged message still writes nothing — the value it would be given is the va
 ## Passages cut from an attachment
 
 A deployment that sets `Embeddings:AttachmentText:Enabled` gains a second source of passages: the words a document
-attachment yielded, and the words a model used to describe a picture. They are **the same kind of passage in the same
+attachment yielded, and the words a model transcribed from a picture or used to describe one. They are **the same kind of passage in the same
 vector space**, distinguished by the text they are a span of and by nothing else — which is what
 [ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 decides and what keeps a single search over a message and its attachment one ranking rather than two fused.

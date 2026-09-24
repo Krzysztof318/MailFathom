@@ -44,7 +44,7 @@ public sealed class ImageDescriptionScenarioTests : IDisposable
     public async Task RunAsync_ADescriptionNamingEverythingTheImageIsFoundBy_PassesEveryCheckAndFilesTheRating()
     {
         // Arrange
-        using var model = Model("HARBOUR LANE BAKERY. Receipt no. 20417, 12 March 2026. 2 x Rye loaf 9.00, 1 x Almond tart 4.50. TOTAL 13.50 EUR.");
+        using var model = Model("TRANSCRIPTION\nHARBOUR LANE BAKERY. Receipt no. 20417, 12 March 2026. 2 x Rye loaf 9.00, 1 x Almond tart 4.50. TOTAL 13.50 EUR.");
 
         // Act
         var verdict = await this.RunAsync(Receipt, model);
@@ -52,6 +52,7 @@ public sealed class ImageDescriptionScenarioTests : IDisposable
         // Assert
         Assert.True(verdict.Get<BooleanMetric>(ImageDescriptionScenario.DescribedMetricName).Value);
         Assert.True(verdict.Get<BooleanMetric>(ImageDescriptionScenario.MentionsWhatItShowsMetricName).Value);
+        Assert.True(verdict.Get<BooleanMetric>(ImageDescriptionScenario.ReadAsTheRightKindMetricName).Value);
         Assert.Equal(5, verdict.Get<NumericMetric>(GroundednessEvaluator.GroundednessMetricName).Value);
     }
 
@@ -83,6 +84,26 @@ public sealed class ImageDescriptionScenarioTests : IDisposable
 
         // Assert
         Assert.Equal(expected, verdict.Get<BooleanMetric>(HostileMail.ObeysNoMailMetricName).Value);
+    }
+
+    [Theory]
+    [InlineData("ImageDescription.Receipt", "TRANSCRIPTION\nHARBOUR LANE BAKERY, receipt no. 20417.", true)]
+    [InlineData("ImageDescription.Receipt", "DESCRIPTION\nA bakery receipt, no. 20417.", false)]
+    [InlineData("ImageDescription.Receipt", "HARBOUR LANE BAKERY, receipt no. 20417.", false)]
+    [InlineData("ImageDescription.Shapes", "DESCRIPTION\nA red circle beside a blue square.", true)]
+    [InlineData("ImageDescription.Shapes", "TRANSCRIPTION\nA red circle beside a blue square.", false)]
+    [InlineData("ImageDescription.LabelEntirelyIllegible", "TRANSCRIPTION\nIllegible.", true)]
+    [InlineData("ImageDescription.LabelEntirelyIllegible", "DESCRIPTION\nA card whose text is illegible.", true)]
+    public async Task RunAsync_APictureReadAsOneKind_PassesOnlyWhereThatIsTheKindItIs(string scenarioName, string answer, bool expected)
+    {
+        // Arrange
+        using var model = Model(answer);
+
+        // Act
+        var verdict = await this.RunAsync(Named(scenarioName), model);
+
+        // Assert
+        Assert.Equal(expected, verdict.Get<BooleanMetric>(ImageDescriptionScenario.ReadAsTheRightKindMetricName).Value);
     }
 
     [Fact]

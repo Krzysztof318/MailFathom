@@ -44,7 +44,7 @@ internal sealed record MatchedEmailAttachment
     public required string MediaType { get; init; }
 
     /// <summary>Gets who wrote the words this attachment contributed.</summary>
-    [Description("Where the words came from: 'document' when they are the file's own, read out of it by a parser and searchable both by word and by meaning; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote and which is reachable by meaning alone. A claim resting on an imageDescription rests on a guess about an image.")]
+    [Description("Where the words came from: 'document' when they are the file's own, read out of it by a parser or transcribed by a model from a picture of a page such as a scanned invoice, and searchable both by word and by meaning; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote and which is reachable by meaning alone. A claim resting on an imageDescription rests on a guess about an image.")]
     public required AttachmentMatchSource Source { get; init; }
 
     /// <summary>Gets what the place inside the file is, or <see langword="null" /> where the reading recorded no boundaries.</summary>

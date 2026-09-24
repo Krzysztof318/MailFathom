@@ -138,4 +138,34 @@ public sealed class EmbeddingImageDescriptionOptionsTests
         // Assert
         Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxRequestsPerMinute), StringComparison.Ordinal));
     }
+
+    /// <summary>A document's picture count outside the range is refused, at either end, because every picture is a chat call.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(EmbeddingImageDescriptionOptions.GreatestMaxPicturesPerDocument + 1)]
+    public void FindDeclarationErrors_APictureCountOutsideTheRange_IsRefused(int maxPicturesPerDocument)
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new() { MaxPicturesPerDocument = maxPicturesPerDocument };
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxPicturesPerDocument), StringComparison.Ordinal));
+    }
+
+    /// <summary>Zero is a supported declaration: it keeps image description to image attachments alone.</summary>
+    [Fact]
+    public void FindDeclarationErrors_NoPicturesInsideDocuments_IsAccepted()
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new() { MaxPicturesPerDocument = 0 };
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Empty(errors);
+    }
 }

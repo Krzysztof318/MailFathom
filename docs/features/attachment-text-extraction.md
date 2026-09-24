@@ -80,8 +80,9 @@ and empty. Recognizing them is what makes that sentence possible.
 Both office families are read as the zip archives of XML they are, rather than through a document model. That is not
 only the smaller dependency: a document model inflates a part before handing it over, which is exactly the moment a
 decompression bomb has already won. Only the parts carrying text are opened — a macro project, a Basic library, an
-embedded object, an OLE package, and every image in the package are never read, never decoded, and never handed to
-anything.
+embedded object, and an OLE package are never read, never decoded, and never handed to anything. An image in the
+package is read only where image description is on, and then as octets handed to the describer rather than decoded
+here — the section on pictures inside a document below says which ones.
 
 Text is not only in the body. A `.docx` keeps a letterhead's invoice number in a header part, a page number in a footer
 part, and a contract's terms in a footnote or endnote part, so all of those are read after the body and in that fixed
@@ -126,9 +127,10 @@ reported as `Encrypted` rather than as the format nothing here reads. Both answe
 so what is wrong is the reason the user is given; #1685 is where telling the two apart is tracked.
 
 `Extracted` with an empty text and every page named as carrying none is a scan, and it is deliberately not a failure. A
-page with no text layer is the exact target an optical-character-recognition pass would be given, which is why the pages
-are reported as a list rather than as a flag on the document — a scanned page bound into an otherwise textual report is
-the ordinary case. No optical character recognition happens here; that is a decision of its own and this is not it.
+page with no text layer is exactly the page the describer is handed the pictures of, which is why the pages are reported
+as a list rather than as a flag on the document — a scanned page bound into an otherwise textual report is the ordinary
+case. No recognition engine runs here; where image description is on, the pictures are read by the chat provider as the
+next section describes, and where it is off the scan yields nothing.
 
 **Both ISO 29500 conformance classes are read, so that answer means a scan and nothing else.** The standard defines a
 **Transitional** class, which is what an office suite writes unless somebody explicitly chooses otherwise, and a
@@ -148,15 +150,48 @@ because neither office format records pagination and reading one would mean layi
 counts as one page for the same reason, so a citation into a `.txt` or a `.md` resolves through the same
 coordinate scheme as one into a `.docx`.
 
-## What a described picture reports, and what a message's own ceiling reports
+## Pictures inside a document
 
-A picture is not read by a parser, so it carries a set of its own: `Described` where a description came back, and one of
-nine refusals where none did. The stored row names whichever word applies beside the word `Document` or
-`ImageDescription`, so the two sets never have to be told apart by guessing which one a value came from.
+Where `Embeddings:ImageDescription:Enabled` is on, a document's pictures are read too, by the same describer an image
+attachment is sent to, so a PDF that is really a scan and a slide that is a photograph of a whiteboard are findable by
+what they say. Which pictures are taken is decided by what the format makes cheap and what would be read twice
+otherwise:
+
+- **PDF:** the images drawn on a page that carries no text layer, and only those stored as a JPEG stream. A page that
+  already carries text has been read, so a searchable scan costs nothing more; other image encodings would have to be
+  decoded here to be sent anywhere, which is the step every other part of this reader refuses.
+- **Word document:** every picture under the package's `word/media/` folder, counted against the document's one page.
+- **Presentation:** the pictures each slide's relationships name, against that slide's number, skipping a picture the
+  slide links to rather than carries.
+- A workbook's pictures are not read, and neither is any OpenDocument file's.
+
+A picture whose shorter side is under 200 pixels is skipped as an icon or a bullet rather than content, a picture the
+document carries twice is read once, and no more than `Embeddings:ImageDescription:MaxPicturesPerDocument` are read from
+one document. Each one read is a chat call and counts against the message's description budget like an image attachment
+does.
+
+What comes back joins the document's text by what it is. A transcription — the picture was a page, a receipt, a form —
+is written into the text at the end of the page it was found on, so a citation into it resolves like one into any other
+page. A description of a photograph is kept only when the document yielded no written words at all, and the attachment
+is then stored as a description; beside written words it is dropped, because a machine's sentence about a picture would
+otherwise enter the lexical index under the document's name. A picture the provider did not answer for, because it
+timed out or was unavailable, leaves the message unsettled so the whole document is read again on a later run.
+
+## What a read picture reports, and what a message's own ceiling reports
+
+A picture is not read by a parser, so it carries a set of its own: `Transcribed` or `Described` where the provider
+answered, and one of nine refusals where it did not. The model decides which of the two a picture is — a document to
+transcribe, such as an invoice, a receipt, or a handwritten note, or a picture to describe, such as a photograph, a bare
+logo, or a chart — and says so on the first line of its answer. A transcription is stored under the word `Document`,
+because somebody wrote those words and the model only read them out, so it is searched and ranked exactly as a parsed
+document is; a description is stored under `ImageDescription` and stays below every written match. The stored row names
+whichever outcome applies beside that word, so the two sets never have to be told apart by guessing which one a value
+came from.
 
 | Outcome | What it means | What an operator or user does |
 | --- | --- | --- |
-| `Described` | The provider answered, and the words it produced are the attachment's text | Nothing |
+| `Transcribed` | The provider read the picture as a document, and the words it transcribed are the attachment's text | Nothing |
+| `Described` | The provider read the picture as a picture, and its description is the attachment's text | Nothing |
 | `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
 | `FormatNotSupported` | The octets are not one of the raster formats a request may carry | Nothing; the attachment is not a picture this can send |
 | `FormatExcluded` | The octets are a markup document — an SVG among them — rather than a raster picture | Nothing; rendering one is executing a document somebody else composed |

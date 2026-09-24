@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Redaction;
@@ -31,6 +32,9 @@ public sealed record DerivedAttachmentText
     /// <see cref="AttachmentTextExtractionOutcome.Extracted" />'s role on the other path.
     /// </remarks>
     private const string DescribedOutcome = "Described";
+
+    /// <summary>Names a picture of a document whose words the model read out, which is stored as written text.</summary>
+    private const string TranscribedOutcome = "Transcribed";
 
     /// <summary>Names an attachment the message's own octet or count ceiling stopped, which neither port publishes.</summary>
     /// <remarks>
@@ -179,7 +183,7 @@ public sealed record DerivedAttachmentText
             segments: []);
     }
 
-    /// <summary>Records what reading one document attachment produced.</summary>
+    /// <summary>Records what reading one document attachment produced, with nothing read off the pictures inside it.</summary>
     /// <param name="position">The attachment's walk position.</param>
     /// <param name="declaredMediaType">The media type the part declared.</param>
     /// <param name="fileName">The normalized file name, or <see langword="null" />.</param>
@@ -190,23 +194,103 @@ public sealed record DerivedAttachmentText
         int position,
         string declaredMediaType,
         string? fileName,
-        AttachmentTextExtractionResult result)
+        AttachmentTextExtractionResult result) =>
+        FromExtraction(position, declaredMediaType, fileName, result, pictureReadings: []);
+
+    /// <summary>Records what reading one document attachment and the pictures inside it produced.</summary>
+    /// <param name="position">The attachment's walk position.</param>
+    /// <param name="declaredMediaType">The media type the part declared.</param>
+    /// <param name="fileName">The normalized file name, or <see langword="null" />.</param>
+    /// <param name="result">What the extractor answered.</param>
+    /// <param name="pictureReadings">What the model read off each picture the document carries, in reading order.</param>
+    /// <returns>The derivation to store.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A transcription is written text that happens to be printed as a picture — the scanned page of a PDF, the photographed
+    /// receipt pasted into a report — so it joins the document's own words, placed at the end of the page it was found on
+    /// so a passage cut from it cites that page. The document stays a <see cref="AttachmentTextKind.Document" /> and is
+    /// searched as one.
+    /// </para>
+    /// <para>
+    /// A description is kept only when the document yielded no written words at all, and then the attachment is stored as
+    /// a <see cref="AttachmentTextKind.ImageDescription" /> — a PDF that is one photograph is a picture, and ranks as one.
+    /// Beside written words a description is dropped rather than joined, because joining it would put a machine's sentence
+    /// about a logo or a product shot into the lexical index as though somebody had written it, which is exactly what
+    /// keeps a depicted match below a written one.
+    /// </para>
+    /// <para>
+    /// A picture the provider did not answer this time leaves the attachment's outcome naming that refusal, whatever the
+    /// document itself yielded. That is what keeps the message outstanding, exactly as an image attachment the provider
+    /// did not answer keeps it: the next run reads the document again and replaces this reading with a complete one,
+    /// rather than the scanned page being settled as though it held nothing.
+    /// </para>
+    /// </remarks>
+    public static DerivedAttachmentText FromExtraction(
+        int position,
+        string declaredMediaType,
+        string? fileName,
+        AttachmentTextExtractionResult result,
+        IReadOnlyList<EmbeddedPictureReading> pictureReadings)
     {
         ArgumentNullException.ThrowIfNull(declaredMediaType);
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(pictureReadings);
+
+        if (result.Text is not { } extracted)
+        {
+            return new DerivedAttachmentText(
+                position,
+                AttachmentTextKind.Document,
+                declaredMediaType,
+                fileName,
+                result.Outcome.ToString(),
+                text: null,
+                pageCount: 0,
+                segments: []);
+        }
+
+        var (written, writtenSegments) = WithPictureText(
+            extracted.Text,
+            extracted.Segments,
+            [.. pictureReadings.Where(picture => picture.Reading is { IsTranscription: true, Text: not null })]);
+
+        var descriptions = pictureReadings
+            .Where(picture => picture.Reading is { IsTranscription: false, Text: not null })
+            .ToArray();
+        var unansweredPicture = pictureReadings
+            .Select(picture => picture.Reading.Refusal)
+            .FirstOrDefault(refusal => refusal
+                is ImageDescriptionRefusal.ProviderTimedOut
+                or ImageDescriptionRefusal.ProviderUnavailable);
+
+        if (!string.IsNullOrWhiteSpace(written) || descriptions.Length == 0)
+        {
+            return new DerivedAttachmentText(
+                position,
+                AttachmentTextKind.Document,
+                declaredMediaType,
+                fileName,
+                unansweredPicture?.ToString() ?? result.Outcome.ToString(),
+                written,
+                extracted.PageCount,
+                writtenSegments);
+        }
+
+        var (depicted, depictedSegments) = WithPictureText(extracted.Text, extracted.Segments, descriptions);
 
         return new DerivedAttachmentText(
             position,
-            AttachmentTextKind.Document,
+            AttachmentTextKind.ImageDescription,
             declaredMediaType,
             fileName,
-            result.Outcome.ToString(),
-            result.Text?.Text,
-            result.Text?.PageCount ?? 0,
-            result.Text?.Segments ?? []);
+            unansweredPicture?.ToString() ?? DescribedOutcome,
+            depicted,
+            extracted.PageCount,
+            depictedSegments);
     }
 
-    /// <summary>Records what describing one image attachment produced.</summary>
+    /// <summary>Records what reading one image attachment produced.</summary>
     /// <param name="position">The attachment's walk position.</param>
     /// <param name="declaredMediaType">The media type the part declared.</param>
     /// <param name="fileName">The normalized file name, or <see langword="null" />.</param>
@@ -214,9 +298,17 @@ public sealed record DerivedAttachmentText
     /// <returns>The derivation to store.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declaredMediaType" /> or <paramref name="description" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// A description is one place with no pagination to record, so it carries a single segment covering the whole of
-    /// it. Without one a passage cut from a long description would resolve to no place at all, and a citation would
-    /// have to special-case the kind rather than reading the same list every other attachment carries.
+    /// <para>
+    /// A transcription is stored as a <see cref="AttachmentTextKind.Document" />: the words on a scanned invoice are
+    /// somebody's written words, and are searched the way a PDF's are. A description stays an
+    /// <see cref="AttachmentTextKind.ImageDescription" />, and a refusal is recorded under that kind as well, since
+    /// nothing was read far enough to say the picture held a document.
+    /// </para>
+    /// <para>
+    /// Either is one place with no pagination to record, so it carries a single segment covering the whole of it.
+    /// Without one a passage cut from a long answer would resolve to no place at all, and a citation would have to
+    /// special-case the kind rather than reading the same list every other attachment carries.
+    /// </para>
     /// </remarks>
     public static DerivedAttachmentText FromDescription(
         int position,
@@ -231,15 +323,73 @@ public sealed record DerivedAttachmentText
 
         return new DerivedAttachmentText(
             position,
-            AttachmentTextKind.ImageDescription,
+            description.IsTranscription ? AttachmentTextKind.Document : AttachmentTextKind.ImageDescription,
             declaredMediaType,
             fileName,
-            description.Refusal is { } refusal ? refusal.ToString() : DescribedOutcome,
+            description switch
+            {
+                { Refusal: { } refusal } => refusal.ToString(),
+                { IsTranscription: true } => TranscribedOutcome,
+                _ => DescribedOutcome,
+            },
             description.Text,
             described ? 1 : 0,
             described
                 ? [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 1, Label: null, StartOffset: 0)]
                 : []);
+    }
+
+    /// <summary>Places what was read off each picture at the end of the page it was found on, and moves the later page boundaries with it.</summary>
+    /// <remarks>
+    /// A picture on a page no segment names — a document that records no pages at all — is placed after everything
+    /// else, which cites the last page rather than one the picture was not on.
+    /// </remarks>
+    private static (string Text, IReadOnlyList<AttachmentTextSegment> Segments) WithPictureText(
+        string text,
+        IReadOnlyList<AttachmentTextSegment> segments,
+        EmbeddedPictureReading[] pictures)
+    {
+        if (pictures.Length == 0)
+        {
+            return (text, segments);
+        }
+
+        var pictureTextByPage = pictures.ToLookup(picture => picture.PageNumber, picture => picture.Reading.Text!);
+        var pagesNamed = segments.Select(segment => segment.Number).ToHashSet();
+        var firstStart = segments.Count == 0 ? text.Length : segments[0].StartOffset;
+        var spliced = new StringBuilder(text, 0, firstStart, text.Length);
+        var movedSegments = new List<AttachmentTextSegment>(segments.Count);
+
+        foreach (var (segment, index) in segments.Select((segment, index) => (segment, index)))
+        {
+            var end = index + 1 < segments.Count ? segments[index + 1].StartOffset : text.Length;
+
+            movedSegments.Add(segment with { StartOffset = spliced.Length });
+            spliced.Append(text, segment.StartOffset, end - segment.StartOffset);
+
+            foreach (var pictureText in pictureTextByPage[segment.Number])
+            {
+                AppendParagraph(spliced, pictureText);
+            }
+        }
+
+        foreach (var pictureText in pictureTextByPage.Where(page => !pagesNamed.Contains(page.Key)).SelectMany(page => page))
+        {
+            AppendParagraph(spliced, pictureText);
+        }
+
+        return (spliced.ToString(), movedSegments);
+    }
+
+    /// <summary>Appends one picture's words on lines of their own.</summary>
+    private static void AppendParagraph(StringBuilder text, string paragraph)
+    {
+        if (text.Length > 0 && text[^1] != '\n')
+        {
+            text.Append('\n');
+        }
+
+        text.Append(paragraph).Append('\n');
     }
 
     /// <summary>Holds a declared media type to the length it is stored at, without leaving half a character behind.</summary>

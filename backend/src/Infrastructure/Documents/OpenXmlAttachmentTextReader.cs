@@ -23,8 +23,15 @@ namespace MailFathom.Infrastructure.Documents;
 /// <para>
 /// Only the parts that carry text are opened — for a word-processing document that is the body, its headers, its
 /// footers, and its two note parts; for a deck and a workbook, the numbered page parts and the string table. A macro
-/// project, an embedded object, an OLE package, an image, and every other part of the package are never read, never
-/// decoded, and never handed to anything — extraction reads structure and text and evaluates nothing.
+/// project, an embedded object, an OLE package, and every other part of the package are never read, never decoded,
+/// and never handed to anything — extraction reads structure and text and evaluates nothing.
+/// </para>
+/// <para>
+/// The one exception is a picture, and only where the deployment reads pictures: the images a word-processing document
+/// stores under <c>word/media/</c>, and the images each slide's relationships name, are copied out as they are stored
+/// for a model to read. A pasted scan of an invoice is words, and a slide's photograph is what the slide shows. A
+/// workbook's pictures are not read. Nothing here decodes a picture: it is inflated out of the archive under the same
+/// budget as every text part and handed on as the octets the package holds.
 /// </para>
 /// </remarks>
 internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtractionOptions options)
@@ -85,14 +92,17 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
         var budget = new DecompressionBudget(options.MaxDecompressedOctets, content.Length);
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
+        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerAttachment);
 
-        return format switch
+        var extracted = format switch
         {
-            AttachmentDocumentFormat.WordOpenXml => this.ReadDocument(archive, budget, text, cancellationToken),
-            AttachmentDocumentFormat.PresentationOpenXml => this.ReadPresentation(archive, budget, text, cancellationToken),
+            AttachmentDocumentFormat.WordOpenXml => this.ReadDocument(archive, budget, text, pictures, cancellationToken),
+            AttachmentDocumentFormat.PresentationOpenXml => this.ReadPresentation(archive, budget, text, pictures, cancellationToken),
             AttachmentDocumentFormat.SpreadsheetOpenXml => this.ReadWorkbook(archive, budget, text, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The format is not an Office Open XML package."),
         };
+
+        return extracted with { Pictures = pictures.Pictures };
     }
 
     [GeneratedRegex(@"^ppt/slides/slide(\d+)\.xml$", RegexOptions.IgnoreCase)]
@@ -107,6 +117,9 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     [GeneratedRegex(@"^xl/worksheets/sheet(\d+)\.xml$", RegexOptions.IgnoreCase)]
     private static partial Regex WorksheetPartPattern();
 
+    [GeneratedRegex(@"^word/media/[^/]+$", RegexOptions.IgnoreCase)]
+    private static partial Regex WordMediaPartPattern();
+
     /// <summary>Reads a word-processing document, whose body is one page because the format records no pagination.</summary>
     /// <remarks>
     /// The body is not the whole of what somebody wrote. A letterhead's invoice number lives in a header part, a
@@ -118,6 +131,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         ZipArchive archive,
         DecompressionBudget budget,
         BoundedTextAccumulator text,
+        EmbeddedPictureCollector pictures,
         CancellationToken cancellationToken)
     {
         var document = archive.GetEntry(WordDocumentPart)
@@ -138,6 +152,12 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
             carriedText |= this.ReadRunsInto(reader, WordprocessingNamespaces, text, cancellationToken);
         }
+
+        var media = archive.Entries
+            .Where(entry => WordMediaPartPattern().IsMatch(entry.FullName))
+            .OrderBy(entry => entry.FullName, StringComparer.Ordinal);
+
+        this.OfferPictures(media, pageNumber: 1, budget, pictures, cancellationToken);
 
         return new ExtractedAttachmentText(
             text.ToText(),
@@ -165,6 +185,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         ZipArchive archive,
         DecompressionBudget budget,
         BoundedTextAccumulator text,
+        EmbeddedPictureCollector pictures,
         CancellationToken cancellationToken)
     {
         var slides = OrderedParts(archive, SlidePartPattern());
@@ -198,6 +219,16 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             }
 
             text.EndLine();
+
+            if (pictures.WantsMore)
+            {
+                this.OfferPictures(
+                    this.SlidePictureParts(archive, slide, budget, cancellationToken),
+                    index + 1,
+                    budget,
+                    pictures,
+                    cancellationToken);
+            }
         }
 
         return new ExtractedAttachmentText(text.ToText(), slides.Count, slidesWithoutText, segments);
@@ -262,6 +293,92 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         return new ExtractedAttachmentText(text.ToText(), sheets.Count, sheetsWithoutText, segments);
+    }
+
+    /// <summary>Copies each picture part out of the archive and offers it to the collector, while it still wants one.</summary>
+    private void OfferPictures(
+        IEnumerable<ZipArchiveEntry> parts,
+        int pageNumber,
+        DecompressionBudget budget,
+        EmbeddedPictureCollector pictures,
+        CancellationToken cancellationToken)
+    {
+        foreach (var part in parts)
+        {
+            if (!pictures.WantsMore)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            pictures.Offer(pageNumber, this.parts.ReadPartOctets(part, budget));
+        }
+    }
+
+    /// <summary>Resolves the picture parts one slide's relationships name, in the order they are declared.</summary>
+    /// <remarks>
+    /// A target is a path relative to the slide's own folder, written by whoever composed the package, so it is
+    /// resolved against the archive's own entries and anything it does not name there — an external link, a path
+    /// climbing out of the package — resolves to nothing.
+    /// </remarks>
+    private List<ZipArchiveEntry> SlidePictureParts(
+        ZipArchive archive,
+        ZipArchiveEntry slide,
+        DecompressionBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var folder = slide.FullName[..(slide.FullName.LastIndexOf('/') + 1)];
+        var relationships = archive.GetEntry($"{folder}_rels/{slide.Name}.rels");
+        var found = new List<ZipArchiveEntry>();
+
+        if (relationships is null)
+        {
+            return found;
+        }
+
+        using var reader = this.parts.OpenPart(relationships, budget);
+
+        while (this.parts.ReadNode(reader, cancellationToken))
+        {
+            if (reader.NodeType != XmlNodeType.Element
+                || reader.LocalName != "Relationship"
+                || reader.GetAttribute("TargetMode") is "External"
+                || reader.GetAttribute("Type")?.EndsWith("/image", StringComparison.Ordinal) is not true
+                || reader.GetAttribute("Target") is not { } target
+                || archive.GetEntry(ResolvePartName(folder, target)) is not { } picture)
+            {
+                continue;
+            }
+
+            found.Add(picture);
+        }
+
+        return found;
+    }
+
+    /// <summary>Resolves a relationship target against the folder of the part that declared it.</summary>
+    private static string ResolvePartName(string folder, string target)
+    {
+        var resolved = new List<string>();
+        var path = target.StartsWith('/') ? target[1..] : folder + target;
+
+        foreach (var segment in path.Split('/'))
+        {
+            if (segment == "..")
+            {
+                if (resolved.Count > 0)
+                {
+                    resolved.RemoveAt(resolved.Count - 1);
+                }
+            }
+            else if (segment is not ("." or ""))
+            {
+                resolved.Add(segment);
+            }
+        }
+
+        return string.Join('/', resolved);
     }
 
     /// <summary>Collects the runs of text in one part, ending a line where the format ends a paragraph.</summary>

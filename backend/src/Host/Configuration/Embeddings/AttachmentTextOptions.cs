@@ -263,9 +263,11 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     ];
 
     /// <summary>Reads the keys one extraction is bounded by.</summary>
+    /// <param name="maxPicturesPerAttachment">How many pictures inside one document are copied out for a model to read, zero where the deployment reads none.</param>
     /// <returns>The bounds the port applies.</returns>
-    internal AttachmentTextExtractionOptions ToExtractionOptions() => new()
+    internal AttachmentTextExtractionOptions ToExtractionOptions(int maxPicturesPerAttachment = 0) => new()
     {
+        MaxPicturesPerAttachment = maxPicturesPerAttachment,
         Formats = this.Formats.Count == 0 ? AttachmentDocumentFormats.Extracted : [.. this.Formats],
         MaxInputOctets = this.MaxInputOctets,
         MaxExtractedTextCharacters = this.MaxExtractedTextCharacters,

@@ -20,6 +20,7 @@
     <!-- The contact mapping writes the book a row belongs to, and a book is a user's or a mail account's, so its
          tests name the same users and accounts every other suite arranges. -->
     <Compile Include="..\shared\SyntheticUser.cs" Link="SyntheticUser.cs" />
+    <Compile Include="..\shared\SyntheticImages.cs" Link="SyntheticImages.cs" />
     <Compile Include="..\shared\SyntheticMailAccount.cs" Link="SyntheticMailAccount.cs" />
     <Compile Include="..\shared\FixedSensitiveContentPostures.cs" Link="FixedSensitiveContentPostures.cs" />
     <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />

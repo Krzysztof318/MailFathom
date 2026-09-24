@@ -42,6 +42,147 @@ public sealed class DerivedAttachmentTextTests
     }
 
     /// <summary>
+    /// A transcription of a picture inside a document is the document's own words, so it lands at the end of the page it
+    /// was found on and every later page boundary moves past it.
+    /// </summary>
+    [Fact]
+    public void FromExtraction_APictureTranscribedOnAnEarlierPage_JoinsThatPageAndMovesTheLaterBoundaries()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText(
+            "First page.\nSecond page.\n",
+            PageCount: 2,
+            PagesWithoutText: [],
+            Segments: [Page(1, 0), Page(2, 12)]);
+        EmbeddedPictureReading[] pictures =
+        [
+            new(1, ImageAttachmentDescription.Transcribed("Invoice FV/0417")),
+        ];
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "report.pdf",
+            AttachmentTextExtractionResult.Extracted(extracted),
+            pictures);
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.Document, derived.Kind);
+        Assert.Equal("First page.\nInvoice FV/0417\nSecond page.\n", derived.Text);
+        Assert.Equal([0, 28], derived.Segments.Select(segment => segment.StartOffset));
+        Assert.True(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>
+    /// A scanned PDF has no text layer, so what its page images were read as is the whole of its words — and it is
+    /// still a document, searched by those words.
+    /// </summary>
+    [Fact]
+    public void FromExtraction_ADocumentWithNoTextLayerWhosePagesWereTranscribed_IsADocumentOfThoseWords()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText(
+            string.Empty,
+            PageCount: 2,
+            PagesWithoutText: [1, 2],
+            Segments: [Page(1, 0), Page(2, 0)]);
+        EmbeddedPictureReading[] pictures =
+        [
+            new(1, ImageAttachmentDescription.Transcribed("Page one words")),
+            new(2, ImageAttachmentDescription.Transcribed("Page two words")),
+        ];
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "scan.pdf",
+            AttachmentTextExtractionResult.Extracted(extracted),
+            pictures);
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.Document, derived.Kind);
+        Assert.Equal("Page one words\nPage two words\n", derived.Text);
+        Assert.Equal([0, 15], derived.Segments.Select(segment => segment.StartOffset));
+    }
+
+    /// <summary>
+    /// Beside written words a description of a picture is dropped, because joining it would put a machine's sentence into
+    /// the lexical index as though somebody had written it.
+    /// </summary>
+    [Fact]
+    public void FromExtraction_ADescribedPictureBesideWrittenWords_IsLeftOut()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText(Contract, 1, [], [Page(1, 0)]);
+        EmbeddedPictureReading[] pictures = [new(1, ImageAttachmentDescription.Described("A company logo."))];
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "lease.docx",
+            AttachmentTextExtractionResult.Extracted(extracted),
+            pictures);
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.Document, derived.Kind);
+        Assert.Equal(Contract, derived.Text);
+    }
+
+    /// <summary>
+    /// A document whose only content is a photograph is a picture, so it is stored as a description and ranks as one,
+    /// under everything anybody wrote.
+    /// </summary>
+    [Fact]
+    public void FromExtraction_ADocumentThatIsOnlyADescribedPicture_IsStoredAsADescription()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText("\n", 1, [1], [Page(1, 0)]);
+        EmbeddedPictureReading[] pictures =
+        [
+            new(1, ImageAttachmentDescription.Described("A red toy car on a wooden floor.")),
+            new(1, ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ImageTooLarge)),
+        ];
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "car.pdf",
+            AttachmentTextExtractionResult.Extracted(extracted),
+            pictures);
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.ImageDescription, derived.Kind);
+        Assert.Equal("Described", derived.Outcome);
+        Assert.Equal("\nA red toy car on a wooden floor.\n", derived.Text);
+        Assert.False(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>
+    /// A picture of a document is somebody's written words, so its transcription is stored as a document and searched
+    /// by those words, ranked with everything written rather than under it.
+    /// </summary>
+    [Fact]
+    public void FromDescription_AnImageThatWasTranscribed_IsADocumentInTheLexicalIndex()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromDescription(
+            2,
+            "image/jpeg",
+            "invoice.jpg",
+            ImageAttachmentDescription.Transcribed("FAKTURA VAT nr FV/2026/09/0417"));
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.Document, derived.Kind);
+        Assert.Equal("Transcribed", derived.Outcome);
+        Assert.Equal("FAKTURA VAT nr FV/2026/09/0417", derived.Text);
+        Assert.True(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>
     /// A user asking why their contract was never searched is owed the reason, so a refusal is a row rather than an
     /// absence — and a row carrying no words reaches neither index.
     /// </summary>

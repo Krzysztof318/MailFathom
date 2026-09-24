@@ -18,7 +18,7 @@ namespace MailFathom.Mcp.Tools.Results;
 /// </remarks>
 internal enum AttachmentMatchSource
 {
-    /// <summary>The words are the file's own, read out of it by a parser.</summary>
+    /// <summary>The words are the file's own, read out of it by a parser or transcribed by a model from a picture of a page.</summary>
     /// <remarks>Searchable by the words themselves as well as by meaning, exactly as a message body is.</remarks>
     Document = 0,
 

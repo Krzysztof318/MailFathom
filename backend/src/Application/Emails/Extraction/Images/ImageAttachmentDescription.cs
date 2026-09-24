@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Emails.Extraction.Images;
 
-/// <summary>What describing one image attachment produced: the words, or the reason there are none.</summary>
+/// <summary>What reading one image attachment produced: a transcription of its words, a description of what it shows, or the reason there are neither.</summary>
 /// <remarks>
 /// <para>
 /// Exactly one of the two is present, and the two factories below are the only way to make one — which is why the
@@ -23,14 +23,24 @@ namespace MailFathom.Application.Emails.Extraction.Images;
 /// </remarks>
 public sealed record ImageAttachmentDescription
 {
-    private ImageAttachmentDescription(string? text, ImageDescriptionRefusal? refusal)
+    private ImageAttachmentDescription(string? text, bool isTranscription, ImageDescriptionRefusal? refusal)
     {
         this.Text = text;
+        this.IsTranscription = isTranscription;
         this.Refusal = refusal;
     }
 
     /// <summary>Gets what the picture shows, or <see langword="null" /> where nothing was described.</summary>
     public string? Text { get; }
+
+    /// <summary>Gets whether <see cref="Text" /> is the words the picture carries rather than an account of what it shows.</summary>
+    /// <remarks>
+    /// The model decides this, and the answer decides where the words are searched: a transcription is what somebody
+    /// wrote, so it is searched as written text, while a description is a machine's sentence about a picture and ranks
+    /// below everything written. Only a result the model explicitly marked as a transcription is one, so an answer that
+    /// ignored the format stays in the lower-ranked place.
+    /// </remarks>
+    public bool IsTranscription { get; }
 
     /// <summary>Gets why nothing was described, or <see langword="null" /> where something was.</summary>
     public ImageDescriptionRefusal? Refusal { get; }
@@ -56,7 +66,18 @@ public sealed record ImageAttachmentDescription
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
 
-        return new ImageAttachmentDescription(text, refusal: null);
+        return new ImageAttachmentDescription(text, isTranscription: false, refusal: null);
+    }
+
+    /// <summary>Carries the words the model read off a picture of a document.</summary>
+    /// <param name="text">The transcription, which is never blank.</param>
+    /// <returns>The transcribed result.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="text" /> is <see langword="null" />, empty, or whitespace.</exception>
+    public static ImageAttachmentDescription Transcribed(string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+
+        return new ImageAttachmentDescription(text, isTranscription: true, refusal: null);
     }
 
     /// <summary>Records why the attachment produced no description.</summary>
@@ -70,6 +91,6 @@ public sealed record ImageAttachmentDescription
             throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "The refusal names no declared reason.");
         }
 
-        return new ImageAttachmentDescription(text: null, refusal);
+        return new ImageAttachmentDescription(text: null, isTranscription: false, refusal);
     }
 }

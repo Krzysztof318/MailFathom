@@ -110,7 +110,7 @@
                       ]
                     },
                     "source": {
-                      "description": "Where the words came from: 'document' when they are the file's own, read out of it by a parser; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote. A claim resting on an imageDescription rests on a guess about an image, and is worth saying so when reporting it.",
+                      "description": "Where the words came from: 'document' when they are the file's own, read out of it by a parser or transcribed by a model from a picture of a page such as a scanned invoice; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote. A claim resting on an imageDescription rests on a guess about an image, and is worth saying so when reporting it.",
                       "enum": [
                         "document",
                         "imageDescription"
@@ -2918,7 +2918,7 @@
                       ]
                     },
                     "source": {
-                      "description": "Where the words came from: 'document' when they are the file's own, read out of it by a parser and searchable both by word and by meaning; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote and which is reachable by meaning alone. A claim resting on an imageDescription rests on a guess about an image.",
+                      "description": "Where the words came from: 'document' when they are the file's own, read out of it by a parser or transcribed by a model from a picture of a page such as a scanned invoice, and searchable both by word and by meaning; 'imageDescription' when they are a model's account of what a picture shows, which nobody wrote and which is reachable by meaning alone. A claim resting on an imageDescription rests on a guess about an image.",
                       "enum": [
                         "document",
                         "imageDescription"

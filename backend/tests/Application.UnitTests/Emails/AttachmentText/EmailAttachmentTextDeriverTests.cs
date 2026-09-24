@@ -594,6 +594,98 @@ public sealed class EmailAttachmentTextDeriverTests
         Assert.True(derived!.IsSettled);
     }
 
+    /// <summary>
+    /// A scanned PDF's page images are read by the same describer an image attachment is, one call each, and every call
+    /// is charged to the description ceiling.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_ADocumentCarryingPictures_ReadsEachPictureAndChargesEveryCall()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "scan.pdf", octets: 4096);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(string.Empty, PageCount: 2, [1, 2], [Page(1, 0), Page(2, 0)])
+                {
+                    Pictures =
+                    [
+                        new EmbeddedAttachmentPicture(1, "image/jpeg", new byte[] { 1 }),
+                        new EmbeddedAttachmentPicture(2, "image/jpeg", new byte[] { 2 }),
+                    ],
+                }));
+        this.describer
+            .DescribeAsync("image/jpeg", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(
+                ImageAttachmentDescription.Transcribed("FAKTURA VAT nr FV/2026/09/0417"),
+                ImageAttachmentDescription.Transcribed("Razem do zapłaty: 1 845,60 zł"));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(derived.Attachments);
+        Assert.Equal(AttachmentTextKind.Document, attachment.Kind);
+        Assert.Equal("FAKTURA VAT nr FV/2026/09/0417\nRazem do zapłaty: 1 845,60 zł\n", attachment.Text);
+        Assert.Equal(2, derived.ProviderDescriptionCount);
+        Assert.True(derived.IsSettled);
+    }
+
+    /// <summary>
+    /// A picture inside a document the provider did not answer this time keeps the message outstanding, so the scanned
+    /// page is read again rather than settled as though it held nothing.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_APictureInsideADocumentTheProviderMayAnswerLater_LeavesTheMessageUnsettled()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "scan.pdf", octets: 4096);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])
+                {
+                    Pictures = [new EmbeddedAttachmentPicture(1, "image/jpeg", new byte[] { 1 })],
+                }));
+        this.describer
+            .DescribeAsync("image/jpeg", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ProviderUnavailable));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(derived.Attachments);
+        Assert.Equal(Contract, attachment.Text);
+        Assert.False(derived.IsSettled);
+    }
+
+    /// <summary>An image attachment the model transcribed is stored as written words, searched as a document is.</summary>
+    [Fact]
+    public async Task DeriveAsync_AnImageTheModelTranscribed_IsStoredAsADocument()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "image/jpeg", "invoice.jpg", octets: 4096);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.FormatNotRecognized());
+        this.describer
+            .DescribeAsync("image/jpeg", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ImageAttachmentDescription.Transcribed("FAKTURA VAT nr FV/2026/09/0417"));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(derived.Attachments);
+        Assert.Equal(AttachmentTextKind.Document, attachment.Kind);
+        Assert.True(attachment.BelongsInLexicalIndex);
+        Assert.Equal(1, derived.ProviderDescriptionCount);
+    }
+
     /// <summary>Nothing can be derived from arguments that are not there.</summary>
     [Fact]
     public async Task DeriveAsync_MissingArgument_IsRefused()

@@ -106,4 +106,14 @@ public sealed class AttachmentTextExtractionOptions
     /// which is why those are not optional, and for a PDF it is <see cref="MaxInputOctets" /> alone.
     /// </remarks>
     public TimeSpan Timeout { get; init; } = DefaultTimeout;
+
+    /// <summary>Gets how many of the pictures inside one document are copied out for a model to read.</summary>
+    /// <remarks>
+    /// Zero, which reads none, unless the deployment turned image description on — the pictures in a document are
+    /// sent exactly where an image attachment would be. Every picture copied out is one chat call, and the aggregate
+    /// description ceiling is checked before a message rather than inside one, so this is what bounds how far one
+    /// message may run past that ceiling. A picture too small to carry a page and a copy of one already taken are not
+    /// counted, so a letterhead repeated on every page cannot use up the allowance before the scanned page is reached.
+    /// </remarks>
+    public int MaxPicturesPerAttachment { get; init; }
 }

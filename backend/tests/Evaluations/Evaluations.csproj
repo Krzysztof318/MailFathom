@@ -33,6 +33,7 @@
     <!-- The images the describer is shown, which the corpus has none of: drawn for this suite from shapes and text alone,
          so they show nobody real and no real document. -->
     <None Include="Descriptions\Images\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Descriptions\Images\*.jpg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
