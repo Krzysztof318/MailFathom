@@ -170,7 +170,10 @@ internal sealed record DiscoveryCompositionScenario(
             "DiscoveryComposition.NamesWhoDoesWhatInALongThread",
             "Who activates the fibre line for our floor at Kestrel Quay, and when?",
             DiscoveryIntent.FindFact,
-            "fibre line",
+
+            // The activation is written in the passive, so who does it is the sentence before it: "I look after the
+            // network at Kestrel Quay". A lookup of "fibre line" alone cuts the extract after that sentence.
+            "fibre line network",
             ["27 August 2026"],
             MinimumRelevance: 4,
             MinimumGroundedness: 4),
@@ -399,11 +402,14 @@ internal sealed record DiscoveryCompositionScenario(
             this.AnswersIn is MailAccountLanguage.Polish ? UserLanguage.Polish : UserLanguage.English);
 
         // The judge is shown the result a person would read, against the question they asked and the extracts it was
-        // composed from, so it grades what the reading kept rather than a source name the reading dropped.
+        // composed from, so it grades what the reading kept rather than a source name the reading dropped. The extracts
+        // are the turn's own, headers included: the model is told to date an event by the day its message arrived, and
+        // a judge shown the bare extracts reads that year as a detail nothing supports.
+        var firstSource = turn.IndexOf("\n[", StringComparison.Ordinal);
         var verdict = await scenarioRun.EvaluateAsync(
             [new ChatMessage(ChatRole.User, this.Question)],
             new ChatResponse(new ChatMessage(ChatRole.Assistant, Rendered(result.Blocks[0]))) { ModelId = modelName },
-            [new GroundednessEvaluatorContext(string.Join("\n\n", sources.Select(static source => source.Extract)))],
+            [new GroundednessEvaluatorContext(firstSource < 0 ? turn : turn[(firstSource + 1)..])],
             cancellationToken);
 
         this.HoldRatings(verdict);

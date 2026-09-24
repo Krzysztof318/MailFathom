@@ -83,6 +83,19 @@ public sealed class MailAnsweringInstructionsTests
         Assert.Contains("A quotation never stands in for the answer", Instruction, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A later message correcting a date seldom repeats the words the first was found by, so an answer that stops at the
+    /// first lookup reports the date that was withdrawn.
+    /// </summary>
+    [Fact]
+    public void Text_TheInstruction_LooksAgainInTheConversationForALaterCorrection()
+    {
+        // Assert
+        Assert.Contains("may be changed by a later message of the same conversation", Instruction, StringComparison.Ordinal);
+        Assert.Contains("in the subject filter", Instruction, StringComparison.Ordinal);
+        Assert.Contains("answer from the latest message that settles it", Instruction, StringComparison.Ordinal);
+    }
+
     /// <summary>A citation shortened to its first characters names no message, so the claim beside it cannot be checked.</summary>
     [Fact]
     public void Text_TheInstruction_AsksForTheCitedIdentifierInFull()

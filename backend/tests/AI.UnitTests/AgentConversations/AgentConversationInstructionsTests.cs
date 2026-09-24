@@ -34,6 +34,18 @@ public sealed class AgentConversationInstructionsTests
         Assert.Contains("a time on the 24-hour clock", text, StringComparison.Ordinal);
     }
 
+    /// <summary>A later message correcting a date seldom repeats the words the first was found by, so the Agent reads the whole conversation first.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_ReadsTheConversationForALaterCorrection()
+    {
+        // Act
+        var text = string.Join(' ', AgentConversationInstructions.TextFor(UserLanguage.English).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("may be changed by a later message of the same conversation", text, StringComparison.Ordinal);
+        Assert.Contains("read the conversation that message belongs to and answer from the latest message that settles it", text, StringComparison.Ordinal);
+    }
+
     /// <summary>A quotation keeps the mail's language, so an answer that is only a quotation is not written in the person's.</summary>
     [Fact]
     public void TextFor_EveryLanguage_FramesAQuotationInThatLanguage()

@@ -153,6 +153,11 @@ half bridges the gap depends on the declared embedding model, which a deployment
 worded every lookup in the question's language would therefore report a mailbox that plainly holds the answer as one
 that does not. [Email search](email-search.md) documents the ranking itself.
 
+**An answer resting on a date, a place, a figure, or a person looks for a later correction first.** A later message of
+the same conversation may change what the first one said, and seldom repeats the words the first was found by, so the
+instruction asks for one more lookup with that message's subject in the subject filter and a word or two of the matter,
+and for the answer to come from the latest message that settles it.
+
 **An answer is written in the language the question was asked in**, whatever language the mail it rests on was written
 in. What the answer quotes from mail — a subject, a name, the phrase a claim rests on — keeps its own wording, with a
 rendering into the question's language beside it where the claim turns on what those words mean. A quotation never

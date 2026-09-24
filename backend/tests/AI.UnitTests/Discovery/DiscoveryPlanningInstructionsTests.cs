@@ -71,7 +71,8 @@ public sealed class DiscoveryPlanningInstructionsTests
         var text = DiscoveryPlanningInstructions.Text.ReplaceLineEndings(" ");
 
         // Assert
-        Assert.Contains("leave such words out of at least one lookup", text, StringComparison.Ordinal);
+        Assert.Contains("the last lookup is always the name alone", text, StringComparison.Ordinal);
+        Assert.Contains("with no other word beside it", text, StringComparison.Ordinal);
         Assert.Contains("let one lookup also carry the word the answer itself stands beside", text, StringComparison.Ordinal);
     }
 

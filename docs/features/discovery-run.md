@@ -49,7 +49,9 @@ The searches the model proposes are a plan, not commands. Each becomes an ordina
 against the same retrieval the rest of the system uses. The model never sees what a lookup found and nothing is searched
 again, so it is told how the words of a lookup are matched — every word required, none stemmed — and asked for several
 lookups of two or three distinctive words each, the most distinctive first, rather than one lookup restating the
-question. The plan is bounded before it runs:
+question. Because every word is required, the last lookup is always the name alone — the product, the person, the place,
+or the code the question is about, with no other word — so a message that puts the rest of the question in words the
+question did not use is still reached. The plan is bounded before it runs:
 
 - **At most six lookups.** More than that is a model misjudging a question rather than a question that needs them, so
   the surplus is dropped and the first six run.

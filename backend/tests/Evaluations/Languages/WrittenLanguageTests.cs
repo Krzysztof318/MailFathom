@@ -45,6 +45,8 @@ public sealed class WrittenLanguageTests
     [InlineData("We will pay the whole amount by Friday.", MailAccountLanguage.Polish, false)]
     [InlineData("Invoice FV/2026/08/117", MailAccountLanguage.Polish, true)]
     [InlineData("Invoice FV/2026/08/117 GDA-2291 IC 5310 RaportPro Gdańsk Wrzosowa Kamionka", MailAccountLanguage.Polish, false)]
+    [InlineData("LumenDesk pokazał komunikat: „Export failed: response payload exceeded the permitted buffer size.”", MailAccountLanguage.Polish, true)]
+    [InlineData("„Export failed: response payload exceeded the permitted buffer size and it was not retried.”", MailAccountLanguage.Polish, false)]
     public void Shortfall_AText_NamesAMissOnlyWhereTheTextIsDecidedOtherwiseOrLongEnoughToHaveBeen(
         string text,
         MailAccountLanguage expected,

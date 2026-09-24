@@ -160,12 +160,22 @@ internal static class ReplyDraftInstructions
 
         if (turn.StyleSamples.Count > 0)
         {
-            text.Append("How this person writes, from their own recent messages\n\n");
+            text.Append("How this person writes, from their own recent messages, for tone and length rather than language\n\n");
 
             foreach (var sample in turn.StyleSamples)
             {
                 text.Append(CultureInfo.InvariantCulture, $"{sample}\n\n");
             }
+        }
+
+        // Said last because the person's ask and their own samples come after the conversation and may be in another
+        // language, and a model weighs what it read most recently: a Polish ask about an English exchange was drafted in
+        // Polish until the turn itself closed on which language the reply is in.
+        if (turn.Messages.Count > 0)
+        {
+            text.Append(
+                "Write the reply in the language the conversation above is written in, whatever language the ask and the "
+                + "samples are in, unless the ask names a language for it.\n");
         }
 
         return text.ToString();
