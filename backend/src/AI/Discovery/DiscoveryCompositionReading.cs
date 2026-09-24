@@ -423,15 +423,16 @@ internal static class DiscoveryCompositionReading
         return limitations;
     }
 
-    /// <summary>Names the sources the answer rests on: the ones it listed, or where it listed none, the ones its own parts cite.</summary>
+    /// <summary>Names the sources the answer rests on: the ones it listed, or where it left the list out, the ones its own parts cite.</summary>
     /// <remarks>
     /// A model filling in events, rows, or the sides of a disagreement cites a source for each of them, and one doing so
     /// has said which extracts the answer rests on even where it left the answer's own list out. Reading that as resting
     /// on nothing would replace a cited answer with the sentence saying the mail does not answer — a false statement
-    /// about the run rather than the honest absence that sentence is for.
+    /// about the run rather than the honest absence that sentence is for. An empty list is not left out: it is how the
+    /// instruction asks a model to say the extracts do not answer, and what its parts cite does not overrule that.
     /// </remarks>
     private static IReadOnlyList<string>? SourcesRestedOn(DiscoveryResultDocument? document) =>
-        document?.Sources is { Count: > 0 } listed
+        document?.Sources is { } listed
             ? listed
             :
             [

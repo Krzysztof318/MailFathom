@@ -32,14 +32,16 @@ public sealed record RetrievalPlan
     public const int MaximumLookups = 6;
 
     /// <summary>
-    /// How many passages every lookup may hand over, whatever number of passages the plan called enough, where what one
-    /// retrieval returns holds that many for each lookup.
+    /// How many messages every lookup may hand over passages of, whatever number of passages the plan called enough,
+    /// where what one retrieval returns holds that many for each lookup.
     /// </summary>
     /// <remarks>
     /// A plan writes several wordings because it cannot know which one the mail uses, and the one that does rarely
     /// ranks the evidence first: the other messages sharing its words come before it. A model's judgement of how many
     /// extracts would answer is routinely one, which on its own would hand over the first lookup's best passage and
     /// never run the rest. Four is where the evaluation corpus stops losing evidence that a lookup of the plan reached.
+    /// A lookup's cut of a message an earlier lookup already handed over takes none of the four, since it adds no
+    /// message to answer from.
     /// Neither bound a run keeps to comes from this number: <see cref="PassageAllowance" /> caps it at what one
     /// retrieval returns, and the run's own ledger stops admitting passages at the characters one question may
     /// retrieve, whatever the allowance still has room for.

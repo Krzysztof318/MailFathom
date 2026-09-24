@@ -105,6 +105,6 @@ internal static partial class WrittenLanguage
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex Word();
 
-    [GeneratedRegex("[\"“„«][^\"“”„«»]*[\"”“»]")]
+    [GeneratedRegex("[\"“„«][^\"“”„«»]*[\"”»]")]
     private static partial Regex Quotation();
 }

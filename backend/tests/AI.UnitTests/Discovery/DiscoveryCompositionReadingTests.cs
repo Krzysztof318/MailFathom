@@ -135,6 +135,33 @@ public sealed class DiscoveryCompositionReadingTests
         Assert.Equal(["s2", "s1"], block.Evidence.Citations.Select(citation => citation.Value));
     }
 
+    /// <summary>
+    /// An empty list is how a model says the extracts do not answer, so a citation it still put on an event does not turn
+    /// the answer into one resting on the mail.
+    /// </summary>
+    [Fact]
+    public void Read_EventsCitingSourcesBesideAnEmptyListOfTheAnswersOwn_SaysTheMailDoesNotAnswer()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "answer": "The move was probably set for 29 August.",
+              "sources": [],
+              "events": [
+                { "occurredAt": "2026-08-29", "summary": "Move set for Saturday", "subject": "Move", "sources": ["s2"] }
+              ]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.TrackChange, Sources("the move is on Sunday", "the move is on Saturday"));
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationSupport.Unsupported, block.Evidence.Support);
+        Assert.Empty(block.Evidence.Citations);
+    }
+
     /// <summary>A model that wrote prose, or nothing at all, still produces a result over the mail the run read.</summary>
     [Theory]
     [InlineData(null)]

@@ -157,8 +157,9 @@ mail it names rather than from mail a reader has no way to reach.
   [the presentation plan](presentation-plan.md#what-the-correspondence-does-for-a-block) fixes. An answer resting on
   nothing carries a sentence about the run rather than the model's own prose, because an unsupported block's prose
   would be exactly the sentence nobody wrote; it is the service's own sentence, so it is written in the language the
-  person asking reads. An answer that lists no sources of its own rests on the ones its events, rows, or sides cite,
-  because a model that cited a source for each of them has said what the answer rests on.
+  person asking reads. An answer that leaves its own source list out rests on the ones its events, rows, or sides
+  cite, because a model that cited a source for each of them has said what the answer rests on. An empty list is not
+  left out: it is how the model says the extracts do not answer, and a citation on an event does not overrule it.
 - **The disagreement is kept as a disagreement.** Where the model reports two or more sides, each naming sources it was
   actually offered, the block carries every side with its own citations rather than one figure the run chose. A later
   message correcting or withdrawing an earlier one is not a disagreement: the model is told to answer with the
