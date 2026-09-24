@@ -195,8 +195,8 @@
          CycleDetection, and System.ValueTuple. Seven packages for one test project is the whole cost of the
          mechanism, and THIRD_PARTY_LICENSES.md records every one of them. -->
     <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
-    <PackageVersion Include="xRetry.v3" Version="1.0.0-rc3" />
-    <PackageVersion Include="xunit.analyzers" Version="1.27.0" />
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
+    <PackageVersion Include="xRetry.v3" Version="1.0.0" />
+    <PackageVersion Include="xunit.analyzers" Version="2.1.0" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
   </ItemGroup>
 </Project>

@@ -15,39 +15,30 @@ namespace MailFathom.Evaluations.Answering;
 /// <remarks>Shaped like <see cref="AgentConversations.AgentConversationEvaluations" />, for the reasons it gives.</remarks>
 public sealed class MailAnsweringEvaluations
 {
-    /// <summary>How many questions are asked at once.</summary>
-    /// <remarks>Bounded by what a provider's rate limit is expected to take, for the reason the Agent's evaluation gives.</remarks>
-    private const int ConcurrentQuestions = 8;
-
     /// <summary>Gets whether an evaluation run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool EvaluationsRequested => AiEvaluationRun.Requested;
 
-    [Fact(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
-    public async Task Answer_EveryScenario_EveryDeclaredModelAnswersFromTheMailItRetrieved()
+    /// <summary>Gets every case, by the name it is filed under.</summary>
+    public static TheoryData<string> Cases { get; } = new(MailAnsweringScenario.All.Select(static scenario => scenario.Name));
+
+    [Theory(Skip = AiEvaluationRun.SkipReason, SkipUnless = nameof(EvaluationsRequested))]
+    [MemberData(nameof(Cases))]
+    public async Task Answer_AQuestion_EveryDeclaredModelAnswersFromTheMailItRetrieved(string caseName)
     {
         // Arrange
+        var scenario = MailAnsweringScenario.All.Single(candidate => candidate.Name == caseName);
         var judge = JudgeDeclaration.Read();
         var apiKey = EvaluationEndpoint.ApiKey();
         var repetitions = EvaluationRepetitions.Declared();
-        var models = ModelsUnderTest.For(ChatCapability.MailAnswering);
-        var scenarios = MailAnsweringScenario.All;
-        var shortfalls = new IReadOnlyList<string>[scenarios.Count];
+        var cancellationToken = TestContext.Current.CancellationToken;
 
         // Act
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, scenarios.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = ConcurrentQuestions, CancellationToken = TestContext.Current.CancellationToken },
-            async (index, cancellationToken) =>
-            {
-                var modelShortfalls = await Task.WhenAll(
-                    [.. models.Select(model => MeasureAsync(scenarios[index], judge, model, apiKey, repetitions, cancellationToken))]);
-
-                shortfalls[index] = [.. modelShortfalls.SelectMany(static modelShortfall => modelShortfall)];
-            });
+        var shortfalls = await Task.WhenAll(
+            [.. ModelsUnderTest.For(ChatCapability.MailAnswering).Select(model => MeasureAsync(scenario, judge, model, apiKey, repetitions, cancellationToken))]);
 
         // Assert
-        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static questionShortfalls => questionShortfalls));
+        AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Puts one question to one model and names what it fell short on.</summary>
