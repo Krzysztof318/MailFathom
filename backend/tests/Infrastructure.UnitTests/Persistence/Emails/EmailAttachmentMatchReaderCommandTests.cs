@@ -39,6 +39,22 @@ public sealed class EmailAttachmentMatchReaderCommandTests
         Assert.DoesNotContain("DROP TABLE", CommandBody(command), StringComparison.Ordinal);
     }
 
+    /// <summary>A file carrying an excluded term yields no passage, and the term reaches the command as a parameter.</summary>
+    [Fact]
+    public void MatchedPassagesQuery_AnyWordQueryExcludingATerm_ReadsTheExclusionAsAParameter()
+    {
+        // Arrange
+        var queryText = EmailSearchQueryText.Create("invoice -\"'; DROP TABLE x; --\"").MatchedUnder(EmailSearchRetrievalMode.Lexical);
+
+        // Act
+        var command = GeneratedMatchedCommand(queryText);
+
+        // Assert
+        Assert.Contains(queryText.ExcludedText!, ParameterDeclarations(command), StringComparison.Ordinal);
+        Assert.DoesNotContain("DROP TABLE", CommandBody(command), StringComparison.Ordinal);
+        Assert.Contains("NOT (", CommandBody(command), StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The file-level vector is what narrows the walk to the attachments a query could be in, so the passages of every
     /// other file are never matched one by one. A statement that reached the chunks first would read every passage of

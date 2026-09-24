@@ -62,7 +62,7 @@ were written by somebody, so it is stored as a document's text and matched and r
 
 **Both halves are read.** A document's own words take part in the lexical ranking on the same terms the body does — a
 message is eligible when either its own vector or one of its attachments' matches, and its rank is the message's own
-`ts_rank` plus the greatest of its matching attachments' — and they take part in the semantic ranking through the
+rank plus the greatest of its matching attachments' — and they take part in the semantic ranking through the
 passages cut from them. A word that occurs only inside a PDF therefore finds the message it was attached to, and the
 result says which file it was found in and where inside it. A picture's description takes part in the semantic half
 alone, by the exclusion above, and never improves a message's place: [Hybrid retrieval](#hybrid-retrieval) records the
@@ -127,9 +127,21 @@ narrows which emails are eligible; the query text is what the eligible ones are 
 - **The text is bounded at 512 characters** and a control character is refused, for the reason a subject fragment's is:
   PostgreSQL text cannot hold a zero byte, so a query carrying one would surface as a provider exception rather than as
   the stable failure this boundary publishes.
-- **Nothing else is interpreted.** The text reaches PostgreSQL as one parameter and `websearch_to_tsquery` parses it
-  there, so quoted phrases, `OR`, and a leading `-` are operators that function understands and every other
-  metacharacter is ordinary text. Nothing at any point concatenates the value into SQL.
+- **How many of its words must match follows from how the search ranks.** Where the lexical ranking is the whole
+  answer — a deployment serving no embedding profile — any word or quoted phrase of the query matches, and `ts_rank_cd`
+  orders what matched, so a message carrying more of the words, and carrying them closer together, ranks higher. Where
+  it is one half of a [hybrid](#hybrid-retrieval) ranking every word is required, as `websearch_to_tsquery` reads the
+  text as written, and `ts_rank` orders what matched: the semantic half already reaches mail that carries only some of
+  the words, and letting the lexical half match any of them pulls mail that shares one common word into the fusion.
+  The PostgreSQL retrieval evaluation measured both, and each mode reads the lexical ranking the way that measured
+  best for it. The extracts and the attachment passages are cut around the same words the ranking matched.
+- **Operators keep their meaning under either reading.** Quoted phrases, `OR`, and a leading `-` are what
+  `websearch_to_tsquery` understands, and every other metacharacter is ordinary text. Where any word matches, the text
+  is split into its words, its quoted phrases, and its excluded terms first: the words and phrases are rejoined with
+  `or`, and the excluded terms are matched as a second query that a document must not match, because
+  `websearch_to_tsquery` binds a minus to the neighbouring word rather than to the whole query. A query that only
+  excludes is matched as written. Every part still reaches PostgreSQL as a parameter, and nothing at any point
+  concatenates the value into SQL.
 - **Query text is never logged**, and no failure message repeats it. What somebody is searching their own mailbox for is
   personal data of a particularly revealing kind.
 
@@ -155,7 +167,7 @@ rather than closing a window, and refuses a page size outside the range the same
 `EmailSearchMatch` pairs the `EmailSummary` a listing would show with two values that exist only for the query that
 produced them, and `SearchEmailsResult` adds the retrieval mode the whole window was ranked by.
 
-- **The relevance rank** is the score of the ranking that produced the window: PostgreSQL's `ts_rank` under lexical
+- **The relevance rank** is the score of the ranking that produced the window: PostgreSQL's `ts_rank_cd` under lexical
   retrieval, a fused rank score under hybrid. It is comparable within one result set and means nothing across two, and
   the two scales are unrelated — reading it without reading the mode says nothing.
 - **The snippets** are extracts of the body text around the matched words, each matched run wrapped in `**`.

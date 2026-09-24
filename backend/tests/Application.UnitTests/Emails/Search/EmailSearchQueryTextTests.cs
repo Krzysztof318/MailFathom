@@ -90,6 +90,68 @@ public sealed class EmailSearchQueryTextTests
         Assert.Equal("invoice", queryText.Value);
     }
 
+    [Fact]
+    public void Create_AnyText_RequiresEveryWordAsWritten()
+    {
+        // Act
+        var queryText = EmailSearchQueryText.Create("invoice -draft");
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.EveryWord, queryText.WordMatching);
+        Assert.Equal("invoice -draft", queryText.MatchedText);
+        Assert.Null(queryText.ExcludedText);
+    }
+
+    /// <summary>The lexical half of a fusion stays precise, because the semantic half already reaches what every word misses.</summary>
+    [Fact]
+    public void MatchedUnder_HybridRetrieval_RequiresEveryWordAsWritten()
+    {
+        // Act
+        var queryText = EmailSearchQueryText.Create("kestrel \"quay move\" -draft").MatchedUnder(EmailSearchRetrievalMode.Hybrid);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.EveryWord, queryText.WordMatching);
+        Assert.Equal("kestrel \"quay move\" -draft", queryText.MatchedText);
+        Assert.Null(queryText.ExcludedText);
+    }
+
+    /// <summary>A phrase stays one term and an exclusion stays an exclusion, while every other word becomes enough on its own.</summary>
+    [Theory]
+    [InlineData("quarterly invoice", "quarterly or invoice", null)]
+    [InlineData("\"Suite 310\"  INV-4827", "\"Suite 310\" or INV-4827", null)]
+    [InlineData("Wrzosowa OR Wrzosową or Wrzosowej", "Wrzosowa or Wrzosową or Wrzosowej", null)]
+    [InlineData("invoice -draft", "invoice", "draft")]
+    [InlineData("invoice OR update -or", "invoice or update", "or")]
+    [InlineData("kestrel -\"quay move\" -draft parking", "kestrel or parking", "\"quay move\" or draft")]
+    [InlineData("invoice \"unclosed phrase", "invoice or \"unclosed phrase", null)]
+    [InlineData("invoice - \"\" -", "invoice", null)]
+    public void MatchedUnder_LexicalRetrieval_MatchesAnyWordOrPhraseAndExcludesSeparately(
+        string text,
+        string expectedMatchedText,
+        string? expectedExcludedText)
+    {
+        // Act
+        var queryText = EmailSearchQueryText.Create(text).MatchedUnder(EmailSearchRetrievalMode.Lexical);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.AnyWord, queryText.WordMatching);
+        Assert.Equal(expectedMatchedText, queryText.MatchedText);
+        Assert.Equal(expectedExcludedText, queryText.ExcludedText);
+        Assert.Equal(text, queryText.Value);
+    }
+
+    /// <summary>A query that only excludes has nothing to match any of, so it is matched as written rather than as nothing.</summary>
+    [Fact]
+    public void MatchedUnder_LexicalRetrievalOfAQueryThatOnlyExcludes_MatchesItAsWritten()
+    {
+        // Act
+        var queryText = EmailSearchQueryText.Create("-draft OR").MatchedUnder(EmailSearchRetrievalMode.Lexical);
+
+        // Assert
+        Assert.Equal("-draft OR", queryText.MatchedText);
+        Assert.Null(queryText.ExcludedText);
+    }
+
     /// <summary>What somebody searches their own mailbox for is personal data, so nothing that prints the value shows it.</summary>
     [Fact]
     public void ToString_AnyQuery_RevealsNoneOfTheText()

@@ -4,7 +4,6 @@
 
 using MailFathom.Evaluations.Costing;
 using MailFathom.Evaluations.Providers;
-using MailFathom.Evaluations.Reporting;
 using Xunit;
 
 namespace MailFathom.Evaluations.Retrieval;
@@ -17,7 +16,7 @@ namespace MailFathom.Evaluations.Retrieval;
 /// evaluations; a run naming none skips it rather than failing.
 /// </para>
 /// <para>
-/// The mailbox is stored once and the lexical baseline measured once, because no model decides either; each declared
+/// The mailbox is stored once and the lexical rankings measured once, because no model decides either; each declared
 /// embedding model is then served in turn over the same database and measured alone and fused.
 /// </para>
 /// </remarks>
@@ -47,12 +46,7 @@ public sealed class PostgresRetrievalEvaluations
             cancellationToken);
 
         // Act
-        await PostgresRetrievalScenario.MeasureLexicalAsync(
-            EvaluationStore.OpenUnjudged(PostgresRetrievalScenario.LexicalEvaluators),
-            database,
-            cancellationToken);
-
-        List<string> shortfalls = [];
+        List<string> shortfalls = [.. await PostgresRetrievalScenario.MeasureLexicalAsync(database, cancellationToken)];
 
         // One model after another, because each is served over the same database and a deployment serves one profile.
         foreach (var model in EmbeddingModelsUnderTest.Declared())
@@ -74,19 +68,6 @@ public sealed class PostgresRetrievalEvaluations
 
         using var generator = ProviderEmbeddingGenerator.Open(model, apiKey, modelSpend);
 
-        var verdicts = await PostgresRetrievalScenario.MeasureModelAsync(
-            EvaluationStore.OpenUnjudged(PostgresRetrievalScenario.ModelEvaluators),
-            database,
-            generator,
-            model,
-            modelSpend,
-            cancellationToken);
-
-        return
-        [
-            .. verdicts.Zip([PostgresRetrievalScenario.SemanticName, PostgresRetrievalScenario.HybridName])
-                .SelectMany(filed => EvaluationMetrics.ShortfallsOf(filed.First)
-                    .Select(shortfall => $"{filed.Second} under {model.ReportedName}: {shortfall}")),
-        ];
+        return await PostgresRetrievalScenario.MeasureModelAsync(database, generator, model, modelSpend, cancellationToken);
     }
 }

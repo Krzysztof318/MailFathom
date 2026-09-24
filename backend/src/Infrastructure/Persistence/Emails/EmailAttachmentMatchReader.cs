@@ -112,7 +112,8 @@ internal sealed class EmailAttachmentMatchReader(
         IReadOnlyList<StoredEmailId> rankedEmailIds)
     {
         var configuration = textSearchConfiguration.Value;
-        var text = queryText.Value;
+        var text = queryText.MatchedText;
+        var excluded = queryText.ExcludedText;
         var headlineOptions = SearchHeadlineText.Options(snippetBounds);
         var identities = Identities(rankedEmailIds);
 
@@ -127,6 +128,8 @@ internal sealed class EmailAttachmentMatchReader(
                       where attachment.SearchVector != null
                           && attachment.SearchVector!.Matches(
                               EF.Functions.WebSearchToTsQuery(configuration, text))
+                          && (excluded == null
+                              || !attachment.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(configuration, excluded)))
                       from chunk in email.Chunks
                       where chunk.AttachmentPosition == attachment.AttachmentPosition
                           && EF.Functions.ToTsVector(configuration, chunk.Text)

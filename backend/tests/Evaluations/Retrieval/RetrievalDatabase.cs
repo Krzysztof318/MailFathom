@@ -223,7 +223,7 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
     }
 
     /// <summary>Ranks the mailbox by the full-text index, as a deployment's lexical search ranks it.</summary>
-    /// <param name="queryText">The query, as a person typed it.</param>
+    /// <param name="queryText">The query, matched as the search it stands for matches it.</param>
     /// <param name="limit">How many candidates the ranking hands back.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The candidates, best first.</returns>

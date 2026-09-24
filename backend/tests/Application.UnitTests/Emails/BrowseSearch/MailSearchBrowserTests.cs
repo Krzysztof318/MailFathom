@@ -356,6 +356,38 @@ public sealed class MailSearchBrowserTests
                 .Order(Comparer<StoredEmailId>.Create(ByIdentity)));
     }
 
+    /// <summary>A lexical ranking standing alone reaches mail carrying some of the words, and the extracts are cut around the same words.</summary>
+    [Fact]
+    public async Task SearchPageAsync_ALexicalInstance_MatchesAnyWordOfTheQuery()
+    {
+        // Arrange
+        var index = IndexOver(RankedCorpus(2));
+        var browser = BrowserOver(index);
+
+        // Act
+        await browser.SearchPageAsync(RequestFor(Query, pageSize: 1), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.AnyWord, Assert.Single(index.RankedCandidatesCalls).QueryText.WordMatching);
+        Assert.Equal(EmailSearchWordMatching.AnyWord, Assert.Single(index.MatchesCalls).QueryText.WordMatching);
+    }
+
+    /// <summary>The lexical half of a fusion keeps every word required, and the extracts follow it.</summary>
+    [Fact]
+    public async Task SearchPageAsync_AHybridInstance_RequiresEveryWordOfTheQuery()
+    {
+        // Arrange
+        var index = IndexOver(RankedCorpus(2));
+        var browser = BrowserOver(index, semanticSearch: SemanticSearchOver(new InMemoryEmailVectorSearchIndex()));
+
+        // Act
+        await browser.SearchPageAsync(RequestFor(Query, pageSize: 1), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.EveryWord, Assert.Single(index.RankedCandidatesCalls).QueryText.WordMatching);
+        Assert.Equal(EmailSearchWordMatching.EveryWord, Assert.Single(index.MatchesCalls).QueryText.WordMatching);
+    }
+
     /// <summary>Both rankings reach the list's whole depth, which is what keeps their agreement observable as far down as paging can go.</summary>
     [Fact]
     public async Task SearchPageAsync_AHybridInstance_RanksBothSidesToTheListsWholeDepth()

@@ -40,7 +40,7 @@ internal static class SemanticRetrievalScenario
     private const int TextsPerRequest = 64;
 
     /// <summary>Gets what every run of this scenario is measured on.</summary>
-    public static IReadOnlyList<IEvaluator> Evaluators => [new RetrievalEvaluator(floorsRecall: true)];
+    public static IReadOnlyList<IEvaluator> Evaluators => [new RetrievalEvaluator(RetrievalEvaluator.MinimumRecall)];
 
     /// <summary>Runs the scenario under one model and files the measurement in the run's store.</summary>
     /// <param name="reporting">The run's store, opened without a judge.</param>

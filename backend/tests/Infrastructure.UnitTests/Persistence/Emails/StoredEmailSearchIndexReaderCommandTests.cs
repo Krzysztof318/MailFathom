@@ -91,6 +91,59 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         Assert.Contains("LIMIT", ordering, StringComparison.Ordinal);
     }
 
+    /// <summary>Where any word matches, cover density ranks the messages carrying the query's words close together first.</summary>
+    [Fact]
+    public void RankedHitsQuery_AnyWordQuery_OrdersByCoverDensity()
+    {
+        // Act
+        var command = CommandBody(GeneratedCommand(QueryTextFor("water damage").MatchedUnder(EmailSearchRetrievalMode.Lexical)));
+
+        // Assert
+        var ordering = command[command.IndexOf("ORDER BY", StringComparison.Ordinal)..];
+
+        Assert.Contains("ts_rank_cd", ordering, StringComparison.Ordinal);
+    }
+
+    /// <summary>Where every word is required, every candidate carries all of them and ts_rank orders them as before.</summary>
+    [Fact]
+    public void RankedHitsQuery_EveryWordQuery_RanksWithoutCoverDensity()
+    {
+        // Act
+        var command = CommandBody(GeneratedCommand(QueryTextFor("water damage").MatchedUnder(EmailSearchRetrievalMode.Hybrid)));
+
+        // Assert
+        Assert.Contains("ts_rank", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("ts_rank_cd", command, StringComparison.Ordinal);
+    }
+
+    /// <summary>An excluded term travels as a parameter of its own, so splitting the query opened no path into the command.</summary>
+    [Fact]
+    public void RankedHitsQuery_AnyWordQueryExcludingATerm_ReadsTheExclusionAsAParameter()
+    {
+        // Arrange
+        var queryText = QueryTextFor($"invoice -\"{HostileQueryText.Replace("\"", string.Empty, StringComparison.Ordinal)}\"")
+            .MatchedUnder(EmailSearchRetrievalMode.Lexical);
+
+        // Act
+        var command = GeneratedCommand(queryText);
+
+        // Assert
+        Assert.Contains(queryText.ExcludedText!, ParameterDeclarations(command), StringComparison.Ordinal);
+        Assert.DoesNotContain("DROP TABLE", CommandBody(command), StringComparison.Ordinal);
+        Assert.Contains("NOT (", CommandBody(command), StringComparison.Ordinal);
+    }
+
+    /// <summary>A query excluding nothing sends no exclusion, so websearch_to_tsquery never parses an empty text.</summary>
+    [Fact]
+    public void RankedHitsQuery_AnyWordQueryExcludingNothing_SendsNoExclusion()
+    {
+        // Act
+        var command = CommandBody(GeneratedCommand(QueryTextFor("water damage").MatchedUnder(EmailSearchRetrievalMode.Lexical)));
+
+        // Assert
+        Assert.DoesNotContain("NOT (", command, StringComparison.Ordinal);
+    }
+
     /// <summary>The ranking query reads no body at all: it decides an order, and an order needs no extract.</summary>
     [Fact]
     public void RankedHitsQuery_AnyQuery_CutsNoExtractAndReadsNoBodyText()

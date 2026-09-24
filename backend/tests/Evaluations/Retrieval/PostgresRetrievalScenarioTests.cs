@@ -23,10 +23,20 @@ public sealed class PostgresRetrievalScenarioTests
     }
 
     [Fact]
-    public async Task LexicalEvaluators_ARankingReachingNoEvidence_ReportsItWithoutFailing()
+    public void All_EveryKeywordQuery_IsAQueryTheLexicalSearchAccepts()
     {
         // Act
-        var verdict = await EvaluateAsync(PostgresRetrievalScenario.LexicalEvaluators, NothingReached());
+        var queries = RetrievalCases.All.Select(static retrievalCase => EmailSearchQueryText.Create(retrievalCase.Keywords)).ToArray();
+
+        // Assert
+        Assert.Equal(RetrievalCases.All.Count, queries.Length);
+    }
+
+    [Fact]
+    public async Task UnflooredEvaluators_ARankingReachingNoEvidence_ReportsItWithoutFailing()
+    {
+        // Act
+        var verdict = await EvaluateAsync(PostgresRetrievalScenario.UnflooredEvaluators, NothingReached());
 
         // Assert
         Assert.Equal(0, verdict.Get<NumericMetric>(RetrievalEvaluator.RecallMetricName(RetrievalEvaluator.FlooredDepth)).Value);
@@ -34,10 +44,10 @@ public sealed class PostgresRetrievalScenarioTests
     }
 
     [Fact]
-    public async Task ModelEvaluators_ARankingReachingNoEvidence_FailsTheRecallFloor()
+    public async Task FlooredEvaluators_ARankingReachingNoEvidence_FailsTheRecallFloor()
     {
         // Act
-        var verdict = await EvaluateAsync(PostgresRetrievalScenario.ModelEvaluators, NothingReached());
+        var verdict = await EvaluateAsync(PostgresRetrievalScenario.FlooredEvaluators, NothingReached());
 
         // Assert
         var recall = verdict.Get<NumericMetric>(RetrievalEvaluator.RecallMetricName(RetrievalEvaluator.FlooredDepth));

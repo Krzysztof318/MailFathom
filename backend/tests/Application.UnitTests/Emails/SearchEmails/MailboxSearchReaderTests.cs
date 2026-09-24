@@ -365,6 +365,40 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal(EmailSearchResultLimit.DefaultValue, Assert.Single(index.RankedCandidatesCalls).Limit);
     }
 
+    /// <summary>A lexical ranking standing alone reaches mail carrying some of the words, and the extracts are cut around the same words.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_NoEmbeddingProviderConfigured_MatchesAnyWordOfTheQuery()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly));
+        var reader = ReaderOver(index);
+
+        // Act
+        await reader.SearchEmailsAsync(RequestFor("water damage"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.AnyWord, Assert.Single(index.RankedCandidatesCalls).QueryText.WordMatching);
+        Assert.Equal(EmailSearchWordMatching.AnyWord, Assert.Single(index.MatchesCalls).QueryText.WordMatching);
+    }
+
+    /// <summary>The lexical half of a fusion keeps every word required, and the extracts follow it.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_HybridRetrieval_RequiresEveryWordOfTheQuery()
+    {
+        // Arrange
+        var email = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(email);
+        var vectorIndex = new InMemoryEmailVectorSearchIndex().With(email, distance: 0.1f);
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        await reader.SearchEmailsAsync(RequestFor("water damage"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchWordMatching.EveryWord, Assert.Single(index.RankedCandidatesCalls).QueryText.WordMatching);
+        Assert.Equal(EmailSearchWordMatching.EveryWord, Assert.Single(index.MatchesCalls).QueryText.WordMatching);
+    }
+
     /// <summary>Mail whose words the query never used is unreachable lexically, which is the whole point of the second ranking.</summary>
     [Fact]
     public async Task SearchEmailsAsync_ActiveProfile_ReturnsMailTheLexicalRankingNeverMatched()
