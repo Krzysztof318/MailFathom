@@ -72,7 +72,9 @@ that from, and no mailbox either, the one it will be sent from being a choice no
 [the language the person writing it reads](../operations/configuration-sources.md#the-language-this-person-reads--language).
 An instruction asking for a particular language outranks both, being the one thing the person said about the message
 themselves. The language the request happens to be written in is not such an instruction: somebody asking in Polish for
-a reply to an English exchange gets an English reply.
+a reply to an English exchange gets an English reply. The turn closes on that rule, after the request and the writer's
+own recent messages, which it labels as showing tone and length rather than language: both come after the exchange and
+may be in the writer's language, and a model otherwise drafts in whichever language it read last.
 
 ## What reaches the provider, and what does not
 

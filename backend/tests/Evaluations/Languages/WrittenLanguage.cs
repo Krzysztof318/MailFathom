@@ -54,7 +54,7 @@ internal static partial class WrittenLanguage
     /// quotations is too little to, so a quotation standing alone is still read as the language it is in.
     /// </remarks>
     public static MailAccountLanguage? Of(string? text) =>
-        Decided(WordsOf(Quotation().Replace(text ?? string.Empty, " "))) ?? Decided(WordsOf(text));
+        Decided(WordsOf(Unquoted(text))) ?? Decided(WordsOf(text));
 
     private static MailAccountLanguage? Decided(List<string> words)
     {
@@ -74,11 +74,16 @@ internal static partial class WrittenLanguage
     /// <param name="text">What a model wrote.</param>
     /// <param name="expected">The language it should be written in.</param>
     /// <returns>What is wrong, or <see langword="null" /> where the text is in that language or too short to tell.</returns>
+    /// <remarks>
+    /// Too short to tell is judged on the words outside quotations, because those are the only ones the instructions
+    /// ask to be in the reader's language: a four-word Polish sentence around a long quoted English error message is
+    /// too short to tell rather than written in neither language.
+    /// </remarks>
     public static string? Shortfall(string? text, MailAccountLanguage expected) => Of(text) switch
     {
         { } found when found == expected => null,
         { } found => $"what it wrote is in {found} rather than {expected}.",
-        null when WordsOf(text).Count < FewestWordsToDecide => null,
+        null when WordsOf(Unquoted(text)).Count < FewestWordsToDecide => null,
         null => $"what it wrote reads as neither English nor Polish throughout, where {expected} was expected.",
     };
 
@@ -98,6 +103,8 @@ internal static partial class WrittenLanguage
             UserLanguage.Polish => MailAccountLanguage.Polish,
             _ => MailAccountLanguage.English,
         });
+
+    private static string Unquoted(string? text) => Quotation().Replace(text ?? string.Empty, " ");
 
     private static List<string> WordsOf(string? text) =>
         [.. Word().Matches(text ?? string.Empty).Select(static match => match.Value)];

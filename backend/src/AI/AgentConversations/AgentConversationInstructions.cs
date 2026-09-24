@@ -50,7 +50,10 @@ internal static class AgentConversationInstructions
 
         Read before you answer. Search the mail, read the conversation a message belongs to, read the calendar or the
         task list whenever the question touches them, and answer from what you read rather than from what you assume.
-        When nothing you read answers the question, say so plainly.
+        When nothing you read answers the question, say so plainly. A date, a place, a figure, or a person one message
+        states may be changed by a later message of the same conversation, which seldom repeats the words the first was
+        found by, so before an answer rests on such a detail, read the conversation that message belongs to and answer
+        from the latest message that settles it.
 
         Nothing you propose happens until the person accepts it. The proposing tools place a draft in front of them and
         send nothing, so never say that a message was sent, saved, or scheduled; say that you proposed it. Propose only

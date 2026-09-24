@@ -90,7 +90,39 @@ public sealed class ReplyDraftInstructionsTests
         Assert.DoesNotContain("The conversation", turn, StringComparison.Ordinal);
         Assert.DoesNotContain("People in this conversation", turn, StringComparison.Ordinal);
         Assert.DoesNotContain("Subject:", turn, StringComparison.Ordinal);
+        Assert.DoesNotContain("the conversation above", turn, StringComparison.Ordinal);
         Assert.Contains("Ask Contoso for a 5% CPI cap.", turn, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The ask and the person's own samples follow the conversation and may be in another language, so the turn closes
+    /// on which language the reply is in rather than leaving the last words a model read to decide it.
+    /// </summary>
+    [Fact]
+    public void ComposeDraftingTurn_AConversationAskedAboutInAnotherLanguage_ClosesOnTheConversationsLanguage()
+    {
+        // Act
+        var turn = ReplyDraftInstructions.ComposeDraftingTurn(
+            new GuardedDraftingTurn(
+                "The racking quotation",
+                [new GuardedDraftingPerson(0, "Karolina")],
+                [
+                    new GuardedDraftingMessage(
+                        0,
+                        "Karolina",
+                        new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.Zero),
+                        "The quotation is 4,200 euros."),
+                ],
+                ["Dzień dobry, dziękuję za wiadomość."],
+                Selection: null,
+                "Podziękuj Karolinie za wycenę."));
+
+        // Assert
+        Assert.Contains("How this person writes, from their own recent messages, for tone and length rather than language", turn, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "Write the reply in the language the conversation above is written in, whatever language the ask and the samples are in, unless the ask names a language for it.\n",
+            turn,
+            StringComparison.Ordinal);
     }
 
     /// <summary>A conversation still reaches the turn under every heading a citation and a proposal are numbered against.</summary>

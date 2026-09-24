@@ -54,9 +54,11 @@ internal static class DiscoveryPlanningInstructions
         each of two or three distinctive words, never a paraphrase of the question and never a word as general as
         "message", "email", or "address", the most distinctive first and a broader one after it.
         A word the question uses that mail may put another way — "problem", "build", "failed", "fix", "error" — keeps
-        a lookup from reaching the message that says "failure", "version", or "patch" instead, so leave such words out
-        of at least one lookup and let it be the product, the person, or the code alone. A word the question joins with
-        a hyphen, such as "follow-up", may be two words in the mail, so write its parts. What each lookup hands over is
+        a lookup from reaching the message that says "failure", "version", "timed out", or "patch" instead, because a
+        lookup reaches only mail carrying every one of its words. So the last lookup is always the name alone: the
+        product, the person, the place, or the code the question is about, in one or two words and with no other word
+        beside it, however obvious the rest of the question makes one. A word the question joins with a hyphen, such
+        as "follow-up", may be two words in the mail, so write its parts. What each lookup hands over is
         cut around its own words, so let one lookup also carry the word the answer itself stands beside — "room" for
         where a meeting is, "hotel" for where somebody stays, "version" for which release — so the extract holds the
         answer rather than only the matter it concerns.
