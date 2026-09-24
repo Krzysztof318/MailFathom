@@ -37,20 +37,25 @@ public sealed record EmailSearchQueryText
 
     /// <summary>How the words of a query are matched, written for whoever writes one.</summary>
     /// <remarks>
+    /// <para>
     /// Stated once, here, because every surface a query is written through — a published tool, an agent's lookup, a
     /// plan's search — is read by a model that otherwise writes the question itself as the query. Where meaning takes
-    /// part in the ranking, every word is required and the default text search configuration stems nothing, so a
-    /// six-word lookup in the nominative misses the one message that carries four of the words in another case; where
-    /// words alone rank, any of them matches and the common words of a sentence crowd the ranking. Distinctive words
-    /// serve both.
+    /// part in the ranking every word is required, and the default text search configuration stems nothing, so a
+    /// six-word lookup in the nominative misses the one message that carries four of the words in another case.
+    /// </para>
+    /// <para>
+    /// It says every word <em>may</em> be required rather than describing both readings. Where words alone rank, any of
+    /// them matches, but the same few distinctive words reach the mail there too — and telling a model that any word
+    /// matches made it write longer lookups, which the every-word reading then answered with less mail: the agent
+    /// evaluations measured the mail-answering agent failing on its evidence nearly three times as often under that
+    /// wording.
+    /// </para>
     /// </remarks>
     public const string MatchingDescription =
-        "Two or three distinctive words — a name, a number, a place, a rare term — reach the right mail better than a "
-        + "sentence does: where the search also ranks by meaning every word is required, and where it ranks by words "
-        + "alone any of them matches and a message carrying more of them ranks higher. Words match as they are "
-        + "written, without stemming: a language that inflects its words, such as Polish, writes one word in several "
-        + "forms (Warszawa, Warszawy, Warszawie), so offer the forms or the translations you expect with OR, or search "
-        + "by a name or a number that does not change.";
+        "Lexical matching may require every word, so two or three distinctive words — a name, a number, a place, a rare "
+        + "term — reach more mail than a sentence does. Words match as they are written, without stemming: a language "
+        + "that inflects its words, such as Polish, writes one word in several forms (Warszawa, Warszawy, Warszawie), so "
+        + "offer the forms or the translations you expect with OR, or search by a name or a number that does not change.";
 
     private EmailSearchQueryText(string value, EmailSearchWordMatching wordMatching)
     {

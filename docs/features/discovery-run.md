@@ -47,10 +47,10 @@ the block catalogue closed — a model cannot name a block a client has no rende
 
 The searches the model proposes are a plan, not commands. Each becomes an ordinary knowledge lookup, run in order
 against the same retrieval the rest of the system uses. The model never sees what a lookup found and nothing is searched
-again, so it is told how the words of a lookup are matched — none stemmed, and every word required wherever the search
-also ranks by meaning — and asked for several lookups of two or three distinctive words each, the most distinctive
-first, rather than one lookup restating the question. Because every word may be required, the last lookup is always the name alone — the product, the person, the place,
-or the code the question is about, with no other word — so a message that puts the rest of the question in words the
+again, so it is told how the words of a lookup are matched — every word may be required, none is stemmed — and asked
+for several lookups of two or three distinctive words each, the most distinctive first, rather than one lookup restating
+the question. Because every word may be required, the last lookup is always the name alone — the product, the person,
+the place, or the code the question is about, with no other word — so a message that puts the rest of the question in words the
 question did not use is still reached. The plan is bounded before it runs:
 
 - **At most six lookups.** More than that is a model misjudging a question rather than a question that needs them, so

@@ -139,8 +139,7 @@ retrieval underneath it, and neither is anything an operator configures.
 **A lookup is worded in the language the mail is likely to carry**, which need not be the language the question was
 asked in, and one that returns nothing useful is tried again — with fewer words, with the other forms an inflected word
 takes, or in another language the mailbox plausibly holds — before the run concludes that the mailbox does not answer.
-The search tool's own description tells the model why: lexical matching stems no word, and requires every one wherever
-the search also ranks by meaning, so a
+The search tool's own description tells the model why: lexical matching may require every word and stems none, so a
 language that inflects its words, Polish among them, writes one word in several forms, and a lookup offers the forms it
 expects with `OR` or searches by a name or a number that does not change. The extra lookups are ordinary lookups,
 bounded by [§ What one question may spend](#what-one-question-may-spend) like every other.
