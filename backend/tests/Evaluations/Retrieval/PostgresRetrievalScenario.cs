@@ -119,7 +119,7 @@ internal static class PostgresRetrievalScenario
         return shortfalls;
     }
 
-    /// <summary>Serves one model's vectors, ranks every case by pgvector alone and fused with each lexical ranking, and files the measurements.</summary>
+    /// <summary>Serves one model's vectors, ranks every case by pgvector alone and fused with each lexical ranking, over both inputs, and files the measurements.</summary>
     /// <param name="database">The database holding the mailbox, whose serving profile becomes this model's.</param>
     /// <param name="generator">The model under test's generator, which stays the caller's.</param>
     /// <param name="model">The model, whose reported name is what every result is filed under.</param>
@@ -127,8 +127,10 @@ internal static class PostgresRetrievalScenario
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>One line per floor a ranking fell short of, naming the ranking.</returns>
     /// <remarks>
-    /// Both fusions are asked the question, as the semantic half is: a fusion reads one text into both halves, and the
-    /// question is what a lookup that reaches the vectors carries.
+    /// A fusion reads one text into both halves, so each input is measured whole: the question, which is what the
+    /// semantic figure has always rested on and the only input held to a floor, and the keyword query, which is what a
+    /// model that searches actually sends. Each is fused once with the deployment's lexical ranking and once with the
+    /// candidate.
     /// </remarks>
     public static async Task<IReadOnlyList<string>> MeasureModelAsync(
         RetrievalDatabase database,
@@ -141,52 +143,66 @@ internal static class PostgresRetrievalScenario
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(modelSpend);
 
-        var reporting = EvaluationStore.OpenUnjudged(FlooredEvaluators);
+        var floored = EvaluationStore.OpenUnjudged(FlooredEvaluators);
+        var unfloored = EvaluationStore.OpenUnjudged(UnflooredEvaluators);
         var cases = RetrievalCases.All;
-        var questions = cases.Select(static retrievalCase => retrievalCase.Question).ToArray();
         var passages = await database.ReadPassagesAsync(cancellationToken);
         var vectors = await SemanticRetrievalScenario.EmbedThroughCacheAsync(
-            reporting,
+            floored,
             SemanticName,
             generator,
             model,
-            [.. passages.Select(static passage => passage.Text), .. questions],
+            [
+                .. passages.Select(static passage => passage.Text),
+                .. cases.Select(static retrievalCase => retrievalCase.Question),
+                .. cases.Select(static retrievalCase => retrievalCase.Keywords),
+            ],
             cancellationToken);
-        var width = vectors[questions[0]].Dimension;
+        var width = vectors[cases[0].Question].Dimension;
         var profile = await database.ServeAsync(
             ProfileOf(model, width),
             passages.ToDictionary(static passage => passage.ChunkId, passage => vectors[passage.Text]),
             cancellationToken);
+        var paid = modelSpend.Take();
 
-        var semanticRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
-        var hybridRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
-        var anyWordHybridRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
+        List<string> shortfalls = [];
 
-        foreach (var question in questions)
+        foreach (var input in (LexicalInput[])[LexicalInput.Question, LexicalInput.Keywords])
         {
-            var semantic = await database.RankSemanticallyAsync(profile, vectors[question], CandidateDepth, cancellationToken);
-            var allWords = await RankLexicallyAsync(database, LexicalMatching.AllWords, question, CandidateDepth, cancellationToken);
-            var anyWord = await RankLexicallyAsync(database, LexicalMatching.AnyWord, question, CandidateDepth, cancellationToken);
+            var queries = cases.Select(retrievalCase => QueryOf(retrievalCase, input)).ToArray();
+            var semanticRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
+            var hybridRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
+            var anyWordHybridRankings = new List<IReadOnlyList<StoredEmailId>>(cases.Count);
 
-            semanticRankings.Add(IdentifiersOf(semantic.Written));
-            hybridRankings.Add(IdentifiersOf(HybridSearchRanking.Compose(allWords, semantic, ResultLimit).Candidates));
-            anyWordHybridRankings.Add(IdentifiersOf(HybridSearchRanking.Compose(anyWord, semantic, ResultLimit).Candidates));
-        }
+            foreach (var query in queries)
+            {
+                var semantic = await database.RankSemanticallyAsync(profile, vectors[query], CandidateDepth, cancellationToken);
+                var allWords = await RankLexicallyAsync(database, LexicalMatching.AllWords, query, CandidateDepth, cancellationToken);
+                var anyWord = await RankLexicallyAsync(database, LexicalMatching.AnyWord, query, CandidateDepth, cancellationToken);
 
-        return
-        [
-            .. await FileAsync(reporting, SemanticName, model.ReportedName, cases, questions, semanticRankings, modelSpend.Take(), cancellationToken),
-            .. await FileAsync(reporting, HybridName, model.ReportedName, cases, questions, hybridRankings, paid: default, cancellationToken),
-            .. await FileAsync(
-                EvaluationStore.OpenUnjudged(UnflooredEvaluators),
+                semanticRankings.Add(IdentifiersOf(semantic.Written));
+                hybridRankings.Add(IdentifiersOf(HybridSearchRanking.Compose(allWords, semantic, ResultLimit).Candidates));
+                anyWordHybridRankings.Add(IdentifiersOf(HybridSearchRanking.Compose(anyWord, semantic, ResultLimit).Candidates));
+            }
+
+            var isQuestion = input is LexicalInput.Question;
+            var suffix = isQuestion ? string.Empty : " " + NameOf(input);
+            var reporting = isQuestion ? floored : unfloored;
+
+            shortfalls.AddRange(await FileAsync(reporting, SemanticName, model.ReportedName + suffix, cases, queries, semanticRankings, isQuestion ? paid : default, cancellationToken));
+            shortfalls.AddRange(await FileAsync(reporting, HybridName, model.ReportedName + suffix, cases, queries, hybridRankings, paid: default, cancellationToken));
+            shortfalls.AddRange(await FileAsync(
+                unfloored,
                 HybridName,
-                model.ReportedName + AnyWordFusionSuffix,
+                model.ReportedName + AnyWordFusionSuffix + suffix,
                 cases,
-                questions,
+                queries,
                 anyWordHybridRankings,
                 paid: default,
-                cancellationToken),
-        ];
+                cancellationToken));
+        }
+
+        return shortfalls;
     }
 
     private static string QueryOf(RetrievalCase retrievalCase, LexicalInput input) =>

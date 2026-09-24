@@ -1841,9 +1841,11 @@ Three scenarios are filed, each ranking with the four figures [Measuring semanti
 | `Retrieval.PostgreSQL.Lexical` | `all-words keywords` | The full-text index alone, as an instance with no embedding profile serves it, over each case's keyword query, read into the window a search returns when its caller names no limit | Yes, 80% at 20 |
 | `Retrieval.PostgreSQL.Lexical` | `all-words question` | The same ranking over the question as written | No |
 | `Retrieval.PostgreSQL.Lexical` | `any-word keywords`, `any-word question` | A candidate no deployment runs: any of the query's words matches and `ts_rank_cd` orders, over each input | No |
-| `Retrieval.PostgreSQL.Semantic` | each model's name | pgvector alone, over each declared model's vectors served as the active profile | Yes, 80% at 20 |
-| `Retrieval.PostgreSQL.Hybrid` | each model's name | Both, each read as deep as a deployment's search reads the halves of a fusion and fused by the production fusion into that window, over the question | Yes, 80% at 20 |
-| `Retrieval.PostgreSQL.Hybrid` | each model's name followed by `any-word` | The same fusion with the candidate as its lexical half | No |
+| `Retrieval.PostgreSQL.Semantic` | each model's name | pgvector alone, over each declared model's vectors served as the active profile, asked the question | Yes, 80% at 20 |
+| `Retrieval.PostgreSQL.Semantic` | each model's name followed by `keywords` | The same, asked the keyword query | No |
+| `Retrieval.PostgreSQL.Hybrid` | each model's name | Both, each read as deep as a deployment's search reads the halves of a fusion and fused by the production fusion into that window, with the question read into both halves | Yes, 80% at 20 |
+| `Retrieval.PostgreSQL.Hybrid` | each model's name followed by `keywords` | The same fusion with the keyword query read into both halves, which is what a model that searches sends | No |
+| `Retrieval.PostgreSQL.Hybrid` | each model's name followed by `any-word`, or by `any-word keywords` | The same two fusions with the candidate as their lexical half | No |
 
 Each case carries two inputs. The question is what the vectors are asked and what the semantic figures rest on. The keyword query is what a model writes from that question when it searches, two or three distinctive words with word forms and translations offered through `OR`, as `EmailSearchQueryText.MatchingDescription` asks of every model that writes one; `RetrievalCases` holds it, written from the question alone rather than from the evidence. The deployment's full-text ranking requires every word, so it reaches almost nothing on a sentence, and the figure it is held to is the one over the keyword queries a deployment is actually sent: a lexical half that reaches nothing there fails the run rather than being filed green.
 
