@@ -24,6 +24,8 @@ set -euo pipefail
 # neither is set; where it names no EmbeddingModels, MAILFATHOM_EMBEDDING_MODEL is. The retrieval scenario
 # reaches its models with MAILFATHOM_EMBEDDING_API_KEY, which a requested run cannot proceed without, and
 # MAILFATHOM_EMBEDDING_ADDRESS, which it may leave unset for the provider's own address.
+# MAILFATHOM_EVALUATION_DATABASE names a PostgreSQL server the retrieval scenario over PostgreSQL seeds a
+# database of its own on and drops afterwards; unset, that one scenario skips.
 #
 # The store is kept rather than cleared: its results are what the report compares this run against,
 # and its cache is what makes an unchanged prompt free. MAILFATHOM_AI_EVALUATIONS_STORE points it

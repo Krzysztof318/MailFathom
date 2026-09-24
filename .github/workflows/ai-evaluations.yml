@@ -44,6 +44,12 @@ name: AI evaluations
 # A model's answer varies between calls, so a model is held to the share of those repetitions that passed rather than to
 # one answer, and the report shows that share per case and per model beside what the repetitions cost together. Each
 # repetition is its own cached answer, so a repeated run over an unchanged prompt still costs nothing.
+#
+# The `postgres_retrieval` input also measures retrieval as a deployment ranks it — the full-text index, pgvector, and
+# the two fused — over a PostgreSQL container the job starts and the scenario seeds. It is off unless a dispatch turns it
+# on, because a run that did not ask for it has no reason to start a database, and the scenario it serves skips wherever
+# no server is named. It is a switch beside `discard_cached_answers` rather than a key in the block, because like that
+# one it decides what the job does around the suite rather than what the suite measures.
 on:
   workflow_dispatch:
     inputs:
@@ -53,6 +59,11 @@ on:
         type: string
       discard_cached_answers:
         description: 'Start with an empty response cache, so every model and the judge are asked again; the result history is kept'
+        required: false
+        type: boolean
+        default: false
+      postgres_retrieval:
+        description: 'Also measure lexical, semantic, and hybrid retrieval over a PostgreSQL container the run starts and seeds'
         required: false
         type: boolean
         default: false
@@ -173,6 +184,45 @@ jobs:
             echo "Discarded every cached answer and verdict; the results are kept."
           fi
 
+      # The one scenario that ranks mail through PostgreSQL needs a server, and a run that did not ask for it starts none.
+      # The image is the one the Compose deployment pins, read from where that pin is written, so a moved pin moves this
+      # run with it rather than leaving a second copy behind. The server lives on the runner's loopback for the length of
+      # one job and holds only the synthetic corpus the scenario seeds, so its superuser takes no password.
+      - name: Start the retrieval database
+        id: retrieval-database
+        if: inputs.postgres_retrieval
+        run: |
+          set -euo pipefail
+
+          image=$(sed -nE 's/^[[:space:]]*image: \$\{MAILFATHOM_POSTGRES_IMAGE:-([^}]+)\}[[:space:]]*$/\1/p' deploy/compose/compose.yaml)
+
+          if [ -z "$image" ]; then
+            echo "::error::deploy/compose/compose.yaml names no PostgreSQL image to start."
+            exit 1
+          fi
+
+          docker run --detach --name retrieval-database \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            --publish 127.0.0.1::5432 \
+            "$image" > /dev/null
+
+          # Over TCP, because the image's entrypoint initializes the data directory on a server that listens on a socket
+          # alone, and a socket check would call that one ready.
+          for attempt in $(seq 1 30); do
+            if docker exec retrieval-database pg_isready --quiet --host 127.0.0.1 --username postgres; then
+              port=$(docker port retrieval-database 5432/tcp | head -n 1 | sed -E 's/.*:([0-9]+)$/\1/')
+              echo "Started $image on port $port."
+              echo "connection=Host=127.0.0.1;Port=$port;Username=postgres;Database=postgres" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker logs retrieval-database
+          echo "::error::PostgreSQL did not accept connections within a minute."
+          exit 1
+
       - name: Run the evaluations
         run: bash scripts/run-ai-evaluations.sh
         env:
@@ -194,6 +244,8 @@ jobs:
           MAILFATHOM_EMBEDDING_MODEL: ${{ vars.EMBEDDING_PROVIDER_ROUTED_MODEL || vars.EMBEDDING_PROVIDER_MODEL }}
           MAILFATHOM_EMBEDDING_ADDRESS: ${{ vars.EMBEDDING_PROVIDER_ADDRESS }}
           MAILFATHOM_EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_PROVIDER_API_KEY }}
+          # Empty unless the step above started a server, which is what leaves the PostgreSQL retrieval scenario skipped.
+          MAILFATHOM_EVALUATION_DATABASE: ${{ steps.retrieval-database.outputs.connection }}
 
       # Uploaded whether the run passed or not, because a failing run still paid for every answer it
       # received. A run that wrote nothing uploads nothing, which leaves the previous store the newest.

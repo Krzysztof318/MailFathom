@@ -8,7 +8,7 @@ using Microsoft.Extensions.AI.Evaluation;
 
 namespace MailFathom.Evaluations.Retrieval;
 
-/// <summary>Turns where the evidence landed into recall at three depths and a mean reciprocal rank, and holds the deepest recall to a floor.</summary>
+/// <summary>Turns where the evidence landed into recall at three depths and a mean reciprocal rank, and holds the deepest recall to a floor where the ranking is one a floor applies to.</summary>
 /// <remarks>
 /// <para>
 /// Each figure is the mean over cases rather than over pieces of evidence, so a question resting on two facts weighs as
@@ -20,7 +20,11 @@ namespace MailFathom.Evaluations.Retrieval;
 /// No model is asked: every metric is computed from the ranks, so this evaluator needs no chat configuration.
 /// </para>
 /// </remarks>
-internal sealed class RetrievalEvaluator : IEvaluator
+/// <param name="floorsRecall">
+/// Whether recall at <see cref="FlooredDepth" /> fails under <see cref="MinimumRecall" />. A ranking that is a baseline
+/// to compare others against rather than a model to hold to a bar is reported without one.
+/// </param>
+internal sealed class RetrievalEvaluator(bool floorsRecall) : IEvaluator
 {
     /// <summary>The name the mean reciprocal rank is reported under.</summary>
     public const string MeanReciprocalRankMetricName = "Mean reciprocal rank";
@@ -58,7 +62,7 @@ internal sealed class RetrievalEvaluator : IEvaluator
 
         EvaluationMetric[] metrics =
         [
-            .. Depths.Select(depth => Recall(measurement, depth)),
+            .. Depths.Select(depth => this.Recall(measurement, depth)),
             new NumericMetric(
                 MeanReciprocalRankMetricName,
                 measurement.Cases.Average(static ranks => ranks.ReciprocalRank),
@@ -68,7 +72,7 @@ internal sealed class RetrievalEvaluator : IEvaluator
         return ValueTask.FromResult(new EvaluationResult(metrics));
     }
 
-    private static NumericMetric Recall(RetrievalMeasurement measurement, int depth)
+    private NumericMetric Recall(RetrievalMeasurement measurement, int depth)
     {
         var recall = measurement.Cases.Average(ranks => ranks.RecallAt(depth));
         var metric = new NumericMetric(
@@ -76,7 +80,7 @@ internal sealed class RetrievalEvaluator : IEvaluator
             recall,
             string.Create(CultureInfo.InvariantCulture, $"The mean over cases of the share of their evidence ranked within the first {depth} messages."));
 
-        if (depth is FlooredDepth)
+        if (floorsRecall && depth is FlooredDepth)
         {
             metric.Interpretation = new EvaluationMetricInterpretation(
                 recall >= MinimumRecall ? EvaluationRating.Good : EvaluationRating.Unacceptable,

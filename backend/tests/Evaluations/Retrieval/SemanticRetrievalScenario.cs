@@ -40,7 +40,7 @@ internal static class SemanticRetrievalScenario
     private const int TextsPerRequest = 64;
 
     /// <summary>Gets what every run of this scenario is measured on.</summary>
-    public static IReadOnlyList<IEvaluator> Evaluators => [new RetrievalEvaluator()];
+    public static IReadOnlyList<IEvaluator> Evaluators => [new RetrievalEvaluator(floorsRecall: true)];
 
     /// <summary>Runs the scenario under one model and files the measurement in the run's store.</summary>
     /// <param name="reporting">The run's store, opened without a judge.</param>
@@ -49,10 +49,6 @@ internal static class SemanticRetrievalScenario
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its generator is opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The metrics the measurement produced.</returns>
-    [SuppressMessage(
-        "Reliability",
-        "CA2000:Dispose objects before losing scope",
-        Justification = "Disposing the caching wrapper would dispose the caller's generator, which this scenario does not own.")]
     public static async Task<EvaluationResult> RunAsync(
         ReportingConfiguration reporting,
         IEmbeddingGenerator<string, Embedding<float>> generator,
@@ -67,15 +63,11 @@ internal static class SemanticRetrievalScenario
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(Name, iterationName, cancellationToken: cancellationToken);
 
-        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(Name, iterationName, cancellationToken);
-        var cachedGenerator = new DistributedCachingEmbeddingGenerator<string, Embedding<float>>(generator, cache)
-        {
-            CacheKeyAdditionalValues = [model.RoutedModelName, model.Address?.AbsoluteUri ?? string.Empty],
-        };
-
         var cases = RetrievalCases.All;
-        var vectors = await EmbedAsync(
-            cachedGenerator,
+        var vectors = await EmbedThroughCacheAsync(
+            reporting,
+            Name,
+            generator,
             model,
             [.. RetrievalCases.Mailbox.SelectMany(static message => message.Passages.Select(static passage => passage.Text)), .. cases.Select(static retrievalCase => retrievalCase.Question)],
             cancellationToken);
@@ -95,6 +87,39 @@ internal static class SemanticRetrievalScenario
         EvaluationCost.Record(verdict, model.ReportedName, modelSpend.Take(), judgeSpend: default);
 
         return verdict;
+    }
+
+    /// <summary>Embeds every distinct text once under one model, through the run's response cache for the scenario that asks.</summary>
+    /// <param name="reporting">The run's store, whose cache the vectors are read from and written to.</param>
+    /// <param name="scenarioName">The scenario the cache entries are filed under.</param>
+    /// <param name="generator">The model under test's generator, which stays the caller's.</param>
+    /// <param name="model">The model, whose name and address join the cache key.</param>
+    /// <param name="texts">The texts to embed, each prepared as a deployment prepares a passage.</param>
+    /// <param name="cancellationToken">Withdraws the run.</param>
+    /// <returns>Each text's vector, in the space the run measures.</returns>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Disposing the caching wrapper would dispose the caller's generator, which this scenario does not own.")]
+    internal static async Task<Dictionary<string, EmbeddingVector>> EmbedThroughCacheAsync(
+        ReportingConfiguration reporting,
+        string scenarioName,
+        IEmbeddingGenerator<string, Embedding<float>> generator,
+        EmbeddingModelUnderTest model,
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reporting);
+        ArgumentNullException.ThrowIfNull(model);
+
+        var iterationName = EvaluationStore.IterationNameFor(model.ReportedName, repetition: 1);
+        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
+        var cachedGenerator = new DistributedCachingEmbeddingGenerator<string, Embedding<float>>(generator, cache)
+        {
+            CacheKeyAdditionalValues = [model.RoutedModelName, model.Address?.AbsoluteUri ?? string.Empty],
+        };
+
+        return await EmbedAsync(cachedGenerator, model, texts, cancellationToken);
     }
 
     /// <summary>Embeds every distinct text once, in requests of a deployment's size, and reads each answer into the space the run measures.</summary>
