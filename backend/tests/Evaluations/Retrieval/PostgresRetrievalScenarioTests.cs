@@ -56,16 +56,6 @@ public sealed class PostgresRetrievalScenarioTests
     }
 
     [Fact]
-    public void AnyWordQuery_AQueryWithOperators_JoinsEveryWordWithOr()
-    {
-        // Act
-        var query = RetrievalDatabase.AnyWordQuery("\"Suite 310\"  -draft INV-4827 OR Wrzosową");
-
-        // Assert
-        Assert.Equal("Suite or 310 or draft or INV-4827 or Wrzosową", query);
-    }
-
-    [Fact]
     public void ConnectionTo_AServerConnectionString_NamesTheDatabaseAndKeepsEverythingElse()
     {
         // Arrange

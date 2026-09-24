@@ -137,41 +137,62 @@ internal sealed class StoredEmailSearchIndexReader(
         int limit)
     {
         var configuration = textSearchConfiguration.Value;
-        var text = queryText.Value;
+        var text = queryText.MatchedText;
+        var excluded = queryText.ExcludedText;
 
+        // An exclusion is its own predicate rather than a term of the matched text, and it is judged per document as
+        // websearch_to_tsquery judges one: a message is kept when its body or one of its files carries the words and not
+        // the excluded ones. A null exclusion is folded away by the provider, which reads the parameter's value when it
+        // compiles the command, so a query without one sends no second tsquery at all.
         var matching = StoredEmailSelectionPredicate
             .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
             .Where(email =>
                 (email.SearchDocument != null
-                    && email.SearchDocument.SearchVector.Matches(
-                        EF.Functions.WebSearchToTsQuery(configuration, text)))
+                    && email.SearchDocument.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, text))
+                    && (excluded == null
+                        || !email.SearchDocument.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, excluded))))
                 || email.AttachmentTexts.Any(attachment => attachment.SearchVector != null
-                    && attachment.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, text))));
+                    && attachment.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, text))
+                    && (excluded == null
+                        || !attachment.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, excluded)))));
+
+        // ts_rank_cd where any word matches, because it rewards the words standing close together, which is what tells a
+        // message about the query from one that carries a single common word of it; ts_rank where every word is
+        // required, since every candidate already carries all of them.
+        var scored = queryText.WordMatching is EmailSearchWordMatching.AnyWord
+            ? matching.Select(email => new
+            {
+                email.Id,
+                email.ReceivedAt,
+                RelevanceRank = ((float?)email.SearchDocument!.SearchVector.RankCoverDensity(
+                        EF.Functions.WebSearchToTsQuery(configuration, text)) ?? 0f)
+                    + (email.AttachmentTexts
+                        .Where(attachment => attachment.SearchVector != null)
+                        .Max(attachment => (float?)attachment.SearchVector!.RankCoverDensity(
+                            EF.Functions.WebSearchToTsQuery(configuration, text))) ?? 0f),
+            })
+            : matching.Select(email => new
+            {
+                email.Id,
+                email.ReceivedAt,
+                RelevanceRank = ((float?)email.SearchDocument!.SearchVector.Rank(
+                        EF.Functions.WebSearchToTsQuery(configuration, text)) ?? 0f)
+                    + (email.AttachmentTexts
+                        .Where(attachment => attachment.SearchVector != null)
+                        .Max(attachment => (float?)attachment.SearchVector!.Rank(
+                            EF.Functions.WebSearchToTsQuery(configuration, text))) ?? 0f),
+            });
 
         // Rank first, then the timeline order from the ordering contract. Ranking alone ties whenever several messages
         // carry the query's words equally often, and an unbroken tie leaves the server free to return either order — so
         // two identical requests would disagree about what the most relevant results were.
-        return matching
-            .OrderByDescending(email =>
-                ((float?)email.SearchDocument!.SearchVector.Rank(
-                    EF.Functions.WebSearchToTsQuery(configuration, text)) ?? 0f)
-                + (email.AttachmentTexts
-                    .Where(attachment => attachment.SearchVector != null)
-                    .Max(attachment => (float?)attachment.SearchVector!.Rank(
-                        EF.Functions.WebSearchToTsQuery(configuration, text))) ?? 0f))
-            .ThenBy(email => email.ReceivedAt == null)
-            .ThenByDescending(email => email.ReceivedAt)
-            .ThenByDescending(email => email.Id)
+        return scored
+            .OrderByDescending(hit => hit.RelevanceRank)
+            .ThenBy(hit => hit.ReceivedAt == null)
+            .ThenByDescending(hit => hit.ReceivedAt)
+            .ThenByDescending(hit => hit.Id)
             .Take(limit)
-            .Select(email => new StoredEmailSearchHitRow(
-                email.Id,
-                email.ReceivedAt,
-                ((float?)email.SearchDocument!.SearchVector.Rank(
-                    EF.Functions.WebSearchToTsQuery(configuration, text)) ?? 0f)
-                + (email.AttachmentTexts
-                    .Where(attachment => attachment.SearchVector != null)
-                    .Max(attachment => (float?)attachment.SearchVector!.Rank(
-                        EF.Functions.WebSearchToTsQuery(configuration, text))) ?? 0f)));
+            .Select(hit => new StoredEmailSearchHitRow(hit.Id, hit.ReceivedAt, hit.RelevanceRank));
     }
 
     /// <summary>Composes the query that cuts the snippets of an already ranked window.</summary>
@@ -200,7 +221,7 @@ internal sealed class StoredEmailSearchIndexReader(
         IReadOnlyList<Guid> rankedIds)
     {
         var configuration = textSearchConfiguration.Value;
-        var text = queryText.Value;
+        var text = queryText.MatchedText;
         var headlineOptions = SearchHeadlineText.Options(snippetBounds);
         var identities = rankedIds.ToArray();
 

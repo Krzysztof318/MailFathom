@@ -56,6 +56,9 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
     /// <summary>A query written the way somebody types one, carrying the metacharacters an injection attempt would.</summary>
     private const string HostileQueryText = "'; DROP TABLE stored_emails; --";
 
+    /// <summary>A word no seeded body carries, so a query holding it matches only where any word is enough.</summary>
+    private const string AbsentTerm = "zyzzogeton";
+
     private static readonly DateTimeOffset FirstReceivedAt = SyntheticEmail.ReceivedAt;
 
     /// <summary>Runs the composed command three ways and proves it ranks, selects, and refuses to be talked into anything.</summary>
@@ -132,6 +135,42 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         Assert.Contains(match.Snippets, snippet => snippet.EndsWith('…'));
     }
 
+    /// <summary>Where the lexical ranking stands alone any word matches, while a phrase and an exclusion keep their meaning.</summary>
+    /// <remarks>
+    /// Each claim rests on the server rather than on the composed command: that <c>websearch_to_tsquery</c> reads the
+    /// rejoined words as alternatives, that the exclusion predicate removes a document the words alone would match, that
+    /// a quoted phrase still needs its words side by side, and that the extract is cut around the word that matched
+    /// rather than returned without a highlight. The same query under every word required is the control that shows the
+    /// partial match is the any-word reading's doing.
+    /// </remarks>
+    [Fact]
+    public async Task ReadRankedMatchesAsync_LexicalRetrieval_MatchesAnyWordAndKeepsPhrasesAndExclusions()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await SeededSelectionAsync(services, cancellationToken);
+        var partialQuery = $"{DistinctiveTerm} {AbsentTerm}";
+
+        // Act
+        var partialUnderEveryWord = await SearchAsync(services, partialQuery, cancellationToken, retrievalMode: EmailSearchRetrievalMode.Hybrid);
+        var partialUnderAnyWord = await SearchAsync(services, partialQuery, cancellationToken, retrievalMode: EmailSearchRetrievalMode.Lexical);
+        var excluding = await SearchAsync(services, $"{SharedTerm} -{DistinctiveTerm}", cancellationToken, retrievalMode: EmailSearchRetrievalMode.Lexical);
+        var byPhrase = await SearchAsync(services, $"\"{SharedTerm} {SharedTerm}\" {AbsentTerm}", cancellationToken, retrievalMode: EmailSearchRetrievalMode.Lexical);
+
+        // Assert
+        Assert.Empty(partialUnderEveryWord);
+
+        var partial = Assert.Single(partialUnderAnyWord);
+        Assert.True(partial.RelevanceRank > 0);
+        Assert.Contains(partial.Snippets, snippet => snippet.Contains($"**{DistinctiveTerm}**", StringComparison.Ordinal));
+
+        Assert.Equal(SeededEmailCount - 1, excluding.Count);
+        Assert.DoesNotContain(excluding, match => match.Summary.StoredEmailId == partial.Summary.StoredEmailId);
+
+        Assert.Equal(partial.Summary.StoredEmailId, Assert.Single(byPhrase).Summary.StoredEmailId);
+    }
+
     /// <summary>A search that tracked its rows would let an unrelated commit in the same scope write mail nobody changed.</summary>
     [Fact]
     public async Task ReadMatchesAsync_AnyWindow_TracksNoEntities()
@@ -180,25 +219,31 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         string queryText,
         CancellationToken cancellationToken,
         MailboxEmailSelection? selection = null,
-        EmailSearchSnippetBounds? snippetBounds = null) => services.AsCallerInScopeAsync(
+        EmailSearchSnippetBounds? snippetBounds = null,
+        EmailSearchRetrievalMode? retrievalMode = null) => services.AsCallerInScopeAsync(
             (scope, token) => RankedWindowAsync(
                 scope.GetRequiredService<IEmailSearchIndexReader>(),
                 selection ?? SeededSelection(scope),
                 queryText,
                 snippetBounds ?? EmailSearchSnippetBounds.Default,
-                token),
+                token,
+                retrievalMode),
             [],
             cancellationToken);
 
     /// <summary>Runs both halves of the port the way the use case does: rank the mail, then read the window it chose.</summary>
+    /// <remarks>A retrieval mode matches the text as a search ranking that way matches it; none reads it as written.</remarks>
     private static async Task<IReadOnlyList<EmailSearchMatch>> RankedWindowAsync(
         IEmailSearchIndexReader reader,
         MailboxEmailSelection selection,
         string queryText,
         EmailSearchSnippetBounds snippetBounds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EmailSearchRetrievalMode? retrievalMode = null)
     {
-        var validatedQueryText = EmailSearchQueryText.Create(queryText);
+        var validatedQueryText = retrievalMode is { } mode
+            ? EmailSearchQueryText.Create(queryText).MatchedUnder(mode)
+            : EmailSearchQueryText.Create(queryText);
 
         var candidates = await reader.ReadRankedCandidatesAsync(
             selection,

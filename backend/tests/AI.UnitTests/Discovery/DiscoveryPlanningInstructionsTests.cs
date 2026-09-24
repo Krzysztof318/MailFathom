@@ -37,7 +37,7 @@ public sealed class DiscoveryPlanningInstructionsTests
             intent => Assert.Contains(intent.Identity, text, StringComparison.Ordinal));
     }
 
-    /// <summary>Every word of a lookup is required and none is stemmed, which a planner writing the question itself as the lookup does not know.</summary>
+    /// <summary>No word of a lookup is stemmed and every one may be required, which a planner writing the question itself as the lookup does not know.</summary>
     [Fact]
     public void Text_TheInstruction_StatesHowTheWordsOfALookupAreMatched()
     {

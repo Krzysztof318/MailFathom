@@ -230,16 +230,20 @@ public sealed class MailboxSearchReader
         var (ranking, retrievalMode, semanticSearchCapability) =
             await this.RankAsync(selection, queryText, resultLimit.Value, cancellationToken);
 
+        // The extracts are cut around the words the ranking matched, so a message a lexical-only search placed for one
+        // of the query's words is quoted where that word stands rather than returned without a highlight.
+        var matchedText = queryText.MatchedUnder(retrievalMode);
+
         var matches = await this.searchIndexReader.ReadMatchesAsync(
             selection,
-            queryText,
+            matchedText,
             this.snippetBounds,
             ranking.Candidates,
             cancellationToken);
 
         matches = await this.attachmentMatchReader.ReadWindowMatchesAsync(
             selection,
-            queryText,
+            matchedText,
             this.snippetBounds,
             matches,
             ranking.DepictedOnly,
@@ -354,7 +358,7 @@ public sealed class MailboxSearchReader
         {
             var lexicalWindow = await this.searchIndexReader.ReadRankedCandidatesAsync(
                 selection,
-                queryText,
+                queryText.MatchedUnder(EmailSearchRetrievalMode.Lexical),
                 resultLimit,
                 cancellationToken);
 

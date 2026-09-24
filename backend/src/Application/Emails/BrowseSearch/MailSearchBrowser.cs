@@ -173,16 +173,18 @@ public sealed class MailSearchBrowser
         var walked = ranking.After(boundary, pageSize.Value + 1);
         var page = walked.Take(pageSize.Value).ToArray();
 
+        var matchedText = rankedList.QueryText.MatchedUnder(ranking.RetrievalMode);
+
         var matches = await this.searchIndexReader.ReadMatchesAsync(
             rankedList.Selection,
-            rankedList.QueryText,
+            matchedText,
             this.snippetBounds,
             page,
             cancellationToken);
 
         matches = await this.attachmentMatchReader.ReadWindowMatchesAsync(
             rankedList.Selection,
-            rankedList.QueryText,
+            matchedText,
             this.snippetBounds,
             matches,
             ranking.DepictedOnly,
@@ -263,7 +265,8 @@ public sealed class MailSearchBrowser
     /// <summary>Ranks the eligible mail to the list's whole depth, by whichever method this instance can apply to this query.</summary>
     /// <remarks>
     /// The semantic ranking is asked for first, because its answer decides whether a lexical ranking is the list itself
-    /// or one half of a fusion. Both sides reach the same depth, which is what keeps agreement between them observable
+    /// or one half of a fusion — and with it whether the lexical ranking matches any word of the query or every one.
+    /// Both sides reach the same depth, which is what keeps agreement between them observable
     /// as far down the list as paging can go.
     /// </remarks>
     private async Task<RankedSearchRanking> RankAsync(
@@ -280,9 +283,11 @@ public sealed class MailSearchBrowser
             depth,
             cancellationToken);
 
+        var retrievalMode = semantic.Rankings is null ? EmailSearchRetrievalMode.Lexical : EmailSearchRetrievalMode.Hybrid;
+
         var lexicalCandidates = await this.searchIndexReader.ReadRankedCandidatesAsync(
             rankedList.Selection,
-            rankedList.QueryText,
+            rankedList.QueryText.MatchedUnder(retrievalMode),
             depth,
             cancellationToken);
 

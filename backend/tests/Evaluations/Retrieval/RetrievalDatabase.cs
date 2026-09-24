@@ -223,7 +223,7 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
     }
 
     /// <summary>Ranks the mailbox by the full-text index, as a deployment's lexical search ranks it.</summary>
-    /// <param name="queryText">The query, as a person typed it.</param>
+    /// <param name="queryText">The query, matched as the search it stands for matches it.</param>
     /// <param name="limit">How many candidates the ranking hands back.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The candidates, best first.</returns>
@@ -237,75 +237,6 @@ internal sealed class RetrievalDatabase : IAsyncDisposable
         return await new StoredEmailSearchIndexReader(context, PostgresTextSearchConfiguration.Default)
             .ReadRankedCandidatesAsync(Selection, queryText, limit, cancellationToken);
     }
-
-    /// <summary>Ranks the mailbox by the candidate lexical ranking: any of the query's words matches, and cover density orders.</summary>
-    /// <param name="queryText">The query, as a person or a model wrote it.</param>
-    /// <param name="limit">How many candidates the ranking hands back.</param>
-    /// <param name="cancellationToken">Withdraws the run.</param>
-    /// <returns>The candidates, best first.</returns>
-    /// <remarks>
-    /// <para>
-    /// A candidate measured beside the deployment's ranking, not a copy of it: no deployment runs this query. It keeps
-    /// the production reader's parser, configuration, and tie-break, and changes the two things under measurement. The
-    /// words are joined by <c>OR</c> through <see cref="AnyWordQuery" />, so a message carrying some of them matches,
-    /// and <c>ts_rank_cd</c> replaces <c>ts_rank</c>, so a message where they sit close together ranks higher.
-    /// </para>
-    /// <para>
-    /// It reads the message's own document and leaves out the attachment documents the production reader adds, because
-    /// the mailbox stores no attachment text and a sum over nothing adds nothing.
-    /// </para>
-    /// </remarks>
-    public async Task<IReadOnlyList<RankedEmailCandidate>> RankByAnyWordAsync(
-        string queryText,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        var configuration = PostgresTextSearchConfiguration.Default.Value;
-        var text = AnyWordQuery(queryText);
-
-        await using var context = this.NewContext();
-
-        var hits = await context.StoredEmails
-            .AsNoTracking()
-            .Where(email => email.SearchDocument != null
-                && email.SearchDocument.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(configuration, text)))
-            .OrderByDescending(email => email.SearchDocument!.SearchVector.RankCoverDensity(
-                EF.Functions.WebSearchToTsQuery(configuration, text)))
-            .ThenBy(email => email.ReceivedAt == null)
-            .ThenByDescending(email => email.ReceivedAt)
-            .ThenByDescending(email => email.Id)
-            .Take(limit)
-            .Select(email => new
-            {
-                email.Id,
-                email.ReceivedAt,
-                Score = email.SearchDocument!.SearchVector.RankCoverDensity(EF.Functions.WebSearchToTsQuery(configuration, text)),
-            })
-            .ToArrayAsync(cancellationToken);
-
-        return
-        [
-            .. hits.Select(static hit => new RankedEmailCandidate(
-                new EmailTimelinePosition(hit.ReceivedAt, StoredEmailId.Create(hit.Id)),
-                hit.Score)),
-        ];
-    }
-
-    /// <summary>Rewrites a query so that <c>websearch_to_tsquery</c> matches any of its words rather than all of them.</summary>
-    /// <param name="queryText">The query, as a person or a model wrote it.</param>
-    /// <returns>Every word of the query, joined by <c>or</c>.</returns>
-    /// <remarks>
-    /// Quotation marks and a leading minus are dropped along with the <c>OR</c> the query already carried, because a
-    /// phrase or an exclusion inside a query that asks for any word would reintroduce the requirement the candidate
-    /// removes, or match every message that lacks the excluded word.
-    /// </remarks>
-    internal static string AnyWordQuery(string queryText) =>
-        string.Join(
-            " or ",
-            queryText
-                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-                .Select(static word => word.Trim('"').TrimStart('-'))
-                .Where(static word => word.Length > 0 && !word.Equals("or", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>Ranks the mailbox by pgvector's distance to a query's vector, as a deployment's semantic search ranks it.</summary>
     /// <param name="profile">The profile whose vectors are read.</param>
