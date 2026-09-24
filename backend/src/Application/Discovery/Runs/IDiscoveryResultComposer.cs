@@ -34,7 +34,7 @@ public interface IDiscoveryResultComposer
     /// <param name="language">The language the person the result is for reads, which every sentence the service writes into it itself is in.</param>
     /// <param name="cancellationToken">Cancels the composition.</param>
     /// <returns>The plan.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when any argument but the token is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="question" />, <paramref name="plan" />, <paramref name="evidence" />, or <paramref name="coverage" /> is <see langword="null" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     Task<PresentationPlan> ComposeAsync(
         MailQuestion question,

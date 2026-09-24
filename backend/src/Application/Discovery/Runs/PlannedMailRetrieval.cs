@@ -126,9 +126,11 @@ public sealed class PlannedMailRetrieval
 
                 lookupsRun++;
 
-                // Cut to the lookup's share before the ledger is asked, so a lookup returning twenty passages charges
-                // the run for its share alone: what it found beyond that is held back uncharged, and reaches the ledger
-                // only if the rest of the plan leaves room for it.
+                // Cut to the lookup's share before the ledger is asked, so a lookup returning twenty passages of new
+                // messages charges the run for its share alone: what it found beyond that is held back uncharged, and
+                // reaches the ledger only if the rest of the plan leaves room for it. A further cut of a message already
+                // found is not capped by the share and is charged at once, since the ledger rather than the share is
+                // what bounds it.
                 var (taken, held) = Split(
                     NotYetFound(retrieved.Passages, alreadyFound),
                     messagesFound,

@@ -47,7 +47,7 @@ internal static class DiscoveryCompositionReading
     /// <param name="coverage">What the run read, one entry per account its scope reached.</param>
     /// <param name="language">The language the person the result is for reads, which the sentence saying the mail does not answer is written in.</param>
     /// <returns>The plan a client draws.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when any argument but <paramref name="answerText" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" />, <paramref name="sources" />, <paramref name="evidence" />, or <paramref name="coverage" /> is <see langword="null" />.</exception>
     internal static PresentationPlan Read(
         string? answerText,
         DiscoveryRunPlan plan,
