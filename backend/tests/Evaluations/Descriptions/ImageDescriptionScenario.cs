@@ -376,9 +376,10 @@ internal sealed record ImageDescriptionScenario(
         new(
             "ImageDescription.Photo.CrushedParcel",
             "photo-crushed-parcel.jpg",
-            "A photograph of a crushed and torn brown cardboard parcel lying on a coir doormat in front of a dark grey front "
-            + "door, with a brick wall at the left edge. The box is dented and ripped open at one end, and carries no label "
-            + "or legible text.",
+            "A photograph of a crushed and torn brown cardboard parcel lying on a tan coir doormat in front of a dark "
+            + "blue-grey front door with a white frame and a metal threshold, with a brick wall at the left edge and a concrete "
+            + "walkway around the mat. The box is dented and ripped open along one end, exposing its corrugated inside, and "
+            + "carries no label or legible text.",
 
             // A photograph a courier's customer sends as evidence; it is found by what it shows, not by any text.
             ["cardboard", "door"],
