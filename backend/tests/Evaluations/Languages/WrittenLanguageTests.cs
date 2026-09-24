@@ -15,6 +15,8 @@ public sealed class WrittenLanguageTests
     [InlineData("NIE MA JESZCZE WYCENY DLA TEGO ZAMÓWIENIA", MailAccountLanguage.Polish)]
     [InlineData("We will pay the whole amount by Friday, 4 September 2026.", MailAccountLanguage.English)]
     [InlineData("Termin płatności tej faktury to piątek, a temat „Re: Invoice for the order” zostaje bez zmian i nie jest tłumaczony.", MailAccountLanguage.Polish)]
+    [InlineData("LumenDesk wyświetlił komunikat błędu: „The export was stopped because the file is larger than the permitted buffer size and it will not be retried.”", MailAccountLanguage.Polish)]
+    [InlineData("“The export was stopped because the file is larger than the permitted buffer size.”", MailAccountLanguage.English)]
     public void Of_ATextWrittenInOneLanguage_TellsThatLanguage(string text, MailAccountLanguage expected)
     {
         // Act

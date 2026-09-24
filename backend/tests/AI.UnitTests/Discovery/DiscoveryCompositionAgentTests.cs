@@ -23,6 +23,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
@@ -62,6 +63,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -84,6 +86,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -107,6 +110,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -131,6 +135,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence($"the key is {Marker} as agreed"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -154,6 +159,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -175,6 +181,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -199,6 +206,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence($"the key is {Marker} as agreed"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -221,6 +229,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept", "we will revert", "the figure stands"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -246,6 +255,7 @@ public sealed class DiscoveryCompositionAgentTests
             Plan(DiscoveryIntent.FindFact),
             Evidence("we accept the revised figure"),
             Coverage(),
+            UserLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -276,6 +286,7 @@ public sealed class DiscoveryCompositionAgentTests
                 Plan(DiscoveryIntent.FindFact),
                 Evidence("we accept the revised figure"),
                 Coverage(),
+                UserLanguage.English,
                 TestContext.Current.CancellationToken));
 
         // Assert

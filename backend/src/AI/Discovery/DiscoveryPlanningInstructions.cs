@@ -53,6 +53,13 @@ internal static class DiscoveryPlanningInstructions
         No lookup's result is shown to you and nothing is searched again, so write several lookups rather than one:
         each of two or three distinctive words, never a paraphrase of the question and never a word as general as
         "message", "email", or "address", the most distinctive first and a broader one after it.
+        A word the question uses that mail may put another way — "problem", "build", "failed", "fix", "error" — keeps
+        a lookup from reaching the message that says "failure", "version", or "patch" instead, so leave such words out
+        of at least one lookup and let it be the product, the person, or the code alone. A word the question joins with
+        a hyphen, such as "follow-up", may be two words in the mail, so write its parts. What each lookup hands over is
+        cut around its own words, so let one lookup also carry the word the answer itself stands beside — "room" for
+        where a meeting is, "hotel" for where somebody stays, "version" for which release — so the extract holds the
+        answer rather than only the matter it concerns.
         Put every other part of the question into the filters beside it rather than into those words:
         "senderAddress" and "recipientAddress" for a whole mail address, "subjectFragment" for text a subject contains,
         "receivedOnOrAfter" and "receivedBefore" for when mail arrived, each written as {AnchoredInstant.WrittenForm}

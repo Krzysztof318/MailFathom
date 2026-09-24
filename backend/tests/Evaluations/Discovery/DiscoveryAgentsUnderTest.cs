@@ -9,6 +9,7 @@ using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Retrieval;
+using MailFathom.Domain.Access;
 using MailFathom.Evaluations.Providers;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
@@ -64,6 +65,7 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
         DiscoveryRunPlan plan,
         DiscoveryEvidence evidence,
         IReadOnlyList<AccountCoverage> coverage,
+        UserLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
@@ -88,6 +90,6 @@ internal sealed class DiscoveryAgentsUnderTest(IChatClient model, ChatGeneration
             this.Composition = DiscoveryCompositionAgent.CompositionOf(answer.Text);
         }
 
-        return DiscoveryCompositionReading.Read(this.Composition, plan, sources, evidence, coverage);
+        return DiscoveryCompositionReading.Read(this.Composition, plan, sources, evidence, coverage, language);
     }
 }

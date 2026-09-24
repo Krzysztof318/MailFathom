@@ -49,6 +49,7 @@ internal static class DiscoveryRuns
     /// <param name="folders">How current each folder the run read was, defaulting to a scope reporting none.</param>
     /// <param name="ledger">What this run has spent, defaulting to an untouched ledger under the deployment's default ceilings.</param>
     /// <param name="spendLedger">What the current period has spent, defaulting to a period that admits the run.</param>
+    /// <param name="languages">Which language the person asking reads, defaulting to the one a substitute answers with.</param>
     /// <returns>The composed run.</returns>
     public static DiscoveryRun Composing(
         IDiscoveryRunPlanner? planner,
@@ -60,7 +61,8 @@ internal static class DiscoveryRuns
         IDiscoveryResultComposer? composer = null,
         IReadOnlyList<MailboxFolderFreshness>? folders = null,
         MailAnsweringRunLedger? ledger = null,
-        IMailAnsweringSpendLedger? spendLedger = null)
+        IMailAnsweringSpendLedger? spendLedger = null,
+        IUserLanguages? languages = null)
     {
         // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
         var healthReader = Substitute.For<IAiProviderHealthReader>();
@@ -97,6 +99,7 @@ internal static class DiscoveryRuns
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
             spendLedger ?? PeriodAdmitting(),
+            languages ?? Substitute.For<IUserLanguages>(),
             planner,
             // The two halves of one deployment's chat configuration: an instance that derives a plan composes a result
             // from it, and an instance that declared no endpoint has neither.
@@ -145,6 +148,7 @@ internal static class DiscoveryRuns
                 Arg.Any<DiscoveryRunPlan>(),
                 Arg.Any<DiscoveryEvidence>(),
                 Arg.Any<IReadOnlyList<AccountCoverage>>(),
+                Arg.Any<UserLanguage>(),
                 Arg.Any<CancellationToken>())
             .Returns(presentation);
 

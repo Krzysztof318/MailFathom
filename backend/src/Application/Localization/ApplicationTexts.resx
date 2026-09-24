@@ -49,4 +49,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <value>Writing the answer</value>
     <comment>The status line while the Agent writes the answer itself.</comment>
   </data>
+  <data name="DiscoveryMailDoesNotAnswer" xml:space="preserve">
+    <value>The mail this run read does not answer the question.</value>
+    <comment>What a Discover result says in place of an answer when the mail the run read does not answer the question.</comment>
+  </data>
 </root>

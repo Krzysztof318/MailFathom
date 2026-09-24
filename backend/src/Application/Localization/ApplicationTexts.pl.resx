@@ -41,4 +41,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   <data name="AgentStatusComposingAnswer" xml:space="preserve">
     <value>Piszę odpowiedź</value>
   </data>
+  <data name="DiscoveryMailDoesNotAnswer" xml:space="preserve">
+    <value>Poczta przeczytana w tym wyszukiwaniu nie odpowiada na to pytanie.</value>
+  </data>
 </root>

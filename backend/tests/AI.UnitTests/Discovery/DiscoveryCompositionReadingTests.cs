@@ -11,6 +11,7 @@ using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
@@ -87,6 +88,77 @@ public sealed class DiscoveryCompositionReadingTests
         // Assert
         var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
         Assert.Equal("The mail this run read does not answer the question.", block.Text.Value);
+        Assert.Empty(block.Evidence.Citations);
+    }
+
+    /// <summary>The sentence saying the mail does not answer is the service's own, so it is written in the reader's language.</summary>
+    [Fact]
+    public void Read_AnAnswerRestingOnNoSourceForAPersonReadingPolish_SaysSoInPolish()
+    {
+        // Arrange
+        const string answer = """
+            { "answer": "To pewnie zwykły dostawca.", "confidence": "high", "sources": [] }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.FindFact, Sources("a quotation"), language: UserLanguage.Polish);
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal("Poczta przeczytana w tym wyszukiwaniu nie odpowiada na to pytanie.", block.Text.Value);
+    }
+
+    /// <summary>
+    /// A model that cited a source for every event has said what the answer rests on, even where it left the answer's own
+    /// list out, and reading that as resting on nothing would tell somebody their mail holds no answer.
+    /// </summary>
+    [Fact]
+    public void Read_EventsCitingSourcesBesideNoListOfTheAnswersOwn_RestsTheTimelineOnWhatTheEventsCite()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "answer": "The move was set for 29 August and corrected to 30 August.",
+              "events": [
+                { "occurredAt": "2026-08-29", "summary": "Move set for Saturday", "subject": "Move", "sources": ["s2"] },
+                { "occurredAt": "2026-08-30", "summary": "Move corrected to Sunday", "subject": "Move", "sources": ["s1"] }
+              ]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.TrackChange, Sources("the move is on Sunday", "the move is on Saturday"));
+
+        // Assert
+        var block = Assert.IsType<TimelineBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationSupport.Supported, block.Evidence.Support);
+        Assert.Equal(["s2", "s1"], block.Evidence.Citations.Select(citation => citation.Value));
+    }
+
+    /// <summary>
+    /// An empty list is how a model says the extracts do not answer, so a citation it still put on an event does not turn
+    /// the answer into one resting on the mail.
+    /// </summary>
+    [Fact]
+    public void Read_EventsCitingSourcesBesideAnEmptyListOfTheAnswersOwn_SaysTheMailDoesNotAnswer()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "answer": "The move was probably set for 29 August.",
+              "sources": [],
+              "events": [
+                { "occurredAt": "2026-08-29", "summary": "Move set for Saturday", "subject": "Move", "sources": ["s2"] }
+              ]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.TrackChange, Sources("the move is on Sunday", "the move is on Saturday"));
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationSupport.Unsupported, block.Evidence.Support);
         Assert.Empty(block.Evidence.Citations);
     }
 
@@ -522,7 +594,8 @@ public sealed class DiscoveryCompositionReadingTests
                     PresentationSourceMedium.Written),
                 Work,
                 $"extract {index}",
-                Relevance: 0.5))
+                Relevance: 0.5,
+                ReceivedAt: null))
             .ToArray();
 
         // Act
@@ -640,7 +713,8 @@ public sealed class DiscoveryCompositionReadingTests
         DiscoveryIntent intent,
         IReadOnlyList<DiscoveryComposedSource> sources,
         IReadOnlyList<AccountCoverage>? coverage = null,
-        DiscoveryEvidence? evidence = null) =>
+        DiscoveryEvidence? evidence = null,
+        UserLanguage language = UserLanguage.English) =>
         DiscoveryCompositionReading.Read(
             answerText,
             DiscoveryRunPlan.Compose(
@@ -651,7 +725,8 @@ public sealed class DiscoveryCompositionReadingTests
                     sufficientPassages: 5)),
             sources,
             evidence ?? Evidence(sources, EmailSearchRetrievalMode.Hybrid, lookupsRefused: 0),
-            coverage ?? [Coverage(Work, PresentationFreshness.CurrentAt(ObservedAt))]);
+            coverage ?? [Coverage(Work, PresentationFreshness.CurrentAt(ObservedAt))],
+            language);
 
     private static IReadOnlyList<DiscoveryComposedSource> Sources(params string[] extracts) =>
         DiscoveryComposedSources.Declare([.. extracts.Select(Passage)]);
