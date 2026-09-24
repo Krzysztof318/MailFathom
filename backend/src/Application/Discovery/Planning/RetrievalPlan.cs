@@ -18,7 +18,7 @@ namespace MailFathom.Application.Discovery.Planning;
 /// <para>
 /// Several lookups rather than one, because a question worth asking rarely matches one wording. Ordered rather than
 /// unordered, because the order settles which lookup's passage goes first where two share a rank — but never which
-/// lookup deserves the whole of <see cref="PassageAllowance" />, since each is given its share of it.
+/// lookup deserves the whole of <see cref="MessageAllowance" />, since each is given its share of it.
 /// </para>
 /// </remarks>
 public sealed record RetrievalPlan
@@ -42,17 +42,17 @@ public sealed record RetrievalPlan
     /// never run the rest. Four is where the evaluation corpus stops losing evidence that a lookup of the plan reached.
     /// A lookup's cut of a message an earlier lookup already handed over takes none of the four, since it adds no
     /// message to answer from.
-    /// Neither bound a run keeps to comes from this number: <see cref="PassageAllowance" /> caps it at what one
+    /// Neither bound a run keeps to comes from this number: <see cref="MessageAllowance" /> caps it at what one
     /// retrieval returns, and the run's own ledger stops admitting passages at the characters one question may
     /// retrieve, whatever the allowance still has room for.
     /// </remarks>
-    public const int PassagesAssuredPerLookup = 4;
+    public const int MessagesAssuredPerLookup = 4;
 
-    private RetrievalPlan(IReadOnlyList<EmailKnowledgeQuery> lookups, int sufficientPassages, int passageAllowance)
+    private RetrievalPlan(IReadOnlyList<EmailKnowledgeQuery> lookups, int sufficientPassages, int messageAllowance)
     {
         this.Lookups = lookups;
         this.SufficientPassages = sufficientPassages;
-        this.PassageAllowance = passageAllowance;
+        this.MessageAllowance = messageAllowance;
     }
 
     /// <summary>Gets the lookups to run, in the order they are worth running.</summary>
@@ -60,14 +60,14 @@ public sealed record RetrievalPlan
 
     /// <summary>Gets the number of distinct passages the planning judged would answer the question.</summary>
     /// <remarks>
-    /// A judgement rather than the bound a run keeps to: <see cref="PassageAllowance" /> is that, and it only follows
+    /// A judgement rather than the bound a run keeps to: <see cref="MessageAllowance" /> is that, and it only follows
     /// this number where the number asks for more than every lookup is assured anyway.
     /// </remarks>
     public int SufficientPassages { get; }
 
     /// <summary>Gets the number of distinct messages a run may hand over passages of to answer from.</summary>
     /// <remarks>
-    /// The larger of <see cref="SufficientPassages" /> and <see cref="PassagesAssuredPerLookup" /> for every lookup,
+    /// The larger of <see cref="SufficientPassages" /> and <see cref="MessagesAssuredPerLookup" /> for every lookup,
     /// within what one retrieval may return, so a plan whose lookups would need more than that gets an equal part of it
     /// instead. It is divided between the lookups rather than spent by whichever runs first: each lookup is admitted up
     /// to its equal share, and what a lookup found beyond that fills only what the others left unspent. So every lookup
@@ -75,7 +75,7 @@ public sealed record RetrievalPlan
     /// lookup already handed over counts against neither, because it adds no message: it joins that message's passage,
     /// charged to the run's ledger like any other.
     /// </remarks>
-    public int PassageAllowance { get; }
+    public int MessageAllowance { get; }
 
     /// <summary>Composes the plan a run retrieves by.</summary>
     /// <param name="retrievalBounds">What this deployment's retrieval will return at most, which bounds what enough can mean.</param>
@@ -115,7 +115,7 @@ public sealed record RetrievalPlan
         return new RetrievalPlan(
             [.. lookups],
             sufficientPassages,
-            Math.Min(retrievalBounds.MaximumPassages, Math.Max(sufficientPassages, lookups.Count * PassagesAssuredPerLookup)));
+            Math.Min(retrievalBounds.MaximumPassages, Math.Max(sufficientPassages, lookups.Count * MessagesAssuredPerLookup)));
     }
 
     /// <inheritdoc />

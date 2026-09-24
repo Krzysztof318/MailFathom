@@ -108,7 +108,7 @@ public sealed class RetrievalPlanTests
         var plan = RetrievalPlan.Create(EmailKnowledgeBounds.Create(20, 1200), lookups, sufficientPassages);
 
         // Assert
-        Assert.Equal(expectedAllowance, plan.PassageAllowance);
+        Assert.Equal(expectedAllowance, plan.MessageAllowance);
         Assert.Equal(sufficientPassages, plan.SufficientPassages);
     }
 

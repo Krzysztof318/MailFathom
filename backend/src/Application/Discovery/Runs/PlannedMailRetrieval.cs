@@ -57,7 +57,7 @@ public sealed class PlannedMailRetrieval
     /// <exception cref="MailboxQueryFilterInvalidException">Every lookup the plan holds carried a filter this deployment refuses.</exception>
     /// <remarks>
     /// <para>
-    /// Every lookup is admitted up to an equal share of <see cref="RetrievalPlan.PassageAllowance" /> first, and only
+    /// Every lookup is admitted up to an equal share of <see cref="RetrievalPlan.MessageAllowance" /> first, and only
     /// what that leaves unspent goes to the passages a lookup found beyond its share, taken rank by rank across the
     /// lookups. So a later lookup's best passages are never crowded out by an earlier lookup's lower-ranked ones: a plan
     /// lists several short wordings because it cannot know which one reaches the evidence, and the one that does is as
@@ -92,11 +92,11 @@ public sealed class PlannedMailRetrieval
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(plan);
 
-        var found = new List<EmailKnowledgePassage>(plan.PassageAllowance);
+        var found = new List<EmailKnowledgePassage>(plan.MessageAllowance);
         var alreadyFound = new HashSet<(Guid StoredEmailId, string Text)>();
         var messagesFound = new HashSet<Guid>();
         var beyondShare = new List<IReadOnlyList<EmailKnowledgePassage>>(plan.Lookups.Count);
-        var share = Math.Max(1, plan.PassageAllowance / plan.Lookups.Count);
+        var share = Math.Max(1, plan.MessageAllowance / plan.Lookups.Count);
         var retrievalMode = EmailSearchRetrievalMode.Lexical;
         var lookupsRun = 0;
         var lookupsRefused = 0;
@@ -132,7 +132,7 @@ public sealed class PlannedMailRetrieval
                 var (taken, held) = Split(
                     NotYetFound(retrieved.Passages, alreadyFound),
                     messagesFound,
-                    Math.Min(share, plan.PassageAllowance - messagesFound.Count));
+                    Math.Min(share, plan.MessageAllowance - messagesFound.Count));
 
                 beyondShare.Add(held);
                 found.AddRange(Admit(taken));
@@ -143,12 +143,12 @@ public sealed class PlannedMailRetrieval
                 found.AddRange(Admit(Split(
                     RankByRank(beyondShare, alreadyFound),
                     messagesFound,
-                    plan.PassageAllowance - messagesFound.Count).Taken));
+                    plan.MessageAllowance - messagesFound.Count).Taken));
             }
 
             await ReportAsync();
 
-            if (messagesFound.Count >= plan.PassageAllowance || this.ledger.RetrievalWasTruncated)
+            if (messagesFound.Count >= plan.MessageAllowance || this.ledger.RetrievalWasTruncated)
             {
                 // A ceiling that is reached stops the plan rather than cutting one lookup: nothing a later lookup found
                 // would fit either, so issuing it would read more of somebody's mail out of the database to discard it.
