@@ -9,6 +9,8 @@ using MailFathom.Application.Discovery.Presentation.Blocks;
 using MailFathom.Application.Discovery.Presentation.Citations;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Localization;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.Discovery;
 
@@ -43,6 +45,7 @@ internal static class DiscoveryCompositionReading
     /// <param name="sources">The sources the run declared, which are the only ones a claim may rest on.</param>
     /// <param name="evidence">What running the retrieval plan took, which is where two of the limitations come from.</param>
     /// <param name="coverage">What the run read, one entry per account its scope reached.</param>
+    /// <param name="language">The language the person the result is for reads, which the sentence saying the mail does not answer is written in.</param>
     /// <returns>The plan a client draws.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument but <paramref name="answerText" /> is <see langword="null" />.</exception>
     internal static PresentationPlan Read(
@@ -50,7 +53,8 @@ internal static class DiscoveryCompositionReading
         DiscoveryRunPlan plan,
         IReadOnlyList<DiscoveryComposedSource> sources,
         DiscoveryEvidence evidence,
-        IReadOnlyList<AccountCoverage> coverage)
+        IReadOnlyList<AccountCoverage> coverage,
+        UserLanguage language)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(sources);
@@ -61,7 +65,7 @@ internal static class DiscoveryCompositionReading
         var freshness = new DiscoveryFreshnessIndex(sources, coverage);
         var document = ReadDocument(answerText);
 
-        var cited = Resolve(document?.Sources, everySource);
+        var cited = Resolve(SourcesRestedOn(document), everySource);
 
         // Everything inside the block refers to what the block rests on and to nothing else: a side, an event, or a
         // cell naming a source the answer never cited would be a reference the block's own evidence does not carry,
@@ -79,7 +83,7 @@ internal static class DiscoveryCompositionReading
 
         IReadOnlyList<PresentationBlock> blocks =
         [
-            OpeningBlock(plan.Intent, document, evidenceOf, restedOn, support),
+            OpeningBlock(plan.Intent, document, evidenceOf, restedOn, support, language),
             .. EvidenceList(sources, freshness),
         ];
 
@@ -110,7 +114,8 @@ internal static class DiscoveryCompositionReading
         DiscoveryResultDocument? document,
         PresentationEvidence evidence,
         Dictionary<string, DiscoveryComposedSource> restedOn,
-        PresentationSupport support)
+        PresentationSupport support,
+        UserLanguage language)
     {
         PresentationBlock? shaped = support is PresentationSupport.Unsupported
             ? null
@@ -121,7 +126,7 @@ internal static class DiscoveryCompositionReading
                 _ => null,
             };
 
-        return shaped ?? Answer(document, evidence, support);
+        return shaped ?? Answer(document, evidence, support, language);
     }
 
     /// <summary>Composes the synthesized answer, holding what a model claimed about it to what its sources support.</summary>
@@ -140,7 +145,8 @@ internal static class DiscoveryCompositionReading
     private static AnswerBlock Answer(
         DiscoveryResultDocument? document,
         PresentationEvidence evidence,
-        PresentationSupport support)
+        PresentationSupport support,
+        UserLanguage language)
     {
         var answer = document?.Answer is { Length: > PresentationText.MaxLength } overlong
             ? overlong[..(char.IsLowSurrogate(overlong[PresentationText.MaxLength])
@@ -151,7 +157,7 @@ internal static class DiscoveryCompositionReading
         var text = support is not PresentationSupport.Unsupported
             && PresentationText.TryCreate(answer, out var written)
             ? written
-            : UnansweredText;
+            : PresentationText.Create(ApplicationTexts.GetText(ApplicationText.DiscoveryMailDoesNotAnswer, language));
 
         return new AnswerBlock(evidence, text, ConfidenceOf(document?.Confidence, support));
     }
@@ -417,6 +423,23 @@ internal static class DiscoveryCompositionReading
         return limitations;
     }
 
+    /// <summary>Names the sources the answer rests on: the ones it listed, or where it listed none, the ones its own parts cite.</summary>
+    /// <remarks>
+    /// A model filling in events, rows, or the sides of a disagreement cites a source for each of them, and one doing so
+    /// has said which extracts the answer rests on even where it left the answer's own list out. Reading that as resting
+    /// on nothing would replace a cited answer with the sentence saying the mail does not answer — a false statement
+    /// about the run rather than the honest absence that sentence is for.
+    /// </remarks>
+    private static IReadOnlyList<string>? SourcesRestedOn(DiscoveryResultDocument? document) =>
+        document?.Sources is { Count: > 0 } listed
+            ? listed
+            :
+            [
+                .. (document?.Events ?? []).SelectMany(static entry => entry?.Sources ?? []),
+                .. (document?.Rows ?? []).SelectMany(static row => row?.Cells ?? []).SelectMany(static cell => cell?.Sources ?? []),
+                .. (document?.Conflict ?? []).SelectMany(static side => side?.Sources ?? []),
+            ];
+
     private static IReadOnlyList<DiscoveryComposedSource> Resolve(
         IReadOnlyList<string>? named,
         Dictionary<string, DiscoveryComposedSource> available) =>
@@ -470,8 +493,4 @@ internal static class DiscoveryCompositionReading
 
         return opening >= 0 && closing > opening ? text[opening..(closing + 1)] : null;
     }
-
-    /// <summary>What an unsupported answer says, which is a statement about the run rather than about the question.</summary>
-    private static PresentationText UnansweredText { get; } =
-        PresentationText.Create("The mail this run read does not answer the question.");
 }

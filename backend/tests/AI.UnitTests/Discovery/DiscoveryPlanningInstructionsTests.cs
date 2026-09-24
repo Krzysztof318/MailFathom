@@ -60,6 +60,21 @@ public sealed class DiscoveryPlanningInstructionsTests
         Assert.Contains("the most distinctive first and a broader one after it", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Every word of a lookup has to be in the message and the extract is cut around those words, so a lookup copying the
+    /// question's own wording misses the message and one naming only the matter hands over an extract without the answer.
+    /// </summary>
+    [Fact]
+    public void Text_TheInstruction_AsksForALookupWithoutTheQuestionsWordingAndOneBesideTheAnswer()
+    {
+        // Act
+        var text = DiscoveryPlanningInstructions.Text.ReplaceLineEndings(" ");
+
+        // Assert
+        Assert.Contains("leave such words out of at least one lookup", text, StringComparison.Ordinal);
+        Assert.Contains("let one lookup also carry the word the answer itself stands beside", text, StringComparison.Ordinal);
+    }
+
     /// <summary>The agent is never asked for a block type, because the composition is derived from the intent in code.</summary>
     [Fact]
     public void Text_TheInstruction_AsksForNoPresentation()

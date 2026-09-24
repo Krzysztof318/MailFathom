@@ -13,6 +13,7 @@ using MailFathom.Application.Discovery.Presentation.Blocks;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Evaluations.Answering;
 using MailFathom.Evaluations.Corpus;
@@ -394,7 +395,8 @@ internal sealed record DiscoveryCompositionScenario(
             runPlan,
             sources,
             evidence,
-            [new AccountCoverage(PresentationText.Create(CorpusKnowledgeSearch.Account.Value), PresentationFreshness.CurrentAt(ObservedAt), earliestReceivedAt: null, latestReceivedAt: null)]);
+            [new AccountCoverage(PresentationText.Create(CorpusKnowledgeSearch.Account.Value), PresentationFreshness.CurrentAt(ObservedAt), earliestReceivedAt: null, latestReceivedAt: null)],
+            this.AnswersIn is MailAccountLanguage.Polish ? UserLanguage.Polish : UserLanguage.English);
 
         // The judge is shown the result a person would read, against the question they asked and the extracts it was
         // composed from, so it grades what the reading kept rather than a source name the reading dropped.

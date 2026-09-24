@@ -101,6 +101,34 @@ public sealed class DiscoveryRunTests
             Arg.Any<DiscoveryEvidence>(),
             Arg.Is<IReadOnlyList<AccountCoverage>>(coverage =>
                 coverage != null && coverage.Count == 1 && coverage[0].Account.Value == "primary"),
+            Arg.Any<UserLanguage>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The sentences the service writes into a result are the person's own language, not the deployment's.</summary>
+    [Fact]
+    public async Task RunAsync_APersonReadingPolish_ComposesTheResultForPolish()
+    {
+        // Arrange
+        var composer = DiscoveryRuns.ComposerReturning(PresentationPlanExample.Compose());
+        var languages = Substitute.For<IUserLanguages>();
+        languages.LanguageOf(Arg.Any<UserId>()).Returns(UserLanguage.Polish);
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            composer: composer,
+            languages: languages);
+
+        // Act
+        await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        await composer.Received(1).ComposeAsync(
+            Arg.Any<MailQuestion>(),
+            Arg.Any<DiscoveryRunPlan>(),
+            Arg.Any<DiscoveryEvidence>(),
+            Arg.Any<IReadOnlyList<AccountCoverage>>(),
+            UserLanguage.Polish,
             Arg.Any<CancellationToken>());
     }
 

@@ -15,6 +15,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -115,6 +116,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         DiscoveryRunPlan plan,
         DiscoveryEvidence evidence,
         IReadOnlyList<AccountCoverage> coverage,
+        UserLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
@@ -127,7 +129,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         var turn = await ComposeTurnAsync(question, plan, sources, this.egressGuard, cancellationToken);
 
         var answer = await this.AskAsync(turn, cancellationToken);
-        var composed = DiscoveryCompositionReading.Read(answer?.Text, plan, sources, evidence, coverage);
+        var composed = DiscoveryCompositionReading.Read(answer?.Text, plan, sources, evidence, coverage, language);
 
         if (answer is { Text: not null })
         {
@@ -210,7 +212,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
                 .. sources.Select(source => new DiscoveryTurnSource(
                     source.Citation.Id.Value,
                     source.Citation.Label.Value,
-                    source.Extract)),
+                    source.Extract,
+                    source.ReceivedAt)),
             ];
         }
 
@@ -227,7 +230,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
                 await egressGuard.GuardAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     source.Extract,
-                    cancellationToken)));
+                    cancellationToken),
+                source.ReceivedAt));
         }
 
         return guarded;

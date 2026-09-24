@@ -38,6 +38,7 @@ public sealed class DiscoveryRun
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly DiscoveryCoverageReader coverageReader;
     private readonly IMailAnsweringSpendLedger spendLedger;
+    private readonly IUserLanguages languages;
     private readonly IDiscoveryRunPlanner? planner;
     private readonly IDiscoveryResultComposer? composer;
 
@@ -48,6 +49,7 @@ public sealed class DiscoveryRun
     /// <param name="egressGuard">Withholds from a provider whatever this user's posture withholds.</param>
     /// <param name="coverageReader">Reads which accounts the run drew on and how current each one's local copy was.</param>
     /// <param name="spendLedger">Admits the run against what the current period may still spend, and is what stops the next question.</param>
+    /// <param name="languages">Resolves the language the person asking reads, which the result's own sentences are written in.</param>
     /// <param name="planner">The derivation, absent on a deployment that composes no chat agent.</param>
     /// <param name="composer">The composition, absent on the same deployments the derivation is.</param>
     public DiscoveryRun(
@@ -57,6 +59,7 @@ public sealed class DiscoveryRun
         SensitiveContentEgressGuard egressGuard,
         DiscoveryCoverageReader coverageReader,
         IMailAnsweringSpendLedger spendLedger,
+        IUserLanguages languages,
         IDiscoveryRunPlanner? planner,
         IDiscoveryResultComposer? composer)
     {
@@ -66,6 +69,7 @@ public sealed class DiscoveryRun
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(coverageReader);
         ArgumentNullException.ThrowIfNull(spendLedger);
+        ArgumentNullException.ThrowIfNull(languages);
 
         this.capability = capability;
         this.retrieval = retrieval;
@@ -73,6 +77,7 @@ public sealed class DiscoveryRun
         this.egressGuard = egressGuard;
         this.coverageReader = coverageReader;
         this.spendLedger = spendLedger;
+        this.languages = languages;
         this.planner = planner;
         this.composer = composer;
     }
@@ -137,7 +142,8 @@ public sealed class DiscoveryRun
         // refuses to judge text on a flow acting for nobody wherever the deployment scans somebody. Read from the
         // authorization rather than from the scope, which names nobody where the caller owns no served account — a run
         // whose question would then leave under the deployment's floor instead of under this user's posture.
-        using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireUser());
+        var user = this.authorization.RequireUser();
+        using var actingFor = this.egressGuard.ActingFor(user);
 
         return await AnswerAsync(
             question,
@@ -145,6 +151,7 @@ public sealed class DiscoveryRun
             this.retrieval,
             this.coverageReader,
             composition,
+            this.languages.LanguageOf(user),
             progress,
             cancellationToken);
     }
@@ -155,6 +162,7 @@ public sealed class DiscoveryRun
     /// <param name="retrieval">The retrieval the plan is run through.</param>
     /// <param name="coverageReader">Reads which accounts the run drew on and how current each one's local copy was.</param>
     /// <param name="composer">The composition the result is written through.</param>
+    /// <param name="language">The language the person asking reads.</param>
     /// <param name="progress">Told how far the retrieval has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
     /// <param name="cancellationToken">Cancels the derivation, the retrieval, and the composition.</param>
     /// <returns>What the run decided, what it found, and what it composed out of it.</returns>
@@ -169,6 +177,7 @@ public sealed class DiscoveryRun
         PlannedMailRetrieval retrieval,
         DiscoveryCoverageReader coverageReader,
         IDiscoveryResultComposer composer,
+        UserLanguage language,
         Func<DiscoveryRetrievalProgress, Task>? progress,
         CancellationToken cancellationToken)
     {
@@ -179,6 +188,6 @@ public sealed class DiscoveryRun
         return new DiscoveryRunResult(
             plan,
             evidence,
-            await composer.ComposeAsync(question, plan, evidence, coverage, cancellationToken));
+            await composer.ComposeAsync(question, plan, evidence, coverage, language, cancellationToken));
     }
 }

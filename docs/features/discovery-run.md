@@ -73,8 +73,11 @@ question. The plan is bounded before it runs:
   fewer passages than the plan holds lookups gives each lookup one and leaves the lookups past that many unrun, since
   nothing they found could be admitted. What a lookup found beyond what is admitted is neither charged to the run nor
   handed to the composition.
-- **A passage is counted once.** Two lookups finding the same extract of the same message contribute one passage, which
-  is what stops a model from filling the budget by asking the same thing in four wordings.
+- **A passage is counted once, and a message too.** Two lookups finding the same extract of the same message contribute
+  one passage, which is what stops a model from filling the budget by asking the same thing in four wordings. The
+  allowance and every lookup's share count messages: a lookup's cut of a message an earlier lookup already handed over
+  is handed over beside it without spending the share, because two lookups cut one message around different words and
+  the later cut is as often the one carrying the answer. The run's ledger charges that cut like any other passage.
 
 What a run reports back is the passages, which ranking answered them, how many lookups ran, and how many were refused.
 A lookup a filter refuses is counted and skipped; only a plan whose every lookup was refused fails, and it fails with
@@ -137,7 +140,9 @@ own name, no tools at all, and the same instruction envelope every agent here ca
 extracts and nothing else about the mailbox.
 
 **The citations are minted before the model sees anything, and they are the only ones a claim may rest on.** The run
-declares one source per distinct message it retrieved, names it `s1`, `s2`, and so on, and shows the model those names.
+declares one source per distinct message it retrieved, names it `s1`, `s2`, and so on, and shows the model those names —
+each over every extract the run retrieved from that message, headed by the message's subject and the day it arrived,
+which is what tells a correction from the statement it corrects.
 A name the model invents resolves to nothing, so the claim resting on it is read as resting on nothing — which is what
 makes a composed answer checkable at all. Nothing a model writes ever becomes a reference to mail.
 
@@ -151,7 +156,9 @@ mail it names rather than from mail a reader has no way to reach.
   and how current the accounts they were read from are — supported, unsupported, conflicting, or stale, in the sense
   [the presentation plan](presentation-plan.md#what-the-correspondence-does-for-a-block) fixes. An answer resting on
   nothing carries a sentence about the run rather than the model's own prose, because an unsupported block's prose
-  would be exactly the sentence nobody wrote.
+  would be exactly the sentence nobody wrote; it is the service's own sentence, so it is written in the language the
+  person asking reads. An answer that lists no sources of its own rests on the ones its events, rows, or sides cite,
+  because a model that cited a source for each of them has said what the answer rests on.
 - **The disagreement is kept as a disagreement.** Where the model reports two or more sides, each naming sources it was
   actually offered, the block carries every side with its own citations rather than one figure the run chose. A later
   message correcting or withdrawing an earlier one is not a disagreement: the model is told to answer with the
@@ -165,7 +172,8 @@ mail it names rather than from mail a reader has no way to reach.
 **The evidence list is built from what retrieval returned rather than from what the model cited**, so a reader checking
 a thin answer sees the mail the run actually read. And the material the model is asked for follows the intent: events
 for a question about change — given even where only one point of the change carries a date, the undated stages folded
-into the entry they led to — columns and rows for a comparison, and the answer alone otherwise. What it gives back is
+into the entry they led to — columns and rows for a comparison, and nothing further otherwise; the answer, its sources,
+and its confidence are asked for every time. What it gives back is
 held to the contract — a column the catalogue does not hold is dropped, a row whose cells do not match the columns is
 dropped rather than padded, an event whose date is not a full date — a day with no year, a sentence, a number — is
 dropped on its own while the answer and every other event are read as before, and a shape that ends up empty falls back

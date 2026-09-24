@@ -1129,6 +1129,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<SensitiveContentEgressGuard>(),
             provider.GetRequiredService<DiscoveryCoverageReader>(),
             provider.GetRequiredService<IMailAnsweringSpendLedger>(),
+            provider.GetRequiredService<IUserLanguages>(),
             provider.GetService<IDiscoveryRunPlanner>(),
             provider.GetService<IDiscoveryResultComposer>()));
         // Built by hand for the reason the run above is: the endpoint's identity is the one dependency a supported

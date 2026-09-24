@@ -185,6 +185,41 @@ public sealed class PlannedMailRetrievalTests
         Assert.Equal(2, evidence.LookupsRun);
     }
 
+    /// <summary>
+    /// A later lookup's cut of a message already found adds no message, so it is handed over beside the first cut and the
+    /// lookup's share goes to the messages nothing earlier reached.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveAsync_ALaterLookupCuttingMessagesAlreadyFound_SpendsItsShareOnMessagesNotYetFound()
+    {
+        // Arrange
+        Guid[] messages = [.. Enumerable.Range(1, 4).Select(static number => new Guid($"{number:D8}-0000-0000-0000-000000000000"))];
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Returning("invoice", [.. messages.Select(static (message, index) => ScriptedEmailKnowledgeSearch.Passage($"invoice cut {index + 1}", message))])
+            .Returning(
+                "faktura",
+                [
+                    .. messages.Select(static (message, index) => ScriptedEmailKnowledgeSearch.Passage($"faktura cut {index + 1}", message)),
+                    .. PassagesNamed("fifth", "sixth", "seventh", "eighth"),
+                ]);
+
+        // Act
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 1, "invoice", "faktura"),
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                "invoice cut 1", "invoice cut 2", "invoice cut 3", "invoice cut 4",
+                "faktura cut 1", "faktura cut 2", "faktura cut 3", "faktura cut 4",
+                "fifth", "sixth", "seventh", "eighth",
+            ],
+            evidence.Passages.Select(passage => passage.Text));
+    }
+
     /// <summary>One wording the deployment refuses does not make a question unanswerable.</summary>
     [Fact]
     public async Task RetrieveAsync_OneRefusedLookupAmongSeveral_AnswersFromTheOthersAndSaysSo()

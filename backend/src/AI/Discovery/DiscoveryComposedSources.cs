@@ -12,13 +12,15 @@ namespace MailFathom.AI.Discovery;
 /// <summary>One source a run may cite: the citation the plan declares, the extract the model is shown, and where it was read from.</summary>
 /// <param name="Citation">The citation the plan declares, under the name the model is asked to cite it by.</param>
 /// <param name="AccountId">The account the extract was read from, which is how the block's freshness is found.</param>
-/// <param name="Extract">The passage itself, which is what the model is shown and what an evidence entry quotes.</param>
+/// <param name="Extract">Every passage the run retrieved from the message, in the order retrieval ranked them, which is what the model is shown and what an evidence entry quotes.</param>
 /// <param name="Relevance">Where the extract stood in the retrieval's own order, on the scale the contract states it on.</param>
+/// <param name="ReceivedAt">When the message arrived, or <see langword="null" /> where the store recorded no time.</param>
 internal sealed record DiscoveryComposedSource(
     PresentationCitation Citation,
     MailAccountId AccountId,
     string Extract,
-    double Relevance);
+    double Relevance,
+    DateTimeOffset? ReceivedAt);
 
 /// <summary>Declares the sources one run may cite, before a model is shown anything.</summary>
 /// <remarks>
@@ -31,7 +33,8 @@ internal sealed record DiscoveryComposedSource(
 /// One citation per message rather than per extract, because that is what a passage can be followed to today: a passage
 /// carries the message it was cut from and not the persisted identity of the cut, so a fragment target would be a
 /// coordinate this run does not hold. Two extracts of one message therefore share a source, which is also what a reader
-/// checking two facts against one message wants to see.
+/// checking two facts against one message wants to see. Sharing it means joining them: two lookups cut one message
+/// around different words, and the extract the later lookup reached is as often the one that answers as the first.
 /// </para>
 /// <para>
 /// Every source is <see cref="PresentationSourceMedium.Written" /> here, because every passage this retrieval returns
@@ -59,20 +62,20 @@ internal static class DiscoveryComposedSources
         var ranked = passages
             .GroupBy(passage => passage.StoredEmailId)
             .Take(PresentationEvidence.MaxCitations)
-            .Select(message => message.First())
             .ToArray();
 
         return
         [
-            .. ranked.Select((passage, rank) => new DiscoveryComposedSource(
+            .. ranked.Select((message, rank) => new DiscoveryComposedSource(
                 new PresentationCitation(
                     PresentationCitationId.Create($"s{rank + 1}"),
-                    new EmailCitationTarget(passage.StoredEmailId),
-                    LabelOf(passage),
+                    new EmailCitationTarget(message.Key),
+                    LabelOf(message.First()),
                     PresentationSourceMedium.Written),
-                passage.AccountId,
-                passage.Text,
-                RelevanceOf(rank, ranked.Length))),
+                message.First().AccountId,
+                string.Join('\n', message.Select(passage => passage.Text).Distinct(StringComparer.Ordinal)),
+                RelevanceOf(rank, ranked.Length),
+                message.First().ReceivedAt)),
         ];
     }
 

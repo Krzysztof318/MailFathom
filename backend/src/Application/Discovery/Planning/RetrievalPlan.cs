@@ -63,13 +63,15 @@ public sealed record RetrievalPlan
     /// </remarks>
     public int SufficientPassages { get; }
 
-    /// <summary>Gets the number of distinct passages a run may hand over to answer from.</summary>
+    /// <summary>Gets the number of distinct messages a run may hand over passages of to answer from.</summary>
     /// <remarks>
     /// The larger of <see cref="SufficientPassages" /> and <see cref="PassagesAssuredPerLookup" /> for every lookup,
     /// within what one retrieval may return, so a plan whose lookups would need more than that gets an equal part of it
     /// instead. It is divided between the lookups rather than spent by whichever runs first: each lookup is admitted up
     /// to its equal share, and what a lookup found beyond that fills only what the others left unspent. So every lookup
-    /// runs, and one that never reaches this number answers from what it found.
+    /// runs, and one that never reaches this number answers from what it found. A lookup's cut of a message an earlier
+    /// lookup already handed over counts against neither, because it adds no message: it joins that message's passage,
+    /// charged to the run's ledger like any other.
     /// </remarks>
     public int PassageAllowance { get; }
 

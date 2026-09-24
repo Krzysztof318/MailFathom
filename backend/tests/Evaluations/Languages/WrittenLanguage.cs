@@ -47,9 +47,17 @@ internal static partial class WrittenLanguage
     /// <summary>Tells which language a text is written in.</summary>
     /// <param name="text">What a model wrote.</param>
     /// <returns>The language, or <see langword="null" /> where the text is too short or too evenly mixed to tell.</returns>
-    public static MailAccountLanguage? Of(string? text)
+    /// <remarks>
+    /// Read outside quotation marks first, because the instructions keep a quotation in the language it was written in
+    /// and ask for the sentence around it in the reader's: a long quoted error message would otherwise outweigh the
+    /// short sentence that makes the answer the reader's. The whole text decides only where what stands outside the
+    /// quotations is too little to, so a quotation standing alone is still read as the language it is in.
+    /// </remarks>
+    public static MailAccountLanguage? Of(string? text) =>
+        Decided(WordsOf(Quotation().Replace(text ?? string.Empty, " "))) ?? Decided(WordsOf(text));
+
+    private static MailAccountLanguage? Decided(List<string> words)
     {
-        var words = WordsOf(text);
         var polish = words.Count(static word => PolishWords.Contains(word) || word.AsSpan().ContainsAny(PolishLetters));
         var english = words.Count(EnglishWords.Contains);
 
@@ -96,4 +104,7 @@ internal static partial class WrittenLanguage
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex Word();
+
+    [GeneratedRegex("[\"“„«][^\"“”„«»]*[\"”“»]")]
+    private static partial Regex Quotation();
 }

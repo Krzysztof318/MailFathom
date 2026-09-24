@@ -12,6 +12,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Evaluations.Answering;
 using MailFathom.Evaluations.Corpus;
 using MailFathom.Evaluations.Costing;
@@ -155,6 +156,7 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
             new PlannedMailRetrieval(search, new MailAnsweringRunLedger(MailAnsweringRunBounds.Default)),
             new DiscoveryCoverageReader(new SynchronizedCorpus(), new MailSynchronizationRunLedger(TimeProvider.System)),
             agents,
+            UserLanguage.English,
             progress: null,
             cancellationToken);
 
@@ -229,14 +231,19 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
             lost.Count is 0 ? "Every piece of evidence is in an extract the result cites." : string.Join(" ", lost));
 
         // Walked backwards from the result: an extract the composition was handed and did not cite is the composition's,
-        // one a lookup of the plan reaches on its own and the run did not hand on is the retrieval's — it stopped early,
-        // ran out of its allowance, or ranked the message past what a result may cite — and one no lookup reaches is the
-        // plan's.
+        // one the run retrieved and did not hand on is the declaration's, one a lookup of the plan reaches on its own
+        // and the run did not retrieve is the retrieval's — it stopped early or ran out of its allowance — and one no
+        // lookup reaches is the plan's.
         async Task<string> LostAtAsync(string phrase)
         {
             if (handed.FirstOrDefault(source => Carries(source.Extract, phrase)) is { } uncited)
             {
                 return $"\"{phrase}\" was lost by the composition: it was handed {uncited.Citation.Id} and did not cite it.";
+            }
+
+            if (run.Evidence.Passages.Any(passage => Carries(passage.Text, phrase)))
+            {
+                return $"\"{phrase}\" was lost by the declaration: the run retrieved it from a message past the {PresentationEvidence.MaxCitations} a result may cite.";
             }
 
             foreach (var lookup in run.Plan.Retrieval.Lookups)

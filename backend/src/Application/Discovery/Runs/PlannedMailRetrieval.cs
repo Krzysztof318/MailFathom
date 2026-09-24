@@ -61,9 +61,11 @@ public sealed class PlannedMailRetrieval
     /// what that leaves unspent goes to the passages a lookup found beyond its share, taken rank by rank across the
     /// lookups. So a later lookup's best passages are never crowded out by an earlier lookup's lower-ranked ones: a plan
     /// lists several short wordings because it cannot know which one reaches the evidence, and the one that does is as
-    /// often the last as the first. The allowance assures every lookup a share, so every lookup runs; only a deployment
-    /// whose retrieval returns fewer passages than the plan holds lookups gives each one passage and leaves the lookups
-    /// past that many unrun, since nothing they found could be admitted.
+    /// often the last as the first. A cut of a message already handed over spends no share, since the shares count
+    /// messages: two lookups cut one message around different words, and the second cut is handed over beside the first
+    /// rather than crowding out a message nothing else reached. The allowance assures every lookup a share, so every
+    /// lookup runs; only a deployment whose retrieval returns fewer passages than the plan holds lookups gives each one
+    /// passage and leaves the lookups past that many unrun, since nothing they found could be admitted.
     /// </para>
     /// <para>
     /// One refused lookup is skipped rather than fatal: the filters are derived from a question by a model, and a
@@ -92,6 +94,7 @@ public sealed class PlannedMailRetrieval
 
         var found = new List<EmailKnowledgePassage>(plan.PassageAllowance);
         var alreadyFound = new HashSet<(Guid StoredEmailId, string Text)>();
+        var messagesFound = new HashSet<Guid>();
         var beyondShare = new List<IReadOnlyList<EmailKnowledgePassage>>(plan.Lookups.Count);
         var share = Math.Max(1, plan.PassageAllowance / plan.Lookups.Count);
         var retrievalMode = EmailSearchRetrievalMode.Lexical;
@@ -126,21 +129,26 @@ public sealed class PlannedMailRetrieval
                 // Cut to the lookup's share before the ledger is asked, so a lookup returning twenty passages charges
                 // the run for its share alone: what it found beyond that is held back uncharged, and reaches the ledger
                 // only if the rest of the plan leaves room for it.
-                var newlyFound = NotYetFound(retrieved.Passages, alreadyFound);
-                var admissible = Math.Min(newlyFound.Count, Math.Min(share, plan.PassageAllowance - found.Count));
+                var (taken, held) = Split(
+                    NotYetFound(retrieved.Passages, alreadyFound),
+                    messagesFound,
+                    Math.Min(share, plan.PassageAllowance - messagesFound.Count));
 
-                beyondShare.Add(newlyFound[admissible..]);
-                found.AddRange(Admit(newlyFound[..admissible]));
+                beyondShare.Add(held);
+                found.AddRange(Admit(taken));
             }
 
             if (lookupsRun + lookupsRefused == plan.Lookups.Count && !this.ledger.RetrievalWasTruncated)
             {
-                found.AddRange(Admit(RankByRank(beyondShare, alreadyFound, plan.PassageAllowance - found.Count)));
+                found.AddRange(Admit(Split(
+                    RankByRank(beyondShare, alreadyFound),
+                    messagesFound,
+                    plan.PassageAllowance - messagesFound.Count).Taken));
             }
 
             await ReportAsync();
 
-            if (found.Count >= plan.PassageAllowance || this.ledger.RetrievalWasTruncated)
+            if (messagesFound.Count >= plan.PassageAllowance || this.ledger.RetrievalWasTruncated)
             {
                 // A ceiling that is reached stops the plan rather than cutting one lookup: nothing a later lookup found
                 // would fit either, so issuing it would read more of somebody's mail out of the database to discard it.
@@ -170,6 +178,7 @@ public sealed class PlannedMailRetrieval
         {
             var admitted = this.ledger.AdmitPassages(passages);
             alreadyFound.UnionWith(admitted.Select(IdentityOf));
+            messagesFound.UnionWith(admitted.Select(static passage => passage.StoredEmailId.Value));
 
             return admitted;
         }
@@ -180,21 +189,60 @@ public sealed class PlannedMailRetrieval
         HashSet<(Guid StoredEmailId, string Text)> alreadyFound) =>
         [.. passages.Where(passage => !alreadyFound.Contains(IdentityOf(passage))).DistinctBy(IdentityOf)];
 
-    /// <summary>Takes what the lookups found beyond their shares, every lookup's first before any lookup's second.</summary>
+    /// <summary>Orders what the lookups found beyond their shares, every lookup's first before any lookup's second.</summary>
     /// <remarks>The sort is stable, so within one rank the plan's own order decides.</remarks>
     private static List<EmailKnowledgePassage> RankByRank(
         List<IReadOnlyList<EmailKnowledgePassage>> beyondShare,
-        HashSet<(Guid StoredEmailId, string Text)> alreadyFound,
-        int wanted) =>
+        HashSet<(Guid StoredEmailId, string Text)> alreadyFound) =>
     [
         .. beyondShare
             .SelectMany(passages => passages.Select((passage, rank) => (Passage: passage, Rank: rank)))
             .OrderBy(ranked => ranked.Rank)
             .Select(ranked => ranked.Passage)
             .Where(passage => !alreadyFound.Contains(IdentityOf(passage)))
-            .DistinctBy(IdentityOf)
-            .Take(wanted),
+            .DistinctBy(IdentityOf),
     ];
+
+    /// <summary>
+    /// Takes, in rank order, every further cut of a message already found and the passages of at most
+    /// <paramref name="newMessages" /> messages not yet found, and holds back the rest.
+    /// </summary>
+    /// <remarks>
+    /// A further cut costs no share because it adds no message: two lookups cut one message around different words, and
+    /// the cut a later lookup made is as often the one carrying the answer as the first. Counting it against the
+    /// lookup's share would spend the share on mail already handed over, and crowd out the messages nothing else found.
+    /// What bounds it is the ledger, which charges it like any other passage.
+    /// </remarks>
+    private static (List<EmailKnowledgePassage> Taken, List<EmailKnowledgePassage> Held) Split(
+        IEnumerable<EmailKnowledgePassage> candidates,
+        HashSet<Guid> messagesFound,
+        int newMessages)
+    {
+        List<EmailKnowledgePassage> taken = [];
+        List<EmailKnowledgePassage> held = [];
+        var messagesTaken = new HashSet<Guid>();
+
+        foreach (var passage in candidates)
+        {
+            var message = passage.StoredEmailId.Value;
+
+            if (messagesFound.Contains(message) || messagesTaken.Contains(message))
+            {
+                taken.Add(passage);
+            }
+            else if (messagesTaken.Count < newMessages)
+            {
+                messagesTaken.Add(message);
+                taken.Add(passage);
+            }
+            else
+            {
+                held.Add(passage);
+            }
+        }
+
+        return (taken, held);
+    }
 
     /// <summary>What makes two passages one: the same extract of the same message, however many lookups reached it.</summary>
     private static (Guid StoredEmailId, string Text) IdentityOf(EmailKnowledgePassage passage) =>
