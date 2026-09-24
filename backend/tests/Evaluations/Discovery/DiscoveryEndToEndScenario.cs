@@ -120,10 +120,12 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
 
     /// <summary>Runs the question through both agents and the retrieval between them, checks the result, and files the verdict in the run's store.</summary>
     /// <param name="reporting">The run's store and name, opened with <see cref="Evaluators" />.</param>
-    /// <param name="model">The model under test's client, which both agents are asked through.</param>
-    /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="planningModel">The client the planning agent is asked through.</param>
+    /// <param name="planningPlan">The plan the planning agent's model is measured with.</param>
+    /// <param name="compositionModel">The client the composing agent is asked through, which is the planning one where both run on one model.</param>
+    /// <param name="compositionPlan">The plan the composing agent's model is measured with.</param>
     /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
-    /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
+    /// <param name="modelSpend">What reaching those models has cost, which is the meter their clients are opened over.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The verdict, carrying every check as a metric.</returns>
     [SuppressMessage(
@@ -132,13 +134,18 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
         Justification = "Disposing the caching wrapper would dispose the caller's model client, which this scenario does not own.")]
     public async Task<EvaluationResult> RunAsync(
         ReportingConfiguration reporting,
-        IChatClient model,
-        ChatGenerationPlan plan,
+        IChatClient planningModel,
+        ChatGenerationPlan planningPlan,
+        IChatClient compositionModel,
+        ChatGenerationPlan compositionPlan,
         int repetition,
         SpendMeter modelSpend,
         CancellationToken cancellationToken)
     {
-        var modelName = plan.Endpoint.RoutedModelName;
+        ArgumentNullException.ThrowIfNull(planningPlan);
+        ArgumentNullException.ThrowIfNull(compositionPlan);
+
+        var modelName = NameOf(planningPlan, compositionPlan);
         var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
@@ -146,8 +153,11 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
             iterationName,
             cancellationToken: cancellationToken);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
-        var agents = new DiscoveryAgentsUnderTest(cachedModel, plan);
+        var agents = new DiscoveryAgentsUnderTest(
+            await EvaluationStore.CacheOverAsync(reporting, planningModel, planningPlan, this.Name, iterationName, cancellationToken),
+            planningPlan,
+            await EvaluationStore.CacheOverAsync(reporting, compositionModel, compositionPlan, this.Name, iterationName, cancellationToken),
+            compositionPlan);
         var search = new CorpusKnowledgeSearch(CorpusMessage.All);
 
         var run = await DiscoveryRun.AnswerAsync(
@@ -177,6 +187,20 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
         EvaluationCost.Record(verdict, modelName, modelSpend.Take(), judgeSpend: default);
 
         return verdict;
+    }
+
+    /// <summary>Names the pairing a result is filed under: the one model where both agents ran on it, and both joined by a plus where they did not.</summary>
+    /// <param name="planningPlan">The plan the planning agent's model is measured with.</param>
+    /// <param name="compositionPlan">The plan the composing agent's model is measured with.</param>
+    /// <returns>The name, which is the model's own where both agents ran on one, so a run naming no agent keeps the results it always filed.</returns>
+    public static string NameOf(ChatGenerationPlan planningPlan, ChatGenerationPlan compositionPlan)
+    {
+        ArgumentNullException.ThrowIfNull(planningPlan);
+        ArgumentNullException.ThrowIfNull(compositionPlan);
+
+        return planningPlan.Endpoint.Alias == compositionPlan.Endpoint.Alias
+            ? planningPlan.Endpoint.Alias
+            : $"{planningPlan.Endpoint.Alias}+{compositionPlan.Endpoint.Alias}";
     }
 
     /// <summary>Names every check the verdict falls short on, in words a failed run can be read by.</summary>

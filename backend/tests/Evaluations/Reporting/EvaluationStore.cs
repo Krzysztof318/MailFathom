@@ -5,6 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.AI.Chat;
+using MailFathom.AI.Providers;
+using MailFathom.Evaluations.Providers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Reporting;
@@ -176,16 +178,28 @@ internal static class EvaluationStore
     {
         var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
 
-        // The effort travels in a request-options factory the cache key cannot read, so it joins the key explicitly — and
-        // only where one is declared, so every answer cached by a run declaring none keeps the key it was filed under. The
-        // tools a request offers are the same kind of gap, closed per request by the client itself.
-        string[] identity = [plan.Endpoint.RoutedModelName, plan.Endpoint.Address?.AbsoluteUri ?? string.Empty];
-
         return new ToolKeyedCachingChatClient(model, cache)
         {
-            CacheKeyAdditionalValues = plan.ReasoningEffort is { } effort ? [.. identity, effort] : identity,
+            CacheKeyAdditionalValues = CacheIdentityOf(plan, model.GetService<ProviderChatClient>()?.ExtraHeaders ?? []),
         };
     }
+
+    /// <summary>Names what an answer is keyed by beyond the request the cache key reads itself.</summary>
+    /// <remarks>
+    /// The effort, the additional request members, and the API travel in a request-options factory the cache key cannot
+    /// read, and the headers travel in the transport, so each joins the key explicitly — and only where it is declared, so
+    /// every answer cached by a run declaring none keeps the key it was filed under. The tools a request offers are the
+    /// same kind of gap, closed per request by the client itself.
+    /// </remarks>
+    private static string[] CacheIdentityOf(ChatGenerationPlan plan, IReadOnlyList<ProviderEndpointHeader> extraHeaders) =>
+    [
+        plan.Endpoint.RoutedModelName,
+        plan.Endpoint.Address?.AbsoluteUri ?? string.Empty,
+        .. plan.ReasoningEffort is { } effort ? [effort] : Array.Empty<string>(),
+        .. plan.Endpoint.Api is ChatProviderApi.ChatCompletions ? Array.Empty<string>() : [plan.Endpoint.Api.ToString()],
+        .. plan.AdditionalProperties.OrderBy(static member => member.Key, StringComparer.Ordinal).Select(static member => $"{member.Key}={member.Value.GetRawText()}"),
+        .. extraHeaders.Select(static header => $"{header.Name}: {header.Value}"),
+    ];
 
     private static RecallingResponseCacheProvider ResponseCacheAt(string root) =>
         new(new DiskBasedResponseCacheProvider(root, AnswerLifetime));

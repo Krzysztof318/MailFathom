@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using MailFathom.AI.Chat;
 using MailFathom.Evaluations.Enrichment;
+using MailFathom.Evaluations.Providers;
 using MailFathom.Evaluations.StructuredAnswers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.AI.Evaluation.Reporting;
@@ -70,6 +71,30 @@ public sealed class EvaluationStoreTests : IDisposable
             await ReachesTheModelAsync(reporting, Held, withEffort),
             await ReachesTheModelAsync(reporting, Held, withEffort),
             await ReachesTheModelAsync(reporting, Held, withoutEffort),
+        ];
+
+        // Assert
+        Assert.Equal([true, true, false, false], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_ARunDeclaringAnAdditionalRequestMember_AsksAgainRatherThanReadingTheAnswerCachedWithoutOne()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var withoutMember = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
+        var withMember = Assert.Single(EvaluationDeclaration.Parse(
+            $"{{MainModel: {{Model: {ScriptedStructuredAnswerRun.ModelUnderTest}, AdditionalProperties: {{top_k: 40}}}}}}",
+            fallbackMainModel: null,
+            address: null).ModelsFor(ChatCapability.Enrichment)).Plan;
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, withoutMember),
+            await ReachesTheModelAsync(reporting, Held, withMember),
+            await ReachesTheModelAsync(reporting, Held, withMember),
+            await ReachesTheModelAsync(reporting, Held, withoutMember),
         ];
 
         // Assert

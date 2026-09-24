@@ -39,25 +39,26 @@ public sealed class RelevanceFilterEvaluations
         var repetitions = EvaluationRepetitions.Declared();
 
         // Act
-        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(plan, apiKey, repetitions))]);
+        var shortfalls = await Task.WhenAll([.. ModelsUnderTest.For(ChatCapability.RelevanceFilter).Select(model => MeasureAsync(model, apiKey, repetitions))]);
 
         // Assert
         AiEvaluationRun.AssertNoShortfalls(shortfalls.SelectMany(static modelShortfalls => modelShortfalls));
     }
 
     /// <summary>Measures one model over a client, a meter, and a store handle of its own, which is what lets the models run at once.</summary>
-    private static async Task<IReadOnlyList<string>> MeasureAsync(ChatGenerationPlan plan, string apiKey, int repetitions)
+    private static async Task<IReadOnlyList<string>> MeasureAsync(ModelUnderTest modelUnderTest, string apiKey, int repetitions)
     {
+        var plan = modelUnderTest.Plan;
         var modelSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
+        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
 
         var reporting = EvaluationStore.OpenUnjudged(RelevanceFilterScenario.Evaluators);
 
         return await EvaluationRepetitions.MeasureAsync(
             reporting,
             RelevanceFilterScenario.Name,
-            plan.Endpoint.RoutedModelName,
+            modelUnderTest.Name,
             repetitions,
             async repetition => [.. ShortfallsOf(await RelevanceFilterScenario.RunAsync(
                 reporting,

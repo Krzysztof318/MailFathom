@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Evaluations.Costing;
+using MailFathom.Evaluations.Providers;
 using Microsoft.Extensions.AI.Evaluation;
 using Microsoft.Extensions.AI.Evaluation.Reporting;
 
@@ -25,9 +26,6 @@ namespace MailFathom.Evaluations.Reporting;
 /// </remarks>
 internal static class EvaluationRepetitions
 {
-    /// <summary>The variable carrying how many times each case is asked of each model, read beside the models.</summary>
-    public const string RepetitionsVariable = "MAILFATHOM_EVALUATION_REPETITIONS";
-
     /// <summary>The name the share of repetitions that passed is recorded under.</summary>
     public const string PassingShareMetricName = "Passing share";
 
@@ -41,10 +39,10 @@ internal static class EvaluationRepetitions
     /// <summary>Reads how many times the run asks each case of each model.</summary>
     /// <returns>The declared count, or one where the run declared none.</returns>
     /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the declaration is not a count the run accepts.</exception>
-    public static int Declared() => Parse(AiEvaluationRun.Optional(RepetitionsVariable));
+    public static int Declared() => EvaluationDeclaration.Read().Repetitions;
 
     /// <summary>Reads a declared count of repetitions.</summary>
-    /// <param name="declared">The declaration, or <see langword="null" /> where the run made none.</param>
+    /// <param name="declared">The <c>Repetitions</c> the run's block declares, or <see langword="null" /> where it declares none.</param>
     /// <returns>The count, which is one where nothing was declared.</returns>
     /// <exception cref="InvalidOperationException">Thrown, naming the variable, when the declaration is not a count the run accepts.</exception>
     public static int Parse(string? declared)
@@ -58,7 +56,7 @@ internal static class EvaluationRepetitions
             && count is >= 1 and <= MostRepetitions
             ? count
             : throw new InvalidOperationException(
-                $"{RepetitionsVariable} must be a whole number from 1 to {MostRepetitions}.");
+                $"{EvaluationDeclaration.Variable} declares Repetitions that is not a whole number from 1 to {MostRepetitions}.");
     }
 
     /// <summary>Asks one case of one model once per repetition, records the share that passed, and names the shortfall.</summary>

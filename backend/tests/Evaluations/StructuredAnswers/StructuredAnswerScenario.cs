@@ -82,11 +82,13 @@ internal static class StructuredAnswerScenario
         }
     }
 
-    /// <summary>Measures one case under every declared model at once, each over clients, meters, and a store handle of its own.</summary>
+    /// <summary>Measures one case under every model declared for its agent at once, each over clients, meters, and a store handle of its own.</summary>
+    /// <param name="capability">The agent the case is put to, whose declared models it runs on.</param>
     /// <param name="request">The case.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>What each model fell short on, in the order the models were declared.</returns>
     public static async Task<IReadOnlyList<string>> MeasureEveryDeclaredModelAsync(
+        ChatCapability capability,
         StructuredAnswerRequest request,
         CancellationToken cancellationToken)
     {
@@ -95,7 +97,7 @@ internal static class StructuredAnswerScenario
         var repetitions = EvaluationRepetitions.Declared();
 
         var shortfalls = await Task.WhenAll(
-            [.. ModelsUnderTest.Plans().Select(plan => MeasureAsync(judge, plan, apiKey, repetitions, request, cancellationToken))]);
+            [.. ModelsUnderTest.For(capability).Select(model => MeasureAsync(judge, model, apiKey, repetitions, request, cancellationToken))]);
 
         return [.. shortfalls.SelectMany(static modelShortfalls => modelShortfalls)];
     }
@@ -129,7 +131,7 @@ internal static class StructuredAnswerScenario
     /// <summary>Runs one case under one model and files the verdict in the run's store.</summary>
     /// <param name="reporting">The run's store, judge, and name, opened with the request's evaluators.</param>
     /// <param name="model">The model under test's client.</param>
-    /// <param name="plan">The plan the model is measured with, whose routed name is what the result is filed under.</param>
+    /// <param name="plan">The plan the model is measured with, whose alias is what the result is filed under.</param>
     /// <param name="repetition">Which repetition of the case this is, counted from one, which the result and the cached answer are filed under.</param>
     /// <param name="request">The case.</param>
     /// <param name="modelSpend">What reaching that model has cost, which is the meter its client is opened over.</param>
@@ -154,7 +156,7 @@ internal static class StructuredAnswerScenario
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(request);
 
-        var modelName = plan.Endpoint.RoutedModelName;
+        var modelName = plan.Endpoint.Alias;
         var iterationName = EvaluationStore.IterationNameFor(modelName, repetition);
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(
@@ -192,16 +194,17 @@ internal static class StructuredAnswerScenario
     /// <summary>Measures one model over clients, meters, and a store handle of its own, which is what lets the models run at once.</summary>
     private static async Task<IReadOnlyList<string>> MeasureAsync(
         JudgeDeclaration judge,
-        ChatGenerationPlan plan,
+        ModelUnderTest modelUnderTest,
         string apiKey,
         int repetitions,
         StructuredAnswerRequest request,
         CancellationToken cancellationToken)
     {
+        var plan = modelUnderTest.Plan;
         var modelSpend = new SpendMeter();
         var judgeSpend = new SpendMeter();
 
-        using var model = ProviderChatClient.Open(plan.Endpoint, apiKey, plan.RequestTimeout, modelSpend);
+        using var model = ProviderChatClient.Open(modelUnderTest, apiKey, modelSpend);
         using var judgeClient = judge.Open(judgeSpend);
 
         var reporting = EvaluationStore.Open(judgeClient, judge.CachingKey, request.Evaluators);
@@ -209,7 +212,7 @@ internal static class StructuredAnswerScenario
         return await EvaluationRepetitions.MeasureAsync(
             reporting,
             request.ScenarioName,
-            plan.Endpoint.RoutedModelName,
+            modelUnderTest.Name,
             repetitions,
             async repetition => [.. ShortfallsOf(await RunAsync(reporting, model, plan, repetition, request, modelSpend, judgeSpend, cancellationToken))],
             cancellationToken);
