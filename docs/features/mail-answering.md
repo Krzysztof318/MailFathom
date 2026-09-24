@@ -144,11 +144,6 @@ language that inflects its words, Polish among them, writes one word in several 
 expects with `OR` or searches by a name or a number that does not change. The extra lookups are ordinary lookups,
 bounded by [§ What one question may spend](#what-one-question-may-spend) like every other.
 
-**An answer resting on a date, a place, a figure, or a person looks for a later correction first.** A later message of
-the same conversation may change what the first one said, and seldom repeats the words the first was found by, so the
-instruction asks for one more lookup with that message's subject in the subject filter and a word or two of the matter,
-and for the answer to come from the latest message that settles it.
-
 It cannot be left to retrieval, because the lexical half of retrieval matches a word against a word. The index is built
 with one PostgreSQL text search configuration for the whole deployment —
 [`Persistence:TextSearchConfiguration`](../operations/configuration-runtime.md#persistence-and-the-connection-string),
@@ -157,6 +152,11 @@ lookup worded in the language of the question reaches mail written in that langu
 half bridges the gap depends on the declared embedding model, which a deployment chose for other reasons. A run that
 worded every lookup in the question's language would therefore report a mailbox that plainly holds the answer as one
 that does not. [Email search](email-search.md) documents the ranking itself.
+
+**An answer resting on a date, a place, a figure, or a person looks for a later correction first.** A later message of
+the same conversation may change what the first one said, and seldom repeats the words the first was found by, so the
+instruction asks for one more lookup with that message's subject in the subject filter and a word or two of the matter,
+and for the answer to come from the latest message that settles it.
 
 **An answer is written in the language the question was asked in**, whatever language the mail it rests on was written
 in. What the answer quotes from mail — a subject, a name, the phrase a claim rests on — keeps its own wording, with a
