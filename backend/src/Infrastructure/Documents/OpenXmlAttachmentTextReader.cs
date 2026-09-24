@@ -92,7 +92,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
         var budget = new DecompressionBudget(options.MaxDecompressedOctets, content.Length);
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
-        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerAttachment);
+        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerDocument);
 
         var extracted = format switch
         {

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Extraction.Attachments;
+using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
@@ -44,7 +45,7 @@ namespace MailFathom.Infrastructure.Documents;
 /// as it stands; every other filter would have to be decoded here first, and nothing on this path decodes a picture.
 /// </para>
 /// </remarks>
-internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions options)
+internal sealed partial class PdfAttachmentTextReader(AttachmentTextExtractionOptions options, ILogger logger)
 {
     /// <summary>Reads one PDF attachment.</summary>
     /// <param name="content">The attachment's octets, positioned at the start.</param>
@@ -56,7 +57,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
         var pagesWithoutText = new List<int>();
         var segments = new List<AttachmentTextSegment>();
-        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerAttachment);
+        var pictures = new EmbeddedPictureCollector(options.MaxPicturesPerDocument);
 
         using var document = PdfDocument.Open(content, ReadOnlyParsingOptions());
 
@@ -85,7 +86,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
             if (string.IsNullOrWhiteSpace(pageText))
             {
                 pagesWithoutText.Add(page);
-                OfferPictures(pdfPage, page, pictures);
+                this.OfferPictures(pdfPage, page, pictures, cancellationToken);
                 continue;
             }
 
@@ -101,28 +102,46 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
 
     /// <summary>Offers every image drawn on one page, as the document stores it, to the collector.</summary>
     /// <remarks>
+    /// <para>
+    /// The allowance and the caller's deadline are both checked per image rather than per page, because the number of
+    /// images one page draws is the sender's and nothing else bounds it.
+    /// </para>
+    /// <para>
     /// A page whose images the library cannot enumerate keeps the rest of the document readable: losing one scanned page
-    /// is a smaller loss than reporting a document whose text layer read cleanly as malformed.
+    /// is a smaller loss than reporting a document whose text layer read cleanly as malformed. The failure is logged by
+    /// its type alone, since a parser's message can quote the document it was reading.
+    /// </para>
     /// </remarks>
-    private static void OfferPictures(Page page, int pageNumber, EmbeddedPictureCollector pictures)
+    private void OfferPictures(
+        Page page,
+        int pageNumber,
+        EmbeddedPictureCollector pictures,
+        CancellationToken cancellationToken)
     {
-        if (!pictures.WantsMore)
-        {
-            return;
-        }
-
         try
         {
             foreach (var image in page.GetImages())
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!pictures.WantsMore)
+                {
+                    return;
+                }
+
                 pictures.Offer(pageNumber, image.RawMemory.Span);
             }
         }
         catch (Exception failure) when (failure is not OperationCanceledException and not OutOfMemoryException)
         {
-            return;
+            LogPicturesUnreadable(logger, pageNumber, failure.GetType().Name);
         }
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The images on page {PageNumber} of a PDF attachment could not be read ({FailureType}); that page's pictures are not sent to the describer, and the rest of the document is read as usual.")]
+    private static partial void LogPicturesUnreadable(ILogger logger, int pageNumber, string failureType);
 
     /// <summary>Builds the options every PDF here is opened under.</summary>
     /// <remarks>

@@ -33,7 +33,7 @@ public sealed record ExtractedAttachmentText(
 {
     /// <summary>Gets the pictures the document carries that a model may read, in reading order.</summary>
     /// <remarks>
-    /// Empty unless <see cref="AttachmentTextExtractionOptions.MaxPicturesPerAttachment" /> admits any, which is the case
+    /// Empty unless <see cref="AttachmentTextExtractionOptions.MaxPicturesPerDocument" /> admits any, which is the case
     /// only where the deployment turned image description on. A scanned page is the picture this exists for: a PDF
     /// whose pages carry no text layer is one image per page, and those images are the whole of what it says.
     /// </remarks>

@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Infrastructure.Documents;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -1085,7 +1086,7 @@ public sealed class BoundedAttachmentTextExtractorTests
             beforeWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
 
         // Act
-        var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
+        var result = await new BoundedAttachmentTextExtractor(bounds, clock, NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 
@@ -1118,7 +1119,7 @@ public sealed class BoundedAttachmentTextExtractorTests
             afterWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
 
         // Act
-        var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
+        var result = await new BoundedAttachmentTextExtractor(bounds, clock, NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 
@@ -1141,7 +1142,7 @@ public sealed class BoundedAttachmentTextExtractorTests
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider()).ExtractTextAsync(
+            new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider(), NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
                 attachment,
                 caller.Token));
     }
@@ -1675,7 +1676,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     private static AttachmentTextExtractionOptions Bounds() => new();
 
     private static AttachmentTextExtractionOptions ReadingPictures(int maxPictures = 10) =>
-        new() { MaxPicturesPerAttachment = maxPictures };
+        new() { MaxPicturesPerDocument = maxPictures };
 
     /// <summary>Builds one slide part carrying a single line.</summary>
     private static string Slide(string line) => $"""
@@ -1692,7 +1693,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     private static Task<AttachmentTextExtractionResult> ExtractAsync(
         FakeOpenedEmailAttachment attachment,
         AttachmentTextExtractionOptions? bounds = null) =>
-        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), new FakeTimeProvider()).ExtractTextAsync(
+        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), new FakeTimeProvider(), NullLogger<BoundedAttachmentTextExtractor>.Instance).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 }

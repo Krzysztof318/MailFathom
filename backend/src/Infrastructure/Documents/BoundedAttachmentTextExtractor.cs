@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.Extraction.Attachments;
+using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig.Exceptions;
 
 namespace MailFathom.Infrastructure.Documents;
@@ -29,12 +30,13 @@ namespace MailFathom.Infrastructure.Documents;
 /// </remarks>
 internal sealed class BoundedAttachmentTextExtractor(
     AttachmentTextExtractionOptions options,
-    TimeProvider timeProvider) : IAttachmentTextExtractor
+    TimeProvider timeProvider,
+    ILogger<BoundedAttachmentTextExtractor> logger) : IAttachmentTextExtractor
 {
     /// <summary>The eight octets an OLE compound file opens with.</summary>
     private static readonly byte[] CompoundFileSignature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-    private readonly PdfAttachmentTextReader pdf = new(options);
+    private readonly PdfAttachmentTextReader pdf = new(options, logger);
     private readonly OpenXmlAttachmentTextReader openXml = new(options);
     private readonly OpenDocumentAttachmentTextReader openDocument = new(options);
     private readonly PlainTextAttachmentTextReader plainText = new(options);

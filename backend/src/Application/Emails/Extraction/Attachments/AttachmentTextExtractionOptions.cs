@@ -115,5 +115,5 @@ public sealed class AttachmentTextExtractionOptions
     /// message may run past that ceiling. A picture too small to carry a page and a copy of one already taken are not
     /// counted, so a letterhead repeated on every page cannot use up the allowance before the scanned page is reached.
     /// </remarks>
-    public int MaxPicturesPerAttachment { get; init; }
+    public int MaxPicturesPerDocument { get; init; }
 }
