@@ -79,8 +79,8 @@ public sealed class EvaluationDeclarationTests
     }
 
     [Theory]
-    [InlineData("{MainModel: model-a, Repetitons: 2}", "Repetitons")]
-    [InlineData("{MainModel: {Model: model-a, ReasoningEfort: high}}", "ReasoningEfort")]
+    [InlineData("{MainModel: model-a, Repeat: 2}", "Repeat")]
+    [InlineData("{MainModel: {Model: model-a, Thinking: high}}", "Thinking")]
     public void Parse_AKeyTheRunDoesNotRead_FailsNamingIt(string block, string key)
     {
         // Act
