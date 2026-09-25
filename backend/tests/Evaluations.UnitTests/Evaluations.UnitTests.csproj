@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The evaluation suite's free half: the tests proving each scenario tells a right answer from a wrong one, driven
+       through scripted providers, so nothing here calls a model. The scenarios, the corpora, and the store they prove
+       live in Evaluations, which is why that project is the one reference; its corpora and images reach this output
+       through it. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Evaluations\Evaluations.csproj" />
+  </ItemGroup>
+</Project>

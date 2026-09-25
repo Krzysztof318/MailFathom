@@ -22,6 +22,7 @@
     <InternalsVisibleTo Include="MailFathom.AI.UnitTests" />
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
     <InternalsVisibleTo Include="MailFathom.Evaluations" />
+    <InternalsVisibleTo Include="MailFathom.Evaluations.UnitTests" />
 
     <!--
       The two projects that measure what this boundary costs rather than what it answers: the allocation budgets the

@@ -9,9 +9,10 @@ set -euo pipefail
 # and scripts/verify-full.sh because a scenario calls real models and a judge, and its GitHub workflow
 # never runs on a pull request.
 #
-# Without MAILFATHOM_AI_EVALUATIONS=true the paid scenarios skip, and what runs is only the free proof
-# of what the store holds. With it, the run needs MAILFATHOM_CHAT_API_KEY and MAILFATHOM_JUDGE_MODEL, and
-# fails naming whichever is missing. The judge answers from the same endpoint and the same key as the
+# It runs the paid scenarios and nothing else: their free counterparts are backend/tests/Evaluations.UnitTests,
+# a unit suite every gate already runs. So without MAILFATHOM_AI_EVALUATIONS=true there is nothing here
+# to run and the script says so. With it, the run needs MAILFATHOM_CHAT_API_KEY and MAILFATHOM_JUDGE_MODEL,
+# and fails naming whichever is missing. The judge answers from the same endpoint and the same key as the
 # models under test, so its model is all that is declared apart — beside MAILFATHOM_JUDGE_REASONING_EFFORT,
 # which a run may leave unset to send the judge no reasoning parameter at all.
 #
@@ -37,6 +38,12 @@ if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
 fi
 
 cd "$repository_root"
+
+requested="${MAILFATHOM_AI_EVALUATIONS:-}"
+if [[ "${requested,,}" != 'true' ]]; then
+  printf 'MAILFATHOM_AI_EVALUATIONS is not true, so no scenario would run; the free tests are Evaluations.UnitTests.\n'
+  exit 0
+fi
 
 evaluation_project='backend/tests/Evaluations/Evaluations.csproj'
 output_directory='artifacts/ai-evaluations'
@@ -100,30 +107,24 @@ if [[ -d "$execution_results" ]]; then
 fi
 
 # A model's answer varies between calls, so a few scenarios falling short is the measurement rather
-# than a defect, and only a pass rate under this floor fails the run. The rate counts the paid
-# `<Subject>Evaluations` classes alone: the free tests beside them are deterministic, so any one of
-# them failing still fails the run, and counted in they would hold the rate near 100%. Exit code 2 is
-# the test platform's "at least one test failed"; every other code is carried as it is.
+# than a defect, and only a pass rate under this floor fails the run. Every result here is a paid
+# scenario's, the free tests being a unit suite of their own. Exit code 2 is the test platform's "at
+# least one test failed"; every other code is carried as it is.
 required_pass_percentage=85
 
 if [[ "$test_exit_code" -eq 2 ]] && trx_files=("$output_directory"/results/*.trx) && [[ -f "${trx_files[0]}" ]]; then
-  read -r free_failed paid_passed paid_executed < <(
+  read -r passed executed < <(
     grep -ho '<UnitTestResult testName="[^"]*" outcome="[A-Za-z]*"' "${trx_files[@]}" |
-      sed -E 's/^<UnitTestResult testName="([^"(]*)[^"]*" outcome="([A-Za-z]*)"$/\1 \2/' |
+      sed -E 's/^<UnitTestResult testName="[^"]*" outcome="([A-Za-z]*)"$/\1/' |
       awk '
-        $2 == "NotExecuted" { next }
-        {
-          class = $1
-          sub(/\.[^.]*$/, "", class)
-          if (class ~ /Evaluations$/) { paid_executed++; if ($2 == "Passed") paid_passed++ }
-          else if ($2 != "Passed") free_failed++
-        }
-        END { print free_failed + 0, paid_passed + 0, paid_executed + 0 }')
+        $1 == "NotExecuted" { next }
+        { executed++; if ($1 == "Passed") passed++ }
+        END { print passed + 0, executed + 0 }')
 
-  printf '%d of %d evaluation scenarios passed, and %d free tests failed; the run fails under %d%% or on any free failure.\n' \
-    "$paid_passed" "$paid_executed" "$free_failed" "$required_pass_percentage"
+  printf '%d of %d evaluation scenarios passed; the run fails under %d%%.\n' \
+    "$passed" "$executed" "$required_pass_percentage"
 
-  if (( free_failed == 0 && paid_executed > 0 && paid_passed * 100 >= required_pass_percentage * paid_executed )); then
+  if (( executed > 0 && passed * 100 >= required_pass_percentage * executed )); then
     test_exit_code=0
   fi
 fi
