@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- What an agent answers, measured against the models a run declares and judged by one pinned model. Nothing
-       discovers it as a test: backend/Directory.Build.props opts it out of discovery, and scripts/run-ai-evaluations.sh
-       is what runs it. Every scenario that calls a provider skips unless MAILFATHOM_AI_EVALUATIONS asks for it. -->
+       discovers it as a test: backend/Directory.Build.props opts it out of discovery, scripts/run-ai-evaluations.sh
+       is what runs it. Every scenario that calls a provider skips unless MAILFATHOM_AI_EVALUATIONS asks for it; the free
+       tests proving each scenario's checks live in Evaluations.UnitTests, which every gate runs. -->
   <PropertyGroup>
     <!-- AIEVAL001 marks the agent-quality evaluators — intent resolution, task adherence, tool-call accuracy — as open to
          change. Measuring an agent is the only thing this project does, so a change there is one it has to absorb anyway,
@@ -63,6 +64,11 @@
     <!-- The authority the retrieval database's mail is read under: none, as a deployment that names no trusted server
          reads it, which decides nothing the rankings read. -->
     <Compile Include="..\shared\NoTrustedAuthentication.cs" Link="NoTrustedAuthentication.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The free half proving each scenario's checks catch what they exist for, which reaches the scenarios' own types. -->
+    <InternalsVisibleTo Include="MailFathom.Evaluations.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>
