@@ -433,7 +433,7 @@ internal sealed record ImageDescriptionScenario(
             iterationName,
             cancellationToken: cancellationToken);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, repetition, cancellationToken);
         var describer = new ImageAttachmentDescriber(
             new ScenarioChatModelClient(cachedModel, plan),
             plan,

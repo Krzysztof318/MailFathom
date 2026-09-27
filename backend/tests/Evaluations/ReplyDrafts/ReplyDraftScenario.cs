@@ -355,7 +355,7 @@ internal sealed partial record ReplyDraftScenario(
         // Refused rather than sent, as the deployment's drafting refuses it: a turn past the model's bound fails the run.
         ModelsUnderTest.RequireOneTurn(turn, plan);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, repetition, cancellationToken);
         var agent = ReplyDraftAgentComposition.Compose(
             cachedModel,
             plan,

@@ -148,13 +148,23 @@ internal static class EvaluationStore
     /// <param name="model">The model under test's client, which stays the caller's.</param>
     /// <param name="plan">The plan the model is measured with.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
-    /// <param name="iterationName">The iteration the answers are filed under.</param>
+    /// <param name="iterationName">The iteration the result is filed under, which the answers are tallied against.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The cached client.</returns>
     /// <remarks>
+    /// <para>
+    /// The answers are cached under the routed model and the repetition rather than under the iteration, because an
+    /// iteration is named after the model's alias, and an alias only labels a result: renaming one, or declaring a second
+    /// with the same request, reads back the answers the request was already given. What the model is actually asked
+    /// is what <see cref="CacheIdentityOf" /> keys it by. A model declared without an alias is filed exactly where it
+    /// always was, since its iteration was already named after the routed model.
+    /// </para>
+    /// <para>
     /// The wrapper is not disposed, and owns nothing that would need it: disposing a
     /// <see cref="DelegatingChatClient" /> disposes the client it wraps, and the model under test belongs to the caller
     /// that opened it. The cache itself is the run's, and the store closes it.
+    /// </para>
     /// </remarks>
     [SuppressMessage(
         "Reliability",
@@ -166,10 +176,14 @@ internal static class EvaluationStore
         ChatGenerationPlan plan,
         string scenarioName,
         string iterationName,
+        int repetition,
         CancellationToken cancellationToken)
     {
         var provider = (TallyingResponseCacheProvider)reporting.ResponseCacheProvider!;
-        var cache = await provider.GetCacheAsync(scenarioName, iterationName, cancellationToken);
+        var cache = await provider.GetCacheAsync(
+            scenarioName,
+            IterationNameFor(plan.Endpoint.RoutedModelName, repetition),
+            cancellationToken);
 
         return new ToolKeyedCachingChatClient(model, cache, provider.TallyFor(scenarioName, iterationName))
         {

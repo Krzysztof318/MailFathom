@@ -72,7 +72,7 @@ internal static class RelevanceFilterScenario
             iterationName,
             cancellationToken: cancellationToken);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, Name, iterationName, repetition, cancellationToken);
         var judge = new ScenarioChatModelClient(cachedModel, plan);
         var lookups = LabelledCandidates.Lookups
             .Select(static lookup => new ResolvedLookup(lookup, [.. lookup.Candidates.Select(static candidate => candidate.Resolve())]))
