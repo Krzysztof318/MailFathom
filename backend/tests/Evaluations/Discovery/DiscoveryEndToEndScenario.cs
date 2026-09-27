@@ -154,9 +154,9 @@ internal sealed record DiscoveryEndToEndScenario(string Name, string Question, I
             cancellationToken: cancellationToken);
 
         var agents = new DiscoveryAgentsUnderTest(
-            await EvaluationStore.CacheOverAsync(reporting, planningModel, planningPlan, this.Name, iterationName, cancellationToken),
+            await EvaluationStore.CacheOverAsync(reporting, planningModel, planningPlan, this.Name, iterationName, repetition, cancellationToken),
             planningPlan,
-            await EvaluationStore.CacheOverAsync(reporting, compositionModel, compositionPlan, this.Name, iterationName, cancellationToken),
+            await EvaluationStore.CacheOverAsync(reporting, compositionModel, compositionPlan, this.Name, iterationName, repetition, cancellationToken),
             compositionPlan);
         var search = new CorpusKnowledgeSearch(CorpusMessage.All);
 

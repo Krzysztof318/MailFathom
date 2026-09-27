@@ -16,7 +16,9 @@ namespace MailFathom.Evaluations.Reporting;
 /// A model's answer varies between calls, so one call says whether a model passed this time rather than how often it
 /// passes, and what a deployment experiences is the rate. Each repetition is its own iteration in the store and so its
 /// own cached answer: a repeated run over an unchanged prompt reads every repetition back, and the rate it reports is
-/// the rate the answers it paid for gave.
+/// the rate the answers it paid for gave. The declared count joins the key those answers are cached under wherever it
+/// is more than one, because the repetitions are one sample: a run declaring three reads nothing a run declaring two
+/// paid for, rather than replaying two of its answers and asking only for the third.
 /// </para>
 /// <para>
 /// A case keeps its answers cached whatever its verdict, so a later run replays the sample an earlier one drew, passed

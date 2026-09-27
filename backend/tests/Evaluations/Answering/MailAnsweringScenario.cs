@@ -340,6 +340,7 @@ internal sealed partial record MailAnsweringScenario(
             plan,
             this.Name,
             iterationName,
+            repetition,
             cancellationToken);
 
         var search = new CorpusKnowledgeSearch(this.Mailbox);

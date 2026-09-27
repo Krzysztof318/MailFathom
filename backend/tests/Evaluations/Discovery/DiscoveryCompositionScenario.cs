@@ -381,7 +381,7 @@ internal sealed record DiscoveryCompositionScenario(
             SensitiveContentEgressGuards.Inactive(),
             cancellationToken);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, repetition, cancellationToken);
         var agent = DiscoveryCompositionAgentComposition.Compose(
             cachedModel,
             plan,

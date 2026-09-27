@@ -10,13 +10,19 @@ namespace MailFathom.Evaluations.Reporting;
 
 /// <summary>A response cache that keeps, per scenario and iteration, a tally of the answers read from it and the ones asked afresh.</summary>
 /// <param name="inner">The cache the entries live in.</param>
+/// <param name="repetitions">How many times the run asks each case of each model.</param>
 /// <remarks>
-/// The tally is kept here because the cache provider is the one member of a run's <see cref="ReportingConfiguration" />
-/// the suite supplies, so it is what every scenario of the run and the code filing its verdicts can reach alike.
+/// The tally and the count are kept here because the cache provider is the one member of a run's
+/// <see cref="ReportingConfiguration" /> the suite supplies, so it is what every scenario of the run and the code filing
+/// its verdicts can reach alike.
 /// </remarks>
-internal sealed class TallyingResponseCacheProvider(IEvaluationResponseCacheProvider inner) : IEvaluationResponseCacheProvider
+internal sealed class TallyingResponseCacheProvider(IEvaluationResponseCacheProvider inner, int repetitions)
+    : IEvaluationResponseCacheProvider
 {
     private readonly ConcurrentDictionary<(string Scenario, string Iteration), CachedAnswerTally> tallies = new();
+
+    /// <summary>Gets how many times the run asks each case of each model, which joins the key every answer is cached under.</summary>
+    public int Repetitions => repetitions;
 
     /// <inheritdoc />
     public ValueTask<IDistributedCache> GetCacheAsync(

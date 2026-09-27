@@ -170,6 +170,7 @@ internal static class StructuredAnswerScenario
             plan,
             request.ScenarioName,
             iterationName,
+            repetition,
             cancellationToken);
 
         var agent = request.Compose(cachedModel, plan);

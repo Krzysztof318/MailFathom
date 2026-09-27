@@ -1146,7 +1146,7 @@ internal sealed record AgentConversationScenario(
 
         await using var scenarioRun = await reporting.CreateScenarioRunAsync(this.Name, iterationName, cancellationToken: cancellationToken);
 
-        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, cancellationToken);
+        var cachedModel = await EvaluationStore.CacheOverAsync(reporting, model, plan, this.Name, iterationName, repetition, cancellationToken);
 
         var search = new CorpusKnowledgeSearch(Mailbox);
         var runLedger = new MailAnsweringRunLedger(MailAnsweringRunBounds.Default);

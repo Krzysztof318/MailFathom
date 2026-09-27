@@ -261,7 +261,7 @@ public sealed class EvaluationRepetitionsTests : IDisposable
                     iterationName,
                     cancellationToken: cancellationToken);
 
-                var cached = await EvaluationStore.CacheOverAsync(reporting, model, plan, Scenario, iterationName, cancellationToken);
+                var cached = await EvaluationStore.CacheOverAsync(reporting, model, plan, Scenario, iterationName, repetition, cancellationToken);
                 var answer = await cached.GetResponseAsync(question, cancellationToken: cancellationToken);
                 var verdict = await scenarioRun.EvaluateAsync(question, answer, cancellationToken: cancellationToken);
 

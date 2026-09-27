@@ -43,7 +43,8 @@ name: AI evaluations
 # Each case is asked of each model as many times as the block's `Repetitions` declares, and once where it declares none.
 # A model's answer varies between calls, so a model is held to the share of those repetitions that passed rather than to
 # one answer, and the report shows that share per case and per model beside what the repetitions cost together. Each
-# repetition is its own cached answer, so a repeated run over an unchanged prompt still costs nothing.
+# repetition is its own cached answer, so a repeated run over an unchanged prompt still costs nothing, while a run
+# declaring a different count asks every repetition afresh rather than finishing a sample another run started.
 #
 # The `postgres_retrieval` input also measures retrieval as a deployment ranks it — the full-text index, pgvector, and
 # the two fused — over a PostgreSQL container the job starts and the scenario seeds. It is off unless a dispatch turns it

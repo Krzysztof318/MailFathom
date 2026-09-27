@@ -90,6 +90,50 @@ public sealed class EvaluationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheOverAsync_ARunDeclaringAnotherRepetitionCount_AsksAgainRatherThanReadingTheAnswerThatCountPaidFor()
+    {
+        // Arrange
+        var declaringTwo = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "two", [], repetitions: 2);
+        var declaringThree = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "three", [], repetitions: 3);
+        var declaringOne = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "one", [], repetitions: 1);
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(declaringTwo, Held),
+            await ReachesTheModelAsync(declaringThree, Held),
+            await ReachesTheModelAsync(declaringThree, Held),
+            await ReachesTheModelAsync(declaringTwo, Held),
+            await ReachesTheModelAsync(declaringOne, Held),
+        ];
+
+        // Assert
+        Assert.Equal([true, true, false, false, true], reached);
+    }
+
+    [Fact]
+    public async Task CacheOverAsync_TheSameRequestUnderAnotherAlias_ReadsBackTheAnswerRatherThanAskingAgain()
+    {
+        // Arrange
+        var reporting = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "only", []);
+        var unnamed = ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
+        var renamed = Assert.Single(EvaluationDeclaration.Parse(
+            $"{{MainModel: {{Model: {ScriptedStructuredAnswerRun.ModelUnderTest}, Alias: renamed}}}}",
+            fallbackMainModel: null,
+            address: null).ModelsFor(ChatCapability.Enrichment)).Plan;
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(reporting, Held, unnamed),
+            await ReachesTheModelAsync(reporting, Held, renamed),
+        ];
+
+        // Assert
+        Assert.Equal([true, false], reached);
+    }
+
+    [Fact]
     public async Task CacheOverAsync_AToolWhoseDescriptionChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
     {
         // Arrange
@@ -188,12 +232,14 @@ public sealed class EvaluationStoreTests : IDisposable
         AITool[]? tools = null)
     {
         using var model = ScriptedStructuredAnswerRun.Model("{}");
+        var asked = plan ?? ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest);
         var cached = await EvaluationStore.CacheOverAsync(
             reporting,
             model,
-            plan ?? ScriptedStructuredAnswerRun.PlanFor(ScriptedStructuredAnswerRun.ModelUnderTest),
+            asked,
             scenarioName,
-            EvaluationStore.IterationNameFor(ScriptedStructuredAnswerRun.ModelUnderTest, repetition: 1),
+            EvaluationStore.IterationNameFor(asked.Endpoint.Alias, repetition: 1),
+            repetition: 1,
             TestContext.Current.CancellationToken);
 
         await cached.GetResponseAsync(

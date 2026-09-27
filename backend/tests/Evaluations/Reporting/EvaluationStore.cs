@@ -55,7 +55,8 @@ internal static class EvaluationStore
             AiEvaluationRun.Required(ExecutionVariable),
             judge,
             judgeCachingKey,
-            evaluators);
+            evaluators,
+            EvaluationRepetitions.Declared());
 
     /// <summary>Opens the store a requested run was pointed at, for a scenario that no model judges.</summary>
     /// <param name="evaluators">What every scenario in the run is measured on, none of which asks a model.</param>
@@ -69,7 +70,8 @@ internal static class EvaluationStore
         OpenUnjudgedAt(
             AiEvaluationRun.Required(RootVariable),
             AiEvaluationRun.Required(ExecutionVariable),
-            evaluators);
+            evaluators,
+            EvaluationRepetitions.Declared());
 
     /// <summary>Opens a store at a given directory, under a given run name.</summary>
     /// <param name="root">The directory holding the results and the cache.</param>
@@ -77,18 +79,20 @@ internal static class EvaluationStore
     /// <param name="judge">The judge, already anonymous.</param>
     /// <param name="judgeCachingKey">The key the judge's verdicts are filed under.</param>
     /// <param name="evaluators">What every scenario in the run is judged on.</param>
+    /// <param name="repetitions">How many times the run asks each case of each model.</param>
     /// <returns>The configuration each scenario opens its run from.</returns>
     public static ReportingConfiguration OpenAt(
         string root,
         string executionName,
         IChatClient judge,
         string judgeCachingKey,
-        IEnumerable<IEvaluator> evaluators) =>
+        IEnumerable<IEvaluator> evaluators,
+        int repetitions = 1) =>
         new(
             evaluators,
             new DiskBasedResultStore(root),
             new ChatConfiguration(judge),
-            ResponseCacheAt(root),
+            ResponseCacheAt(root, repetitions),
             [judgeCachingKey],
             executionName);
 
@@ -96,6 +100,7 @@ internal static class EvaluationStore
     /// <param name="root">The directory holding the results and the cache.</param>
     /// <param name="executionName">The name this run's results are filed and compared under.</param>
     /// <param name="evaluators">What every scenario in the run is measured on, none of which asks a model.</param>
+    /// <param name="repetitions">How many times the run asks each case of each model.</param>
     /// <returns>The configuration each scenario opens its run from.</returns>
     /// <remarks>
     /// No judge means no judge's verdicts to cache, but the model under test's answers are what this store caches all the
@@ -104,12 +109,13 @@ internal static class EvaluationStore
     public static ReportingConfiguration OpenUnjudgedAt(
         string root,
         string executionName,
-        IEnumerable<IEvaluator> evaluators) =>
+        IEnumerable<IEvaluator> evaluators,
+        int repetitions = 1) =>
         new(
             evaluators,
             new DiskBasedResultStore(root),
             chatConfiguration: null,
-            ResponseCacheAt(root),
+            ResponseCacheAt(root, repetitions),
             executionName: executionName);
 
     /// <summary>Gets how many answers the model under test gave under one scenario and iteration were read from the cache, and how many were asked afresh.</summary>
@@ -142,13 +148,23 @@ internal static class EvaluationStore
     /// <param name="model">The model under test's client, which stays the caller's.</param>
     /// <param name="plan">The plan the model is measured with.</param>
     /// <param name="scenarioName">The scenario the answers are filed under.</param>
-    /// <param name="iterationName">The iteration the answers are filed under.</param>
+    /// <param name="iterationName">The iteration the result is filed under, which the answers are tallied against.</param>
+    /// <param name="repetition">Which repetition of the case this is, counted from one.</param>
     /// <param name="cancellationToken">Withdraws the run.</param>
     /// <returns>The cached client.</returns>
     /// <remarks>
+    /// <para>
+    /// The answers are cached under the routed model and the repetition rather than under the iteration, because an
+    /// iteration is named after the model's alias, and an alias only labels a result: renaming one, or declaring a second
+    /// with the same request, reads back the answers the request was already given. What the model is actually asked
+    /// is what <see cref="CacheIdentityOf" /> keys it by. A model declared without an alias is filed exactly where it
+    /// always was, since its iteration was already named after the routed model.
+    /// </para>
+    /// <para>
     /// The wrapper is not disposed, and owns nothing that would need it: disposing a
     /// <see cref="DelegatingChatClient" /> disposes the client it wraps, and the model under test belongs to the caller
     /// that opened it. The cache itself is the run's, and the store closes it.
+    /// </para>
     /// </remarks>
     [SuppressMessage(
         "Reliability",
@@ -160,24 +176,42 @@ internal static class EvaluationStore
         ChatGenerationPlan plan,
         string scenarioName,
         string iterationName,
+        int repetition,
         CancellationToken cancellationToken)
     {
-        var cache = await reporting.ResponseCacheProvider!.GetCacheAsync(scenarioName, iterationName, cancellationToken);
+        var provider = (TallyingResponseCacheProvider)reporting.ResponseCacheProvider!;
+        var cache = await provider.GetCacheAsync(
+            scenarioName,
+            IterationNameFor(plan.Endpoint.RoutedModelName, repetition),
+            cancellationToken);
 
-        return new ToolKeyedCachingChatClient(model, cache, TallyOf(reporting, scenarioName, iterationName))
+        return new ToolKeyedCachingChatClient(model, cache, provider.TallyFor(scenarioName, iterationName))
         {
-            CacheKeyAdditionalValues = CacheIdentityOf(plan, model.GetService<ProviderChatClient>()?.ExtraHeaders ?? []),
+            CacheKeyAdditionalValues = CacheIdentityOf(
+                plan,
+                model.GetService<ProviderChatClient>()?.ExtraHeaders ?? [],
+                provider.Repetitions),
         };
     }
 
     /// <summary>Names what an answer is keyed by beyond the request the cache key reads itself.</summary>
     /// <remarks>
+    /// <para>
     /// The effort, the additional request members, and the API travel in a request-options factory the cache key cannot
     /// read, and the headers travel in the transport, so each joins the key explicitly — and only where it is declared, so
     /// every answer cached by a run declaring none keeps the key it was filed under. The tools a request offers are the
     /// same kind of gap, closed per request by the client itself.
+    /// </para>
+    /// <para>
+    /// The run's repetition count joins it too, because the repetitions of one case are one sample: a run declaring three
+    /// would otherwise read the first two back from a run declaring two and ask only the third, reporting one rate over
+    /// answers two different runs drew. A run declaring one keeps the key its answers were always filed under.
+    /// </para>
     /// </remarks>
-    private static string[] CacheIdentityOf(ChatGenerationPlan plan, IReadOnlyList<ProviderEndpointHeader> extraHeaders) =>
+    private static string[] CacheIdentityOf(
+        ChatGenerationPlan plan,
+        IReadOnlyList<ProviderEndpointHeader> extraHeaders,
+        int repetitions) =>
     [
         plan.Endpoint.RoutedModelName,
         plan.Endpoint.Address?.AbsoluteUri ?? string.Empty,
@@ -185,8 +219,9 @@ internal static class EvaluationStore
         .. plan.Endpoint.Api is ChatProviderApi.ChatCompletions ? Array.Empty<string>() : [plan.Endpoint.Api.ToString()],
         .. plan.AdditionalProperties.OrderBy(static member => member.Key, StringComparer.Ordinal).Select(static member => $"{member.Key}={member.Value.GetRawText()}"),
         .. extraHeaders.Select(static header => $"{header.Name}: {header.Value}"),
+        .. repetitions is 1 ? Array.Empty<string>() : [string.Create(CultureInfo.InvariantCulture, $"repetitions={repetitions}")],
     ];
 
-    private static TallyingResponseCacheProvider ResponseCacheAt(string root) =>
-        new(new DiskBasedResponseCacheProvider(root, AnswerLifetime));
+    private static TallyingResponseCacheProvider ResponseCacheAt(string root, int repetitions) =>
+        new(new DiskBasedResponseCacheProvider(root, AnswerLifetime), repetitions);
 }
