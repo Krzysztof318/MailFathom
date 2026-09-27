@@ -90,6 +90,28 @@ public sealed class EvaluationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task CacheOverAsync_ARunDeclaringAnotherRepetitionCount_AsksAgainRatherThanReadingTheAnswerThatCountPaidFor()
+    {
+        // Arrange
+        var declaringTwo = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "two", [], repetitions: 2);
+        var declaringThree = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "three", [], repetitions: 3);
+        var declaringOne = EvaluationStore.OpenUnjudgedAt(this.store.FullName, "one", [], repetitions: 1);
+
+        // Act
+        bool[] reached =
+        [
+            await ReachesTheModelAsync(declaringTwo, Held),
+            await ReachesTheModelAsync(declaringThree, Held),
+            await ReachesTheModelAsync(declaringThree, Held),
+            await ReachesTheModelAsync(declaringTwo, Held),
+            await ReachesTheModelAsync(declaringOne, Held),
+        ];
+
+        // Assert
+        Assert.Equal([true, true, false, false, true], reached);
+    }
+
+    [Fact]
     public async Task CacheOverAsync_AToolWhoseDescriptionChanged_AsksTheModelAgainRatherThanReadingTheAnswerGivenUnderTheOldOne()
     {
         // Arrange
