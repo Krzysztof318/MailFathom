@@ -955,32 +955,14 @@
                       <sc-if value="{{ m.simpleView }}" hint-placeholder-val="{{ true }}">
                         <sc-for list="{{ m.paras }}" as="p" hint-placeholder-count="2">
                           <sc-if value="{{ p.isText }}" hint-placeholder-val="{{ true }}">
-                            <div style="{{ p.style }}">
-                              <sc-for list="{{ p.runs }}" as="r" hint-placeholder-count="1">
-                                <sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}">
-                                  <span style="{{ r.style }}">{{ r.text }}</span>
-                                </sc-if>
-                                <sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}">
-                                  <a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a>
-                                </sc-if>
-                              </sc-for>
-                            </div>
+                            <div style="{{ p.style }}"><sc-for list="{{ p.runs }}" as="r" hint-placeholder-count="1"><sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}"><span style="{{ r.style }}">{{ r.text }}</span></sc-if><sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a></sc-if></sc-for></div>
                           </sc-if>
                           <sc-if value="{{ p.isList }}" hint-placeholder-val="{{ false }}">
                             <div style="{{ p.style }}">
                               <sc-for list="{{ p.items }}" as="it" hint-placeholder-count="3">
                                 <div style="{{ it.style }}">
                                   <span style="{{ it.markerStyle }}">{{ it.marker }}</span>
-                                  <span style="{{ it.textStyle }}">
-                                    <sc-for list="{{ it.runs }}" as="r" hint-placeholder-count="1">
-                                      <sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}">
-                                        <span style="{{ r.style }}">{{ r.text }}</span>
-                                      </sc-if>
-                                      <sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}">
-                                        <a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a>
-                                      </sc-if>
-                                    </sc-for>
-                                  </span>
+                                  <span style="{{ it.textStyle }}"><sc-for list="{{ it.runs }}" as="r" hint-placeholder-count="1"><sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}"><span style="{{ r.style }}">{{ r.text }}</span></sc-if><sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a></sc-if></sc-for></span>
                                 </div>
                               </sc-for>
                             </div>
@@ -1579,13 +1561,41 @@
                   <span>·</span>
                   <span style="letter-spacing:0.02em">{{ m.scope }}</span>
                 </div>
-                <sc-if value="{{ m.hasText }}" hint-placeholder-val="{{ true }}">
-                  <div style="font-size:15px;line-height:1.6;color:var(--text2);text-wrap:pretty">{{ m.text }}</div>
-                </sc-if>
-                <sc-if value="{{ m.hasParas }}" hint-placeholder-val="{{ false }}">
-                  <sc-for list="{{ m.paras }}" as="p" hint-placeholder-count="0">
-                    <div style="{{ p.style }}">{{ p.t }}</div>
+                <sc-if value="{{ m.hasMd }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-direction:column;gap:12px">
+                  <sc-for list="{{ m.md }}" as="p" hint-placeholder-count="1">
+                    <sc-if value="{{ p.isText }}" hint-placeholder-val="{{ true }}">
+                      <div style="{{ p.style }}"><sc-for list="{{ p.runs }}" as="r" hint-placeholder-count="1"><sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}"><span style="{{ r.style }}">{{ r.text }}</span></sc-if><sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a></sc-if></sc-for></div>
+                    </sc-if>
+                    <sc-if value="{{ p.isList }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ p.style }}">
+                        <sc-for list="{{ p.items }}" as="it" hint-placeholder-count="3">
+                          <div style="{{ it.style }}">
+                            <span style="{{ it.markerStyle }}">{{ it.marker }}</span>
+                            <span style="{{ it.textStyle }}"><sc-for list="{{ it.runs }}" as="r" hint-placeholder-count="1"><sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}"><span style="{{ r.style }}">{{ r.text }}</span></sc-if><sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ r.href }}" style="{{ r.style }}">{{ r.text }}</a></sc-if></sc-for></span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ p.isTable }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ p.style }}">
+                        <sc-for list="{{ p.rows }}" as="row" hint-placeholder-count="3">
+                          <div style="{{ row.style }}">
+                            <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="3">
+                              <div style="{{ cell.style }}">{{ cell.text }}</div>
+                            </sc-for>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ p.isCode }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ p.style }}">{{ p.text }}</div>
+                    </sc-if>
+                    <sc-if value="{{ p.isHr }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ p.style }}"></div>
+                    </sc-if>
                   </sc-for>
+                  </div>
                 </sc-if>
                 <sc-if value="{{ m.working }}" hint-placeholder-val="{{ false }}">
                   <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--accent-d)">autorenew</span>The agent is going through your mail…</div>
@@ -4599,12 +4609,12 @@ const DEMO_SCRIPT = [
   },
   { d: 600, s: "Weighing the 2023 cap against the new wording" },
   { d: 1500, b: { scope: "reading · 3 sources", text: "" } },
-  { d: 700, p: "Short version: the cap you already agreed has quietly disappeared. The 2023 addendum says indexation shall not exceed 5% per year. The new draft only points at the CPI published for the previous year, with no ceiling on it at all." },
-  { d: 1500, p: "That matters more than the 8% headline does. At the 4.1% forecast the first year costs you roughly the same either way — but with no cap, a repeat of 2022 would push the fee up by a fifth in one step, and nothing in the framework contract stops it." },
+  { d: 700, p: "**Short version:** the cap you already agreed has quietly disappeared. The 2023 addendum says:\n\n> Indexation shall not exceed 5% per year.\n\nThe new draft only points at *the CPI published for the previous year*, with no ceiling on it at all." },
+  { d: 1500, p: "**That matters more than the 8% headline does.** At the 4.1% forecast the first year costs you roughly the same either way — but with no cap, a repeat of 2022 would push the fee up by a fifth in one step, and nothing in the framework contract stops it." },
   { d: 800, s: "Checking the penalty in case CN-114" },
-  { d: 1700, p: "The response time is the smaller trade. You give up 4 hours for 2 on critical incidents, while the penalty stays at 0.2% of the monthly fee — the same figure as in the framework contract, so no new exposure there." },
+  { d: 1700, p: "The response time is the smaller trade:\n\n- **Critical incidents:** response drops from 4 h to 2 h\n- **Penalty:** stays at `0.2%` of the monthly fee — the same figure as in the framework contract\n\nSo no new exposure there." },
   { d: 700, s: "Putting my reading together" },
-  { d: 1600, p: "My reading: take the 8%, insist the 5% cap comes back in writing, leave the penalty alone. That keeps the whole thing closable by the 28 August date you already promised Anna." },
+  { d: 1600, p: "## My reading\n\n1. Take the **8%**.\n2. Insist the **5% cap** comes back in writing.\n3. Leave the penalty alone.\n\nThat keeps the whole thing closable by **28 August**, the date you already promised Anna." },
   { d: 1900, u: "Accept the 8%, but keep the 5% cap. Draft it." },
   { d: 450, s: "Writing the draft" },
   { d: 1500, s: "Matching the tone to your earlier replies" },
@@ -4636,8 +4646,8 @@ const DEMO_SCRIPT = [
     },
   },
   { d: 1000, b: { scope: "waiting for you", text: "" } },
-  { d: 600, p: "Nothing has left your outbox. Three things sit above waiting on you: the reply, the task for the 28th, and the half-hour with Anna. Approve the draft and I will send it, then the other two follow on their own." },
-  { d: 1800, p: "If you would rather not concede the 8% at all, say so and I will rewrite the draft around holding January's fee flat. Be aware that the 28 August date then becomes unlikely — Anna's last two messages both pushed for a decision this week." },
+  { d: 600, p: "Nothing has left your outbox. Three things above wait on you:\n\n- [ ] The reply to Anna\n- [ ] The task for the 28th\n- [ ] The half-hour with Anna\n\nApprove the draft and I will send it — the other two follow on their own." },
+  { d: 1800, p: "If you would rather not concede the 8% at all, say so and I will rewrite the draft around holding January's fee flat. *Be aware* that the 28 August date then becomes unlikely — Anna's last two messages both pushed for a decision this week." },
   /* Work is done — three things the agent can do next, never more. */
   { d: 500, n: ["Rewrite the draft firmer", "What if Anna refuses the cap?", "Open the 2023 addendum"] },
 ];
@@ -7679,11 +7689,11 @@ class Component extends DCLogic {
       railAgentStyle: railBase + (st.screen === "agent" ? activeStyle : idleColor),
       agentScrollStyle: isMobile
         ? "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:16px 14px"
-        : "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:22px 26px" + (narrow ? "" : compact ? ";max-width:780px" : ";max-width:1520px"),
-      agentBoxStyle: "display:flex;align-items:center;gap:12px;background:var(--panel);border:2px solid var(--accent);border-radius:11px;padding:10px 13px" + (isMobile ? "" : narrow ? "" : compact ? ";max-width:780px" : ";max-width:1520px"),
+        : "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:22px " + (narrow ? "26px" : "max(26px, calc((100% - " + (compact ? 1170 : 1290) + "px) / 2))"),
+      agentBoxStyle: "display:flex;align-items:center;gap:12px;background:var(--panel);border:2px solid var(--accent);border-radius:11px;padding:10px 13px",
       agentInputWrapStyle: isMobile
         ? "display:flex;flex-direction:column;gap:9px;background:var(--panel);border-top:1px solid var(--line);padding:12px 14px"
-        : "display:flex;flex-direction:column;gap:10px;background:var(--panel);border-top:1px solid var(--line);padding:14px 26px 16px 26px",
+        : "display:flex;flex-direction:column;gap:10px;background:var(--panel);border-top:1px solid var(--line);padding:14px " + (narrow ? "26px" : "max(26px, calc((100% - " + (compact ? 1170 : 1290) + "px) / 2))") + " 16px",
       agentThinking: !!st.agentThinking,
       agentScrollRef: this.agentScrollRef,
       onAgentScroll: this.onAgentScroll,
@@ -7796,6 +7806,10 @@ class Component extends DCLogic {
         time: formatMsgTime(m.ts),
         text: m.text,
         hasText: !!m.text,
+        md: (m.text ? mdView(m.text) : []).concat((m.paras || []).reduce((acc, p) => acc.concat(mdView(p.t).map(b => Object.assign({}, b, {
+          style: b.style + (p.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
+        }))), [])),
+        hasMd: !!m.text || (m.paras || []).length > 0,
         scope: m.scope || "",
         working: !!m.working,
         hasParas: (m.paras || []).length > 0,
