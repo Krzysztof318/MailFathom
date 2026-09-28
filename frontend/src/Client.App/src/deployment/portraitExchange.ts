@@ -15,6 +15,7 @@ import {
 } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
 import { asDataUrl } from './dataUrl';
+import { fetchFromDeployment } from './deploymentFetch';
 import { deploymentCredentials } from './sendToDeployment';
 
 // The third module in this directory that calls `fetch`, and the third for the same reason: `Client.Backend` declares
@@ -82,19 +83,24 @@ function refusalOf(answer: PortraitRead | PortraitWrite): ClientFailureReason | 
 
 /** Fetches the picture and answers an address the client may draw it at, or why there is nothing to draw. */
 async function readPicture(request: ClientRequest, abandoned: AbortSignal): Promise<PortraitRead> {
-    let response: Response;
-
     try {
-        response = await fetch(request.path, {
-            method: request.method,
-            headers: { ...request.headers },
-            credentials: deploymentCredentials,
-            signal: abandoned,
-        });
+        return await fetchFromDeployment(
+            request.path,
+            {
+                method: request.method,
+                headers: { ...request.headers },
+                credentials: deploymentCredentials,
+                signal: abandoned,
+            },
+            pictureOf,
+        );
     } catch {
         return { outcome: 'refused', reason: 'unavailable' };
     }
+}
 
+/** What one answer to a read of the picture amounts to. */
+async function pictureOf(response: Response): Promise<PortraitRead> {
     // Having no picture is an ordinary state of the screen rather than a failure on it: the initials are what the
     // client draws instead, and it already has the name they come from.
     if (response.status === 204) {
@@ -128,21 +134,24 @@ async function readPicture(request: ClientRequest, abandoned: AbortSignal): Prom
 
 /** Puts one write on the wire and reports whether it landed, an expected failure being a value here as everywhere. */
 async function stated(request: ClientRequest, body: Blob | null): Promise<PortraitWrite> {
-    let response: Response;
-
     try {
-        response = await fetch(request.path, {
-            method: request.method,
-            headers: { ...request.headers },
-            credentials: deploymentCredentials,
-            body,
-        });
+        return await fetchFromDeployment(
+            request.path,
+            {
+                method: request.method,
+                headers: { ...request.headers },
+                credentials: deploymentCredentials,
+                body,
+            },
+            // Both writes are answered `204`, which is the whole of what says the deployment took them.
+            (response) =>
+                Promise.resolve<PortraitWrite>(
+                    response.status === 204
+                        ? { outcome: 'stored' }
+                        : { outcome: 'refused', reason: failureReasonForStatus(response.status) },
+                ),
+        );
     } catch {
         return { outcome: 'refused', reason: 'unavailable' };
     }
-
-    // Both writes are answered `204`, which is the whole of what says the deployment took them.
-    return response.status === 204
-        ? { outcome: 'stored' }
-        : { outcome: 'refused', reason: failureReasonForStatus(response.status) };
 }

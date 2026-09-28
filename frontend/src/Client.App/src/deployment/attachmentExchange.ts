@@ -11,6 +11,7 @@ import {
 } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
 import { asDataUrl } from './dataUrl';
+import { fetchFromDeployment } from './deploymentFetch';
 import { deploymentCredentials } from './sendToDeployment';
 
 // The two things the client does with one file a message carries: hand it to the person to keep, and show it inside the
@@ -200,27 +201,35 @@ async function fetchedOctets(
     arrived: (octets: number) => void,
     abandoned: AbortSignal,
 ): Promise<readonly Uint8Array<ArrayBuffer>[] | Exclude<AttachmentDeliveryOutcome, 'delivered'>> {
-    let response: Response;
-
     try {
-        response = await fetch(request.path, {
-            method: request.method,
-            headers: { ...request.headers },
-            credentials: deploymentCredentials,
-            signal: abandoned,
-        });
+        return await fetchFromDeployment(
+            request.path,
+            {
+                method: request.method,
+                headers: { ...request.headers },
+                credentials: deploymentCredentials,
+                signal: abandoned,
+            },
+            async (response) => {
+                const answer = await attachmentOctetsOf(
+                    response,
+                    request.longestAnswer ?? longestResponseBody,
+                    arrived,
+                );
+
+                // A read that stopped partway is reported as the person's act where it was one: the answer had begun,
+                // so what ended it is asked of the signal rather than of the refusal. A refusal the deployment itself
+                // stated keeps its own name, which is why this reaches only an answer that had already been accepted.
+                return response.status === 200 && typeof answer === 'string' && abandoned.aborted
+                    ? 'abandoned'
+                    : answer;
+            },
+        );
     } catch {
         // A connection refused, a name that does not resolve, and a person pressing the way out all arrive here as one
         // rejected promise, so which of them it was is asked of the signal rather than of the error.
         return abandoned.aborted ? 'abandoned' : 'unavailable';
     }
-
-    const answer = await attachmentOctetsOf(response, request.longestAnswer ?? longestResponseBody, arrived);
-
-    // A read that stopped partway is reported as the person's act where it was one: the answer had begun, so what
-    // ended it is asked of the signal rather than of the refusal. A refusal the deployment itself stated keeps its own
-    // name, which is why this reaches only an answer that had already been accepted.
-    return response.status === 200 && typeof answer === 'string' && abandoned.aborted ? 'abandoned' : answer;
 }
 
 /**
