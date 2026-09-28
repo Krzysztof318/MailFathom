@@ -32,7 +32,7 @@ export function ThreadAgentField() {
 
     const passage = fragmentBeingRead(workspace);
     const answering = workspace.selection;
-    const busy = drafting?.draft?.body === null;
+    const busy = drafting?.draft?.body === null && drafting.draft.answering === answering;
 
     function draftAReply(): void {
         if (drafting === null || answering === null || busy) {

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useEffect, useRef } from 'react';
 import type {
     CleanedMailBody,
     ClientResult,
@@ -288,7 +289,7 @@ function ReadAsWords({ body }: { readonly body: MailBody }) {
 // The design draws the two states unequally on purpose. What was removed is a card, because it asks something of the
 // reader and says what answering costs; what was loaded is one quiet line, because it is a fact about the message and
 // nothing more is owed on it. The line takes no focus: it is not a control, and a reader who pressed the button has
-// finished with the card rather than landed somewhere new.
+// finished with the card rather than landed somewhere new — so it is announced rather than focused.
 function RemoteContent({
     document,
     requested,
@@ -302,10 +303,25 @@ function RemoteContent({
 }) {
     const { locale, translate } = useLocalization();
 
+    // The line is no place to land, but the button it replaces is where somebody's focus was, and letting that fall to
+    // the document would restart keyboard reading at the top of the page. So it goes to the message the line stands
+    // in — the region the reading pane and a conversation each draw a message as — and only where the button was on the
+    // screen first: a message read with the pictures already asked for takes focus from nobody.
+    const line = useRef<HTMLParagraphElement>(null);
+    const asked = useRef(false);
+
+    useEffect(() => {
+        if (!requested) {
+            asked.current = true;
+        } else if (asked.current) {
+            line.current?.closest<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
+        }
+    }, [requested]);
+
     if (requested) {
         return (
             <>
-                <p className="flex items-center gap-2 text-sm text-muted">
+                <p className="flex items-center gap-2 text-sm text-muted" ref={line} role="status">
                     <Icon name="image" className="size-4 shrink-0" />
                     {translate('body.remotePicturesShown')}
                 </p>

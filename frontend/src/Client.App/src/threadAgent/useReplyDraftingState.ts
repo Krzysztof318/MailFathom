@@ -44,9 +44,10 @@ export function useReplyDraftingState(session: ClientSession | null, transport: 
     const draft = held !== null && held.session === session ? held.draft : null;
 
     function draftReply(answering: string, typed: string, passage: string | null): void {
-        // One reply at a time: a second press while the first is being written would spend the allowance twice and put
-        // whichever answered last on the screen.
-        if (session === null || draft?.body === null) {
+        // One reply at a time for a message: a second press while its reply is being written would spend the allowance
+        // twice and put whichever answered last on the screen. A press under another message is a new question, and
+        // what is still on the wire for the first becomes an answer nobody is waiting for.
+        if (session === null || (draft?.body === null && draft.answering === answering)) {
             return;
         }
 

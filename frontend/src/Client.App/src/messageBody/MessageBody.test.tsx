@@ -238,24 +238,46 @@ describe('MessageBody', () => {
         expect(screen.queryByRole('button', { name: 'Load images from the sender' })).toBeNull();
     });
 
-    // The line is a statement rather than a notice to act on, so it takes nobody's focus — not even the focus of whoever
-    // pressed the button it replaces, which falls back to the document with nothing to move it on to.
-    it('takes nobody\u2019s focus with the line that replaces the card', () => {
+    const messageRegion = 'The racking quote';
+
+    // The line is a statement rather than a notice to act on, so it takes no focus itself and is announced instead. The
+    // focus of whoever pressed the button it replaces goes to the message the line stands in, drawn here the way the
+    // reading pane and a conversation draw one: a region that takes focus without being a stop.
+    it('announces the line that replaces the card, and hands the keyboard to the message rather than to it', async () => {
         const asking = { ...readable, document: { ...drawnDocument, removedRemoteReferenceCount: 1 } };
         const answered = {
             ...readable,
             remoteImagesRequested: true,
             document: { ...drawnDocument, retainedRemoteImageCount: 1 },
         };
-        const drawn = drawing(asking);
+        const inTheMessage = (body: MailBody) => (
+            <article aria-label={messageRegion} tabIndex={-1}>
+                {inThePane(body)}
+            </article>
+        );
+        const drawn = render(inTheMessage(asking));
         screen.getByRole('button', { name: 'Load images from the sender' }).focus();
 
-        drawn.rerender(inThePane(answered));
+        drawn.rerender(inTheMessage(answered));
 
-        const loaded = screen.getByText('Images from the sender are loaded for this message.');
+        const loaded = screen.getByRole('status');
 
+        expect(loaded.textContent).toBe('Images from the sender are loaded for this message.');
         expect(loaded.hasAttribute('tabindex')).toBe(false);
-        expect(loaded.contains(document.activeElement)).toBe(false);
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('article', { name: messageRegion }));
+        });
+    });
+
+    it('moves nobody’s focus where the message opens with the pictures already asked for', () => {
+        render(
+            <article aria-label={messageRegion} tabIndex={-1}>
+                {inThePane({ ...readable, remoteImagesRequested: true, document: drawnDocument })}
+            </article>,
+        );
+
+        expect(screen.getByRole('status')).toBeDefined();
+        expect(document.activeElement).toBe(document.body);
     });
 
     it('says how many of the message own pictures a bound left undrawn', () => {

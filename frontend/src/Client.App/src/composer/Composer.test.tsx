@@ -1596,4 +1596,33 @@ describe('Composer drafting', () => {
         expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
         expect(asked.filter((request) => request.path.endsWith('/replies/drafting'))).toHaveLength(0);
     });
+
+    // Opening the composer is not accepting the words in it: they are still a draft nobody has read in place, so the
+    // composer says so exactly as it does for one it asked for itself, and the way back is to the empty reply the
+    // author had not written anything into yet.
+    it('holds a reply drafted under a correspondence as a draft to accept or take back', async () => {
+        drawComposer(
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        expect(await screen.findByText('AI draft — check the facts and tone before sending')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Accept' })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
+
+        await waitFor(() => {
+            expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
+        });
+        expect(screen.queryByText('AI draft — check the facts and tone before sending')).toBeNull();
+    });
 });

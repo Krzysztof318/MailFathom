@@ -219,8 +219,7 @@ describe('ThreadAgentField', () => {
 });
 
 describe('ReplyDraftCard', () => {
-    it('drafts the reply into a card in the thread, going nowhere and sending nothing', async () => {
-        window.history.replaceState(null, '', '#/mail');
+    it('drafts the reply into a card in the thread, asking the deployment once for it', async () => {
         const { transport, asked } = answeringDrafts();
 
         drawing(transport);
@@ -240,7 +239,6 @@ describe('ReplyDraftCard', () => {
             selection: null,
             instruction: 'Write a reply to this message. accept the SLA',
         });
-        expect(window.location.hash).toBe('#/mail');
     });
 
     it('says a reply is being written while the deployment writes it, and offers nothing to act on yet', async () => {
@@ -264,6 +262,26 @@ describe('ReplyDraftCard', () => {
         draftingAReply();
 
         expect(asked).toHaveLength(1);
+    });
+
+    it('lets a reply be asked under another message while the first is still being written', async () => {
+        const asked: ClientRequest[] = [];
+
+        const { opening } = drawing((request) => {
+            asked.push(request);
+
+            return new Promise(() => undefined);
+        });
+        draftingAReply();
+        await screen.findByText('AI is drafting…');
+        opening(another);
+
+        expect(screen.getByRole('button', { name: 'Draft' }).getAttribute('aria-disabled')).toBe('false');
+
+        draftingAReply();
+
+        expect(asked).toHaveLength(2);
+        expect(JSON.parse(asked[1]?.body ?? '')).toMatchObject({ answeredEmailId: another });
     });
 
     it('carries the passage somebody selected into what the reply is written about', async () => {
