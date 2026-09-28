@@ -265,17 +265,51 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
 
 `pnpm test:browser` is the second suite, and it is the answer to everything the first one structurally cannot make.
 **`pnpm test` starts no browser and no server**, so a claim that needs real layout or geometry, real navigation, the
-back gesture, a real network exchange, or the built bundle rather than the source belongs here. Moving such a check is
-the answer; dropping it is not, and neither is asserting it in jsdom where it would pass for the wrong reason.
+back gesture, a real network exchange, or the built bundle rather than the source belongs here — and so does a journey
+across the screens, which a suite rendering one component at a time cannot perform. Moving such a check is the answer;
+dropping it is not, and neither is asserting it in jsdom where it would pass for the wrong reason.
 
 - **It runs against the built bundle, never the development server.** `pnpm test:browser` runs `pnpm build` and then
   Playwright, whose configuration starts Vite's preview server over `src/Client.App/dist/`. A development server
   transforms modules on demand, so a screen proven against one has not been proven against the directory of static
   files a deployment publishes — which is half of what this suite is for.
-- **A check earns its place here by being unanswerable in jsdom.** Rendering a component with a value handed to it, a
-  branch, a label, a failure message: all of that is faster and clearer in `pnpm test`, and duplicating it here buys a
-  slower copy. What only a browser answers is the bundle, the document's history, layout and geometry, and the requests
-  the page actually issued.
+- **A check earns its place here in one of two ways, and a copy of a unit test is neither.** The first is being
+  unanswerable in jsdom: what only a browser answers is the bundle, the document's history, layout and geometry, and the
+  requests the page actually issued. The second is being a **journey** — a sequence a person performs across more than
+  one component, asserted by what the screen holds after it and by the requests the page issued. A unit test renders one
+  component against a transport it was handed, so it proves what that component does with an answer and says nothing
+  about what the _next_ screen holds once the act is done: whether the list dropped the row, whether the unread count
+  moved, whether the destination folder holds what was filed into it, whether undo put it back. That seam is where the
+  client's defects have been, and only a journey stands on it.
+- **What tells the two apart is what the assertion reads.** One that reads only what the component acted on draws in
+  answer to a value handed to it — a branch, a label, a failure message, a control turning disabled — is a unit test:
+  it is faster and clearer in `pnpm test`, and duplicating it here buys a slower copy. One that reads what a _different_
+  component holds because of the act, or what a later read of the same component answers after it, is a journey and
+  belongs here. A journey that checks a label on its way is still a journey; a check that performs one act and reads
+  back only the component it acted on is not one, however many clicks it takes to get there.
+- **A journey runs against a fake deployment that holds state.** A route fulfilled with one fixed answer answers the
+  list after a delete exactly as it answered it before, so it cannot tell a client that dropped the row from one that
+  never asked again. The fake a journey drives applies what the client writes — a delete, a move, a flag, a read mark,
+  a draft, an undo — and answers every later read from what those writes did, in the shapes the service answers, so the
+  bundle parses them through `Client.Backend` exactly as it would a deployment's.
+- **No journey asserts a service behaviour the fake merely assumes.** The fake holds one reading of what the service
+  does — that a moved message leaves the folder it came from, that emptying the trash empties it — and a journey proves
+  the client agrees with that reading, never that the service does. Agreement with a real service stays with the
+  service's integration suite and with [the end-to-end suite](#the-end-to-end-suite); a journey pinning a service rule
+  would pass while the fake and the client both disagreed with the deployment.
+- **A journey never waits out a real duration.** The fake answers at once, an AI answer included: nothing in it
+  simulates how long a model takes, and where a journey needs a running answer the fake hands it back running and the
+  next read the journey causes answers it finished. A timer the client itself runs — a poll, a notice's lifetime, a
+  renewal — is advanced with Playwright's clock, `page.clock.install()` before the page loads and `page.clock.runFor()`
+  over the timer's duration, rather than slept through. So a journey costs what its steps cost, and
+  `page.waitForTimeout` is not a wait this suite writes.
+- **A defect a journey exposes is fixed in the pull request that adds the journey.** No journey is skipped, marked as
+  expected to fail, or weakened until it passes: a check that stands aside for the defect it found reports that defect
+  as the behaviour the client intends.
+- **A client defect whose cause crosses components is fixed together with a journey.** The regression check for such a
+  fix is a journey that fails without it and passes with it, in the same pull request. A unit test beside each
+  component it touched proves that each did its own part and nothing about the seam between them, which is where the
+  defect was. A defect whose cause sits inside one component is held by a unit test beside that component.
 - **The same rule about what a test asserts holds**, and this suite has no exemption from it: a role first, then the
   text a person would read. Playwright's `getByRole` is the same query React Testing Library's is. No CSS selector, no
   `data-testid`, no coordinate, and no assertion on a class name.
@@ -305,8 +339,13 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   it.
 - **Where it runs is decided**: on every pull request that reaches the client stack, in
   `.github/workflows/build-test-frontend.yml`, which carries the argument for that rather than nightly or local-only.
-  Neither verification gate runs it, because it needs a browser install the gates would otherwise demand of every
-  machine.
+  Neither verification gate runs it, journeys included, because it needs a browser install the gates would otherwise
+  demand of every machine — so the local gate costs the same however far this suite grows.
+- **It is held to a budget: the suite never pushes a pull request's `CI` run past twelve minutes.** `Fathom review`
+  takes ten to twenty minutes on a pull request, so a pipeline held inside twelve is done within the time the review
+  already takes, and this suite is never what a merge waits on. When it nears the budget the first answer is a job of
+  its own in that workflow, beside the one that lints, type-checks, and runs the unit suites, with its worker count
+  measured on the runner. Sharding comes only once that one job no longer fits.
 
 What the suite asserts about the network is therefore three things rather than one: that the client reaches the origin
 it was served from and no other, that what it sends there is the credential the bundle composed — the second being the
@@ -411,8 +450,8 @@ changing. `pnpm test:desktop` is the whole of how it runs.
 - **What it owns is what the platform answers, and nothing else.** Two rules qualify today and both are
   [#1462](https://github.com/Krzysztof318/MailFathom/issues/1462)'s: that an instant is placed against the zone the
   runtime reports, and that a first run opens in the language the platform states. A check belongs here by being
-  unanswerable in the other three — a component, a label, a layout, a request on the wire, or anything about the
-  accessibility tree belongs above, and a copy of one here buys a slower answer and a second thing to keep in step.
+  unanswerable in the other three — a component, a label, a layout, a journey, a request on the wire, or anything about
+  the accessibility tree belongs above, and a copy of one here buys a slower answer and a second thing to keep in step.
 - **It asserts a literal spelling, never a formatter built the same way.** That is the rule § _A localized screen_
   already states, and it is the whole content of the timezone half: an expectation written as the output of a second
   `Intl.DateTimeFormat` passes for a head that named a zone of its own as happily as for one that did not.

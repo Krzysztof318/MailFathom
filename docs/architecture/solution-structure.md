@@ -185,7 +185,8 @@ The unit suite is Vitest, run by `pnpm test` as one Vitest project per package: 
 test has to import a component neither package publishes and a test tree beside `src/` could reach one only by
 crossing the boundary above. A second suite, `pnpm test:browser`, builds the bundle and drives it with Playwright in a
 real browser, which is what answers the questions jsdom structurally cannot — the built bundle rather than the source,
-a document with a history, and the requests a page actually issued; and another, `pnpm test:desktop`, builds the
+a document with a history, and the requests a page actually issued — and what a journey across more than one component
+leaves on the screen; and another, `pnpm test:desktop`, builds the
 desktop shell and drives the WebView it renders in, which is what answers the two a browser somebody downloaded cannot:
 the zone an instant is placed against, and the language a first run opens in, each read from the process the WebView was
 started in. Neither belongs to a package, neither imports one, and both therefore live under `frontend/tests/`, beside

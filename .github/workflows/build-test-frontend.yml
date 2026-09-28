@@ -17,7 +17,8 @@ name: Build and test the frontend
 #
 # **Why a browser check is gated on a pull request rather than left local or deferred to a nightly.** What it covers is
 # what jsdom structurally cannot answer — the built bundle rather than the source, a real document with a history, and
-# the requests a browser actually issued — which is exactly the class of break nobody notices while writing a screen.
+# the requests a browser actually issued — and the journeys that cross from one component to the next, which is exactly
+# the class of break nobody notices while writing a screen.
 # A nightly finds it the morning after the merge and names a run at 02:00 rather than the change that caused it, and a
 # local-only suite is a suite whoever is in a hurry does not run. It costs a browser download, which the cache below
 # makes a one-off per lock file, and about a minute of runner time on a change that reaches the client at all — the
