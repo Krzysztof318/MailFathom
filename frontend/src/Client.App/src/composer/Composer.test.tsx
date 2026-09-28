@@ -1576,9 +1576,16 @@ describe('Composer drafting', () => {
         ).toBeDefined();
     });
 
-    it('asks for the draft as it opens where the bar under a correspondence asked for one', async () => {
+    // The card under a correspondence has already drafted the reply, so the composer is opened holding it: asking the
+    // deployment again would spend an allowance on words the reader has already read and chosen to keep.
+    it('opens holding the reply drafted under a correspondence, and asks for no draft of its own', async () => {
         const { asked } = drawComposer(
-            { kind: 'answer', answers: 'senderOnly', storedEmailId: messageId, asked: 'accept the SLA' },
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
             {},
             [work],
             true,
@@ -1587,13 +1594,7 @@ describe('Composer drafting', () => {
         );
 
         expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
-
-        const drafting = asked.filter((request) => request.path.endsWith('/replies/drafting'));
-
-        expect(drafting).toHaveLength(1);
-        expect(JSON.parse(drafting[0]?.body ?? '')).toMatchObject({
-            answeredEmailId: messageId,
-            instruction: 'Write this message. accept the SLA',
-        });
+        expect(asked.filter((request) => request.path.endsWith('/replies/drafting'))).toHaveLength(0);
     });
+
 });

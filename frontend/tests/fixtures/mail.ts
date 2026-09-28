@@ -332,9 +332,10 @@ const conversationRows = [
 /**
  * Where that conversation stands, as a deployment that turned the derivation on would have written it down.
  *
- * Three statements, one of each aspect a correspondence of this kind produces, each resting on the message that says
- * it — which is what the block is for, and what a capture of the screen has to show. A version difference is absent
- * because nothing in this exchange carries a document.
+ * Four statements, one of each aspect, each resting on the message that says it — which is what the block is for, and
+ * what a capture of the screen has to show. Four is also the count at which the block stands as two columns, which is
+ * how the design draws the conversation it pairs with this one, so the version difference is the price the deeper bays
+ * corrected rather than a document: the one thing in this exchange a later message changed.
  */
 export const conversationState = {
     threadId: conversationId,
@@ -362,6 +363,13 @@ export const conversationState = {
             owedBy: 'Iris Marlow',
             dueAt: '2026-09-01T08:00:00+00:00',
             sources: [{ kind: 'email', email: conversationRows[3]?.id ?? '' }],
+        },
+        {
+            aspect: 'VersionDifference',
+            text: 'The fixings moved inside the quoted figure, where the first quote priced them apart.',
+            owedBy: null,
+            dueAt: null,
+            sources: [{ kind: 'email', email: conversationRows[2]?.id ?? '' }],
         },
     ],
 };
@@ -413,7 +421,7 @@ export const conversation = {
     moreMessagesNotAssembled: false,
     moreParticipantsNotNamed: false,
     nextCursor: null,
-    pageSize: 25,
+    pageSize: 10,
 };
 
 /** That this deployment reads a typed sentence into filters at all, which is what the search field asks before offering it. */

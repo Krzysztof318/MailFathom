@@ -73,6 +73,7 @@ export const iconNames = [
     'help',
     'history',
     'hourglass_top',
+    'image',
     'inbox',
     'key',
     'info',

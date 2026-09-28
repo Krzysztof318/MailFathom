@@ -32,7 +32,7 @@ function listStandsAside(): boolean {
 }
 const handedTheDrawer = 'Folders and filters';
 const handedToMail = 'The mail this space was handed.';
-const handedTheIntent = 'The question this space was handed.';
+const handedTheThreadField = 'The field under a correspondence this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
 const chooseAFolder = 'Choose a folder, as the folder tree would.';
 
@@ -229,7 +229,7 @@ function renderSpace(
                             list={<HandedList />}
                             mail={<HandedMessage />}
                             tabs={<p>{handedTheTabs}</p>}
-                            intent={<p>{handedTheIntent}</p>}
+                            threadField={<p>{handedTheThreadField}</p>}
                             status={<p>{handedTheStatus}</p>}
                             person={person}
                         />
@@ -349,11 +349,11 @@ describe('MailSpace, wide', () => {
         expect(screen.getByText(handedToMail)).toBeDefined();
     });
 
-    it('puts the connection at the foot of the mailbox column and the question at the foot of the reading column', () => {
+    it('puts the connection at the foot of the mailbox column and the field under a correspondence at the foot of the reading column', () => {
         renderSpace(desktop);
 
         expect(screen.getByRole('complementary').contains(screen.getByText(handedTheStatus))).toBe(true);
-        expect(screen.getByRole('region', { name: 'What is open' }).contains(screen.getByText(handedTheIntent))).toBe(
+        expect(screen.getByRole('region', { name: 'What is open' }).contains(screen.getByText(handedTheThreadField))).toBe(
             true,
         );
     });
@@ -576,7 +576,7 @@ describe('MailSpace, narrow', () => {
 
         expect(screen.getByText(handedToMail)).toBeDefined();
         expect(listStandsAside()).toBe(true);
-        expect(screen.getByText(handedTheIntent)).toBeDefined();
+        expect(screen.getByText(handedTheThreadField)).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to the list' }));
 
@@ -665,7 +665,7 @@ describe('MailSpace, in the four compositions', () => {
     it('takes the field the client is asked questions in away with the rest of the panels', () => {
         renderSpace(desktop, { selection: 'stored-1', panelsHidden: true });
 
-        expect(screen.queryByText(handedTheIntent)).toBeNull();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
     });
 
     it('keeps the list at a tablet width while nothing is open, the correspondence having nothing to stand alone with', () => {

@@ -390,6 +390,8 @@ describe('App', () => {
         expect(screen.getByRole('link', { current: 'page' }).textContent).toBe('Cases');
     });
 
+    // Discover's question is the one field that asks one, so the space moved to draws no copy of it — and coming back
+    // finds the sentence and its scope where they were left.
     it('keeps the question and the mailbox in scope while the person moves between spaces', async () => {
         renderApp();
         await framed();
@@ -403,6 +405,10 @@ describe('App', () => {
 
         await goTo('Mail');
 
+        expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
+
+        await goTo('Discover');
+
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
             'value',
             'the renewal Nordwind sent',
@@ -411,6 +417,23 @@ describe('App', () => {
             'value',
             'account:work',
         );
+    });
+
+    // The field under a correspondence drafts a reply and does nothing else, so a deployment that writes none is shown
+    // no field at all rather than one whose press would have to go somewhere else.
+    it('draws no field under an open message where the deployment writes no reply', async () => {
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByRole('form', { name: 'Ask about this correspondence' })).toBeNull();
+        expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
     });
 
     it('offers every mailbox the user holds as a scope, beside all of them at once', async () => {

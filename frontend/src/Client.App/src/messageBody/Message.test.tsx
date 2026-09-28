@@ -278,9 +278,9 @@ describe('Message', () => {
         await screen.findByText('A drawn message.');
         answering(bodyAnswering(true));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
 
-        expect(await screen.findByText('Pictures are being loaded from the sender for this message.')).toBeDefined();
+        expect(await screen.findByText('Images from the sender are loaded for this message.')).toBeDefined();
         expect(readsAsked()).toEqual([
             `${baseAddress}/api/client/messages/stub-message/body`,
             `${baseAddress}/api/client/messages/stub-message/body?remoteImages=true`,
@@ -291,7 +291,7 @@ describe('Message', () => {
         readingOneMessage();
         await screen.findByText('A drawn message.');
         answering({ status: 500, body: '' });
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
         await screen.findByText('The message could not be read: unavailable.');
         answering(bodyAnswering(false));
 
@@ -324,14 +324,14 @@ describe('Message', () => {
         const opened = readingOneMessage();
         await screen.findByText('A drawn message.');
         answering(bodyAnswering(true));
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
-        await screen.findByText('Pictures are being loaded from the sender for this message.');
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
+        await screen.findByText('Images from the sender are loaded for this message.');
         answering(bodyAnswering(false));
         asked = [];
 
         opened.rerender(reading('another-message'));
 
-        expect(await screen.findByText('Load pictures from the sender')).toBeDefined();
+        expect(await screen.findByText('Load images from the sender')).toBeDefined();
         expect(readsAsked()).toEqual([`${baseAddress}/api/client/messages/another-message/body`]);
     });
 
@@ -339,8 +339,8 @@ describe('Message', () => {
         const opened = readingOneMessage();
         await screen.findByText('A drawn message.');
         answering(bodyAnswering(true));
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
-        await screen.findByText('Pictures are being loaded from the sender for this message.');
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
+        await screen.findByText('Images from the sender are loaded for this message.');
 
         // The message they moved to never answers, so what stands on the screen when they come back is decided
         // entirely by what this component was still holding from the visit they asked for the pictures in.
@@ -351,23 +351,23 @@ describe('Message', () => {
         opened.rerender(reading('another-message'));
         opened.rerender(reading('stub-message'));
 
-        expect(await screen.findByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
-        expect(screen.queryByText('Pictures are being loaded from the sender for this message.')).toBeNull();
+        expect(await screen.findByRole('button', { name: 'Load images from the sender' })).toBeDefined();
+        expect(screen.queryByText('Images from the sender are loaded for this message.')).toBeNull();
     });
 
     it('remembers nothing about the ask, so opening the message again asks again', async () => {
         const opened = readingOneMessage();
         await screen.findByText('A drawn message.');
         answering(bodyAnswering(true));
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
-        await screen.findByText('Pictures are being loaded from the sender for this message.');
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
+        await screen.findByText('Images from the sender are loaded for this message.');
 
         opened.unmount();
         answering(bodyAnswering(false));
         asked = [];
         readingOneMessage();
 
-        expect(await screen.findByText('Load pictures from the sender')).toBeDefined();
+        expect(await screen.findByText('Load images from the sender')).toBeDefined();
         expect(readsAsked()).toEqual([`${baseAddress}/api/client/messages/stub-message/body`]);
     });
 
@@ -435,8 +435,8 @@ describe('Message', () => {
         render(readingReported(() => drawn.push(1)));
         await screen.findByText('A drawn message.');
         answering(bodyAnswering(true));
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
-        await screen.findByText('Pictures are being loaded from the sender for this message.');
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
+        await screen.findByText('Images from the sender are loaded for this message.');
 
         await waitFor(() => {
             expect(drawn).toHaveLength(1);
@@ -506,7 +506,7 @@ describe('Message and the view a reader chose', () => {
         await screen.findByText('A drawn message.');
 
         answer = () => new Promise<Answer>(() => undefined);
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
 
         expect(await screen.findByText('Loading them…')).toBeDefined();
     });
@@ -520,7 +520,7 @@ describe('Message and the view a reader chose', () => {
         answer = () => new Promise<Answer>(() => undefined);
         opened.rerender(readingUnder('embeddedHtml'));
 
-        expect(screen.getByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Load images from the sender' })).toBeDefined();
         expect(screen.queryByText('Loading them…')).toBeNull();
     });
 

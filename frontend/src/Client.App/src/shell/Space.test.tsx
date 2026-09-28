@@ -21,7 +21,7 @@ const handedToPeople = 'The address book this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedToDiscover = 'The answer this space was handed.';
 const handedToTheAgent = 'The conversation this space was handed.';
-const handedTheIntent = 'The question this space was handed.';
+const handedTheThreadField = 'The field under a correspondence this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
 
 // Every case here renders under `StrictMode`, which is what `main.tsx` mounts and what makes React invoke an effect
@@ -46,7 +46,7 @@ function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces):
                         <Space
                             offered={offered}
                             space={space}
-                            intent={<p>{handedTheIntent}</p>}
+                            threadField={<p>{handedTheThreadField}</p>}
                             status={<p>{handedTheStatus}</p>}
                             folders={<p>{handedTheFolders}</p>}
                             list={<p>{handedTheList}</p>}
@@ -139,7 +139,7 @@ describe('Space', () => {
 
         expect(within(agent).getByText(handedToTheAgent)).toBeDefined();
         expect(within(agent).queryByText(/not built yet/)).toBeNull();
-        expect(within(agent).queryByText(handedTheIntent)).toBeNull();
+        expect(within(agent).queryByText(handedTheThreadField)).toBeNull();
         expect(within(agent).queryByText(handedTheStatus)).toBeNull();
     });
 
@@ -149,16 +149,31 @@ describe('Space', () => {
     it('stands neither region beneath Discover, which is handed them instead', () => {
         render(inStrictMode('discover'));
 
-        expect(screen.queryByText(handedTheIntent)).toBeNull();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
         expect(screen.queryByText(handedTheStatus)).toBeNull();
     });
 
-    it('carries the question and the connection into every other space', () => {
+    it('carries the connection into every other space', () => {
         for (const space of ['mail', 'cases'] as const) {
             const { unmount } = render(inStrictMode(space));
 
-            expect(screen.getByText(handedTheIntent)).toBeDefined();
             expect(screen.getByText(handedTheStatus)).toBeDefined();
+            unmount();
+        }
+    });
+
+    // The design draws the field under a correspondence in the Mail space and nowhere else: Discover draws a field of
+    // its own, and every other space draws none at all.
+    it('draws the field under a correspondence in Mail and in no other space', () => {
+        for (const space of spaces) {
+            const { unmount } = render(inStrictMode(space));
+
+            if (space === 'mail') {
+                expect(screen.getByText(handedTheThreadField)).toBeDefined();
+            } else {
+                expect(screen.queryByText(handedTheThreadField)).toBeNull();
+            }
+
             unmount();
         }
     });
@@ -182,14 +197,15 @@ describe('Space', () => {
         expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedToTasks)).toBeDefined();
     });
 
-    it('hands the question and the connection to Tasks when it is in front, and to nothing when it is not', () => {
+    it('hands the connection to Tasks when it is in front, and to nothing when it is not', () => {
         const { rerender } = render(inStrictMode('tasks'));
 
-        expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedTheIntent)).toBeDefined();
+        expect(within(screen.getByRole('main', { name: 'Tasks' })).getByText(handedTheStatus)).toBeDefined();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
 
         rerender(inStrictMode('cases'));
 
-        expect(within(screen.getByLabelText('Tasks')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('Tasks')).queryByText(handedTheStatus)).toBeNull();
         expect(within(screen.getByLabelText('Tasks')).getByText(handedToTasks)).toBeDefined();
     });
 
@@ -219,14 +235,15 @@ describe('Space', () => {
         expect(region.className).not.toContain('overflow-y-auto');
     });
 
-    it('hands the question and the connection to People when it is in front, and to nothing when it is not', () => {
+    it('hands the connection to People when it is in front, and to nothing when it is not', () => {
         const { rerender } = render(inStrictMode('people'));
 
-        expect(within(screen.getByRole('main', { name: 'People' })).getByText(handedTheIntent)).toBeDefined();
+        expect(within(screen.getByRole('main', { name: 'People' })).getByText(handedTheStatus)).toBeDefined();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
 
         rerender(inStrictMode('cases'));
 
-        expect(within(screen.getByLabelText('People')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('People')).queryByText(handedTheStatus)).toBeNull();
         expect(within(screen.getByLabelText('People')).getByText(handedToPeople)).toBeDefined();
     });
 
@@ -251,14 +268,15 @@ describe('Space', () => {
         expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedToTheCalendar)).toBeDefined();
     });
 
-    it('hands the question and the connection to the Calendar when it is in front, and to nothing when it is not', () => {
+    it('hands the connection to the Calendar when it is in front, and to nothing when it is not', () => {
         const { rerender } = render(inStrictMode('calendar'));
 
-        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedTheIntent)).toBeDefined();
+        expect(within(screen.getByRole('main', { name: 'Calendar' })).getByText(handedTheStatus)).toBeDefined();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
 
         rerender(inStrictMode('cases'));
 
-        expect(within(screen.getByLabelText('Calendar')).queryByText(handedTheIntent)).toBeNull();
+        expect(within(screen.getByLabelText('Calendar')).queryByText(handedTheStatus)).toBeNull();
         expect(within(screen.getByLabelText('Calendar')).getByText(handedToTheCalendar)).toBeDefined();
     });
 
@@ -369,22 +387,23 @@ describe('Space', () => {
         expect(region.scrollTop).toBe(120);
     });
 
-    // The two the frame composes for whichever space is in front. Handed to one of them and to nothing else: a second
-    // live copy of the field would be a second place somebody's question could be typed into.
-    it('hands the question and the connection to the space in front and to nothing behind it', () => {
-        render(inStrictMode('cases'));
+    // What the frame composes for the space in front is handed to that one and to nothing else: a second live copy of
+    // the field would be a second place a reply could be asked for, and a second connection a second live region.
+    it('hands the field and the connection to Mail in front and to nothing behind it', () => {
+        render(inStrictMode('mail'));
 
-        expect(screen.getAllByText(handedTheIntent)).toHaveLength(1);
+        expect(screen.getAllByText(handedTheThreadField)).toHaveLength(1);
         expect(screen.getAllByText(handedTheStatus)).toHaveLength(1);
-        expect(within(screen.getByRole('main', { name: 'Cases' })).getByText(handedTheIntent)).toBeDefined();
+        expect(within(screen.getByRole('main', { name: 'Mail' })).getByText(handedTheThreadField)).toBeDefined();
     });
 
-    it('moves the question and the connection to the space arrived at rather than leaving them behind', () => {
-        const { rerender } = render(inStrictMode('cases'));
+    it('takes the field away with Mail and moves the connection to the space arrived at', () => {
+        const { rerender } = render(inStrictMode('mail'));
 
-        rerender(inStrictMode('mail'));
+        rerender(inStrictMode('cases'));
 
-        expect(screen.getAllByText(handedTheIntent)).toHaveLength(1);
-        expect(within(screen.getByRole('main', { name: 'Mail' })).getByText(handedTheIntent)).toBeDefined();
+        expect(screen.queryByText(handedTheThreadField)).toBeNull();
+        expect(screen.getAllByText(handedTheStatus)).toHaveLength(1);
+        expect(within(screen.getByRole('main', { name: 'Cases' })).getByText(handedTheStatus)).toBeDefined();
     });
 });

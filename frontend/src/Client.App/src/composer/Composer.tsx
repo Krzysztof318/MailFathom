@@ -30,6 +30,7 @@ import {
 } from './composition';
 import { DiscardConfirmation } from './DiscardConfirmation';
 import { DraftingBlock, DraftingStanding } from './DraftingBlock';
+import { draftingRead, failureSaid } from './draftingRead';
 import { writtenParagraphs } from './draftWords';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
 import type { RecipientSuggestion } from './recipientSuggestions';
@@ -58,22 +59,13 @@ import type { WrittenNode } from './writtenText';
 // and a subject, or names the message it answers and lets the deployment derive both — so an edited subject on a reply
 // is a value the surface has nowhere to put, and offering the field would be offering an edit that is discarded.
 
-/** What the composer is doing before there is anything to write in, which is a state of its own rather than a blank. */
+/**
+ * What the composer is doing before there is anything to write in, which is a state of its own rather than a blank.
+ *
+ * A read that failed is said and the composer stays open: a surface somebody opened is left by the control they opened
+ * it with, and closing itself under them would report a message that is gone by taking away the one place that said so.
+ */
 type Reading = { readonly kind: 'reading' } | { readonly kind: 'unread'; readonly reason: ClientFailureReason };
-
-// What each of the five failures means for somebody trying to write mail, said as what they do next. The reading
-// failure and the deployment's own are worded from one table because four of the five are the same answer to either.
-// `missing` reaches only the read: the message route is the one that reads a `404` as something the deployment no
-// longer holds, so the sentence is about the message being answered rather than about a draft. The composer says it
-// and stays open: a surface somebody opened is left by the control they opened it with, and closing itself under them
-// would report a message that is gone by taking away the one place that said so.
-const failureSaid: Readonly<Record<ClientFailureReason, MessageKey>> = {
-    unauthenticated: 'compose.failedUnauthenticated',
-    unauthorized: 'compose.failedUnauthorized',
-    unavailable: 'compose.failedUnavailable',
-    unreadable: 'compose.failedUnreadable',
-    missing: 'compose.failedMissing',
-};
 
 // What each rule that refuses a send is called, and what would change it. Exhaustive by its own type, so a refusal the
 // surface adds fails to compile until somebody has written what a person does about it.
@@ -191,7 +183,11 @@ export function Composer({
     // both the way back and the fact the send confirmation cautions about: a draft nobody has read is words somebody
     // else wrote, and accepting it is what makes them the author's own.
     const [drafting, setDrafting] = useState(false);
-    const [beforeDrafting, setBeforeDrafting] = useState<readonly WrittenNode[] | null>(null);
+    // A composer opened on a draft written in the thread opens on words nobody has accepted yet, exactly as though the
+    // block here had written them over an empty message — so restoring gives back the nothing that was there.
+    const [beforeDrafting, setBeforeDrafting] = useState<readonly WrittenNode[] | null>(() =>
+        opening.kind === 'answer' && opening.drafted !== undefined ? [] : null,
+    );
 
     // How many times the words have been replaced wholesale, which is what the editable region is keyed by: it renders
     // the tree it opens with once and never again, so a draft arriving has to be a new region rather than a new prop.
@@ -225,7 +221,13 @@ export function Composer({
             }
 
             setParticipants(offeredFrom(answer.value.headers.participants));
-            setComposition((held) => held ?? answerTo(answer.value, opening.answers));
+            setComposition(
+                (held) =>
+                    held ?? {
+                        ...answerTo(answer.value, opening.answers),
+                        words: opening.drafted === undefined ? [] : writtenParagraphs(opening.drafted),
+                    },
+            );
         });
 
         return () => {
@@ -318,33 +320,17 @@ export function Composer({
         }).then((answer) => {
             setDrafting(false);
 
-            if (answer.outcome === 'failed') {
-                toasts.raise({
-                    kind: 'error',
-                    title: translate('compose.notDraftedTitle'),
-                    body: translate(failureSaid[answer.failure.reason]),
-                });
+            const read = draftingRead(answer);
 
-                return;
-            }
-
-            if (answer.value.outcome !== 'drafted') {
-                toasts.raise({
-                    kind: 'warning',
-                    title: translate('compose.notDraftedTitle'),
-                    body: translate(
-                        answer.value.outcome === 'allowanceSpent'
-                            ? 'compose.draftAllowanceSpent'
-                            : 'compose.notDrafted',
-                    ),
-                });
+            if (!read.drafted) {
+                toasts.raise({ kind: read.kind, title: translate('compose.notDraftedTitle'), body: translate(read.said) });
 
                 return;
             }
 
             setBeforeDrafting(before);
             setDraftGeneration((written) => written + 1);
-            revise({ words: writtenParagraphs(answer.value.body) });
+            revise({ words: writtenParagraphs(read.body) });
         });
     }
 
@@ -662,7 +648,6 @@ export function Composer({
                                     : composition.subject
                             }
                             busy={drafting}
-                            asked={opening.kind === 'answer' ? (opening.asked ?? '') : ''}
                             onDraft={askForADraft}
                         />
                     ) : null}
@@ -797,9 +782,13 @@ function sameOpening(kept: Composition, opening: ComposerOpening): boolean {
             return kept.answering === null && kept.continuing === null;
         case 'draft':
             return kept.continuing === opening.storedEmailId;
+        // A draft carried in from the thread is what somebody just asked to write, so it replaces whatever this tab
+        // kept for the same answer rather than being dropped in favour of it.
         case 'answer':
             return (
-                kept.answering?.storedEmailId === opening.storedEmailId && kept.answering.answers === opening.answers
+                opening.drafted === undefined &&
+                kept.answering?.storedEmailId === opening.storedEmailId &&
+                kept.answering.answers === opening.answers
             );
     }
 }

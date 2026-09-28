@@ -23,6 +23,7 @@ import { useAgentHandOver } from '../routing/agentHandOver';
 import { askScopeInForce, withAsked, type AskedQuestion } from '../workspace/askScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { DiscoverIdle } from './DiscoverIdle';
+import { IntentField } from './IntentField';
 import { useStartedRun } from './useStartedRun';
 
 // The client's own opening screen, and the one place a question asked anywhere in the application is answered. The
@@ -30,8 +31,9 @@ import { useStartedRun } from './useStartedRun';
 // inspector and the follower — so what this owns is the screen they stand on: which question is being answered, the run
 // answering it, and the way back to asking another.
 //
-// **The field stands under the head rather than at the foot.** The design project draws it there on this screen and at
-// the foot of a correspondence, so the frame hands the field to the space in front and this is where Discover puts it.
+// **The field stands under the head rather than at the foot**, where the design project draws it on this screen. It is
+// this screen's own field rather than one the frame shares with the mail, because the design gives Discover a question
+// of its own: what somebody typed under a correspondence is about that correspondence and never arrives here.
 //
 // **A question is answered by following a run rather than by waiting for one.** Starting one answers with an
 // identifier, and everything the run publishes is read from its own record — so a block draws as it arrives, a run that
@@ -72,7 +74,7 @@ const notAsked: Readonly<Record<ClientFailureReason, MessageKey>> = {
  * @param session Who is asking, or `null` where nobody is signed in.
  * @param transport How every read and the question itself go out.
  * @param accounts The mailboxes this user holds, which is what a scope is resolved against.
- * @param intent The question field the frame composes for the space in front.
+ * @param asking Whether the question field is drawn, which it is only while this is the space in front.
  * @param status What the deployment is doing, which every space shows somewhere.
  * @param onOpenMessage Opens the message a citation names, which is the Mail space's to draw and the frame's to perform.
  * @param schedule How the follower waits, which a test replaces so nothing polls in it.
@@ -81,7 +83,7 @@ export function DiscoverSpace({
     session,
     transport,
     accounts,
-    intent,
+    asking,
     status,
     onOpenMessage,
     schedule = whileTheRunIsSilent,
@@ -89,7 +91,7 @@ export function DiscoverSpace({
     readonly session: ClientSession | null;
     readonly transport: MailFathomTransport;
     readonly accounts: readonly MailAccount[];
-    readonly intent: ReactNode;
+    readonly asking: boolean;
     readonly status: ReactNode;
     readonly onOpenMessage: (storedEmailId: string) => void;
     readonly schedule?: RunFollowingSchedule;
@@ -160,7 +162,7 @@ export function DiscoverSpace({
                 )}
             </header>
 
-            {intent}
+            {asking ? <IntentField accounts={accounts} recall={asked === null} /> : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 workspace:px-5.5">
                 {asked === null ? (

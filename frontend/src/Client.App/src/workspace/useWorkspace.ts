@@ -130,7 +130,12 @@ export interface Workspace {
      */
     readonly selected: readonly string[];
 
-    /** What has been typed into the intent field, which the next question would be asked with. */
+    /**
+     * What has been typed into Discover's field, which the next question would be asked with.
+     *
+     * Discover's alone: the field under a correspondence holds what is typed there itself, so the two never share a
+     * sentence — here, or through what is remembered of this workspace.
+     */
     readonly question: string;
 
     /**
@@ -149,9 +154,9 @@ export interface Workspace {
     /**
      * What was asked before, newest first, each with the scope it was asked under.
      *
-     * Here rather than in the space that answers, for the reason the searches are: the field is drawn in every space
-     * and an answer is drawn in one, so a list the answer held would be empty everywhere a question is composed. It is
-     * a list of questions rather than a conversation — what somebody does with one is ask it again, usually wider —
+     * Here rather than in the space that answers, for the reason the searches are: it has to outlive the answer it was
+     * asked for, and a list the answer held would be gone the moment somebody asked something else. It is a list of
+     * questions rather than a conversation — what somebody does with one is ask it again, usually wider —
      * and it goes with the credential like everything else the workspace holds, because what a person asked their own
      * mail is theirs.
      */

@@ -108,7 +108,7 @@ is held to account and what keeps the files runnable in any order.
 built, so pressing one of the questions it offers starts a real run — but composing an answer needs a chat provider and
 this run configures none, so a spec that waited for a block would be waiting on a model nothing here provides. What the
 spec holds is that landing reaches the screen rather than the note every unbuilt space carries, that the questions it
-offers are there to press, and that the question field the frame composes for every space stands on it.
+offers are there to press, and that its own question field stands on it.
 
 **They route nothing.** The bundle the deployment serves reaches the surface that deployment serves, over one origin,
 and every answer comes from mail that arrived at a mail server and was synchronized out of it. A `page.route` here would

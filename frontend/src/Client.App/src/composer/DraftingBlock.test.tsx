@@ -12,12 +12,12 @@ import { DraftingBlock, DraftingStanding } from './DraftingBlock';
 // what it contains rather than word for word, so an instruction reworded for the writer does not fail a test about
 // the control that sends it.
 
-function drawBlock(asked = '', busy = false): { drafted: ReturnType<typeof vi.fn> } {
+function drawBlock(busy = false): { drafted: ReturnType<typeof vi.fn> } {
     const drafted = vi.fn();
 
     render(
         <LocalizationProvider>
-            <DraftingBlock context="Quarterly invoice" busy={busy} asked={asked} onDraft={drafted} />
+            <DraftingBlock context="Quarterly invoice" busy={busy} onDraft={drafted} />
         </LocalizationProvider>,
     );
 
@@ -74,18 +74,7 @@ describe('DraftingBlock', () => {
         expect(drafted.mock.calls[1]?.[0]).toContain('formal');
     });
 
-    it('asks once for what the composer was opened asking for, with the words still in the field', () => {
-        const { drafted } = drawBlock('accept the SLA');
-
-        expect(drafted).toHaveBeenCalledTimes(1);
-        expect(drafted.mock.calls[0]?.[0]).toContain('accept the SLA');
-        expect(screen.getByRole('textbox', { name: 'What the draft should say' })).toHaveProperty(
-            'value',
-            'accept the SLA',
-        );
-    });
-
-    it('asks for nothing on its own where the composer was opened asking for nothing', () => {
+    it('asks for nothing on its own, however the composer was opened', () => {
         const { drafted } = drawBlock();
 
         expect(drafted).not.toHaveBeenCalled();
@@ -119,7 +108,7 @@ describe('DraftingBlock', () => {
     });
 
     it('refuses a second act while one is still being written', () => {
-        drawBlock('', true);
+        drawBlock(true);
 
         expect(screen.getByRole('button', { name: 'Write a draft' })).toHaveProperty('disabled', true);
     });

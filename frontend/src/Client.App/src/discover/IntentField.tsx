@@ -4,13 +4,11 @@
 
 import { useEffect, useRef } from 'react';
 import type { MailAccount } from '@mailfathom/client-backend';
-import { useComposing } from '../composer/useComposing';
 import { chip } from '../controls/chrome';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import type { Locale } from '../localization/locale';
 import { useLocalization, type Translate } from '../localization/useLocalization';
-import { goToSpace } from '../routing/useSpace';
 import {
     askScopeInForce,
     askScopeKey,
@@ -22,66 +20,49 @@ import {
 } from '../workspace/askScope';
 import { folderRoleLabels, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { useTwoPanes } from './useWideWorkspace';
 
-// What the product puts in front of the person in every space: the question they are composing, drawn as the design
-// project draws the bar under a correspondence — a field with the product's mark on it, and the scope the question
-// would be asked under beneath it. It asks nothing here: running a question is Discover's work, so submitting goes to
-// the space that will answer and carries the question and its scope there in the workspace rather than starting
-// anything.
+// Discover's question, drawn as the design project draws it under that screen's head: a field with the product's mark
+// on it, and the scope the question would be asked under beneath it. Submitting records the question and its scope in
+// the workspace, which is what the screen starts a run from.
 //
-// One field takes every kind of ask — a question, an instruction to search, a request to compare, a request to draft —
-// because a mode selector is an admission that the field does not understand what was typed. What it does insist on is
-// the scope: every question is asked *against* something, and what is in scope is what is read and sent, so it is
-// named before the question is submitted rather than discovered in the answer.
+// One field takes every kind of ask — a question, an instruction to search, a request to compare — because a mode
+// selector is an admission that the field does not understand what was typed. What it does insist on is the scope:
+// every question is asked *against* something, and what is in scope is what is read and sent, so it is named before
+// the question is submitted rather than discovered in the answer.
 //
-// It no longer writes the scope the mail space is read under, which it used to: choosing a mailbox to ask about is not
-// choosing a folder to read, and somebody widening a question after too narrow an answer would otherwise lose the
-// folder they were in and the messages they had picked out.
+// It does not write the scope the mail space is read under: choosing a mailbox to ask about is not choosing a folder to
+// read, and somebody widening a question after too narrow an answer would otherwise lose the folder they were in and
+// the messages they had picked out.
 //
-// **The words on it follow the scope, because the design project draws two bars rather than one.** Standing over a
-// correspondence, the act somebody wants is a reply rather than a question about their mail, so the bar names that and
-// the placeholder offers both; standing anywhere else it is the Discover screen's own question.
-//
-// **And over a correspondence the submission is the draft itself.** Asking for a reply and being sent to another space
-// is the offer not being kept: what somebody wanted is a message they can edit and send, so the press opens the
-// composer on the message being read and hands it the words, and the composer asks the deployment for the draft as it
-// opens. What the bar is called does not follow that — the design draws the same bar over a correspondence whatever a
-// deployment holds — so a deployment with no writer submits the question to the space that answers questions, exactly
-// as every press here did before.
+// **It is Discover's alone.** The field under a correspondence is a different field with state of its own —
+// `threadAgent/ThreadAgentField.tsx` — so what somebody typed here never turns up under a message, and what they typed
+// there never follows them back.
 
-export function IntentField({ accounts }: { readonly accounts: readonly MailAccount[] }) {
+export function IntentField({
+    accounts,
+    recall,
+}: {
+    readonly accounts: readonly MailAccount[];
+
+    /**
+     * Whether what was asked before is offered back under the field.
+     *
+     * Only while the field is idle, which is how the design draws it: once a run is answering, the row of earlier
+     * questions leaves, because it stands where the answer's own context would be read.
+     */
+    readonly recall: boolean;
+}) {
     const { locale, translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
-    const composing = useComposing();
-    const twoPanes = useTwoPanes();
     const question = useRef<HTMLInputElement>(null);
 
     const onScreen = askScopeOnScreen(workspace);
     const inForce = askScopeInForce(workspace, accounts);
     const offered = askScopesOffered(workspace, accounts);
 
-    // Which message a draft would answer: the one a passage was taken from, the one being read, or the message a
-    // correspondence was opened at. A scope narrower than a mailbox with no message behind it is nothing to answer.
-    const answering =
-        inForce.kind === 'fragment' || inForce.kind === 'message' ? inForce.messageId : workspace.selection;
-
-    const overACorrespondence = correspondenceScopes.includes(inForce.kind);
-    const draftable = composing.drafts && overACorrespondence && answering !== null;
-
-    // The whole sentence rather than the shortened label, because what a press with nothing typed asks for must not
-    // depend on how wide the window was: the scope travels with the question, so *draft a reply* against this
-    // correspondence is already a complete request, and shortening it for room would change what was asked.
-    const drafting = translate('intent.draftReply');
-
-    const submitting = !overACorrespondence
-        ? translate('intent.ask')
-        : translate(twoPanes ? 'intent.draftReply' : 'intent.draftReplyShort');
-
-    // The front door is reachable without hunting for it, which is what "from anywhere in the application" costs: a
-    // reader inside a list of messages would otherwise tab back out of it to reach the field. An imperative browser
-    // API being subscribed to is what an effect is for, and the shortcut is announced on the field itself rather than
-    // written anywhere on the screen.
+    // The front door is reachable without hunting for it: a reader somewhere in the answer would otherwise tab back
+    // out of it to reach the field. An imperative browser API being subscribed to is what an effect is for, and the
+    // shortcut is announced on the field itself rather than written anywhere on the screen.
     useEffect(() => {
         function pressed(event: KeyboardEvent): void {
             if (event.key.toLowerCase() === askShortcutKey && (event.ctrlKey || event.metaKey) && !event.altKey) {
@@ -106,28 +87,6 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
         if (words.length > 0) {
             revise({ question: asked, askedBefore: withAsked(workspace.askedBefore, words, inForce) });
         }
-
-        // A passage in scope is what the draft is about, so it travels as the words rather than being left behind:
-        // the field is empty until somebody types in it, and what they highlighted is the whole of what they asked.
-        if (draftable) {
-            composing.compose({
-                kind: 'answer',
-                answers: 'senderOnly',
-                storedEmailId: answering,
-                asked: words.length > 0 ? words : askedOfAFragment(inForce),
-            });
-
-            return;
-        }
-
-        // Nothing typed over a correspondence is still a complete request on the way to Discover, which is what the
-        // control says it would do: the whole sentence rather than the shortened label, so what a press asks for does
-        // not depend on how wide the window was.
-        if (words.length === 0 && overACorrespondence) {
-            revise({ question: drafting, askedBefore: withAsked(workspace.askedBefore, drafting, inForce) });
-        }
-
-        goToSpace('discover');
     }
 
     return (
@@ -161,7 +120,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                     type="search"
                     aria-label={translate('intent.label')}
                     aria-keyshortcuts={askShortcut}
-                    placeholder={translate(overACorrespondence ? 'intent.threadPlaceholder' : 'intent.placeholder')}
+                    placeholder={translate('intent.placeholder')}
                     value={workspace.question}
                     onChange={(event) => {
                         revise({ question: event.target.value });
@@ -173,7 +132,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                     type="submit"
                     className="shrink-0 rounded-lg bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
                 >
-                    {submitting}
+                    {translate('intent.ask')}
                 </button>
             </div>
 
@@ -224,7 +183,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                 )}
             </div>
 
-            {workspace.askedBefore.length === 0 ? null : (
+            {!recall || workspace.askedBefore.length === 0 ? null : (
                 <AskedBefore
                     asked={workspace.askedBefore}
                     accounts={accounts}
@@ -248,18 +207,6 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 // it, where the two could drift apart without either half looking wrong.
 const askShortcutKey = 'k';
 const askShortcut = `Control+${askShortcutKey.toUpperCase()} Meta+${askShortcutKey.toUpperCase()}`;
-
-// What a press with nothing typed asks the draft to say, where the scope is a passage somebody highlighted. Quoting it
-// is the whole of the request: what they selected is what the reply is about, and a drafting that read the exchange and
-// ignored the passage would answer the conversation rather than the sentence they pointed at.
-function askedOfAFragment(scope: AskScope): string {
-    return scope.kind === 'fragment' ? scope.text : '';
-}
-
-// The scopes that mean somebody is standing over a correspondence, which is what the design project's thread bar is
-// drawn under. A passage is one of them because it was selected inside a message somebody is reading; a selection of
-// rows is not, because what is in front of them then is the list rather than the exchange.
-const correspondenceScopes: readonly AskScope['kind'][] = ['thread', 'message', 'fragment'];
 
 // How many messages are picked out, in the forms a language has for the noun — selected rather than spelled, for the
 // reason `mailSpace/SelectionBar.tsx` gives: Polish needs three forms and English hides that it needs two.

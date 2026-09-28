@@ -236,7 +236,7 @@ describe('FullHtmlSurface', () => {
 
         await drawing(transport);
         await screen.findByTitle("The sender's own markup, drawn in isolation");
-        press('Load pictures from the sender');
+        press('Load images from the sender');
 
         await screen.findByText(/so their servers can tell it was opened/);
 
@@ -251,7 +251,7 @@ describe('FullHtmlSurface', () => {
 
         await drawing(transport);
         await screen.findByTitle("The sender's own markup, drawn in isolation");
-        press('Load pictures from the sender');
+        press('Load images from the sender');
 
         await screen.findByText(/so their servers can tell it was opened/);
 
