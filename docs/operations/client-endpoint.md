@@ -2697,6 +2697,13 @@ Both walk the same order, so a cursor either returns continues in the other. Nei
 page size is served fifty and one asking for more than two hundred is refused rather than quietly served two hundred,
 which is what stops a request deciding how much of a person's correspondents leaves the database at once.
 
+**Either listing takes a `search`**, which is how the composer offers recipients as somebody types: text a contact has
+to carry in its name or in one of its addresses, matched the way [Contacts § Reading the
+book](../features/contacts.md#reading-the-book) states, over the page size the request names. A blank `search` narrows
+nothing. One longer than 320 characters — the longest address the book can hold, so text past it can match nobody — is
+refused with a `400` before anything is read, and the refusal names the rule rather than the text, which is somebody's
+name or address being looked up.
+
 **No request names a user.** The books reached are this user's own and the collected book of each mail account they are
 assigned, resolved from the session rather than from the request, so a contact somebody else holds answers exactly as
 one nobody holds. That is the whole difference from [the administrative contact routes](admin-endpoint.md), which name

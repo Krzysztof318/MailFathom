@@ -167,6 +167,15 @@ describe('fixtureAnswer', () => {
         );
     });
 
+    it('narrows a book by a name or an address, within the page the composer asked for', () => {
+        const byName = stated(answered('/contacts?pageSize=5&search=anna%20mar'));
+        const byAddress = stated(answered('/contacts/collected?pageSize=5&search=contoso'));
+
+        expect(byName['contacts']).toStrictEqual([contacts.assertedContact]);
+        expect(byAddress['contacts']).toStrictEqual([contacts.collectedContact]);
+        expect(stated(answered('/contacts?pageSize=5&search=example'))['contacts']).toHaveLength(5);
+    });
+
     it('answers both books empty where the deployment is set to hold nothing', () => {
         expect(stated(answered('/contacts', { emptyCollections: true }))).toStrictEqual(contacts.emptyContactPage);
         expect(stated(answered('/contacts/collected', { emptyCollections: true }))).toStrictEqual(

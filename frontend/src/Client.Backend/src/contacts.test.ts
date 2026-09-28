@@ -80,6 +80,24 @@ describe('readOwnContacts', () => {
         );
     });
 
+    it('narrows the book by what somebody typed, trimmed and escaped for the address', async () => {
+        const { transport, requests } = recording({ status: 200, body: pageBody });
+
+        await readOwnContacts(session, transport, { pageSize: 8, search: ' Kowal & Co ' });
+
+        expect(requests[0]?.path).toBe(
+            'https://mail.example.invalid/api/client/contacts?pageSize=8&search=Kowal%20%26%20Co',
+        );
+    });
+
+    it('asks for the whole book where the search is blank', async () => {
+        const { transport, requests } = recording({ status: 200, body: pageBody });
+
+        await readOwnContacts(session, transport, { search: '   ' });
+
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/contacts?pageSize=50');
+    });
+
     it('asks for no more than the page the route will serve', async () => {
         const { transport, requests } = recording({ status: 200, body: pageBody });
 

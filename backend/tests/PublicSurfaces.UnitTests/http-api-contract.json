@@ -15172,6 +15172,13 @@
         "parameters": [
           {
             "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "pageSize",
             "schema": {
               "format": "int32",
@@ -15253,6 +15260,13 @@
     "/api/client/contacts/collected": {
       "get": {
         "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "pageSize",

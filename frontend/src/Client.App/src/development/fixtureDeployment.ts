@@ -360,7 +360,7 @@ function answerFor(
         calendarAnswer(route, asked, request, options) ??
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??
-        contactAnswer(route, request, options) ??
+        contactAnswer(route, asked, request, options) ??
         draftAnswer(route, request) ??
         taskAnswer(route, request, options) ??
         messageAnswer(route, asked) ?? { status: 404, body: '', headers: {} }
@@ -555,6 +555,7 @@ function dayHere(): string {
  */
 function contactAnswer(
     route: string,
+    asked: URLSearchParams,
     request: ClientRequest,
     options: Readonly<FixtureDeploymentOptions>,
 ): ClientResponse | null {
@@ -585,14 +586,41 @@ function contactAnswer(
     }
 
     if (route === '/contacts/collected') {
-        return answering(options.emptyCollections ? contacts.emptyContactPage : contacts.collectedContactPage);
+        return answering(
+            options.emptyCollections ? contacts.emptyContactPage : searched(contacts.collectedContactPage, asked),
+        );
     }
 
     if (route === '/contacts') {
-        return answering(options.emptyCollections ? contacts.emptyContactPage : contacts.assertedContactPage);
+        return answering(
+            options.emptyCollections ? contacts.emptyContactPage : searched(contacts.assertedContactPage, asked),
+        );
     }
 
     return answering(contacts.assertedContact);
+}
+
+/**
+ * One book narrowed the way the deployment narrows it: a search is text somebody's name or one of their addresses
+ * carries, and the page holds no more than was asked for — which is how the composer's recipient list asks, and a page
+ * larger than the one asked for is one the client refuses unread.
+ */
+function searched(
+    page: { readonly contacts: readonly { readonly displayName: string; readonly addresses: readonly string[] }[] },
+    asked: URLSearchParams,
+): unknown {
+    const search = asked.get('search')?.trim().toUpperCase() ?? '';
+
+    if (search === '') {
+        return page;
+    }
+
+    const pageSize = Number(asked.get('pageSize') ?? page.contacts.length);
+    const found = page.contacts.filter((contact) =>
+        [contact.displayName, ...contact.addresses].some((text) => text.toUpperCase().includes(search)),
+    );
+
+    return { contacts: found.slice(0, pageSize), nextCursor: null };
 }
 
 /** What the notification centre and the bell above it answer with. */
