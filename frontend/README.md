@@ -662,12 +662,22 @@ A refusal is a state of the screen rather than an error on it. Screening, the re
 each refuse a send, and each is drawn as its own sentence saying what would change it; a temporary refusal says the
 message is still here. The four failure reasons are the four sentences they are everywhere else in the client.
 
-Two things it does not do yet, and both are somebody else's route rather than a decision taken here. **A recipient is
-completed from the conversation being answered rather than from the contact directory**, because that directory is not
-served to the client yet — `src/Client.Backend` names no contacts operation, and the field is a `datalist` so it gains
-one by being handed a longer list. And **the subject of an answer is read-only**: a save either names an account and a
-subject or names the message it answers and lets the deployment derive both, so an edited reply subject is a value the
-client surface has nowhere to put, and offering the field would be offering an edit that is discarded.
+**A recipient is suggested from the conversation being answered and from the address book together**, the people in
+the conversation first. `RecipientField.tsx` is a combobox over one list: what somebody types narrows it, the arrows
+move through it, and the book is asked through the `search` both contact listings take — once the typing settles, from
+both books at once, a few contacts each, with an answer that arrived after a later keystroke discarded. The book is
+searched rather than walked because it can hold every address somebody ever corresponded with, and the service bounds
+the search text rather than the client trusting itself to. When neither book could be searched the field says so and
+leaves the address to be written in full; a book the grant does not reach says nothing, since nothing would change it.
+
+**Hiding the copy headers never drops an address in them.** The control only decides whether the two rows are drawn, so
+a copy written before they were hidden is still saved and still sent — and the confirmation, which names every address,
+is where it is seen again. A composition that already carries copies — an answer to everyone, a draft carried on — opens with them drawn.
+
+One thing it does not do yet, and it is somebody else's route rather than a decision taken here: **the subject of an
+answer is read-only**. A save either names an account and a subject or names the message it answers and lets the
+deployment derive both, so an edited reply subject is a value the client surface has nowhere to put, and offering the
+field would be offering an edit that is discarded.
 
 ## Confirming what leaves the deployment
 

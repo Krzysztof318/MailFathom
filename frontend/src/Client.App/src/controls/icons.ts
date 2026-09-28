@@ -114,6 +114,7 @@ export const iconNames = [
     'topic',
     'tune',
     'unarchive',
+    'visibility',
     'warning',
 ] as const;
 

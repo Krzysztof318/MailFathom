@@ -32,6 +32,7 @@ import { DiscardConfirmation } from './DiscardConfirmation';
 import { DraftingBlock, DraftingStanding } from './DraftingBlock';
 import { writtenParagraphs } from './draftWords';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
+import type { RecipientSuggestion } from './recipientSuggestions';
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
 import { useDraftAtDeployment, type AttachedFile, type DraftStanding } from './useDraftAtDeployment';
@@ -47,7 +48,11 @@ import type { WrittenNode } from './writtenText';
 // **The body is rich text, and `WrittenMessage` is the whole of it**: the editable region, the formatting bar the
 // design draws over it, and the toggle that stands in for the bar where a finger drives the screen. What reaches the
 // deployment is both parts of one message — the markup and the plain-text alternative read out of the same tree. The
-// block of AI actions the design draws above the bar belongs to the stage that adds them.
+// block of AI actions the design draws above the bar is `DraftingBlock`, drawn wherever the deployment writes drafts.
+//
+// **The design's copy headers carry a Reply-to field this composer does not draw.** A message MailFathom writes names
+// no reply address — the draft, the outbox, and the composed message carry To, Cc, and Bcc and nothing else — so a
+// field here would be an address somebody typed that no message ever carried.
 //
 // **An answer's subject is read-only, and that is the platform rather than a choice.** A save either names an account
 // and a subject, or names the message it answers and lets the deployment derive both — so an edited subject on a reply
@@ -174,8 +179,13 @@ export function Composer({
     // authored by definition — somebody wrote it, in this tab, before the reload.
     const [authored, setAuthored] = useState(() => composition !== null && anythingWritten(composition));
     const [reading, setReading] = useState<Reading>({ kind: 'reading' });
-    const [known, setKnown] = useState<readonly string[]>([]);
-    const [copiesShown, setCopiesShown] = useState(false);
+    const [participants, setParticipants] = useState<readonly RecipientSuggestion[]>([]);
+
+    // Whether the copy headers are drawn, which is a choice only once somebody made one: before that they are drawn
+    // exactly where the message already copies somebody in, so an answer to everyone and a draft carried on show the
+    // addresses they will go to rather than holding them behind a control nobody pressed. Hiding them keeps what they
+    // hold — the message still goes to those people, and pressing the control again shows them where they were.
+    const [copiesChosen, setCopiesChosen] = useState<boolean | null>(null);
 
     // What the deployment is doing about a draft, and what the words were before one replaced them. The second is
     // both the way back and the fact the send confirmation cautions about: a draft nobody has read is words somebody
@@ -214,9 +224,7 @@ export function Composer({
                 return;
             }
 
-            // Once each: somebody who wrote and was copied in is one person to offer, and the completion list is
-            // keyed by the address.
-            setKnown([...new Set(answer.value.headers.participants.map((participant) => participant.address))]);
+            setParticipants(offeredFrom(answer.value.headers.participants));
             setComposition((held) => held ?? answerTo(answer.value, opening.answers));
         });
 
@@ -251,7 +259,7 @@ export function Composer({
                 return;
             }
 
-            setKnown([...new Set(answer.value.headers.participants.map((participant) => participant.address))]);
+            setParticipants(offeredFrom(answer.value.headers.participants));
             setComposition((held) => held ?? draftContinued(answer.value, body.outcome === 'read' ? body.value : null));
         });
 
@@ -472,6 +480,7 @@ export function Composer({
     const sendable = online && stillBeingWritten;
 
     const title = translate(titles[opening.kind === 'answer' ? opening.answers : opening.kind]);
+    const copiesShown = copiesChosen ?? (composition !== null && composition.cc.length + composition.bcc.length > 0);
 
     return (
         <section
@@ -547,24 +556,29 @@ export function Composer({
 
                     <RecipientField
                         label={translate('compose.to')}
+                        placeholder={translate('compose.addRecipient')}
                         addresses={composition.to}
-                        completions={known}
+                        participants={participants}
+                        session={session}
+                        transport={transport}
                         onChanged={(to) => {
                             revise({ to });
                         }}
                         trailing={
-                            copiesShown ? null : (
-                                <button
-                                    type="button"
-                                    aria-label={translate('compose.showCopies')}
-                                    className="shrink-0 rounded-md px-1.5 py-1 text-sm text-muted transition hover:bg-hover hover:text-text"
-                                    onClick={() => {
-                                        setCopiesShown(true);
-                                    }}
-                                >
-                                    {translate('compose.copyHeaders')}
-                                </button>
-                            )
+                            <button
+                                type="button"
+                                aria-expanded={copiesShown}
+                                aria-label={translate(copiesShown ? 'compose.hideCopies' : 'compose.showCopies')}
+                                title={translate(copiesShown ? 'compose.hideCopies' : 'compose.showCopies')}
+                                className={`shrink-0 rounded-md px-2 py-0.5 text-sm transition hover:text-text ${
+                                    copiesShown ? 'bg-accent-soft text-accent-deep' : 'text-muted'
+                                }`}
+                                onClick={() => {
+                                    setCopiesChosen(!copiesShown);
+                                }}
+                            >
+                                {translate('compose.copyHeaders')}
+                            </button>
                         }
                     />
 
@@ -572,17 +586,32 @@ export function Composer({
                         <>
                             <RecipientField
                                 label={translate('compose.cc')}
+                                placeholder={translate('compose.ccPlaceholder')}
                                 addresses={composition.cc}
-                                completions={known}
+                                participants={participants}
+                                session={session}
+                                transport={transport}
                                 onChanged={(cc) => {
                                     revise({ cc });
                                 }}
                             />
 
+                            <p className="flex items-start gap-2.25 border-b border-line-soft bg-sunken px-3.75 py-2.25">
+                                <span className="w-22 shrink-0">
+                                    <Icon name="visibility" className="size-4.25 text-warning-text" />
+                                </span>
+                                <span className="min-w-0 flex-1 text-sm text-text-soft text-pretty">
+                                    {translate('compose.copiesVisible')}
+                                </span>
+                            </p>
+
                             <RecipientField
                                 label={translate('compose.bcc')}
+                                placeholder={translate('compose.bccPlaceholder')}
                                 addresses={composition.bcc}
-                                completions={known}
+                                participants={participants}
+                                session={session}
+                                transport={transport}
                                 onChanged={(bcc) => {
                                     revise({ bcc });
                                 }}
@@ -733,6 +762,16 @@ export function Composer({
             )}
         </section>
     );
+}
+
+// The people a conversation names, as a recipient field offers them: each address once, however many headers it is in,
+// under the name the message gave it where it gave one.
+function offeredFrom(
+    named: readonly { readonly address: string; readonly displayName: string | null }[],
+): readonly RecipientSuggestion[] {
+    return named
+        .filter((person, index) => named.findIndex((earlier) => earlier.address === person.address) === index)
+        .map((person) => ({ address: person.address, name: person.displayName }));
 }
 
 // Where a composition starts: what this tab was already writing where it matches what is being opened, an empty

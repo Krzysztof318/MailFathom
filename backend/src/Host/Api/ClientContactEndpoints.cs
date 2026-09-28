@@ -106,6 +106,7 @@ internal static class ClientContactEndpoints
     }
 
     /// <summary>Serves one bounded page of the people the user wrote down.</summary>
+    /// <param name="search">Text a contact must carry in its name or in one of its addresses, or <see langword="null" /> for the whole book.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="contacts">Reads the page from the books the acting user reads.</param>
@@ -117,13 +118,15 @@ internal static class ClientContactEndpoints
     /// which is what stops a request from deciding how much of a person's correspondents leaves the database at once.
     /// </remarks>
     internal static Task<Results<Ok<ContactPageResponse>, ProblemHttpResult>> ReadOwnBookAsync(
+        [FromQuery] string? search,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] ContactBookReader contacts,
         CancellationToken cancellationToken) =>
-        ReadPageAsync(ContactOrigin.Asserted, pageSize, cursor, contacts, cancellationToken);
+        ReadPageAsync(ContactOrigin.Asserted, search, pageSize, cursor, contacts, cancellationToken);
 
     /// <summary>Serves one bounded page of the people the user's own mailboxes picked up.</summary>
+    /// <param name="search">Text a contact must carry in its name or in one of its addresses, or <see langword="null" /> for the whole book.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="contacts">Reads the page from the books the acting user reads.</param>
@@ -134,11 +137,12 @@ internal static class ClientContactEndpoints
     /// state their book is in.
     /// </remarks>
     internal static Task<Results<Ok<ContactPageResponse>, ProblemHttpResult>> ReadCollectedAsync(
+        [FromQuery] string? search,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] ContactBookReader contacts,
         CancellationToken cancellationToken) =>
-        ReadPageAsync(ContactOrigin.Collected, pageSize, cursor, contacts, cancellationToken);
+        ReadPageAsync(ContactOrigin.Collected, search, pageSize, cursor, contacts, cancellationToken);
 
     /// <summary>Serves one contact of the acting user's by the identity the book gave it.</summary>
     /// <param name="contactId">The contact to read.</param>
@@ -293,11 +297,19 @@ internal static class ClientContactEndpoints
 
     /// <summary>Serves one bounded page of one half of the book.</summary>
     /// <remarks>
+    /// <para>
     /// A blank cursor is read as no cursor, because a client that sent an empty argument asked for the first page
     /// rather than presented a boundary this deployment did not issue.
+    /// </para>
+    /// <para>
+    /// The search is bounded where every other entrypoint's is, in <see cref="ContactBookReader" />: text longer than
+    /// <see cref="ContactSearch.MaximumLength" /> can match nothing the book holds, so it is refused before anything is
+    /// read, with a sentence naming the rule rather than the text — which is somebody's name or address being looked up.
+    /// </para>
     /// </remarks>
     private static async Task<Results<Ok<ContactPageResponse>, ProblemHttpResult>> ReadPageAsync(
         ContactOrigin origin,
+        string? search,
         int? pageSize,
         string? cursor,
         ContactBookReader contacts,
@@ -308,6 +320,7 @@ internal static class ClientContactEndpoints
         var request = new ContactPageRequest
         {
             Origin = origin,
+            Search = search,
             PageSize = pageSize,
             Cursor = string.IsNullOrWhiteSpace(cursor) ? null : cursor,
         };

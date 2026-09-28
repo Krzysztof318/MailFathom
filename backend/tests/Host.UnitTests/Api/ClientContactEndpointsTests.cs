@@ -66,6 +66,7 @@ public sealed class ClientContactEndpointsTests
 
         // Act
         var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            search: null,
             pageSize: null,
             cursor: null,
             this.Reader(),
@@ -86,6 +87,7 @@ public sealed class ClientContactEndpointsTests
 
         // Act
         var result = await ClientContactEndpoints.ReadCollectedAsync(
+            search: null,
             pageSize: null,
             cursor: null,
             this.Reader(),
@@ -103,6 +105,7 @@ public sealed class ClientContactEndpointsTests
         // Arrange
         // Act
         var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            search: null,
             ContactQuery.MaximumPageSize + 1,
             cursor: null,
             this.Reader(),
@@ -114,6 +117,81 @@ public sealed class ClientContactEndpointsTests
         Assert.Empty(this.directory.ReceivedCalls());
     }
 
+    /// <summary>What a composer types into a recipient field reaches the book's own search, in either half of it.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReadAsync_ASearch_NarrowsTheBookByIt(bool ownBook)
+    {
+        // Arrange
+        this.AnswersWith(new ContactPage([ContactOf("Anna Kowalska", "anna@example.test")], NextCursor: null));
+
+        // Act
+        var result = ownBook
+            ? await ClientContactEndpoints.ReadOwnBookAsync(
+                " kowal ",
+                pageSize: 8,
+                cursor: null,
+                this.Reader(),
+                TestContext.Current.CancellationToken)
+            : await ClientContactEndpoints.ReadCollectedAsync(
+                " kowal ",
+                pageSize: 8,
+                cursor: null,
+                this.Reader(),
+                TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<Ok<ContactPageResponse>>(result.Result);
+        Assert.Equal("KOWAL", this.QueryRead().Search?.ComparisonForm);
+        Assert.Equal(8, this.QueryRead().PageSize);
+    }
+
+    /// <summary>
+    /// A search longer than any address the book can hold is refused before anything is read, and the refusal names the
+    /// rule rather than the text, which is somebody's name or address being looked up.
+    /// </summary>
+    [Fact]
+    public async Task ReadOwnBookAsync_ASearchOverTheBound_IsRefusedWithoutReadingOrEchoingIt()
+    {
+        // Arrange
+        var search = new string('k', ContactSearch.MaximumLength + 1);
+
+        // Act
+        var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            search,
+            pageSize: null,
+            cursor: null,
+            this.Reader(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.DoesNotContain(search, refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Empty(this.directory.ReceivedCalls());
+    }
+
+    /// <summary>An empty search asks for the whole book, because a field somebody has not typed in yet narrows nothing.</summary>
+    [Fact]
+    public async Task ReadOwnBookAsync_ABlankSearch_ReadsTheWholeBook()
+    {
+        // Arrange
+        this.AnswersWith(new ContactPage([], NextCursor: null));
+
+        // Act
+        var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            "  ",
+            pageSize: null,
+            cursor: null,
+            this.Reader(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<Ok<ContactPageResponse>>(result.Result);
+        Assert.Null(this.QueryRead().Search);
+    }
+
     /// <summary>A cursor this deployment did not issue is refused rather than read as an offset somebody chose.</summary>
     [Fact]
     public async Task ReadOwnBookAsync_ACursorThisDeploymentDidNotIssue_IsRefusedWithoutReading()
@@ -121,6 +199,7 @@ public sealed class ClientContactEndpointsTests
         // Arrange
         // Act
         var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            search: null,
             pageSize: null,
             "not-a-cursor",
             this.Reader(),
@@ -141,6 +220,7 @@ public sealed class ClientContactEndpointsTests
 
         // Act
         var result = await ClientContactEndpoints.ReadOwnBookAsync(
+            search: null,
             pageSize: null,
             "   ",
             this.Reader(),

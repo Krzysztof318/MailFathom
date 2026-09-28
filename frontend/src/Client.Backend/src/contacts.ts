@@ -117,6 +117,21 @@ export const mostContactsPerPage = 200;
 /** How many a screen asks for where it states no window of its own, which is the size the service serves by default. */
 export const contactsPerPage = 50;
 
+/**
+ * The longest search the deployment runs, which is the longest address a book can hold: text past it can match nobody,
+ * so the deployment refuses it rather than reading anything, and a screen asks no such question in the first place.
+ */
+export const longestContactSearch = 320;
+
+/** What one page of a book is asked for: a window, where the walk continues, and what narrows it. */
+export interface ContactPageRequest {
+    readonly pageSize?: number;
+    readonly cursor?: string | null;
+
+    /** Text a contact has to carry in its name or in one of its addresses; blank or absent narrows nothing. */
+    readonly search?: string | null;
+}
+
 // The most addresses one contact may carry before the answer is refused unread. Far above anything a person records
 // and far below anything worth buffering: what the bound guards against is an answer that was never a contact.
 const mostAddressesPerContact = 64;
@@ -142,7 +157,7 @@ const contactWriteOutcomes: readonly ContactWriteOutcome[] = [
 export function readOwnContacts(
     session: ClientSession,
     transport: MailFathomTransport,
-    page: { readonly pageSize?: number; readonly cursor?: string | null } = {},
+    page: ContactPageRequest = {},
 ): Promise<ClientResult<ContactPage>> {
     return readBook(session, transport, contactsRoute, page);
 }
@@ -151,7 +166,7 @@ export function readOwnContacts(
 export function readCollectedContacts(
     session: ClientSession,
     transport: MailFathomTransport,
-    page: { readonly pageSize?: number; readonly cursor?: string | null } = {},
+    page: ContactPageRequest = {},
 ): Promise<ClientResult<ContactPage>> {
     return readBook(session, transport, collectedContactsRoute, page);
 }
@@ -263,7 +278,7 @@ function readBook(
     session: ClientSession,
     transport: MailFathomTransport,
     route: string,
-    page: { readonly pageSize?: number; readonly cursor?: string | null },
+    page: ContactPageRequest,
 ): Promise<ClientResult<ContactPage>> {
     // The window the screen can render rather than whatever the service would serve, and never more than the bound the
     // route enforces — a request past it is refused, which would cost a reader a page for a number they never chose.
@@ -272,7 +287,7 @@ function readBook(
     return spanned(`GET ${route}`, async () => {
         const response = await send(transport, {
             method: 'GET',
-            path: `${routeFor(session, route)}?${pageArguments(pageSize, page.cursor ?? null)}`,
+            path: `${routeFor(session, route)}?${pageArguments(pageSize, page.cursor ?? null, page.search ?? null)}`,
             headers: headersFor(session),
             longestAnswer: longestContactPage,
         });
@@ -293,11 +308,17 @@ function readBook(
 
 // Written out rather than composed with `URLSearchParams`, which is a browser API and therefore one this package
 // declares nothing of: the wire half of the client knows a route and a status code and nothing about a document.
-function pageArguments(pageSize: number, cursor: string | null): string {
+function pageArguments(pageSize: number, cursor: string | null, search: string | null): string {
     const asked = [`pageSize=${pageSize.toFixed(0)}`];
 
     if (cursor !== null && cursor !== '') {
         asked.push(`cursor=${encodeURIComponent(cursor)}`);
+    }
+
+    const narrowedBy = search?.trim() ?? '';
+
+    if (narrowedBy !== '') {
+        asked.push(`search=${encodeURIComponent(narrowedBy)}`);
     }
 
     return asked.join('&');

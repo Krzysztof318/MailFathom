@@ -132,6 +132,7 @@ interface Answers {
     readonly withdrawal?: { readonly status: number; readonly body: string };
     readonly discard?: { readonly status: number; readonly body: string };
     readonly drafting?: { readonly status: number; readonly body: string };
+    readonly contacts?: { readonly status: number; readonly body: string };
 }
 
 function deployment(answers: Answers = {}): { transport: MailFathomTransport; asked: ClientRequest[] } {
@@ -150,6 +151,10 @@ function deployment(answers: Answers = {}): { transport: MailFathomTransport; as
 }
 
 function answerFor(request: ClientRequest, answers: Answers): { status: number; body: string } {
+    if (request.path.includes('/contacts')) {
+        return answers.contacts ?? { status: 200, body: JSON.stringify({ contacts: [], nextCursor: null }) };
+    }
+
     if (request.path.endsWith('/replies/drafting')) {
         return answers.drafting ?? { status: 200, body: draftedReply() };
     }
@@ -386,7 +391,7 @@ describe('Composer, a message of its own', () => {
     it('draws every header on one grid, each field named in the column beside what is written in it', () => {
         drawComposer({ kind: 'new' }, {}, [work, home]);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Write a copy or a blind copy as well' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show CC and BCC fields' }));
 
         // Every row is a name bound to the one thing written under it, which is what makes the header a grid rather
         // than four rows each starting somewhere of its own. Where each column falls is decided by looking at the
@@ -417,15 +422,57 @@ describe('Composer, a message of its own', () => {
         expect(written['htmlBody']).toBe('They are attached.');
     });
 
-    it('offers the copy headers only once they are asked for, the design drawing one row', () => {
+    it('shows the copy headers and hides them again from one control, which says which it will do next', () => {
         drawComposer();
 
-        expect(screen.queryByLabelText('Cc')).toBeNull();
+        const copies = screen.getByRole('button', { name: 'Show CC and BCC fields' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Write a copy or a blind copy as well' }));
+        expect(screen.queryByLabelText('Cc')).toBeNull();
+        expect(copies.getAttribute('aria-expanded')).toBe('false');
+
+        fireEvent.click(copies);
 
         expect(screen.getByLabelText('Cc')).toBeDefined();
         expect(screen.getByLabelText('Bcc')).toBeDefined();
+        expect(screen.getByText(/Every recipient can see CC addresses/u)).toBeDefined();
+        expect(copies.getAttribute('aria-expanded')).toBe('true');
+        expect(copies.getAttribute('title')).toBe('Hide CC and BCC fields');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide CC and BCC fields' }));
+
+        expect(screen.queryByLabelText('Cc')).toBeNull();
+        expect(screen.queryByText(/Every recipient can see CC addresses/u)).toBeNull();
+    });
+
+    it('keeps the copies written when the headers are hidden, and sends to them', async () => {
+        const { asked } = drawComposer();
+
+        address('ada@example.invalid');
+        fireEvent.click(screen.getByRole('button', { name: 'Show CC and BCC fields' }));
+        fireEvent.change(screen.getByLabelText('Cc'), { target: { value: 'bo@example.invalid' } });
+        fireEvent.keyDown(screen.getByLabelText('Cc'), { key: 'Enter' });
+        fireEvent.click(screen.getByRole('button', { name: 'Hide CC and BCC fields' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show CC and BCC fields' }));
+
+        expect(screen.getByRole('button', { name: 'Remove bo@example.invalid from Cc' })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await waitFor(() => {
+            expect(asked.some((request) => request.method === 'POST')).toBe(true);
+        });
+        expect(JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}')).toMatchObject({
+            cc: ['bo@example.invalid'],
+        });
+    });
+
+    it('opens on the copy headers where the message already copies somebody in', async () => {
+        drawComposer({ kind: 'answer', storedEmailId: messageId, answers: 'everyone' });
+
+        await screen.findByText('Re: Quarterly invoice');
+
+        expect(screen.getByLabelText('Cc')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Hide CC and BCC fields' })).toBeDefined();
     });
 
     it('asks the send question from the shortcut the design draws, rather than sending from it', () => {
@@ -1291,22 +1338,30 @@ describe('Composer, an answer', () => {
         });
     });
 
-    it('offers the people in the conversation to complete an address from, each of them once', async () => {
+    it('offers the people in the conversation to address, each of them once and by the name they wrote under', async () => {
         // The sender copied in as well, which is what puts one address in two headers — and what would otherwise
-        // offer it twice and give the completion list two options under one key.
+        // offer it twice and give the list two options under one key.
         const message = JSON.parse(messageBody()) as {
             headers: { participants: { role: string; address: string; displayName: string | null }[] };
         };
 
         message.headers.participants.push({ role: 'Cc', address: 'billing@example.invalid', displayName: 'Billing' });
 
-        drawComposer(replying, { message: { status: 200, body: JSON.stringify(message) } });
+        // A forward, which opens addressed to nobody, so every one of them is still somebody to offer.
+        drawComposer(
+            { kind: 'answer', answers: 'forward', storedEmailId: messageId },
+            { message: { status: 200, body: JSON.stringify(message) } },
+        );
 
-        await screen.findByText('Re: Quarterly invoice');
+        fireEvent.focus(await screen.findByLabelText('To'));
+        fireEvent.change(screen.getByLabelText('To'), { target: { value: 'example' } });
 
-        const offered = [...document.querySelectorAll('datalist option')].map((option) => option.getAttribute('value'));
+        const offered = within(screen.getByRole('listbox', { name: 'Suggested recipients for To' }))
+            .getAllByRole('option')
+            .map((option) => option.textContent);
 
         expect(offered).toContain('auditor@example.invalid');
+        expect(offered).toContain('Billingbilling@example.invalid');
         expect(offered).toStrictEqual([...new Set(offered)]);
     });
 
