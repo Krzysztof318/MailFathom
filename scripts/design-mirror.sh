@@ -61,6 +61,7 @@ mirrored_screen_sources=(
   "MailFathom Notification Gesture.dc.html"
   "MailFathom Prototype.dc.html"
   "MailFathom AI Blocks.dc.html"
+  "MailFathom Client States.dc.html"
   "MailFathom Sign-in.dc.html"
   "MailFathom Toasts.dc.html"
 )

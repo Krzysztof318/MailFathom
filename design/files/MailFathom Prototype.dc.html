@@ -3042,6 +3042,58 @@
    so half the samples in this prototype use it. The parser handles: headings, paragraphs,
    bold/italic/strikethrough, inline and block code, plain, ordered and task lists
    (including nesting), quotes, tables, horizontal rules and links. */
+
+/* CLIENT STATES — INVENTORY (drawn in “MailFathom Client States.dc.html”).
+   Every state below is revealed there by the property state="<id>", at layout = telefon | fold | tablet | desktop | all
+   and theme = light | dark | both; clicking a ledger row at the top of that file opens the same artboards.
+   Tokens, notices, chips, buttons, skeleton shimmer and toast are this file's; the only new component is the
+   radio list in “Kind of folder” (2.4a).
+   DISCOVER
+     d_refusal   1.1  question refused before a run — one line under the field: signed out, not permitted (neutral);
+                      unavailable, unreadable answer (warning + Try again). The question stays in the field.
+     d_cancel    1.2a cancelling (spinner, disabled “Cancelling…”) and cancel failed (warning, “Try stopping again”).
+     d_ended     1.2b run ended — card takes the running bar's slot above arrived blocks; answer gains “cut short”.
+                      Tones: finished (no card) · stopped by you · limit reached (period allowance with when-line,
+                      run allowance) · try again (timed out, temporarily unavailable) · could not finish (failed,
+                      gone, stopped) · not possible here (unavailable, retrieval refused).
+     d_finished  1.2c completed — no card; “Answered by {endpoint} ({model})” and spend go in the run line.
+     d_coming    1.3a “still coming” dashed card trailing blocks: loading (shimmer), error, offline (+ Retry only here).
+     d_empty     1.3b nothing composed (no action) · answer from a newer version · unknown block (dashed neutral).
+     ev_opening  1.4a inspector opening — header from the citation, shimmer body, “Opening the source…”.
+     ev_failed   1.4b read failures: unavailable, unreadable (warning); signed out, missing (neutral).
+     ev_private  1.4c private source — lock badge + administrator remedy. A “not permitted” read failure renders this.
+     ev_outdated 1.4d outdated stored copy — warning, then the quoted passage in a plain box; Open in mail stays.
+     ev_kinds    1.4e whole-message citation · attachment file row · not openable from the client · text in an image.
+     d_asked     1.5  “Asked before” chips (question + scope) under the scope chips, idle only; “Forget these”.
+                      savedAnswers.a and .fresh are not drawn — recall re-asks instead of replaying.
+   MAIL
+     m_verdict   2.1  sender verdict under the sender line: warning box (authenticated by another domain / nothing
+                      authenticated), healthy as one quiet line.
+     m_more      2.2a thread paging at its end: Read more · reading more · “That is the whole of this conversation.”
+     m_partial   2.2b partial failure in place of the missing messages; head notes (more people, more messages).
+     m_pane      2.2c whole pane: failed, offline, nothing you are allowed to see — “Nothing open” layout.
+     m_folders   2.3a folder column: skeleton (text kept for screen readers), failed, offline (dimmed last tree),
+                      no account.
+     m_list      2.3b list: empty folder, nothing matches (+ Clear filters), partial failure strip, empty while failing.
+     m_kind      2.4a New folder with “Kind of folder” first; a role hides name + inside and shows the hint.
+     m_roles     2.4b tree roles Flagged (flag), Important (label_important), All mail (all_inbox), Outbox (outbox).
+     m_search    2.5  described search: filter chips, “What this search is ranked by” chips, unused-phrase note,
+                      “Reading what you wrote…”, words-only placeholder.
+     m_pending   2.6  pending changes in the connection summary: indicator states, panel (sheet on phone) with
+                      needs-decision, failed, did not reach deployment, pending count; tracking stopped; late toast.
+   TASKS · CALENDAR · PEOPLE
+     c_edit      3.1  event edited in place: All day, Starts / Ends, Save disabled with reason.
+     t_layout    3.2  Lay out today: waiting, offer (Add to calendar / Leave it), nothing left, allowance spent,
+                      unavailable (button hidden).
+     t_proposed  3.3a proposed task (AI tag, Accept, Dismiss task), “No day” group, status line, partly refused.
+     t_states    3.3b empty list, everything done, reading, reading more, failed.
+     p_none      3.4a “Open somebody to read their page.” (fold and wider); status line on a person's page.
+     p_states    3.4b empty address books, reading, failed, conversations reading / failed / none.
+   AGENT
+     a_steer     4.1  steering note during a run: Send reads “Steer”, tag “Joins at the next turn” → “Taken in”.
+     a_failed    4.2a failed answer (error notice + Try again); not-sent line under the field, five reasons.
+     a_read      4.2b conversation read failure (five reasons), history reading / failed / empty, refusal toast,
+                      “Delete 3 conversations?”. */
 const mdInline = (s) => {
   const out = [];
   const re = /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|\*[^*\n]+\*|\[[^\]]+\]\([^)]+\))/g;
