@@ -1600,6 +1600,42 @@ describe('Composer drafting', () => {
     // Opening the composer is not accepting the words in it: they are still a draft nobody has read in place, so the
     // composer says so exactly as it does for one it asked for itself, and the way back is to the empty reply the
     // author had not written anything into yet.
+    // What this tab kept for the same answer is somebody's own words, so a draft carried in from the thread takes their
+    // place the way a draft asked for here would: over them, with them as the way back, rather than instead of them.
+    it('keeps the words this tab was writing for the same answer as the way back from a draft carried in', async () => {
+        rememberComposition({
+            answering: { storedEmailId: messageId, answers: 'senderOnly' },
+            continuing: null,
+            account: 'work',
+            subject: 'Re: Invoice',
+            to: ['ada@example.invalid'],
+            cc: [],
+            bcc: [],
+            words: [{ text: 'What I had written' }],
+        });
+
+        drawComposer(
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
+
+        expect(await screen.findByText('What I had written')).toBeDefined();
+        expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
+    });
+
     it('holds a reply drafted under a correspondence as a draft to accept or take back', async () => {
         drawComposer(
             {

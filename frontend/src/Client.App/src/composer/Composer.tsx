@@ -184,9 +184,10 @@ export function Composer({
     // else wrote, and accepting it is what makes them the author's own.
     const [drafting, setDrafting] = useState(false);
     // A composer opened on a draft written in the thread opens on words nobody has accepted yet, exactly as though the
-    // block here had written them over an empty message — so restoring gives back the nothing that was there.
+    // block here had written them over what was there — so restoring gives back what this tab was writing for that
+    // answer, or the nothing an answer opens on.
     const [beforeDrafting, setBeforeDrafting] = useState<readonly WrittenNode[] | null>(() =>
-        opening.kind === 'answer' && opening.drafted !== undefined ? [] : null,
+        wordsBeforeTheDraft(opening),
     );
 
     // How many times the words have been replaced wholesale, which is what the editable region is keyed by: it renders
@@ -773,11 +774,31 @@ function opened(opening: ComposerOpening, accounts: readonly MailAccount[]): Com
     if (kept !== null && sameOpening(kept, opening)) {
         // What was being written is kept and whoever the opening named is added to it: somebody who asks to write to a
         // person while half a message of their own is open is addressing that message rather than starting a second
-        // one, and a repeat is not written down twice.
-        return { ...kept, to: [...kept.to, ...addressed.filter((address) => !kept.to.includes(address))] };
+        // one, and a repeat is not written down twice. A draft carried in from the thread is what somebody just asked
+        // to have written, so it takes the place of the words — which `wordsBeforeTheDraft` keeps as the way back.
+        return {
+            ...kept,
+            to: [...kept.to, ...addressed.filter((address) => !kept.to.includes(address))],
+            ...(opening.kind === 'answer' && opening.drafted !== undefined
+                ? { words: writtenParagraphs(opening.drafted) }
+                : {}),
+        };
     }
 
     return opening.kind === 'new' ? nothingWrittenYet(accounts[0]?.id ?? '', addressed) : null;
+}
+
+// What a draft carried in from the thread replaced, which the composer holds as the way back: the words this tab kept
+// for the same answer where it kept any, and the empty message an answer opens on otherwise. `null` for every other
+// opening, which carries no draft nobody has accepted.
+function wordsBeforeTheDraft(opening: ComposerOpening): readonly WrittenNode[] | null {
+    if (opening.kind !== 'answer' || opening.drafted === undefined) {
+        return null;
+    }
+
+    const kept = rememberedComposition();
+
+    return kept !== null && sameOpening(kept, opening) ? kept.words : [];
 }
 
 function sameOpening(kept: Composition, opening: ComposerOpening): boolean {
@@ -786,13 +807,9 @@ function sameOpening(kept: Composition, opening: ComposerOpening): boolean {
             return kept.answering === null && kept.continuing === null;
         case 'draft':
             return kept.continuing === opening.storedEmailId;
-        // A draft carried in from the thread is what somebody just asked to write, so it replaces whatever this tab
-        // kept for the same answer rather than being dropped in favour of it.
         case 'answer':
             return (
-                opening.drafted === undefined &&
-                kept.answering?.storedEmailId === opening.storedEmailId &&
-                kept.answering.answers === opening.answers
+                kept.answering?.storedEmailId === opening.storedEmailId && kept.answering.answers === opening.answers
             );
     }
 }
