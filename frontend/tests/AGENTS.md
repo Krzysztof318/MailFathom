@@ -298,7 +298,7 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   back only the component it acted on is not one, however many clicks it takes to get there.
 - **A journey runs against a fake deployment that holds state.** A route fulfilled with one fixed answer answers the
   list after a delete exactly as it answered it before, so it cannot tell a client that dropped the row from one that
-  never asked again. The fake a journey drives applies what the client writes — a delete, a move, a flag, a read mark,
+  never asked again. The fake a journey drives, `fakeDeployment.ts`, applies what the client writes — a delete, a move, a flag, a read mark,
   a draft, an undo — and answers every later read from what those writes did, in the shapes the service answers, so the
   bundle parses them through `Client.Backend` exactly as it would a deployment's.
 - **No journey asserts a service behaviour the fake merely assumes.** The fake holds one reading of what the service
@@ -307,8 +307,9 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   service's integration suite and with [the end-to-end suite](#the-end-to-end-suite); a journey pinning a service rule
   would pass while the fake and the client both disagreed with the deployment.
 - **A journey never waits out a real duration.** The fake answers at once, an AI answer included: nothing in it
-  simulates how long a model takes, and where a journey needs a running answer the fake hands it back running and the
-  next read the journey causes answers it finished. A timer the client itself runs — a poll, a notice's lifetime, a
+  simulates how long a model takes, and where a journey needs a running answer it calls `startNextAnswerRunning()`
+  before it asks: the fake hands the next answer back running and the next read the journey causes answers it finished.
+  A timer the client itself runs — a poll, a notice's lifetime, a
   renewal — is advanced with Playwright's clock, `page.clock.install()` before the page loads and `page.clock.runFor()`
   over the timer's duration, rather than slept through. So a journey costs what its steps cost, and
   `page.waitForTimeout` is not a wait this suite writes.
@@ -330,21 +331,16 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   into it is invented in the spec and reaches a loopback origin, so nothing here is anybody's mail or anybody's
   credential. Driving a real deployment is the agent's own work with `@playwright/cli`, which `frontend/AGENTS.md`
   covers, and it is not this suite.
-- **What answers is `fakeDeployment.ts`, one per check, and it holds state.** It starts from the corpus — the resting
-  mailbox, its folders, the drafts, the Discover run, the Agent's conversations — and applies what the client writes to
-  it: a move, a delete and the withdrawal that takes one back, a flag or a read mark, a draft saved, revised, and sent,
-  a Discover run stopped, and an answer to an Agent proposal. So a read after an act answers what the act left behind,
-  and a check can tell a client that dropped a row from one that never asked again. `client.harness.ts` serves it to
-  the check's browser context before the check starts, a check that opens a context of its own serves that one too, and
+- **Every check signs in to a fake deployment of its own, journey or not.** It starts from the corpus — the resting
+  mailbox, its folders, the drafts, the Discover run, the Agent's conversations — and besides the writes above it stops
+  a Discover run and records an answer to an Agent proposal. `client.harness.ts` serves it to the check's browser
+  context before the check starts, a check that opens a context of its own serves that one too, and
   a route a check registers on its page afterwards takes precedence — which is how one refusal or one recording is put
   in front of a single request.
 - **A request it has no answer for fails the check that issued it**, naming the method and the route, rather than being
   answered with an empty body the screen would draw as something else. Adding the answer is part of the change that
   first reaches the route, and the answer is a corpus value: the fake builds from the corpus and states no mail of its
   own.
-- **Nothing in it waits.** What an agent composes is canned and returned at once, and no latency is simulated anywhere.
-  A check that has to look at an answer still running calls `startNextAnswerRunning()` before it asks: the next question
-  reads as running once and finished on the read the check causes after it.
 - **A check asserts what the client asked for through `deployment.requests(method, route)`**, which answers every
   request of that shape in the order the page issued it, each with its route beneath `/api/client`, its query, and its
   body as the JSON it was sent as — so the identifiers and the folder an act carried are read off the request rather

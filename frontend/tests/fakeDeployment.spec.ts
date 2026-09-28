@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test';
 import { FakeDeployment } from './fakeDeployment';
 import * as agent from './fixtures/agent';
 import * as discovery from './fixtures/discovery';
+import * as mail from './fixtures/mail';
 
 // The fake deployment every browser check signs in to, asked directly rather than through a page: what a journey
 // relies on is that a read after a write answers what the write left behind, and a check that got that wrong would
@@ -83,6 +84,21 @@ test('files a moved message in the folder it was moved to, and moves both folder
         stored: before.archive.stored + 1,
         unread: before.archive.unread + 1,
     });
+});
+
+test('files a message the folder never listed, one out of a thread or a search answer, where it was moved to', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const threaded = mail.conversation.messages[1]?.email.id ?? '';
+    const searched = mail.searchResults.results[0]?.id ?? '';
+
+    ask(deployment, 'POST', '/mutations/moves', {
+        moves: [
+            { storedEmailId: threaded, destinationFolder: 'ARCHIVE/2024' },
+            { storedEmailId: searched, destinationFolder: 'ARCHIVE/2024' },
+        ],
+    });
+
+    expect(listed(deployment, 'folder=ARCHIVE%2F2024')).toStrictEqual([threaded, searched]);
 });
 
 test('answers a later read with the flags a change left, and filters on them', () => {

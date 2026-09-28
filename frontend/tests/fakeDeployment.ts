@@ -100,8 +100,14 @@ const composingEntriesShown = 3;
 /** When every record the fake writes down was written, which no check reads and the record route requires. */
 const recordedAt = '2026-08-31T09:41:00+00:00';
 
-/** One row of the generated folder, as the corpus states it. */
-type FolderRow = ReturnType<typeof mail.timelinePage>['emails'][number];
+/** What the fake reads of a row a folder page lists; every other field travels as the corpus states it. */
+interface FolderRow {
+    readonly id: string;
+    readonly folder: string;
+    readonly unread: boolean;
+    readonly flagged: boolean;
+    readonly hasAttachments: boolean;
+}
 
 /** Where in the generated folder the one row standing for a correspondence sits, read off the corpus's first page. */
 const conversationRowPosition = mail.timelinePage(0).emails.findIndex(({ threadId }) => threadId !== null);
@@ -661,10 +667,9 @@ export class FakeDeployment {
         if (folder !== null && folder !== 'INBOX') {
             const emails = [...this.placed]
                 .filter(([, alias]) => alias === folder)
-                .map(([id]) => positionOf(id))
-                .filter((position) => position !== null)
-                .sort((one, other) => one - other)
-                .map((position) => this.shaped(generatedRow(position)))
+                .map(([id]) => corpusRow(id))
+                .filter((row) => row !== null)
+                .map((row) => this.shaped(row))
                 .filter(matches);
 
             return { emails, nextCursor: null, previousCursor: null, pageSize: mail.rowsPerPage };
@@ -997,16 +1002,61 @@ function generatedRow(position: number): FolderRow {
     return row;
 }
 
-/** Where the corpus puts a message before anything is written to it: in the folder, a search result, or a thread. */
-function corpusFacts(storedEmailId: string): MessageFacts | null {
+/**
+ * A message the corpus holds anywhere — in the folder, in a thread, or only in a search answer — as a folder page lists
+ * it, which is how it reads once a move has filed it somewhere.
+ */
+function corpusRow(storedEmailId: string): FolderRow | null {
     const position = positionOf(storedEmailId);
-    const row =
-        position === null
-            ? (mail.searchResults.results.find(({ id }) => id === storedEmailId) ??
-              mail.conversation.messages.find(({ email }) => email.id === storedEmailId)?.email)
-            : generatedRow(position);
 
-    return row === undefined ? null : { folder: row.folder, unread: row.unread, flagged: row.flagged };
+    if (position !== null) {
+        return generatedRow(position);
+    }
+
+    const threaded = mail.conversation.messages.find(({ email }) => email.id === storedEmailId)?.email;
+
+    if (threaded !== undefined) {
+        return threaded;
+    }
+
+    const found = mail.searchResults.results.find(({ id }) => id === storedEmailId);
+
+    if (found === undefined) {
+        return null;
+    }
+
+    // A search answer is a folder row with what the search matched added and the derivation left off, so the row is
+    // the fields the two share and a derivation of none.
+    const listed = {
+        id: found.id,
+        account: found.account,
+        folder: found.folder,
+        threadId: found.threadId,
+        subject: found.subject,
+        receivedAt: found.receivedAt,
+        sentAt: found.sentAt,
+        senderAddress: found.senderAddress,
+        senderDisplayName: found.senderDisplayName,
+        toAddresses: found.toAddresses,
+        unread: found.unread,
+        flagged: found.flagged,
+        answered: found.answered,
+        hasAttachments: found.hasAttachments,
+        attachmentCount: found.attachmentCount,
+        sizeOctets: found.sizeOctets,
+        preview: found.preview,
+        threadMessageCount: found.threadMessageCount,
+        enrichment: null,
+    };
+
+    return listed;
+}
+
+/** Where the corpus puts a message before anything is written to it. */
+function corpusFacts(storedEmailId: string): MessageFacts | null {
+    const row = corpusRow(storedEmailId);
+
+    return row === null ? null : { folder: row.folder, unread: row.unread, flagged: row.flagged };
 }
 
 /** The day the machine running this is on, as a calendar day is spelled, which is the day a task list is grouped by. */
