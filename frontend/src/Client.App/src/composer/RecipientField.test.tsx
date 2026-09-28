@@ -327,12 +327,35 @@ describe('RecipientField', () => {
         expect(screen.getByRole('listbox')).toBeDefined();
     });
 
-    it('says the book could not be searched, rather than listing nobody over a book it never read', async () => {
+    it('says the book could not be searched, and names no list it did not draw, over a book it never read', async () => {
         drawField([], [], { own: { status: 503 }, collected: { status: 503 } });
 
         typeInto('ann');
 
-        expect(await screen.findByText(/Your contacts could not be searched just now/u)).toBeDefined();
+        expect(await screen.findByText(/Not every contact could be searched just now/u)).toBeDefined();
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(field().getAttribute('aria-expanded')).toBe('false');
+        expect(field().getAttribute('aria-controls')).toBeNull();
+    });
+
+    it('says so when the one half the grants reach went unread, rather than reading as a book with nobody in it', async () => {
+        drawField([], [], { own: { status: 403 }, collected: { status: 503 } });
+
+        typeInto('ann');
+
+        expect(await screen.findByText(/Not every contact could be searched just now/u)).toBeDefined();
+    });
+
+    it('lists the half that answered, and says the other went unread', async () => {
+        drawField([], [], {
+            own: { status: 200, contacts: [contact('000000000001', 'Anna Kowalska', ['anna@example.invalid'])] },
+            collected: { status: 503 },
+        });
+
+        typeInto('ann');
+
+        expect(await screen.findByRole('option', { name: /anna@example\.invalid/u })).toBeDefined();
+        expect(screen.getByText(/Not every contact could be searched just now/u)).toBeDefined();
     });
 
     it('offers nobody from the book, and says nothing about it, to somebody whose grants do not reach it', async () => {

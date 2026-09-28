@@ -667,8 +667,9 @@ the conversation first. `RecipientField.tsx` is a combobox over one list: what s
 move through it, and the book is asked through the `search` both contact listings take — once the typing settles, from
 both books at once, a few contacts each, with an answer that arrived after a later keystroke discarded. The book is
 searched rather than walked because it can hold every address somebody ever corresponded with, and the service bounds
-the search text rather than the client trusting itself to. When neither book could be searched the field says so and
-leaves the address to be written in full; a book the grant does not reach says nothing, since nothing would change it.
+the search text rather than the client trusting itself to. When a book the grant reaches could not be searched the field
+says so beside whatever the other one found, and leaves the address to be written in full; a book the grant does not
+reach says nothing, since nothing would change it.
 
 **Hiding the copy headers never drops an address in them.** The control only decides whether the two rows are drawn, so
 a copy written before they were hidden is still saved and still sent — and the confirmation, which names every address,

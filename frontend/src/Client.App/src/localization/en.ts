@@ -859,7 +859,7 @@ export const en = {
     'compose.copiesVisible': 'Every recipient can see CC addresses. To hide recipients from each other, use BCC.',
     'compose.suggestedRecipients': 'Suggested recipients for {header}',
     'compose.contactsUnsearchable':
-        'Your contacts could not be searched just now. You can still write the address in full.',
+        'Not every contact could be searched just now. You can still write the address in full.',
     'compose.removeRecipient': 'Remove {address} from {header}',
     'compose.notAnAddress': 'That is not an address yet. An address looks like somebody@example.com.',
     'compose.alreadyAddressed': '{address} is written here already.',

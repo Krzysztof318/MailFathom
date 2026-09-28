@@ -22,10 +22,14 @@ export interface RecipientSuggestion {
     readonly name: string | null;
 }
 
-/** What searching the address book answered: the people it found, or that it could not be searched just now. */
-export type ContactLookup =
-    | { readonly kind: 'found'; readonly suggestions: readonly RecipientSuggestion[] }
-    | { readonly kind: 'unsearchable' };
+/**
+ * What searching the address book answered: the people it found, and whether a half of the book the person holds went
+ * unread — which a list of the other half's people does not say on its own.
+ */
+export interface ContactLookup {
+    readonly suggestions: readonly RecipientSuggestion[];
+    readonly incomplete: boolean;
+}
 
 /** The most a field lists at once, which is a list read at a glance rather than a book to page through. */
 export const mostSuggestions = 8;
@@ -38,8 +42,8 @@ const suggestionsPerBook = 5;
  * Searches both of the address book's halves for a term, as suggestions in the book's own order.
  *
  * A person whose grants do not reach the book is offered nobody rather than told it failed: they have no book to search,
- * and a sentence saying so under every keystroke would be a refusal nobody asked about. Any other failure of both halves
- * is said, because a list that stays empty over a book that went unread reads as a book with nobody in it.
+ * and a sentence saying so under every keystroke would be a refusal nobody asked about. Any other failure of either half
+ * is said, because a list that leaves out a book that went unread reads as a book with nobody else in it.
  */
 export async function searchContacts(
     session: ClientSession,
@@ -52,14 +56,8 @@ export async function searchContacts(
         ),
     );
 
-    const unread = answers.filter((answer) => answer.outcome === 'failed' && answer.failure.reason !== 'unauthorized');
-
-    if (unread.length === answers.length) {
-        return { kind: 'unsearchable' };
-    }
-
     return {
-        kind: 'found',
+        incomplete: answers.some((answer) => answer.outcome === 'failed' && answer.failure.reason !== 'unauthorized'),
         suggestions: answers.flatMap((answer) =>
             answer.outcome === 'read' ? answer.value.contacts.flatMap((contact) => offeredAt(contact, term)) : [],
         ),

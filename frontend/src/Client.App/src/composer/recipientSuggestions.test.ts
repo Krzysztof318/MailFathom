@@ -41,7 +41,7 @@ describe('searchContacts', () => {
         );
 
         expect(found).toEqual({
-            kind: 'found',
+            incomplete: false,
             suggestions: [
                 { address: 'a.kowalska@work.example.invalid', name: 'Anna Kowalska' },
                 { address: 'a.kowalska@work.example.invalid', name: 'Anna Kowalska' },
@@ -56,7 +56,24 @@ describe('searchContacts', () => {
             'Anna K',
         );
 
-        expect(found).toMatchObject({ kind: 'found', suggestions: [{ address: 'anna@example.invalid' }, {}] });
+        expect(found).toMatchObject({ incomplete: false, suggestions: [{ address: 'anna@example.invalid' }, {}] });
+    });
+
+    it.each([
+        ['one half the grants reach failed beside one they do not', 403, 503, true],
+        ['both halves failed', 503, 503, true],
+        ['the grants reach neither half', 403, 403, false],
+    ])('says whether a half went unread when %s', async (_, own, collected, incomplete) => {
+        const transport: MailFathomTransport = (request) =>
+            Promise.resolve({
+                status: request.path.includes('/contacts/collected') ? collected : own,
+                body: '',
+                headers: {},
+            });
+
+        const found = await searchContacts(session, transport, 'anna');
+
+        expect(found).toEqual({ incomplete, suggestions: [] });
     });
 });
 

@@ -89,10 +89,12 @@ export function RecipientField({
         };
     }, [searchable, term, session, transport]);
 
-    const fromTheBook = lookup?.kind === 'found' ? lookup.suggestions : [];
+    const fromTheBook = lookup?.suggestions ?? [];
     const offered = searchable ? suggestionsFor(term, participants, fromTheBook, addresses) : [];
-    const unsearchable = searchable && lookup?.kind === 'unsearchable';
+    const unsearchable = searchable && lookup?.incomplete === true;
     const open = focused && !dismissed && (offered.length > 0 || unsearchable);
+    // The popup can hold the note alone, and the combobox names only a listbox that is drawn.
+    const listed = open && offered.length > 0;
     const inForce = open && active !== null ? offered[active] : undefined;
 
     // The field's own text is committed on Enter, on a comma, and on leaving the field, because all three are ways
@@ -190,8 +192,8 @@ export function RecipientField({
                 id={fieldId}
                 role="combobox"
                 aria-autocomplete="list"
-                aria-expanded={open}
-                aria-controls={open ? listId : undefined}
+                aria-expanded={listed}
+                aria-controls={listed ? listId : undefined}
                 aria-activedescendant={inForce === undefined ? undefined : `${listId}-${active?.toFixed(0) ?? ''}`}
                 value={written}
                 inputMode="email"
@@ -225,7 +227,7 @@ export function RecipientField({
 
             {open ? (
                 <div className="absolute inset-x-3.75 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line bg-panel py-1 shadow-overlay">
-                    {offered.length === 0 ? null : (
+                    {listed ? (
                         <ul
                             id={listId}
                             role="listbox"
@@ -243,7 +245,7 @@ export function RecipientField({
                                 />
                             ))}
                         </ul>
-                    )}
+                    ) : null}
 
                     {unsearchable ? (
                         <p aria-live="polite" className="px-3 py-1.75 text-sm text-muted">

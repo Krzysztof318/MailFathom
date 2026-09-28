@@ -872,7 +872,8 @@ export const pl: Catalogue = {
     'compose.copiesVisible':
         'Każdy odbiorca widzi adresy w polu DW. Aby ukryć odbiorców przed sobą nawzajem, użyj UDW.',
     'compose.suggestedRecipients': 'Proponowani odbiorcy: {header}',
-    'compose.contactsUnsearchable': 'Nie udało się teraz przeszukać kontaktów. Adres nadal możesz wpisać w całości.',
+    'compose.contactsUnsearchable':
+        'Nie udało się teraz przeszukać wszystkich kontaktów. Adres nadal możesz wpisać w całości.',
     'compose.removeRecipient': 'Usuń adres {address} z pola {header}',
     'compose.notAnAddress': 'To jeszcze nie jest adres. Adres wygląda tak: ktos@example.com.',
     'compose.alreadyAddressed': 'Adres {address} jest tu już wpisany.',
