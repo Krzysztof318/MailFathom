@@ -23,10 +23,11 @@ Some of the rules below are enforced by the build rather than by a reader. Those
 |---|---|
 | `.editorconfig` diagnostic severities, with `TreatWarningsAsErrors` | Formatting, unnecessary usings, accessibility modifiers, file-scoped namespaces, sealing internal types, disposal (`CA2000`), and the rest of the configured `CA`/`IDE` set |
 | `.config/BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`), which `backend/Directory.Build.props` includes as an additional file for every project here | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, the `System.Net.Mail` types, and the `HttpContent.ReadFromJsonAsync` overloads that deserialize through reflection |
+| `.config/BannedSymbols.Production.txt`, through the same analyzer, which `backend/Directory.Build.props` includes for every project but the unit, integration, and evaluation test projects and the benchmarks | `Guid.NewGuid`, because every identifier production code mints is a version 7 UUID under ADR 0036, while a test draws a fixture identifier however it likes |
 | `Microsoft.VisualStudio.Threading.Analyzers` | Blocking on tasks and other async hazards |
 | `Roslynator.*` and `xunit.analyzers` | General C# quality and xUnit usage |
 
-Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `.config/BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
+Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `.config/BannedSymbols.txt` when the rule is "never call this" anywhere, and in `.config/BannedSymbols.Production.txt` when tests may still call it. Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
 
 - Target .NET 10 and use idiomatic modern C# supported by the pinned SDK.
 - Enable nullable reference types, implicit usings, deterministic builds, .NET analyzers, and code-style enforcement during builds.

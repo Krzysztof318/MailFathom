@@ -1,6 +1,7 @@
 ; Symbols production code forbids and tests may still use, enforced by Microsoft.CodeAnalysis.BannedApiAnalyzers as
 ; RS0030. backend/Directory.Build.props adds this file to every project that is not a unit, integration, or evaluation
-; test project; BannedSymbols.txt beside it holds what no project may use. Format: {SymbolKind}:{DocumentationCommentId};{Message}.
+; test project or the benchmarks, all of which compile the shared test sources; BannedSymbols.txt beside it holds what
+; no project may use. Format: {SymbolKind}:{DocumentationCommentId};{Message}.
 
 ; Version 4 UUIDs. Every identifier MailFathom mints is a version 7 UUID, from the injected clock or the domain instant
 ; where the code holds one, and none of them is a secret; ADR 0036 records the rule. A test draws a fixture identifier

@@ -9,7 +9,7 @@ informed:
 
 # Mint every identifier MailFathom creates as a version 7 UUID in both stacks, never let an identifier stand in for a secret, and make the move forward-only
 
-<!-- describes: .config/BannedSymbols.Production.txt, backend/src/Application/Agent/Conversations/AgentConversationId.cs, backend/src/Application/Agent/Conversations/AgentMessageId.cs, backend/src/Application/Discovery/Streaming/DiscoveryRunId.cs, backend/src/Infrastructure/Secrets/Database/DatabaseSecretReference.cs, frontend/src/Client.App/src/agent/newIdentifier.ts -->
+<!-- describes: .config/BannedSymbols.Production.txt, backend/Directory.Build.props, backend/src/Application/Agent/Conversations/AgentConversationId.cs, backend/src/Application/Agent/Conversations/AgentMessageId.cs, backend/src/Application/Discovery/Streaming/DiscoveryRunId.cs, backend/src/Infrastructure/Secrets/Database/DatabaseSecretReference.cs, frontend/src/Client.App/src/agent/newIdentifier.ts -->
 
 ## Context and Problem Statement
 
@@ -22,8 +22,9 @@ existed was a habit with exceptions, and the author of a new type had nothing to
 The split is not cosmetic. A UUID that leads a B-tree key decides whether inserts land together or scatter across the
 index: version 4 is uniformly random, so every insert touches a different page, while version 7 carries a millisecond
 timestamp in its leading 48 bits, so inserts of the same period share pages. `agent_conversation_entries` is keyed by
-`(ConversationId, Sequence)` and allows 5000 entries per conversation, so a deployment holding hundreds of thousands of
-conversations reaches the order of 10⁹ rows — and a version 4 conversation identifier makes every append write to a
+`(ConversationId, Sequence)` and allows 50 000 entries per conversation — `AgentConversationBounds.MaximumRecordedEntries`,
+of which 5 000 are the visible history — so a deployment holding hundreds of thousands of conversations reaches the order
+of 10¹⁰ rows — and a version 4 conversation identifier makes every append write to a
 cold page of a multi-gigabyte index. `discovery_run_events`, keyed behind a version 4 `DiscoveryRunId`, has the same
 shape, and so does every other table one of the eleven keys.
 
@@ -152,8 +153,13 @@ of those is refused by the rule above rather than by the choice of version: such
 
 `.config/BannedSymbols.Production.txt` bans `System.Guid.NewGuid` through `Microsoft.CodeAnalysis.BannedApiAnalyzers`
 (RS0030) in every project `backend/Directory.Build.props` does not mark as a unit, integration, or evaluation test
-project, so a version 4 call in production code fails the build rather than waiting for review; a test still draws a
-fixture identifier however it likes. The client has no such analyzer, and `newIdentifier` is its one generator: its
+project and in every project but the benchmarks, so a version 4 call in production code fails the build rather than waiting for review; a test still draws a
+fixture identifier however it likes. The ban cannot see SQL: three migrations written before this rule mint rows with
+PostgreSQL's `gen_random_uuid()`, which is version 4 — the one user an upgrade from a release before users were recorded
+writes, the mail accounts carried into records of their own, and the portraits carried into stored files — and those
+rows keep their values like every other stored identifier. A migration written after this rule that mints a row in SQL
+writes a version 7 value rather than calling `gen_random_uuid()`, and review is what holds it to that. The client has no
+such analyzer, and `newIdentifier` is its one generator: its
 unit test asserts the timestamp, the version, and the variant bits. Review holds the rest — minting from the clock or
 instant the code holds, and no access decision resting on an identifier.
 

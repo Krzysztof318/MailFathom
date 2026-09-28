@@ -44,6 +44,7 @@
 # the repository has configured away — or, worse, pass while the repository's own gate does not.
 !/.editorconfig
 !/.config/BannedSymbols.txt
+!/.config/BannedSymbols.Production.txt
 
 # The project's own license and attribution. `Host` publishes both beside the assemblies and fails the publish when
 # either is absent, so an allow-list that forgot them would stop this build rather than quietly ship an image without

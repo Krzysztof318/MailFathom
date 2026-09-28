@@ -112,7 +112,7 @@
     <IsEvaluationProject Condition="'$(MSBuildProjectName)' == 'Evaluations'">true</IsEvaluationProject>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(IsUnitTestProject)' != 'true' And '$(IsIntegrationTestProject)' != 'true' And '$(IsEvaluationProject)' != 'true'">
+  <ItemGroup Condition="'$(IsUnitTestProject)' != 'true' And '$(IsIntegrationTestProject)' != 'true' And '$(IsEvaluationProject)' != 'true' And '$(MSBuildProjectName)' != 'Benchmarks'">
     <AdditionalFiles Include="$(RepositoryRoot).config/BannedSymbols.Production.txt" />
   </ItemGroup>
 
