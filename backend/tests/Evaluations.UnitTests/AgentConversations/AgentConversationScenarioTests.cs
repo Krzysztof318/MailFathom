@@ -148,13 +148,18 @@ public sealed class AgentConversationScenarioTests : IDisposable
         Assert.Equal(expected, verdict.Get<BooleanMetric>(AgentConversationScenario.CarriesEvidenceMetricName).Value);
     }
 
-    [Fact]
-    public async Task RunAsync_AQuotationBoldedInPart_StillCarriesTheEvidenceAsWritten()
+    [Theory]
+    [InlineData("**buffer**")]
+    [InlineData("__buffer__")]
+    [InlineData("*buffer*")]
+    [InlineData("_buffer_")]
+    [InlineData("`buffer`")]
+    public async Task RunAsync_AQuotationEmphasizedInPart_StillCarriesTheEvidenceAsWritten(string emphasized)
     {
         // Arrange
         using var model = new ScriptedAgentChatClient(
             [Search("LumenDesk export error")],
-            "Komunikat brzmiał: „The export exceeded the permitted **buffer** size”.");
+            $"Komunikat brzmiał: „The export exceeded the permitted {emphasized} size”.");
 
         // Act
         var verdict = await this.RunAsync(Quoting, model);
@@ -165,6 +170,9 @@ public sealed class AgentConversationScenarioTests : IDisposable
 
     [Theory]
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size”.\n\n- **eksport** przerwano\n- `bufor` jest pełny", true)]
+    [InlineData("Eksport\n=======\n\nKomunikat brzmiał: „The export exceeded the permitted buffer size”.", false)]
+    [InlineData("Eksport\n---\n\nKomunikat brzmiał: „The export exceeded the permitted buffer size”.", false)]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size”.\n\n---\n\n- eksport przerwano", true)]
     [InlineData("## Eksport\n\nKomunikat brzmiał: „The export exceeded the permitted buffer size”.", false)]
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — [szczegóły](https://example.test/log).", false)]
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — <https://example.test/log>.", false)]

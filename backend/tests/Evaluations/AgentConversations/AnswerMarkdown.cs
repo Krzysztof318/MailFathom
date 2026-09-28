@@ -36,10 +36,17 @@ internal static partial class AnswerMarkdown
 
     /// <summary>Gets the answer's words as the client draws them, without the markers that only emphasize them.</summary>
     /// <param name="answer">What the Agent answered.</param>
-    /// <returns>The answer with bold and inline-code markers removed.</returns>
-    public static string AsRead(string answer) => answer.Replace("**", string.Empty, StringComparison.Ordinal).Replace("`", string.Empty, StringComparison.Ordinal);
+    /// <returns>The answer with its emphasis and inline-code markers removed.</returns>
+    public static string AsRead(string answer) => EmphasisMarker().Replace(answer, string.Empty);
 
-    [GeneratedRegex(@"^ {0,3}#{1,6}\s", RegexOptions.Multiline)]
+    // An emphasis run opens or closes at a word's edge, so an underscore or asterisk inside a word, as in an
+    // identifier, is left where it is.
+    [GeneratedRegex(@"`+|(?<![\p{L}\p{N}])[*_]+|[*_]+(?![\p{L}\p{N}])")]
+    private static partial Regex EmphasisMarker();
+
+    // An ATX heading, and a Setext one: a line of text underlined with `=` or with two or more `-`. A single `-`
+    // under a line would open a list, and a line of dashes after a blank line is a separator rather than a heading.
+    [GeneratedRegex(@"^ {0,3}#{1,6}\s|^(?! {0,3}([-*+>|]|\d+[.)])\s)[^\n]*\S[^\n]*\r?\n {0,3}(=+|-{2,})[ \t]*\r?$", RegexOptions.Multiline)]
     private static partial Regex Heading();
 
     [GeneratedRegex(@"!\[[^\]]*\]\(")]
