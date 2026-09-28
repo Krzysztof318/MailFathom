@@ -178,11 +178,27 @@ test('writes the answer to a proposal into the conversation, and refuses a secon
 
     const answered = ask(deployment, 'PUT', `${conversation}/proposals/6`, { decision: 'declined' });
 
-    expect(answered).toStrictEqual({ sequence: 11 });
-    expect(ask(deployment, 'GET', `${conversation}?since=10`)).toMatchObject({
-        entries: [{ sequence: 11, entry: { entry: 'resolution', proposedAt: 6, state: 'Declined' } }],
+    expect(answered).toStrictEqual({ sequence: 12 });
+    expect(ask(deployment, 'GET', `${conversation}?since=11`)).toMatchObject({
+        entries: [{ sequence: 12, entry: { entry: 'resolution', proposedAt: 6, state: 'Declined' } }],
     });
     expect(ask(deployment, 'PUT', `${conversation}/proposals/6`, { decision: 'accepted' })).toBe(409);
+});
+
+test('opens a conversation started here on the question it was asked, with nothing in it decided yet', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const conversation = '/agent/conversations/0198f4a1-0000-7000-8000-00000000b001';
+    const scope = { kind: 'DiscoveryRun', subject: discovery.runId };
+
+    ask(deployment, 'POST', `${conversation}/messages`, { messageId: agent.answeredQuestionId, text: 'Bays?', scope });
+
+    const read = ask(deployment, 'GET', conversation) as { entries: { entry: Record<string, unknown> }[] };
+
+    expect(read.entries[0]?.entry).toMatchObject({ entry: 'message', text: 'Bays?', scope });
+    expect(read.entries.filter(({ entry }) => entry['entry'] === 'resolution')).toStrictEqual([]);
+    expect(ask(deployment, 'PUT', `${conversation}/proposals/7`, { decision: 'declined' })).toStrictEqual({
+        sequence: read.entries.length + 1,
+    });
 });
 
 test('keeps what each request carried, and names the ones it has no answer for', () => {

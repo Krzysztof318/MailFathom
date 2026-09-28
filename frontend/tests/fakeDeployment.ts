@@ -88,6 +88,10 @@ interface Conversation {
     readonly startedAt: string;
     archived: boolean;
     readonly reads: 'answered' | 'composing';
+
+    /** What a conversation started here was asked, and `null` for one the corpus states. */
+    readonly asked: { readonly text: unknown; readonly scope: unknown } | null;
+
     readonly added: { sequence: number; entry: Readonly<Record<string, unknown>> }[];
     readsTaken: number;
     readonly startsRunning: boolean;
@@ -475,6 +479,7 @@ export class FakeDeployment {
                     startedAt: new Date().toISOString(),
                     archived: false,
                     reads: 'answered',
+                    asked: { text, scope: recordIn(body)?.['scope'] ?? null },
                     added: [],
                     readsTaken: 0,
                     startsRunning: this.takeRunning(),
@@ -548,15 +553,42 @@ export class FakeDeployment {
     private conversationRead(conversation: Conversation, since: number) {
         const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
         const running = conversation.startsRunning && conversation.readsTaken === 0;
-        const entries = running ? base.entries.slice(0, composingEntriesShown) : base.entries;
+        const written = this.written(conversation);
+        const entries = running ? written.slice(0, composingEntriesShown) : [...written, ...conversation.added];
 
         conversation.readsTaken += 1;
 
         return {
             ...base,
             composing: (running || base.composing) && !conversation.stopped,
-            entries: [...entries, ...conversation.added].filter((entry) => entry.sequence > since),
+            entries: entries.filter((entry) => entry.sequence > since),
         };
+    }
+
+    /**
+     * What the corpus conversation a conversation reads as was written as, before anything was added to it here.
+     *
+     * One started here opens with the question it was actually asked, under the scope it was asked in, and nothing in
+     * its answer has been decided yet — so the corpus's own resolutions stay with the corpus's own conversation, and
+     * every proposal in a new one waits on the person who asked.
+     */
+    private written(
+        conversation: Conversation,
+    ): readonly { sequence: number; entry: Readonly<Record<string, unknown>> }[] {
+        const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
+        const { asked } = conversation;
+
+        if (asked === null) {
+            return base.entries;
+        }
+
+        return base.entries
+            .filter(({ entry }) => entry.entry !== 'resolution')
+            .map((held) =>
+                held.entry.entry === 'message'
+                    ? { ...held, entry: { ...held.entry, text: asked.text, scope: asked.scope } }
+                    : held,
+            );
     }
 
     /**
@@ -566,11 +598,7 @@ export class FakeDeployment {
      * `404` — the two answers the client reads as the card having moved on under it.
      */
     private proposalAnswered(conversation: Conversation, proposedAt: number, decision: unknown): FakeAnswer {
-        const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
-        const entries: readonly { sequence: number; entry: Readonly<Record<string, unknown>> }[] = [
-            ...base.entries,
-            ...conversation.added,
-        ];
+        const entries = [...this.written(conversation), ...conversation.added];
         const proposal = entries.find((held) => held.sequence === proposedAt && held.entry['entry'] === 'proposal');
 
         if (proposal === undefined || (decision !== 'accepted' && decision !== 'declined')) {
@@ -592,11 +620,10 @@ export class FakeDeployment {
 
     /** Adds an entry after everything the conversation holds, and says where it went. */
     private append(conversation: Conversation, entry: Readonly<Record<string, unknown>>): number {
-        const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
         const sequence =
             Math.max(
                 0,
-                ...base.entries.map((held) => held.sequence),
+                ...this.written(conversation).map((held) => held.sequence),
                 ...conversation.added.map((held) => held.sequence),
             ) + 1;
 
@@ -613,6 +640,7 @@ export class FakeDeployment {
             startedAt: listed?.startedAt ?? '',
             archived: listed?.archived ?? false,
             reads,
+            asked: null,
             added: [],
             readsTaken: 0,
             startsRunning: false,
