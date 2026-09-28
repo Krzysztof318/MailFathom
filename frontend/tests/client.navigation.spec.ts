@@ -53,7 +53,9 @@ test('moves back and forward through its own spaces without leaving the applicat
     await expect(page.getByRole('main', { name: 'Mail' })).toBeVisible();
 });
 
-test('carries the question and the scope it is asked under from one space to the next', async ({ page }) => {
+// Discover's question is the only field that asks one, so what is carried is the sentence and its scope surviving a
+// visit elsewhere — and what is proven beside it is that the space visited drew no field of its own to type it into.
+test('keeps the question and the scope it is asked under across a visit to another space', async ({ page }) => {
     await openSignedIn(page);
 
     const question = page.getByRole('searchbox', { name: 'Ask your mail' });
@@ -62,6 +64,9 @@ test('carries the question and the scope it is asked under from one space to the
 
     await page.getByRole('link', { name: 'Cases' }).click();
     await expect(page.getByRole('heading', { name: 'Cases', level: 1 })).toBeVisible();
+    await expect(question).toBeHidden();
+
+    await page.getByRole('link', { name: 'Discover' }).click();
 
     await expect(question).toHaveValue('the renewal Nordwind sent');
     await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toHaveValue('account:work');

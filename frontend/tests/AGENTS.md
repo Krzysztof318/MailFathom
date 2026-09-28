@@ -42,8 +42,8 @@ question is answered again rather than reworded.
   is the same judgement the root instructions ask of a directory rather than a line count: a file stops being one thing
   when its `describe` blocks no longer read as one subject.
 - **The browser suite is split the same way**, into `client.<concern>.spec.ts` files over one `client.harness.ts`:
-  sign-in, navigation, layout, settings, language, message security, attachments, the list window, failure, motion, and
-  what the build publishes. It was one file of eighteen hundred lines holding all of them, which is the condition above.
+  sign-in, navigation, layout, settings, language, message security, attachments, the list window, the field under an
+  open message, failure, motion, and what the build publishes. It was one file of eighteen hundred lines holding all of them, which is the condition above.
   A new check goes into the file whose concern it exercises, and a concern none of them names is a file of its own.
 - **A harness is a module and not a suite.** It exports the doubles, the render, and the helpers, and it carries no
   `describe` and no `it` — the hooks a family shares are exported as one function each file calls at its top level, so
