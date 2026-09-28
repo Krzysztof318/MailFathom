@@ -161,19 +161,16 @@ export class FakeDeployment {
         // A pattern rather than a predicate, because Playwright matches a pattern in the browser's driver and a predicate
         // in this process: a predicate would route every request the page makes — each file of the bundle among them —
         // through the runner to be asked about, and under a loaded machine that is most of a check's time.
-        await target.route(
-            servedRoutes,
-            async (route) => {
-                const request = route.request();
-                const answer = this.answer({ method: request.method(), url: request.url(), body: request.postData() });
+        await target.route(servedRoutes, async (route) => {
+            const request = route.request();
+            const answer = this.answer({ method: request.method(), url: request.url(), body: request.postData() });
 
-                await route.fulfill({
-                    status: answer.status,
-                    body: answer.body,
-                    ...(answer.contentType === undefined ? {} : { contentType: answer.contentType }),
-                });
-            },
-        );
+            await route.fulfill({
+                status: answer.status,
+                body: answer.body,
+                ...(answer.contentType === undefined ? {} : { contentType: answer.contentType }),
+            });
+        });
     }
 
     /** The requests the page issued with this method to this route, in the order it issued them. */
@@ -596,7 +593,12 @@ export class FakeDeployment {
     /** Adds an entry after everything the conversation holds, and says where it went. */
     private append(conversation: Conversation, entry: Readonly<Record<string, unknown>>): number {
         const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
-        const sequence = Math.max(0, ...base.entries.map((held) => held.sequence), ...conversation.added.map((held) => held.sequence)) + 1;
+        const sequence =
+            Math.max(
+                0,
+                ...base.entries.map((held) => held.sequence),
+                ...conversation.added.map((held) => held.sequence),
+            ) + 1;
 
         conversation.added.push({ sequence, entry });
 
@@ -717,7 +719,10 @@ export class FakeDeployment {
         while (emails.length < mail.rowsPerPage && position > 0) {
             const from = Math.max(position - mail.rowsPerPage, 0);
 
-            for (const generated of mail.timelinePage(from).emails.slice(0, position - from).reverse()) {
+            for (const generated of mail
+                .timelinePage(from)
+                .emails.slice(0, position - from)
+                .reverse()) {
                 position -= 1;
 
                 const row = this.shaped(generated);
@@ -804,7 +809,9 @@ export class FakeDeployment {
     }
 
     private moved(body: unknown) {
-        const aliases = new Set(deployment.mailFolders.accounts.flatMap(({ folders }) => folders.map(({ alias }) => alias)));
+        const aliases = new Set(
+            deployment.mailFolders.accounts.flatMap(({ folders }) => folders.map(({ alias }) => alias)),
+        );
 
         return listIn(body, 'moves').map((move) => {
             const storedEmailId = String(move['storedEmailId']);

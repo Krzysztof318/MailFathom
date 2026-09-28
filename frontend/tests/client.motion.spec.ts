@@ -51,7 +51,10 @@ test('moves the notification centre onto the screen over a duration of its own',
     expect(await motionDurations(page)).not.toEqual(['0s']);
 });
 
-test('takes that motion away for a reader who asked for less of it, rather than shortening it', async ({ browser, deployment }) => {
+test('takes that motion away for a reader who asked for less of it, rather than shortening it', async ({
+    browser,
+    deployment,
+}) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
 
     await deployment.serve(context);

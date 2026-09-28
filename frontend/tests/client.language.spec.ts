@@ -61,7 +61,10 @@ test('opens in Polish on a machine that prefers Polish, with nothing configured'
     await expect(page.getByRole('button', { name: 'Connect' })).toHaveCount(0);
 });
 
-test('opens in English on a machine preferring a language the client does not carry', async ({ browser, deployment }) => {
+test('opens in English on a machine preferring a language the client does not carry', async ({
+    browser,
+    deployment,
+}) => {
     const page = await openedPreferring(browser, deployment, ['de-DE', 'fr-FR']);
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');

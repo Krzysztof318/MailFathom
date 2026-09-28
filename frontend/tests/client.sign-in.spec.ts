@@ -138,7 +138,6 @@ test('reads a refused password itself rather than letting the browser ask for on
     // carried it is a request the browser would have prompted for.
     await context.addCookies([{ name: 'mailfathom-probe', value: 'set', url: baseURL }]);
 
-
     // The deployment refuses the password and challenges as MailFathom does wherever it accepts one — Basic named
     // first, which is what tells the client a password may be sent at all and what separates this refusal from a
     // deployment offering no password method.

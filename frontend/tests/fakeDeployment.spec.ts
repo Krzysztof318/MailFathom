@@ -135,7 +135,12 @@ test('pages the folder on from where the last page ended, and back from where it
 
 test('keeps a draft across saves as a revision each time, and forgets it once it is sent', () => {
     const deployment = new FakeDeployment('0.0.0');
-    const composition = { account: 'work', subject: 'The yard', plainTextBody: 'Tuesday?', to: ['yard@example.invalid'] };
+    const composition = {
+        account: 'work',
+        subject: 'The yard',
+        plainTextBody: 'Tuesday?',
+        to: ['yard@example.invalid'],
+    };
 
     const written = ask(deployment, 'POST', '/drafts', composition) as { draft: { draftId: string; revision: number } };
     const { draftId } = written.draft;
