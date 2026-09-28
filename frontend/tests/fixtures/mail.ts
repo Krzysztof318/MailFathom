@@ -416,6 +416,9 @@ export const conversation = {
     pageSize: 25,
 };
 
+/** That this deployment reads a typed sentence into filters at all, which is what the search field asks before offering it. */
+export const readsPhrases = { readsPhrases: true };
+
 /**
  * What a typed sentence is read as, which is one interpretation rather than a reading of whatever was typed.
  *

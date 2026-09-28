@@ -367,8 +367,9 @@ reporting the English a missing locale would produce.
 
 `tests/fixtures/` beside the other three is one corpus of example mail — the session, the accounts and folders, the mail, the
 conversations, the drafts, the notifications, and what a change answers with — imported by whatever needs a populated
-screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite reaches
-it with `page.route`, a unit test hands it to a transport function, and the development server below answers from it.
+screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite answers
+the client out of it through `tests/fakeDeployment.ts`, a deployment that applies what the client writes so a later read
+reflects it, a unit test hands it to a transport function, and the development server below answers from it.
 
 ## Looking at a screen with mail in it, with nothing behind the client
 
