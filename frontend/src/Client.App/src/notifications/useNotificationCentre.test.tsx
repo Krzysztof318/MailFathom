@@ -833,6 +833,40 @@ describe('useNotificationCentre', () => {
         expect(result.current.shown).toBe(false);
     });
 
+    it('announces nothing of the next person’s centre for a rise the previous person’s count measured', async () => {
+        let counting: ((answered: Answer) => void) | null = null;
+        let holdsTheCount = false;
+
+        const transport: MailFathomTransport = (request) => {
+            if (request.path.endsWith('/unread-count')) {
+                return holdsTheCount
+                    ? new Promise<Answer>((resolve) => {
+                          counting = resolve;
+                      })
+                    : answer(JSON.stringify({ unreadCount: 1 }));
+            }
+
+            return answer(JSON.stringify({ notifications: [mail], nextCursor: null }));
+        };
+
+        const { result, signInAsSomebodyElse } = centreOf(transport);
+
+        await settled();
+        holdsTheCount = true;
+        await polled();
+
+        // The previous person's count rising and somebody else signing in, committed together as one render.
+        await act(async () => {
+            counting?.({ status: 200, headers: {}, body: JSON.stringify({ unreadCount: 2 }) });
+            await vi.advanceTimersByTimeAsync(0);
+            signInAsSomebodyElse();
+        });
+        await settled();
+
+        expect(result.current.arrived.size).toBe(0);
+        expect(screen.queryByText('Ada Lovelace wrote')).toBeNull();
+    });
+
     // A read is cancelled by the controller its effect owns; a write cannot be, so what it does when it lands is the
     // only guard there is. Both markings are asserted rather than one, because each has a continuation of its own.
     it.each([

@@ -96,7 +96,7 @@ interface Seen {
     readonly ids: ReadonlySet<string>;
 }
 
-/** What the last count answered, and whose it was. */
+/** A count of unread notifications, and whose it was. */
 interface Counted {
     readonly session: ClientSession;
     readonly count: number;
@@ -140,7 +140,7 @@ export function useNotificationCentre(
     // How far the count rose since the page was last asked for, handed from the count that saw it to the read it asks
     // for. It is what an arrival is measured by where this client has drawn no page to compare against — which is every
     // session until somebody opens the panel — and it is a ref for the reason the flag above is.
-    const risen = useRef(0);
+    const risen = useRef<Counted | null>(null);
 
     // What has already been drawn or announced, so an arrival is a notification this client has not seen rather than
     // one it has stopped showing. A ref because nothing on the screen is drawn from it, and it must not restart the
@@ -154,7 +154,7 @@ export function useNotificationCentre(
     // Everything held belongs to the credential that read it, so a sign-out and a sign-in as somebody else start from
     // nothing rather than showing the previous person's centre until the first read lands. It is adjusted while
     // rendering rather than from an effect, because a screen drawn once from the previous person's centre is the whole
-    // of what this prevents — and the two refs carry whose they are for the same reason, which is what makes them
+    // of what this prevents — and the refs above carry whose they are for the same reason, which is what makes them
     // nothing to reset.
     const [credential, setCredential] = useState(session);
 
@@ -210,7 +210,9 @@ export function useNotificationCentre(
             // Only a rise asks for the page. A count that fell is this client's own marking landing, and a count that
             // did not move is the ordinary poll — neither is anything a reader has to be told about.
             if (rose && asksForThePage) {
-                risen.current += rise;
+                const alreadyRisen = risen.current?.session === session ? risen.current.count : 0;
+
+                risen.current = { session, count: alreadyRisen + rise };
                 setAsked((token) => token + 1);
             }
         }
@@ -381,8 +383,8 @@ export function useNotificationCentre(
         const keepsWhatStands = quietly.current;
         quietly.current = false;
 
-        const risenBy = risen.current;
-        risen.current = 0;
+        const risenBy = risen.current?.session === session ? risen.current.count : 0;
+        risen.current = null;
 
         setReading(known.current?.session !== session);
 
