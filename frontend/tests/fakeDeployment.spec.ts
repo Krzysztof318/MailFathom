@@ -196,7 +196,9 @@ test('opens a conversation started here on the question it was asked, with nothi
 
     expect(read.entries[0]?.entry).toMatchObject({ entry: 'message', text: 'Bays?', scope });
     expect(read.entries.filter(({ entry }) => entry['entry'] === 'resolution')).toStrictEqual([]);
-    expect(ask(deployment, 'PUT', `${conversation}/proposals/7`, { decision: 'declined' })).toHaveProperty('sequence');
+    expect(ask(deployment, 'PUT', `${conversation}/proposals/7`, { decision: 'declined' })).toStrictEqual({
+        sequence: read.entries.length + 1,
+    });
 });
 
 test('keeps what each request carried, and names the ones it has no answer for', () => {

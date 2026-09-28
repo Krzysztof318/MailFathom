@@ -620,11 +620,10 @@ export class FakeDeployment {
 
     /** Adds an entry after everything the conversation holds, and says where it went. */
     private append(conversation: Conversation, entry: Readonly<Record<string, unknown>>): number {
-        const base = conversation.reads === 'composing' ? agent.composingConversation : agent.answeredConversation;
         const sequence =
             Math.max(
                 0,
-                ...base.entries.map((held) => held.sequence),
+                ...this.written(conversation).map((held) => held.sequence),
                 ...conversation.added.map((held) => held.sequence),
             ) + 1;
 
