@@ -917,7 +917,7 @@
                 <sc-for list="{{ stateChips }}" as="sc" hint-placeholder-count="3">
                   <div style="{{ sc.style }}">
                     <div style="font-size:9.5px;letter-spacing:0.06em;color:var(--muted)">{{ sc.label }}</div>
-                    <div style="font-size:12.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sc.value }}</div>
+                    <div style="{{ sc.valueStyle }}">{{ sc.value }}</div>
                   </div>
                 </sc-for>
               </div>
@@ -952,6 +952,19 @@
                   </div>
                   <sc-if value="{{ m.open }}" hint-placeholder-val="{{ true }}">
                     <div style="{{ m.bodyPadStyle }}">
+                      <sc-if value="{{ m.remoteBlocked }}" hint-placeholder-val="{{ false }}">
+                        <div style="{{ m.remoteBoxStyle }}">
+                          <div style="font-size:14px;line-height:1.5;color:var(--text);text-wrap:pretty">This message asked to fetch content from another server. That was removed, so opening it told the sender nothing.</div>
+                          <div style="font-size:13px;color:var(--muted)">{{ m.remoteCountLabel }}</div>
+                          <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Loading them tells the sender that this message was opened. This choice applies to this message only and is not remembered anywhere.</div>
+                          <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <div onClick="{{ m.loadRemote }}" style="{{ m.remoteBtnStyle }}" style-hover="opacity:0.88;cursor:pointer">Load images from the sender</div>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ m.remoteLoaded }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">image</span><span>Images from the sender are loaded for this message.</span></div>
+                      </sc-if>
                       <sc-if value="{{ m.simpleView }}" hint-placeholder-val="{{ true }}">
                         <sc-for list="{{ m.paras }}" as="p" hint-placeholder-count="2">
                           <sc-if value="{{ p.isText }}" hint-placeholder-val="{{ true }}">
@@ -3369,6 +3382,7 @@ const THREADS = [
       { label: "AGREED", value: "SLA 2 h · price +8% from 2027" },
       { label: "OPEN QUESTION", value: "Upper cap on CPI indexation" },
       { label: "COMMITMENT", value: "Decision on our side by 28.08" },
+      { label: "VERSION DIFFERENCE", value: "The revised addendum of 25.08 no longer carries the 5% indexation cap that the first draft of 18.08 still had." },
     ],
     body: [
       { md: `Hello, here is **addendum no. 3** in the version for signature. Compared with the 2021 master agreement, the service level and the fee change.
@@ -3403,7 +3417,7 @@ After 28 August we send the document for signature as it stands. Full text: [SLA
     attachments: [ { type: "PDF", name: "INV_08_2026.pdf", size: "96 kB" } ] },
   { id: "piotr", from: "Piotr Zieliński", org: "", time: "yest.", subject: "Re: rollout schedule", ai: "Confirmed phase two",
     meta: "p.zielinski@company.example · yesterday 16:41 · thread: 5 messages",
-    state: [ { label: "AGREED", value: "Phase two confirmed" }, { label: "OPEN QUESTION", value: "UAT test dates" }, { label: "COMMITMENT", value: "Piotr will prepare the test plan" } ],
+    state: [ { label: "AGREED", value: "Phase two confirmed" }, { label: "OPEN QUESTION", value: "UAT test dates" }, { label: "COMMITMENT", value: "Piotr will prepare the test plan" }, { label: "VERSION DIFFERENCE", value: "The corrected schedule of 21.08 closes phase two at 41 of 58 tasks instead of the earlier “all tasks done”." } ],
     body: [
       { text: "Confirming that phase two is closed — the Exchange integration is ready for acceptance, we closed 41 of 58 tasks." },
       { text: "Two tasks remain blocked on the Graph API side, but they do not affect acceptance. No critical bugs open." },
@@ -4967,7 +4981,7 @@ const AGENT_FALLBACK = {
 
 const AGENT_DRAFT_HTML = '<div id="ai-draft-block" style="border-left:3px solid var(--accent);padding-left:14px;margin-left:-14px"><p style="margin:0 0 12px 0">Hello,</p><p style="margin:0 0 12px 0">thank you for the addendum. We accept shortening the response time for critical incidents to 2 hours on business days.</p><p style="margin:0 0 12px 0">At the same time we ask for an upper cap on CPI indexation of 5% per year. At the 4.1% forecast this gives both sides a predictable cost through 2027.</p><p style="margin:0">If the cap is acceptable, we are ready to close the decision by 28 August.</p></div><p style="margin:12px 0 0 0">Best regards,<br />Karolina Kowalska</p>';
 
-const STATE_SRC = { contoso: [5, 4, 5] };
+const STATE_SRC = { contoso: [5, 4, 5, 3] };
 
 /* MESSAGE ADDRESS HEADERS — in a real mailbox these come from the server (From / Reply-To / To / Cc).
    Here addresses are derived from the contact book, while Reply-To and CC are thread data, because only
@@ -5756,12 +5770,13 @@ class Component extends DCLogic {
     .trim();
 
   aiSumCards = (th) => {
-    const HEAD = { AGREED: "WHAT IS SETTLED", "OPEN QUESTION": "WHAT IS STILL OPEN", COMMITMENT: "WHAT IS THE COMMITMENT", DEADLINE: "WHAT THE DEADLINE IS" };
+    const HEAD = { AGREED: "WHAT IS SETTLED", "OPEN QUESTION": "WHAT IS STILL OPEN", COMMITMENT: "WHAT IS THE COMMITMENT", DEADLINE: "WHAT THE DEADLINE IS", "VERSION DIFFERENCE": "WHAT CHANGED BETWEEN VERSIONS" };
     const WHY = {
       AGREED: "The message puts this forward as settled, and nothing later in it walks the point back.",
       "OPEN QUESTION": "The message raises this and never answers it, so it stays open on our side.",
       COMMITMENT: "The message names both the action and the side that owes it.",
       DEADLINE: "The message gives the date outright rather than leaving it to be worked out.",
+      "VERSION DIFFERENCE": "A later message corrects an earlier one, and the newer wording is the one that holds.",
     };
     const msgs = (th.body || []).map(b => this.mdPlain(b.md || b.text));
     const last = Math.max(0, msgs.length - 1);
@@ -7193,8 +7208,17 @@ class Component extends DCLogic {
       const open = true;
       const flash = st.msgFlash === k;
       const isActive = i === activeIdx && msgs.length > 1 && !hiddenCount;
+      const remoteRefs = m.remoteRefs != null ? m.remoteRefs
+        : m.mine ? 0 : (((m.from || "") + (m.when || "")).split("").reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 3 === 0 ? 0 : 3 + (((m.from || "").length * 7 + (m.when || "").length) % 16));
+      const remoteOn = !!(st.remoteLoaded || {})[k];
       items.push({
         isMsg: true, isPill: false, key: k, isActive,
+        remoteBlocked: remoteRefs > 0 && !remoteOn,
+        remoteLoaded: remoteRefs > 0 && remoteOn,
+        remoteCountLabel: "Removed references: " + remoteRefs,
+        loadRemote: () => this.setState(s2 => ({ remoteLoaded: Object.assign({}, s2.remoteLoaded, { [k]: true }) })),
+        remoteBoxStyle: "display:flex;flex-direction:column;gap:9px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:" + (touch ? "14px 15px" : "13px 16px"),
+        remoteBtnStyle: "font-size:" + (touch ? 14 : 13) + "px;font-weight:600;color:var(--onaccent);background:var(--accent);border-radius:7px;" + (touch ? "padding:11px 16px;min-height:44px;box-sizing:border-box;display:flex;align-items:center" : "padding:7px 14px"),
         from: m.from, initials: m.initials, when: m.when,
         hasAvatar: !!avatarOf(m.from), noAvatar: !avatarOf(m.from),
         avatarImgStyle: "width:30px;height:30px;flex:0 0 30px;border-radius:50%;background-color:var(--border2);background-position:center;background-size:cover;background-repeat:no-repeat;background-image:url(" + avatarOf(m.from) + ")",
@@ -9189,11 +9213,17 @@ class Component extends DCLogic {
       threadStateStyle: singlePane
         ? "flex:0 0 auto;display:flex;align-items:center;gap:9px;background:var(--sub);border-bottom:1px solid var(--line);padding:9px 12px"
         : "display:flex;flex-direction:column;gap:6px;background:var(--sub);border-bottom:1px solid var(--line);padding:9px 22px",
-      stateRowStyle: isMobile ? "display:flex;flex-direction:column;gap:6px;padding-top:1px" : "display:flex;gap:8px;flex-wrap:wrap",
-      stateBodyRowStyle: "flex:0 0 auto;display:flex;gap:7px;flex-wrap:wrap;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px",
+      stateRowStyle: isMobile ? "display:flex;flex-direction:column;gap:6px;padding-top:1px"
+        : thread.state.length >= 4 ? "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px" : "display:flex;gap:8px;flex-wrap:wrap",
+      stateBodyRowStyle: thread.state.length >= 4
+        ? "flex:0 0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px"
+        : "flex:0 0 auto;display:flex;gap:7px;flex-wrap:wrap;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px",
       stateChips: thread.state.map(st2 => ({
         label: st2.label,
         value: st2.value,
+        valueStyle: thread.state.length >= 4
+          ? "font-size:12.5px;line-height:1.35;text-wrap:pretty"
+          : "font-size:12.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
         style: "flex:1 1 190px;min-width:0;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 9px",
       })),
       isMobileState: singlePane,
