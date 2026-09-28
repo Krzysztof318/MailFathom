@@ -101,8 +101,16 @@ function Reporting({ onWorkspace }: { readonly onWorkspace: (workspace: Workspac
     return null;
 }
 
-function Frame({ transport }: { readonly transport: MailFathomTransport }) {
-    const drafting = useReplyDraftingState(session, transport);
+const signedInAs = 'https://mail.example.invalid\nagata';
+
+function Frame({
+    presented,
+    transport,
+}: {
+    readonly presented: ClientSession;
+    readonly transport: MailFathomTransport;
+}) {
+    const drafting = useReplyDraftingState(signedInAs, presented, transport);
 
     return (
         <ReplyDraftingContext value={drafting}>
@@ -120,11 +128,12 @@ function drawing(
     composed: ReturnType<typeof vi.fn<(opening: ComposerOpening) => void>>;
     workspace: () => Workspace;
     opening: (selection: string) => void;
+    renewing: () => void;
 } {
     const composed = vi.fn<(opening: ComposerOpening) => void>();
     let last: Workspace | null = null;
 
-    const tree = (standing: Partial<Workspace>) => (
+    const tree = (standing: Partial<Workspace>, presented: ClientSession = session) => (
         <LocalizationProvider>
             <ToastsProvider>
                 <WorkspaceProvider>
@@ -132,7 +141,7 @@ function drawing(
                         value={{ offered, drafts: true, opening: null, compose: composed, close: () => undefined }}
                     >
                         <Standing as={standing} />
-                        <Frame transport={transport} />
+                        <Frame presented={presented} transport={transport} />
                         <Reporting
                             onWorkspace={(workspace) => {
                                 last = workspace;
@@ -150,6 +159,11 @@ function drawing(
         composed,
         opening: (selection) => {
             rerender(tree({ selection }));
+        },
+        // A renewal replaces the credential an hour before it expires, and the frame builds a new session object
+        // for it, with nobody having signed out or in.
+        renewing: () => {
+            rerender(tree({ selection: answering, ...as }, { ...session, authorization: 'Bearer renewed' }));
         },
         workspace: () => {
             if (last === null) {
@@ -337,6 +351,20 @@ describe('ReplyDraftCard', () => {
         opening(another);
 
         expect(screen.queryByRole('region', { name: 'Draft · local' })).toBeNull();
+    });
+
+    it('keeps the draft through a renewal of the credential, which signs nobody out', async () => {
+        const { renewing } = drawing(answeringDrafts().transport);
+
+        draftingAReply();
+        const card = await screen.findByRole('region', { name: 'Draft · local' });
+        await waitFor(() => {
+            expect(card.textContent).toContain(draftedWords);
+        });
+
+        renewing();
+
+        expect(screen.getByRole('region', { name: 'Draft · local' }).textContent).toContain(draftedWords);
     });
 
     it('says why nothing was drafted where the allowance is spent, and draws no card', async () => {
