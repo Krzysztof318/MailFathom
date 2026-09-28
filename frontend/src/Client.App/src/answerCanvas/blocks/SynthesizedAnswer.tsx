@@ -6,6 +6,7 @@ import type { AnswerBlock } from '@mailfathom/client-backend';
 import { Icon } from '../../controls/Icon';
 import { useLocalization } from '../../localization/useLocalization';
 import { AnswerBlockCard, UnrecognisedAnswerBlock } from '../AnswerBlockCard';
+import { AnswerText } from './AnswerText';
 import { Citation } from './Citation';
 import { citationCounts, confidenceBands, supportVerdicts } from './blockWording';
 
@@ -54,15 +55,15 @@ export function SynthesizedAnswer({ block }: { readonly block: AnswerBlock }) {
                 </span>
             </div>
 
-            <p className="text-base leading-relaxed text-pretty">
-                {answer.text}
+            <div className="text-base leading-relaxed text-pretty [&>p:has(+span)]:inline">
+                <AnswerText text={answer.text} />
 
                 {evidence.citations.map((source, at) => (
                     <span className="ms-1 inline-flex" key={source}>
                         <Citation position={at + 1} source={source} />
                     </span>
                 ))}
-            </p>
+            </div>
 
             <p className="text-sm text-muted text-pretty">{translate(verdict.note)}</p>
 
