@@ -16,8 +16,9 @@ namespace MailFathom.Application.Access.Organizations;
 /// password is typed as — a short name every member's at once — which is a decision about how people sign in.
 /// </para>
 /// <para>
-/// The identifier is a version 4 value for the reason a user's is: it reaches administrative listings, and a time-ordered
-/// one would publish when each company was added and in what order.
+/// The identifier is a version 7 value minted from the instant the organization is recorded at, like every identifier
+/// MailFathom mints. It reaches administrative listings, so it says when each company was added and in what order — a
+/// residual ADR 0036 accepts.
 /// </para>
 /// </remarks>
 public sealed class OrganizationAdministration
@@ -71,13 +72,14 @@ public sealed class OrganizationAdministration
         this.authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
         var label = DisplayNameOrThrow(displayName);
-        var organizationId = Guid.NewGuid();
+        var createdAt = this.timeProvider.GetUtcNow();
+        var organizationId = Guid.CreateVersion7(createdAt);
 
         var result = await this.organizations.CreateAsync(
             organizationId,
             label,
             RequireShortName(shortName),
-            this.timeProvider.GetUtcNow(),
+            createdAt,
             cancellationToken);
 
         return result with { OrganizationId = organizationId };

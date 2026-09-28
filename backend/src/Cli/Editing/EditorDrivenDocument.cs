@@ -75,7 +75,7 @@ internal static class EditorDrivenDocument
         ArgumentException.ThrowIfNullOrWhiteSpace(describedAs);
         ArgumentNullException.ThrowIfNull(document);
 
-        var session = Path.Combine(Path.GetTempPath(), $"mailfathom-{buffered}-{Guid.NewGuid():N}");
+        var session = Path.Combine(Path.GetTempPath(), $"mailfathom-{buffered}-{Guid.CreateVersion7():N}");
         var buffer = Path.Combine(session, buffered + ExtensionOf(view));
         var shown = Show(document, view);
         var keepSession = false;

@@ -21,6 +21,17 @@ public sealed class DatabaseSecretReferenceTests
         Assert.Equal($"database:{StoredSecretId:D}", reference.ConfigurationValue);
     }
 
+    /// <summary>A newly stored secret is named by a version 7 identifier, like every identifier MailFathom mints.</summary>
+    [Fact]
+    public void Create_ANewlyStoredSecret_IsNamedByAVersion7Identifier()
+    {
+        // Act
+        var reference = DatabaseSecretReference.Create();
+
+        // Assert
+        Assert.Equal(7, Guid.Parse(reference.ConfigurationValue["database:".Length..]).Version);
+    }
+
     [Fact]
     public void TryParse_ItsConfigurationValue_RoundTripsTheReference()
     {

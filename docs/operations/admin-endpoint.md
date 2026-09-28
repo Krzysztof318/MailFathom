@@ -1489,9 +1489,12 @@ erasure is refused for as long as that lasts, and the way through it is to send 
 moved on, or to reach the replica holding the account. A refusal is the deliberate answer here: an erasure answered as
 done while a run was still writing is the failure this exists to prevent.
 
-**A user is minted with an identifier that says nothing about them.** It is a version 4 UUID, drawn at random rather
-than derived from a name, an address, or the moment it was recorded, so an identifier appearing in a URL, a log line, or
-a support conversation discloses neither who the person is nor when this deployment began serving them. The display name
+**A user is minted with an identifier that says nothing about who they are.** It is a version 7 UUID, like every
+identifier MailFathom mints under [ADR
+0036](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0036-minting-every-identifier-as-a-version-7-uuid-and-never-treating-one-as-a-secret.md):
+its leading bits are the moment it was recorded and the rest is random, and nothing in it is derived from a name or an
+address. An identifier appearing in a URL, a log line, or a support conversation therefore discloses when this
+deployment began serving somebody but never who they are, and it grants nothing to whoever holds it. The display name
 is what an administrator reads them by; it has to be unique across the deployment, so that two people are never told
 apart by an identifier alone.
 
@@ -1624,9 +1627,9 @@ provisioned before a deployment recorded an organization signs in exactly as it 
 | `mfctl organization remove --organization <id>` | Removes an organization nobody belongs to |
 | `mfctl user set-organization (--organization <id> \| --none)` | Moves one user into an organization, or out of every organization; it takes `--user` as every other user command does |
 
-**An organization is minted with an identifier that says nothing about it.** It is a version 4 UUID for the reason a
-user's is: it reaches administrative listings, and a time-ordered one would publish when each company was added and in
-what order. The display name is what an operator reads it by, trimmed and 1 to 128 characters. The short name is 1 to
+**An organization is minted with an identifier that says nothing about who it is.** It is a version 7 UUID for the
+reason a user's is, minted from the moment the organization is recorded, so an administrative listing shows when each
+company was added and in what order but nothing else about it. The display name is what an operator reads it by, trimmed and 1 to 128 characters. The short name is 1 to
 32 characters of `A`–`Z`, `0`–`9`, and `-`, folded to upper case when it is written, and unique across the deployment,
 because it is half of a login; a `/` can never appear in one, since that is what separates it from the username.
 
@@ -1706,7 +1709,7 @@ over exactly that set.
 
 **A declaration is the account's address and name beside its settings.** It is a JSON object stating `EmailAddress`,
 `DisplayName`, and the keys [one account](configuration-mail.md#one-account--a-mailbox-in-a-users-record) lists, with
-credentials as references. It states no `AccountId`: the deployment generates the identifier, a random UUID, and a
+credentials as references. It states no `AccountId`: the deployment generates the identifier, a version 7 UUID, and a
 declaration that states one is refused. The identifier is what every tool argument, stored row, and log line names the
 account by from then on.
 

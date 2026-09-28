@@ -18,8 +18,10 @@ public sealed class OrganizationAdministrationTests
 
     private static readonly Guid OrganizationId = new("0197c0de-0000-4000-8000-000000000002");
 
+    private static readonly DateTimeOffset RecordedAt = new(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
+
     [Fact]
-    public async Task CreateAsync_ACallerGrantedTheConfigurationWrite_RecordsTheTrimmedNameUnderAMintedVersion4Identifier()
+    public async Task CreateAsync_ACallerGrantedTheConfigurationWrite_RecordsTheTrimmedNameUnderAVersion7IdentifierMintedAtTheInstantItRecords()
     {
         // Arrange
         var harness = new AdministrationHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -39,13 +41,14 @@ public sealed class OrganizationAdministrationTests
 
         // Assert
         Assert.Equal(OrganizationWriteOutcome.Written, result.Outcome);
-        Assert.Equal(4, result.OrganizationId.Version);
+        Assert.Equal(7, result.OrganizationId.Version);
+        Assert.Equal(TimestampOf(Guid.CreateVersion7(RecordedAt)), TimestampOf(result.OrganizationId));
 
         await harness.Organizations.Received(1).CreateAsync(
             result.OrganizationId,
             "Test Firma",
             OrganizationShortName.Create("TESTFIRMA"),
-            Arg.Any<DateTimeOffset>(),
+            RecordedAt,
             Arg.Any<CancellationToken>());
     }
 
@@ -116,6 +119,9 @@ public sealed class OrganizationAdministrationTests
         await Assert.ThrowsAsync<ArgumentException>(act);
     }
 
+    /// <summary>The leading 48 bits of a version 7 value, which are the millisecond it was minted at.</summary>
+    private static string TimestampOf(Guid identifier) => identifier.ToString("D")[..13];
+
     private sealed class AdministrationHarness
     {
         internal AdministrationHarness(MailFathomPermission granted)
@@ -128,7 +134,7 @@ public sealed class OrganizationAdministrationTests
             this.Administration = new OrganizationAdministration(
                 new AccessAuthorization(principals),
                 this.Organizations,
-                new FakeTimeProvider(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero)));
+                new FakeTimeProvider(RecordedAt));
         }
 
         internal OrganizationAdministration Administration { get; }

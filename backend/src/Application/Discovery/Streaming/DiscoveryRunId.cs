@@ -4,13 +4,12 @@
 
 namespace MailFathom.Application.Discovery.Streaming;
 
-/// <summary>Identifies one Discover run for as long as this process is executing or holding it.</summary>
+/// <summary>Identifies one Discover run for as long as the deployment keeps it.</summary>
 /// <remarks>
 /// A run is addressed by this from the moment it is started: every event it publishes names it, and a client that lost
-/// its connection reattaches by it rather than by asking the question again. It is a version 4 UUID because it is
-/// handed to a client and then presented back — a guessable identifier would let one caller ask to be shown a run
-/// somebody else started, which the user check beside it refuses but which nothing should be able to attempt cheaply.
-/// It is not persisted, so it means nothing after a restart.
+/// its connection reattaches by it rather than by asking the question again. It is a version 7 UUID, so the events it
+/// leads the key of land together. A client holds it and presents it back, and what refuses a run somebody else started
+/// is the user check beside it rather than the identifier being hard to know — ADR 0036 holds why.
 /// </remarks>
 public readonly record struct DiscoveryRunId
 {
@@ -20,8 +19,8 @@ public readonly record struct DiscoveryRunId
     public Guid Value { get; }
 
     /// <summary>Creates an identifier for a run nothing has started yet.</summary>
-    /// <returns>A new identifier, drawn from the platform's cryptographically secure generator.</returns>
-    public static DiscoveryRunId New() => new(Guid.NewGuid());
+    /// <returns>A new version 7 identifier.</returns>
+    public static DiscoveryRunId New() => new(Guid.CreateVersion7());
 
     /// <summary>Creates a run identifier from a non-empty UUID, which is how one arrives back off the wire.</summary>
     /// <param name="value">The UUID to wrap.</param>

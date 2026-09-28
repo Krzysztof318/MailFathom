@@ -30,6 +30,11 @@ public sealed class DiscoveryRunIdTests
         Assert.Equal(opened.Value.ToString(), presented.ToString());
     }
 
+    /// <summary>A run is named by a version 7 identifier, so the events it leads the key of land together.</summary>
+    [Fact]
+    public void New_ARun_IsNamedByAVersion7Identifier() =>
+        Assert.Equal(7, DiscoveryRunId.New().Value.Version);
+
     /// <summary>Two runs are told apart by their identifiers, which is the whole of what addresses one.</summary>
     [Fact]
     public void New_TwoRuns_AreAddressedSeparately() =>

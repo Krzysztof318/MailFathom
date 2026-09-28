@@ -80,12 +80,11 @@ public sealed class UserRosterAdministrationTests
     }
 
     /// <summary>
-    /// The identifier is minted here rather than supplied, and it is a version 4 value because a user identifier
-    /// reaches administrative APIs, audit records, and logs — and a time-ordered one would publish when each user was
-    /// provisioned and in what order relative to every other.
+    /// The identifier is minted here rather than supplied, and it is a version 7 value like every identifier MailFathom
+    /// mints — ADR 0036 records the rule and the residual it accepts for an identifier naming a person.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_MintsAVersionFourIdentifier()
+    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_MintsAVersionSevenIdentifier()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -95,7 +94,7 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         Assert.True(outcome.IsProvisioned);
-        Assert.Equal(4, outcome.User.Value.Version);
+        Assert.Equal(7, outcome.User.Value.Version);
     }
 
     /// <summary>

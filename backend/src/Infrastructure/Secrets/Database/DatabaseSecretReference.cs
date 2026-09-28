@@ -8,9 +8,10 @@ namespace MailFathom.Infrastructure.Secrets.Database;
 
 /// <summary>Identifies one sealed secret stored in MailFathom's database.</summary>
 /// <remarks>
-/// The configuration form is <c>database:&lt;uuid&gt;</c>. The identifier is a random version 4 UUID rather than a
-/// time-ordered one because the reference reaches documents and administrative responses, where creation time is not
-/// part of its contract. The target is redacted like every other secret reference even though it is not material.
+/// The configuration form is <c>database:&lt;uuid&gt;</c>. The identifier is a version 7 UUID like every other
+/// MailFathom mints, so a reference tells whoever reads the document it sits in when the secret was stored — metadata
+/// ADR 0036 accepts, since it says nothing about the sealed value. The target is redacted like every other secret
+/// reference even though it is not material.
 /// </remarks>
 public readonly record struct DatabaseSecretReference
 {
@@ -29,8 +30,8 @@ public readonly record struct DatabaseSecretReference
         : throw new InvalidOperationException("The unspecified database secret reference has no configuration value.");
 
     /// <summary>Creates a reference for a newly stored secret.</summary>
-    /// <returns>A reference carrying a cryptographically random version 4 UUID.</returns>
-    public static DatabaseSecretReference Create() => new(Guid.NewGuid());
+    /// <returns>A reference carrying a new version 7 UUID.</returns>
+    public static DatabaseSecretReference Create() => new(Guid.CreateVersion7());
 
     /// <summary>Creates a reference from a persisted identifier.</summary>
     /// <param name="id">The stored secret identifier.</param>

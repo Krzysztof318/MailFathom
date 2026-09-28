@@ -77,10 +77,11 @@ internal sealed class StoredFileStore(
         }
 
         var placed = await contentStore.PlaceContentAsync(EmailContentKind.StoredFile, content, cancellationToken);
+        var createdAt = timeProvider.GetUtcNow();
 
         var file = new StoredFileEntity
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(createdAt),
             UserId = ownerValue,
             MediaType = mediaType,
             ByteLength = placed.ByteLength,
@@ -88,7 +89,7 @@ internal sealed class StoredFileStore(
             Backend = placed.Backend,
             Content = placed.Backend == ContentStorageBackend.Database ? placed.RawMime.ToArray() : null,
             ObjectLocator = placed.ObjectLocator,
-            CreatedAt = timeProvider.GetUtcNow(),
+            CreatedAt = createdAt,
         };
 
         var entry = dbContext.StoredFiles.Add(file);

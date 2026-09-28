@@ -327,7 +327,7 @@ assigned. That is the feature page's rule rather than a setting anybody writes.
 
 ### The identifier MailFathom mints
 
-A user identifier is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because a user identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each user was created and in what order. [`mfctl user add`](admin-endpoint.md#users-and-their-records) mints it and reports it, and it is the row's from that moment: nothing an operator writes states one, and nothing changes one afterwards.
+A user identifier is a **version 7 UUID**, like every identifier MailFathom mints under [ADR 0036](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0036-minting-every-identifier-as-a-version-7-uuid-and-never-treating-one-as-a-secret.md). It reaches administrative APIs, audit records, and logs, and it says there when each user was created and in what order — metadata about people that the ADR accepts, and the reason an identifier is treated as metadata wherever it is copied. [`mfctl user add`](admin-endpoint.md#users-and-their-records) mints it and reports it, and it is the row's from that moment: nothing an operator writes states one, and nothing changes one afterwards.
 
 A label is applied only where nobody else holds it, because a label names one user and the column that stores it is unique. That makes two users exchanging labels two calls rather than one: free the label first — [`mfctl user rename`](admin-endpoint.md#users-and-their-records) whoever holds it — and give it to its new user afterwards.
 
