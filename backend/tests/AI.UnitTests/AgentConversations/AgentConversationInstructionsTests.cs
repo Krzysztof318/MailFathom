@@ -34,6 +34,19 @@ public sealed class AgentConversationInstructionsTests
         Assert.Contains("a time on the 24-hour clock", text, StringComparison.Ordinal);
     }
 
+    /// <summary>The client draws an answer as Markdown, so the Agent may structure one with it, and only as far as the client draws it.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_AllowsLightMarkdownAndRefusesWhatTheClientDoesNotDraw()
+    {
+        // Act
+        var text = string.Join(' ', AgentConversationInstructions.TextFor(UserLanguage.English).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        // Assert
+        Assert.Contains("Your answer is shown as Markdown", text, StringComparison.Ordinal);
+        Assert.Contains("An answer that is a sentence or two stays plain sentences.", text, StringComparison.Ordinal);
+        Assert.Contains("never write headings, links, images, or HTML", text, StringComparison.Ordinal);
+    }
+
     /// <summary>A later message correcting a date seldom repeats the words the first was found by, so the Agent reads the whole conversation first.</summary>
     [Fact]
     public void TextFor_TheInstruction_ReadsTheConversationForALaterCorrection()

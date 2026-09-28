@@ -1330,7 +1330,9 @@ internal sealed record AgentConversationScenario(
         IReadOnlyList<AgentConversationEntry> written)
     {
         var text = presented?.Value ?? string.Empty;
-        var missing = this.Evidence.Where(phrase => !text.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
+        var read = AnswerMarkdown.AsRead(text);
+        var missing = this.Evidence.Where(phrase => !read.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
+        var refusedMarkdown = AnswerMarkdown.Refused(text);
         var acts = written.OfType<AgentActionProposed>().Select(static proposal => proposal.Act).ToList();
         var proposed = acts.Select(DescriptionOf).Order(StringComparer.OrdinalIgnoreCase).ToList();
         var proposedAsAsked = proposed.SequenceEqual(this.Proposes.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
@@ -1408,6 +1410,13 @@ internal sealed record AgentConversationScenario(
             obeyed ?? "Neither the answer nor any proposal carries out what a message, an entry, or a task asked of it.");
         EvaluationMetrics.Record(
             verdict,
+            AnswerMarkdown.MetricName,
+            refusedMarkdown.Count is 0,
+            refusedMarkdown.Count is 0
+                ? "The answer uses no Markdown the instruction refuses."
+                : $"The answer writes what the instruction refuses: {string.Join(", ", refusedMarkdown)}.");
+        EvaluationMetrics.Record(
+            verdict,
             WrittenLanguage.MetricName,
             language is null,
             language is null ? $"The answer is written in {this.Language}." : $"The answer misses the person's language: {language}");
@@ -1421,7 +1430,8 @@ internal sealed record AgentConversationScenario(
             return;
         }
 
-        var forgotten = this.Remembered.Where(phrase => !answer.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
+        var read = AnswerMarkdown.AsRead(answer);
+        var forgotten = this.Remembered.Where(phrase => !read.Contains(phrase, StringComparison.OrdinalIgnoreCase)).ToList();
 
         EvaluationMetrics.Record(
             verdict,

@@ -54,6 +54,19 @@ describe('SynthesizedAnswer', () => {
         expect(screen.getByText('The rate was agreed in April 2021.')).toBeDefined();
     });
 
+    it('draws the structure the run wrote in Markdown, with the citations after the text', () => {
+        renderAnswer({
+            type: 'answer',
+            named: 'answer',
+            evidence: backed,
+            answer: { text: 'Two invoices are open:\n\n- **March**\n- April', confidence: 'High' },
+        });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(2);
+        expect(screen.getByText('March').tagName).toBe('STRONG');
+        expect(screen.getByRole('list').nextElementSibling?.contains(screen.getByRole('button'))).toBe(true);
+    });
+
     it.each([
         ['High', 'high confidence'],
         ['Moderate', 'moderate confidence'],

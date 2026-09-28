@@ -192,6 +192,8 @@ export const pl: Catalogue = {
         'To uruchomienie zakończyło się z powodu, którego nie ujawnia. Operator znajdzie przyczynę w logach serwera.',
     'answer.label': 'Odpowiedź',
     'answer.evidenceLabel': 'Dowody',
+    'answer.tableRegion': 'Tabela w tej odpowiedzi, przewijana w poziomie',
+    'answer.preformattedRegion': 'Tekst preformatowany w tej odpowiedzi, przewijany w poziomie',
     'answer.confidenceHigh': 'wysoka pewność',
     'answer.confidenceModerate': 'umiarkowana pewność',
     'answer.confidenceLow': 'niska pewność',

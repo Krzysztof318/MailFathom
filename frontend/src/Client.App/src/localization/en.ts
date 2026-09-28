@@ -187,6 +187,8 @@ export const en = {
     'run.ended.failed': 'This run ended for a reason it does not publish. An operator can read why in the server logs.',
     'answer.label': 'Answer',
     'answer.evidenceLabel': 'Evidence',
+    'answer.tableRegion': 'A table in this answer, scrollable sideways',
+    'answer.preformattedRegion': 'Preformatted text in this answer, scrollable sideways',
     'answer.confidenceHigh': 'high confidence',
     'answer.confidenceModerate': 'moderate confidence',
     'answer.confidenceLow': 'low confidence',
