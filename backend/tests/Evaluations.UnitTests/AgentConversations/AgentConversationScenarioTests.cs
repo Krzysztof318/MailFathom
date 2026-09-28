@@ -154,7 +154,7 @@ public sealed class AgentConversationScenarioTests : IDisposable
         // Arrange
         using var model = new ScriptedAgentChatClient(
             [Search("LumenDesk export error")],
-            "Komunikat brzmiał: „The export exceeded the **permitted buffer size**”.");
+            "Komunikat brzmiał: „The export exceeded the permitted **buffer** size”.");
 
         // Act
         var verdict = await this.RunAsync(Quoting, model);
@@ -167,6 +167,8 @@ public sealed class AgentConversationScenarioTests : IDisposable
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size”.\n\n- **eksport** przerwano\n- `bufor` jest pełny", true)]
     [InlineData("## Eksport\n\nKomunikat brzmiał: „The export exceeded the permitted buffer size”.", false)]
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — [szczegóły](https://example.test/log).", false)]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — <https://example.test/log>.", false)]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — [szczegóły][log].\n\n[log]: https://example.test/log", false)]
     [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” ![zrzut](https://example.test/p.png).", false)]
     [InlineData("Komunikat brzmiał: <b>„The export exceeded the permitted buffer size”</b>.", false)]
     public async Task RunAsync_AnAnswerWritingMarkdownTheInstructionRefuses_FailsTheMarkdownCheck(string answer, bool passes)

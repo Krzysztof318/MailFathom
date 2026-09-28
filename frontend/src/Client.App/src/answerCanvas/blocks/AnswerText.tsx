@@ -88,7 +88,7 @@ function Table({ children }: Written) {
     // where the region that scrolls it can take focus.
     return (
         <div
-            aria-label={translate('body.tableRegion')}
+            aria-label={translate('answer.tableRegion')}
             className={`${spaced} ${tableRegionShape}`}
             role="group"
             tabIndex={0}
@@ -104,7 +104,7 @@ function Preformatted({ children }: Written) {
     // The code inside is the block's text rather than an inline run, so it takes none of the inline code's frame.
     return (
         <pre
-            aria-label={translate('body.preformattedRegion')}
+            aria-label={translate('answer.preformattedRegion')}
             className={`${spaced} ${preformattedShape} [&>code]:contents`}
             role="group"
             tabIndex={0}

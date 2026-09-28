@@ -45,7 +45,9 @@ internal static partial class AnswerMarkdown
     [GeneratedRegex(@"!\[[^\]]*\]\(")]
     private static partial Regex Image();
 
-    [GeneratedRegex(@"(?<!!)\[[^\]]+\]\([^)\s]+\)")]
+    // An inline link, an autolink to a URL or an address, and the definition a reference-style link needs before it
+    // renders as one, which catches the full, collapsed, and shortcut forms alike.
+    [GeneratedRegex(@"(?<!!)\[[^\]]+\]\([^)\s]+\)|<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*>|<[^<>\s@]+@[^<>\s@]+>|^ {0,3}\[[^\]]+\]:[ \t]*\S", RegexOptions.Multiline)]
     private static partial Regex Link();
 
     [GeneratedRegex(@"</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>")]

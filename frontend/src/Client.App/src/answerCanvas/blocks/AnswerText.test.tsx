@@ -96,7 +96,19 @@ describe('AnswerText', () => {
     it('draws a table the model wrote as a table a keyboard can scroll', () => {
         drawing('| Sender | Date |\n| --- | --- |\n| Anna | 15 September 2026 |');
 
-        expect(screen.getByRole('group', { name: /table/iu }).getAttribute('tabindex')).toBe('0');
+        expect(
+            screen.getByRole('group', { name: 'A table in this answer, scrollable sideways' }).getAttribute('tabindex'),
+        ).toBe('0');
         expect(screen.getByRole('cell', { name: 'Anna' })).toBeDefined();
+    });
+
+    it('draws a fenced code block as one preformatted region a keyboard can scroll', () => {
+        drawing('Run this:\n\n```\nmfctl accounts list\n```');
+
+        const region = screen.getByRole('group', { name: 'Preformatted text in this answer, scrollable sideways' });
+
+        expect(region.tagName).toBe('PRE');
+        expect(region.getAttribute('tabindex')).toBe('0');
+        expect(region.textContent).toBe('mfctl accounts list');
     });
 });
