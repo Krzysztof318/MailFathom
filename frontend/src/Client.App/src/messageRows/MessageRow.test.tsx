@@ -273,7 +273,7 @@ describe('MessageRow', () => {
     });
 
     // A delete from the trash destroys the mail rather than filing it anywhere, so the row stays where it is and says
-    // what is happening to it — which is also the sentence the toast offering the way back carries.
+    // what is happening to it — which is also the sentence the toast carries, with no way back offered beside it.
     it('says a message being deleted for good is being deleted rather than moved', () => {
         const reserved = reservedLine(
             drawRow(undefined, false, nothingMarkedRead, asking('delete', email.id, email.folder, false)),
