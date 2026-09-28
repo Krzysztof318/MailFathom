@@ -59,7 +59,9 @@ export function RecipientField({
     const [focused, setFocused] = useState(false);
     const [dismissed, setDismissed] = useState(false);
     const [active, setActive] = useState<number | null>(null);
-    const [lookup, setLookup] = useState<ContactLookup | null>(null);
+    // The term an answer was for travels with it: its people are narrowed to what is typed now, while what it says about
+    // the book is only true of the term it was asked for.
+    const [lookup, setLookup] = useState<{ readonly term: string; readonly answer: ContactLookup } | null>(null);
     const fieldId = useId();
     const listId = useId();
 
@@ -78,7 +80,7 @@ export function RecipientField({
         const waiting = setTimeout(() => {
             void searchContacts(session, transport, term).then((answer) => {
                 if (listening) {
-                    setLookup(answer);
+                    setLookup({ term, answer });
                 }
             });
         }, searchDelay);
@@ -89,9 +91,9 @@ export function RecipientField({
         };
     }, [searchable, term, session, transport]);
 
-    const fromTheBook = lookup?.suggestions ?? [];
+    const fromTheBook = lookup?.answer.suggestions ?? [];
     const offered = searchable ? suggestionsFor(term, participants, fromTheBook, addresses) : [];
-    const unsearchable = searchable && lookup?.incomplete === true;
+    const unsearchable = searchable && lookup?.term === term && lookup.answer.incomplete;
     const open = focused && !dismissed && (offered.length > 0 || unsearchable);
     // The popup can hold the note alone, and the combobox names only a listbox that is drawn.
     const listed = open && offered.length > 0;
@@ -137,9 +139,13 @@ export function RecipientField({
     // The arrows walk the list and wrap at either end, Enter takes what they rest on, and Escape puts the list away
     // without leaving the field, until the next keystroke asks for it again.
     function moveThroughTheList(event: KeyboardEvent<HTMLInputElement>): void {
-        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && offered.length > 0) {
+        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && (offered.length > 0 || unsearchable)) {
             event.preventDefault();
             setDismissed(false);
+
+            if (offered.length === 0) {
+                return;
+            }
 
             const step = event.key === 'ArrowDown' ? 1 : -1;
             const from = active ?? (step === 1 ? -1 : 0);

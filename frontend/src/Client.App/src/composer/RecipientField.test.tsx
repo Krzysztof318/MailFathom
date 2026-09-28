@@ -338,6 +338,39 @@ describe('RecipientField', () => {
         expect(field().getAttribute('aria-controls')).toBeNull();
     });
 
+    it('puts the note away on Escape and brings it back on an arrow, as it does the list', async () => {
+        drawField([], [], { own: { status: 503 }, collected: { status: 503 } });
+
+        typeInto('ann');
+        await screen.findByText(/Not every contact could be searched just now/u);
+        fireEvent.keyDown(field(), { key: 'Escape' });
+
+        expect(screen.queryByText(/Not every contact could be searched just now/u)).toBeNull();
+
+        fireEvent.keyDown(field(), { key: 'ArrowDown' });
+
+        expect(screen.getByText(/Not every contact could be searched just now/u)).toBeDefined();
+    });
+
+    it('says the book went unread only for the term it was asked about, not for one typed since', async () => {
+        vi.useFakeTimers();
+
+        drawField([], [], { own: { status: 503 }, collected: { status: 503 } });
+
+        typeInto('ann');
+        await act(() => vi.runAllTimersAsync());
+
+        expect(screen.getByText(/Not every contact could be searched just now/u)).toBeDefined();
+
+        typeInto('anna');
+
+        expect(screen.queryByText(/Not every contact could be searched just now/u)).toBeNull();
+
+        await act(() => vi.runAllTimersAsync());
+
+        expect(screen.getByText(/Not every contact could be searched just now/u)).toBeDefined();
+    });
+
     it('says so when the one half the grants reach went unread, rather than reading as a book with nobody in it', async () => {
         drawField([], [], { own: { status: 403 }, collected: { status: 503 } });
 
