@@ -100,9 +100,9 @@ internal sealed partial class UserRosterAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     /// <exception cref="UserSettingsUnwritableException">Thrown when the record's first commit did not complete, which leaves the envelope written and nothing published for it.</exception>
     /// <remarks>
-    /// The identifier is minted here rather than supplied, and it is a version 4 value for the reason the column is:
-    /// a user identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish
-    /// when each user was provisioned and in what order relative to every other.
+    /// The identifier is minted here rather than supplied, and it is a version 7 value like every identifier MailFathom
+    /// mints. It reaches administrative APIs, audit records, and logs, so it says when each user was provisioned and in
+    /// what order relative to every other — a residual ADR 0036 accepts.
     /// </remarks>
     internal async Task<UserProvisioningOutcome> ProvisionAsync(
         string? displayName,
@@ -139,7 +139,7 @@ internal sealed partial class UserRosterAdministration(
 
         try
         {
-            outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.NewGuid()), label, cancellationToken);
+            outcome = await this.RecordAndPublishAsync(UserId.Create(Guid.CreateVersion7()), label, cancellationToken);
         }
         finally
         {

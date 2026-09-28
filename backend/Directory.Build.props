@@ -112,6 +112,10 @@
     <IsEvaluationProject Condition="'$(MSBuildProjectName)' == 'Evaluations'">true</IsEvaluationProject>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(IsUnitTestProject)' != 'true' And '$(IsIntegrationTestProject)' != 'true' And '$(IsEvaluationProject)' != 'true' And '$(MSBuildProjectName)' != 'Benchmarks'">
+    <AdditionalFiles Include="$(RepositoryRoot).config/BannedSymbols.Production.txt" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(IsUnitTestProject)' == 'true' Or '$(IsIntegrationTestProject)' == 'true' Or '$(IsEvaluationProject)' == 'true'">
     <PackageReference Include="xunit.analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>

@@ -69,10 +69,9 @@ internal sealed class UserCredentialEntity
 
     /// <summary>The credential's stable identity, which every administrative act on it names.</summary>
     /// <remarks>
-    /// A version 7 identifier like the rest of persistence mints, rather than the version 4 the user row carries. The
-    /// reasoning that made a user's identity time-free does not reach here: what a time-ordered value would disclose
-    /// is when a credential was provisioned relative to others, and every reader entitled to see this identifier is
-    /// already reading the provisioning instant beside it.
+    /// A version 7 identifier like every other MailFathom mints. What its time order discloses is when a credential was
+    /// provisioned relative to others, and every reader entitled to see this identifier is already reading the
+    /// provisioning instant beside it.
     /// </remarks>
     public Guid Id { get; set; }
 

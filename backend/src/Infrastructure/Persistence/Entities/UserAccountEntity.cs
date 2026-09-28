@@ -45,11 +45,9 @@ internal sealed class UserAccountEntity
 
     /// <summary>The stable user identity every mail account of theirs points at.</summary>
     /// <remarks>
-    /// A version 4 identifier rather than one of the version 7 values the rest of persistence mints, and the
-    /// difference is deliberate rather than incidental. A user identifier reaches administrative APIs, audit
-    /// records, and logs, and a time-ordered one published there would say when each user was provisioned and in what
-    /// order relative to every other — which is a fact about people rather than about rows. Nothing reads these rows
-    /// in identifier order, so the locality a version 7 value buys is worth nothing to pay for with that.
+    /// A version 7 identifier like every other MailFathom mints. A user identifier reaches administrative APIs, audit
+    /// records, and logs, so it says there when each user was provisioned and in what order relative to every other —
+    /// a fact about people, which ADR 0036 accepts as a residual in exchange for a rule with no exceptions.
     /// </remarks>
     public Guid Id { get; set; }
 

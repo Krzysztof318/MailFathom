@@ -27,7 +27,7 @@ internal sealed class OrganizationEntity
     /// <summary>The longest short name the column holds.</summary>
     public const int MaximumShortNameLength = OrganizationShortName.MaximumLength;
 
-    /// <summary>The identifier the deployment generated, a version 4 value for the reason a user's is.</summary>
+    /// <summary>The identifier the deployment generated, a version 7 value like every other it mints.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The name an operator reads the organization by.</summary>

@@ -709,7 +709,7 @@ internal sealed class MailAccountAdministration(
         }
 
         var candidate = new MailAccountRecord(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             declaration.EmailAddress,
             declaration.DisplayName,
             document,

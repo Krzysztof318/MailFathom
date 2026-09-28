@@ -66,7 +66,7 @@ ARG VERSION_SUFFIX=
 # the projects under backend/src/. The .NET build contract sits under backend/ beside them and the version it imports
 # sits at the root, so both halves are copied to the places the build resolves them from.
 COPY NuGet.config global.json .editorconfig Version.props ./
-COPY .config/BannedSymbols.txt .config/
+COPY .config/BannedSymbols.txt .config/BannedSymbols.Production.txt .config/
 COPY backend/Directory.Build.props backend/Directory.Packages.props backend/
 COPY backend/src/ backend/src/
 

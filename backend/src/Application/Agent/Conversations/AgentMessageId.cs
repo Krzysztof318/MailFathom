@@ -18,8 +18,8 @@ public readonly record struct AgentMessageId
     public Guid Value { get; }
 
     /// <summary>Creates an identifier for a message nothing has written yet.</summary>
-    /// <returns>A new identifier, drawn from the platform's generator.</returns>
-    public static AgentMessageId New() => new(Guid.NewGuid());
+    /// <returns>A new version 7 identifier.</returns>
+    public static AgentMessageId New() => new(Guid.CreateVersion7());
 
     /// <summary>Creates a message identifier from a non-empty UUID, which is how one arrives back off the wire.</summary>
     /// <param name="value">The UUID to wrap.</param>

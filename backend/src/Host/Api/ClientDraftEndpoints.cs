@@ -572,7 +572,7 @@ internal static class ClientDraftEndpoints
     /// recipient a second message. So the identity is minted per call and says what it truly is — one act.
     /// </remarks>
     private static OutgoingEmailRequester Author() =>
-        OutgoingEmailRequester.Command(Guid.NewGuid().ToString());
+        OutgoingEmailRequester.Command(Guid.CreateVersion7().ToString());
 
     /// <summary>Reads the draft a route named, keeping an identifier that names nothing apart from a draft nobody holds.</summary>
     private static MailDraftId? HeldDraft(Guid draftId) =>

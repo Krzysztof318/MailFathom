@@ -153,5 +153,5 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
     /// — one act, distinct from every other — instead of asking a caller for a value nothing here would compare.
     /// </remarks>
     private static OutgoingEmailRequester Author() =>
-        OutgoingEmailRequester.Command(Guid.NewGuid().ToString());
+        OutgoingEmailRequester.Command(Guid.CreateVersion7().ToString());
 }
