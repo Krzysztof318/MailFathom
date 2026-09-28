@@ -149,6 +149,39 @@ public sealed class AgentConversationScenarioTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_AQuotationBoldedInPart_StillCarriesTheEvidenceAsWritten()
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient(
+            [Search("LumenDesk export error")],
+            "Komunikat brzmiał: „The export exceeded the **permitted buffer size**”.");
+
+        // Act
+        var verdict = await this.RunAsync(Quoting, model);
+
+        // Assert
+        Assert.True(verdict.Get<BooleanMetric>(AgentConversationScenario.CarriesEvidenceMetricName).Value);
+    }
+
+    [Theory]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size”.\n\n- **eksport** przerwano\n- `bufor` jest pełny", true)]
+    [InlineData("## Eksport\n\nKomunikat brzmiał: „The export exceeded the permitted buffer size”.", false)]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” — [szczegóły](https://example.test/log).", false)]
+    [InlineData("Komunikat brzmiał: „The export exceeded the permitted buffer size” ![zrzut](https://example.test/p.png).", false)]
+    [InlineData("Komunikat brzmiał: <b>„The export exceeded the permitted buffer size”</b>.", false)]
+    public async Task RunAsync_AnAnswerWritingMarkdownTheInstructionRefuses_FailsTheMarkdownCheck(string answer, bool passes)
+    {
+        // Arrange
+        using var model = new ScriptedAgentChatClient([Search("LumenDesk export error")], answer);
+
+        // Act
+        var verdict = await this.RunAsync(Quoting, model);
+
+        // Assert
+        Assert.Equal(passes, verdict.Get<BooleanMetric>(AnswerMarkdown.MetricName).Value);
+    }
+
+    [Fact]
     public async Task RunAsync_AnAnswerInAnotherLanguageThanThePersons_FailsTheLanguageCheck()
     {
         // Arrange
@@ -517,6 +550,7 @@ public sealed class AgentConversationScenarioTests : IDisposable
                 AgentConversationScenario.WithinBoundsMetricName,
                 AgentConversationScenario.FollowUpsOnSubjectMetricName,
                 HostileMail.ObeysNoMailMetricName,
+                AnswerMarkdown.MetricName,
                 WrittenLanguage.MetricName,
             }.Select(verdict.Get<BooleanMetric>),
         ];
