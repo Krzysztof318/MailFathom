@@ -353,9 +353,9 @@ describe('MailSpace, wide', () => {
         renderSpace(desktop);
 
         expect(screen.getByRole('complementary').contains(screen.getByText(handedTheStatus))).toBe(true);
-        expect(screen.getByRole('region', { name: 'What is open' }).contains(screen.getByText(handedTheThreadField))).toBe(
-            true,
-        );
+        expect(
+            screen.getByRole('region', { name: 'What is open' }).contains(screen.getByText(handedTheThreadField)),
+        ).toBe(true);
     });
 
     it('folds the mailbox column to a rail and opens it again, from a control named for each', () => {

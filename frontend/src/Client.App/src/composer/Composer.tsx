@@ -323,7 +323,11 @@ export function Composer({
             const read = draftingRead(answer);
 
             if (!read.drafted) {
-                toasts.raise({ kind: read.kind, title: translate('compose.notDraftedTitle'), body: translate(read.said) });
+                toasts.raise({
+                    kind: read.kind,
+                    title: translate('compose.notDraftedTitle'),
+                    body: translate(read.said),
+                });
 
                 return;
             }

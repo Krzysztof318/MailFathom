@@ -69,7 +69,11 @@ export function useReplyDraftingState(session: ClientSession | null, transport: 
 
             if (!read.drafted) {
                 setHeld(null);
-                toasts.raise({ kind: read.kind, title: translate('compose.notDraftedTitle'), body: translate(read.said) });
+                toasts.raise({
+                    kind: read.kind,
+                    title: translate('compose.notDraftedTitle'),
+                    body: translate(read.said),
+                });
 
                 return;
             }

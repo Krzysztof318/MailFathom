@@ -1596,5 +1596,4 @@ describe('Composer drafting', () => {
         expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
         expect(asked.filter((request) => request.path.endsWith('/replies/drafting'))).toHaveLength(0);
     });
-
 });

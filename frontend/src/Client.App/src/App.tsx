@@ -1071,7 +1071,9 @@ export function App({
                                                                                                 // region nobody can see is
                                                                                                 // a second place a
                                                                                                 // question could land.
-                                                                                                asking={space === 'discover'}
+                                                                                                asking={
+                                                                                                    space === 'discover'
+                                                                                                }
                                                                                                 status={
                                                                                                     space === 'discover'
                                                                                                         ? connectionSummary

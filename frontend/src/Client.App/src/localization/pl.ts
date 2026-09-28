@@ -426,8 +426,7 @@ export const pl: Catalogue = {
     'space.calendar': 'Kalendarz',
     'space.people': 'Kontakty',
     'space.notBuiltYet': '{space} — jeszcze niezbudowane',
-    'space.pending':
-        'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres i nawigacja.',
+    'space.pending': 'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres i nawigacja.',
 
     'intent.label': 'Zapytaj swoją pocztę',
     'intent.placeholder': 'O co chcesz zapytać swoją pocztę?',
