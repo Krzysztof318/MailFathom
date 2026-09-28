@@ -812,15 +812,6 @@ describe('MessageRow, dragged towards a folder', () => {
         expect(transfer.setData).toHaveBeenCalledWith('application/x-mailfathom-message', 'message-1');
     });
 
-    it('carries nothing once the drag has ended, wherever it was let go', () => {
-        const carry = vi.fn();
-        const row = draggedRow({ ...nothingActed, carry }, () => undefined);
-
-        fireEvent.dragEnd(row);
-
-        expect(carry).toHaveBeenCalledWith([]);
-    });
-
     it('is not draggable in a list that offers nowhere to drop it', () => {
         expect(draggedRow(nothingActed).getAttribute('draggable')).toBe('false');
     });

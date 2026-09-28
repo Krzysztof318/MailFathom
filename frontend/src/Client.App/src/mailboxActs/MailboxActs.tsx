@@ -205,6 +205,30 @@ export function MailboxActsProvider({
     const [attempts, setAttempts] = useState(0);
     const [carried, carry] = useState<readonly ActedMessage[]>([]);
 
+    // A drag ends wherever it ends, and the row it started on is not always there to say so: the list draws a window of
+    // rows, so a scroll during the drag can take the row out of the document, and a platform dispatches the drag's end
+    // to the row it started on or nowhere. So the end is heard on the window — where it arrives while that row is still
+    // drawn — and from the first pointer movement after it, which a drag in flight never reports.
+    const carrying = carried.length > 0;
+
+    useEffect(() => {
+        if (!carrying) {
+            return undefined;
+        }
+
+        function ended(): void {
+            carry([]);
+        }
+
+        window.addEventListener('dragend', ended);
+        window.addEventListener('pointermove', ended);
+
+        return () => {
+            window.removeEventListener('dragend', ended);
+            window.removeEventListener('pointermove', ended);
+        };
+    }, [carrying]);
+
     // Derived rather than cleared, for the reason `readMarking/ReadMarking.tsx` gives: signing out and back in on one
     // tab keeps this component mounted, and the previous person's pending acts would otherwise be drawn over the next
     // person's mail — and their folders read as this one's.

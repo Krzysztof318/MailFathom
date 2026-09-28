@@ -355,11 +355,6 @@ export function MessageRow({
                 event.dataTransfer.setData(carriedMailType, email.id);
                 onCarry();
             }}
-            onDragEnd={() => {
-                if (onCarry !== undefined) {
-                    acts.carry([]);
-                }
-            }}
             onDoubleClick={onOpen}
             // Flush and square rather than a card: the rows are one continuous list, each separated from the next by
             // the line it carries, which is what the window's arithmetic needs them to be as well. The line and the

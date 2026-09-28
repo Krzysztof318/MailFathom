@@ -254,10 +254,10 @@ function going2(): HTMLElement | null {
 // matched to the end of it — which is what keeps the row for message one from also being the row for message ten.
 // A list whose acts record what a drag carries, under the one surface that remembers where each drawn message belongs:
 // what is carried is read from there, so a selection reaching rows scrolled out of the window still travels whole.
-function renderCarrying(carry: MailboxActs['carry']): RenderResult {
+function renderCarrying(carry: MailboxActs['carry'], refusalOf: MailboxActs['refusalOf'] = () => null): RenderResult {
     return render(
         <ListedMailProvider>
-            {listUnder(answering(wholeFolder), { acts: { ...nothingActed, carry } })}
+            {listUnder(answering(wholeFolder), { acts: { ...nothingActed, carry, refusalOf } })}
         </ListedMailProvider>,
     );
 }
@@ -735,6 +735,12 @@ describe('MessageList', () => {
         expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
     });
 
+    it('offers no drag where the move itself is refused, which no folder would then take', async () => {
+        renderCarrying(vi.fn<MailboxActs['carry']>(), () => 'notOffered');
+
+        expect((await rows()).every((drawn) => drawn.getAttribute('draggable') === 'false')).toBe(true);
+    });
+
     it('offers no drag under a pointer a finger drives, the move dialog being what a finger reaches', async () => {
         const declared = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
@@ -748,7 +754,7 @@ describe('MessageList', () => {
         });
 
         try {
-            renderList(answering(wholeFolder));
+            renderCarrying(vi.fn<MailboxActs['carry']>());
 
             expect((await rows()).every((drawn) => drawn.getAttribute('draggable') === 'false')).toBe(true);
         } finally {

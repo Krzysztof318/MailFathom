@@ -812,16 +812,29 @@ export function MessageList({
     }
 
     // What dragging a row carries towards the folder column, which is the design project's own: the whole selection
-    // where the row is one of several picked out, and the row alone otherwise.
-    function carry(row: number): void {
+    // where the row is one of several picked out, and the row alone otherwise. Absent on the terms `filingAway` is:
+    // where the move could never be seen through there is nothing to drag, rather than a row that fades and lands
+    // nowhere.
+    function carrying(row: number): (() => void) | undefined {
         const email = rowAt(shown, row);
         const { selected } = workspace;
 
-        if (email !== null) {
-            acts.carry(
-                actedMessages(listed, selected.length > 1 && selected.includes(email.id) ? selected : [email.id]),
-            );
+        if (coarse || email === null) {
+            return undefined;
         }
+
+        const messages = actedMessages(
+            listed,
+            selected.length > 1 && selected.includes(email.id) ? selected : [email.id],
+        );
+
+        if (acts.refusalOf('move', messages) !== null) {
+            return undefined;
+        }
+
+        return () => {
+            acts.carry(messages);
+        };
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLUListElement>): void {
@@ -1008,13 +1021,7 @@ export function MessageList({
                                     }}
                                     onAnswer={answering(row)}
                                     onArchive={filingAway(row)}
-                                    onCarry={
-                                        coarse
-                                            ? undefined
-                                            : () => {
-                                                  carry(row);
-                                              }
-                                    }
+                                    onCarry={carrying(row)}
                                     onElement={(element) => {
                                         if (element === null) {
                                             elements.current.delete(row);
