@@ -461,7 +461,7 @@ function OpenMessage({
                     }}
                 />
 
-                <ReplyDraftCard />
+                <ReplyDraftCard under={storedEmailId} />
             </div>
         </article>
     );

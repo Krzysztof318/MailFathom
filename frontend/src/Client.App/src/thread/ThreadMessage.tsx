@@ -8,6 +8,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useMessageBody } from '../messageBody/useMessageBody';
 import { OpenedMessage } from '../readingPane/OpenedMessage';
+import { ReplyDraftCard } from '../threadAgent/ReplyDraftCard';
 import type { ArrivalMark } from './threadOpening';
 
 // One message of a conversation, drawn out in full — which is the whole of what this component decides, because what a
@@ -74,7 +75,7 @@ export function ThreadMessage({
     const body = useMessageBody(session, transport, email.id, online && message.message !== null, message.body);
 
     return (
-        <li>
+        <li className="flex flex-col gap-3">
             <article
                 ref={onRegion}
                 tabIndex={-1}
@@ -121,6 +122,8 @@ export function ThreadMessage({
                     </p>
                 </div>
             </article>
+
+            <ReplyDraftCard under={email.id} />
         </li>
     );
 }

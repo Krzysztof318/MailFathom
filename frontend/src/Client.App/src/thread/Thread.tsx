@@ -24,7 +24,6 @@ import { MessageWaiting } from '../messageBody/Message';
 import { MessageHeaders } from '../readingPane/MessageHeaders';
 import { useTwoPanes } from '../shell/useWideWorkspace';
 import type { OpenConversation } from '../workspace/openConversation';
-import { ReplyDraftCard } from '../threadAgent/ReplyDraftCard';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { arrivalMark, arrivesAt, holdsMessage, messagesOf, type Arrival } from './threadOpening';
 import { ThreadMessage } from './ThreadMessage';
@@ -557,8 +556,6 @@ export function Thread({
                     />
                 </div>
             )}
-
-            <ReplyDraftCard />
         </Conversation>
     );
 }

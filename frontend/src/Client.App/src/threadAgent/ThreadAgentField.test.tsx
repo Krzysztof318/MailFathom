@@ -114,7 +114,7 @@ function Frame({
 
     return (
         <ReplyDraftingContext value={drafting}>
-            <ReplyDraftCard />
+            <ReplyDraftCard under={answering} />
             <ThreadAgentField />
         </ReplyDraftingContext>
     );

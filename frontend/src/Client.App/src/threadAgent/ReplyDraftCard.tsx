@@ -8,22 +8,23 @@ import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useReplyDrafting, type ReplyDrafting, type ThreadDraft } from './replyDrafting';
 
-// The reply the field at the foot of a correspondence asked for, drawn at the end of the thread as the design draws it:
-// a card marked as a local draft, saying nothing has been sent, the words, and the two ways on — into the composer, where
-// it becomes something that can be sent, or away.
+// The reply the field at the foot of a correspondence asked for, drawn under the message it answers — which is the end
+// of the thread where the design draws it, the message the reading column was opened at being the last one drawn unless
+// the history is shown: a card marked as a local draft, saying nothing has been sent, the words, and the two ways on —
+// into the composer, where it becomes something that can be sent, or away.
 //
-// It is drawn by whichever surface is reading the message the reply answers, and only there: a draft written for one
-// message does not stand under the next one somebody opens, and it is back if they return to the first.
+// It is drawn under the message the reply answers while that message is the one being read, and only there: a draft
+// written for one message does not stand under the next one somebody opens, and it is back if they return to the first.
 //
 // *Discard draft* asks nothing first, which the design draws and which is not the composer's discard: these are words
 // the deployment wrote a moment ago rather than words anybody wrote, and one press on the field writes them again.
 
-export function ReplyDraftCard() {
+export function ReplyDraftCard({ under }: { readonly under: string }) {
     const { workspace } = useWorkspace();
     const drafting = useReplyDrafting();
     const draft = drafting?.draft ?? null;
 
-    return drafting === null || draft?.answering !== workspace.selection ? null : (
+    return drafting === null || draft?.answering !== under || under !== workspace.selection ? null : (
         <DraftCard drafting={drafting} draft={draft} />
     );
 }

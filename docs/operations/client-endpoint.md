@@ -2557,8 +2557,8 @@ take, and the two travel as one `instruction`. What comes back replaces the word
 beside them, and a draft nobody has accepted is named in the send confirmation before the message goes out. The field
 under a correspondence is the other: *Draft a reply* asks for a reply to the message being read, with the fixed
 sentence *Write a reply to this message.* and whatever was typed there joined as one `instruction`, and the passage
-selected in the message as the `selection`, and draws the answer as a card inside the thread that says nothing has been
-sent. The card is held in memory and nowhere else; *Open in composer* carries its words into the composer on that
+selected in the message as the `selection`, and draws the answer as a card under that message, even with the rest of
+the correspondence shown, that says nothing has been sent. The card is held in memory and nowhere else; *Open in composer* carries its words into the composer on that
 message without asking the deployment again, over whatever that tab was already writing for the same answer, which stays
 the way back — and *Discard draft* lets it go.
 
