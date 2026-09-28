@@ -1448,14 +1448,24 @@ function corpusEvent(id: string): Held | undefined {
     );
 }
 
-/** One page of a book, walked by position from the cursor, which is as far as the last page reached. */
+/**
+ * One page of a book, walked by position from the cursor, which is as far as the last page reached, over the people
+ * who carry the search in their name or in one of their addresses, as the service matches it.
+ */
 function contactPage(book: readonly Held[], asked: URLSearchParams) {
     const size = Number(asked.get('pageSize') ?? String(contacts.contactsPerPage));
     const start = Number(asked.get('cursor') ?? '0');
+    const term = (asked.get('search') ?? '').trim().toUpperCase();
+    const found = book.filter((contact) =>
+        [
+            contact['displayName'],
+            ...(Array.isArray(contact['addresses']) ? (contact['addresses'] as unknown[]) : []),
+        ].some((text) => typeof text === 'string' && text.toUpperCase().includes(term)),
+    );
 
     return {
-        contacts: book.slice(start, start + size),
-        nextCursor: start + size < book.length ? String(start + size) : null,
+        contacts: found.slice(start, start + size),
+        nextCursor: start + size < found.length ? String(start + size) : null,
     };
 }
 

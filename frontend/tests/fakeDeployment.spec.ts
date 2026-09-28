@@ -359,3 +359,15 @@ test('walks the address book in name order across pages, with a person it was wr
     expect(page('pageSize=50').nextCursor).toBeNull();
     expect(ask(deployment, 'GET', `/contacts/${written.contact.id}/correspondence`)).toBe(404);
 });
+
+test('searches either book by a fragment of a name or of an address, whatever its case', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const found = (route: string) =>
+        (ask(deployment, 'GET', route) as { contacts: { displayName: string }[] }).contacts.map(
+            ({ displayName }) => displayName,
+        );
+
+    expect(found('/contacts?search=MARLOW&pageSize=5')).toStrictEqual(['Anna Marlow']);
+    expect(found('/contacts/collected?search=b.rowe@&pageSize=5')).toStrictEqual(['Bartosz Rowe']);
+    expect(found('/contacts?search=%20&pageSize=5')).toHaveLength(5);
+});

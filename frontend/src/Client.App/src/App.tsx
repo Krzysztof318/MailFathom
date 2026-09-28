@@ -1356,6 +1356,9 @@ export function App({
                                                                                                 drafts={
                                                                                                     composing.drafts
                                                                                                 }
+                                                                                                inFront={
+                                                                                                    space === 'mail'
+                                                                                                }
                                                                                                 onClosed={
                                                                                                     composing.close
                                                                                                 }
