@@ -112,15 +112,13 @@ interface Deployment {
 /**
  * A deployment answering the folders it has, and every submitted batch with the outcomes it was told to answer.
  *
- * A recorded message is answered with one record named after it, so a withdrawal or a release can be read back as the
- * records it named. A withdrawal cancels every record except the ones `takenInHand` names, which the deployment has
- * already begun and refuses to cancel; a release leaves each record pending, the answer the route gives. A record read
- * back by the queue stands at `standing`.
+ * A recorded message is answered with one record named after it, so a release can be read back as the records it
+ * named; a release leaves each record pending, the answer the route gives. A record read back by the queue stands at
+ * `standing`.
  */
 function deploymentAnswering(
     outcomes: Readonly<Record<string, MailMutationOutcome>> = {},
     status = 200,
-    takenInHand: readonly string[] = [],
     standing: MailMutationRecordState = 'pending',
 ): Deployment {
     const requests: ClientRequest[] = [];
@@ -149,9 +147,8 @@ function deploymentAnswering(
                 });
             }
 
-            if (request.path.endsWith('/withdrawals') || request.path.endsWith('/releases')) {
+            if (request.path.endsWith('/releases')) {
                 const { recordIds } = JSON.parse(request.body ?? '{}') as { recordIds: string[] };
-                const withdrawing = request.path.endsWith('/withdrawals');
 
                 return Promise.resolve({
                     status,
@@ -159,7 +156,7 @@ function deploymentAnswering(
                         changes: recordIds.map((recordId) => ({
                             recordId,
                             storedEmailId: recordId.replace('record-', ''),
-                            state: withdrawing && !takenInHand.includes(recordId) ? 'cancelled' : 'pending',
+                            state: 'pending',
                             outcomeUnknown: false,
                         })),
                     }),
@@ -322,10 +319,10 @@ const heapedInTrash: ActedMessage[] = Array.from({ length: mostMessagesPerMutati
     flagged: false,
 }));
 
-/** The records each call to a delete's withdrawal or release route named, one list per call. */
-function recordIdsPosted(deployment: Deployment, route: 'withdrawals' | 'releases'): string[][] {
+/** The records each call to a delete's release route named, one list per call. */
+function recordIdsReleased(deployment: Deployment): string[][] {
     return submitted(deployment)
-        .filter(({ path }) => path.endsWith(`/mutations/deletes/${route}`))
+        .filter(({ path }) => path.endsWith('/mutations/deletes/releases'))
         .map(({ body }) => (body as { recordIds: string[] }).recordIds);
 }
 
@@ -540,7 +537,6 @@ describe('MailboxActsProvider', () => {
                 body: { recordIds: ['record-message-3'] },
             });
         });
-        expect(recordIdsPosted(deployment, 'withdrawals')).toStrictEqual([]);
     });
 
     it('lets go of a delete of more messages than one call may name, a batch at a time', async () => {
@@ -554,10 +550,10 @@ describe('MailboxActsProvider', () => {
         perform(held, 'delete', heapedInTrash);
 
         await waitFor(() => {
-            expect(recordIdsPosted(deployment, 'releases')).toHaveLength(2);
+            expect(recordIdsReleased(deployment)).toHaveLength(2);
         });
 
-        const posted = recordIdsPosted(deployment, 'releases');
+        const posted = recordIdsReleased(deployment);
 
         expect(posted.map((batch) => batch.length).sort((left, right) => left - right)).toStrictEqual([
             1,
@@ -878,7 +874,7 @@ describe('MailboxActsProvider', () => {
     it('asks a move the account stopped retrying again, into the folder the move first named', async () => {
         vi.useFakeTimers();
 
-        const deployment = deploymentAnswering({}, 200, [], 'dead-lettered');
+        const deployment = deploymentAnswering({}, 200, 'dead-lettered');
         const { held } = acting(deployment);
 
         await pass(0);
@@ -906,7 +902,7 @@ describe('MailboxActsProvider', () => {
     it('stops claiming an act the account stopped retrying once the person lets it go', async () => {
         vi.useFakeTimers();
 
-        const { held } = acting(deploymentAnswering({}, 200, [], 'dead-lettered'));
+        const { held } = acting(deploymentAnswering({}, 200, 'dead-lettered'));
 
         await pass(0);
         perform(held, 'archive', [invoice]);

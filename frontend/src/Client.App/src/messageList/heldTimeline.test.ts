@@ -435,6 +435,12 @@ describe('changeNoticed', () => {
         expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
     });
 
+    it('reads nothing for mail it cannot place while a page it dropped may be holding it', () => {
+        const trimmed = trimmedAround(readForward(6), 20, 23);
+
+        expect(changeNoticed(trimmed, ['message-999'])).toBe(trimmed);
+    });
+
     it('leaves the list the object it was where nothing is named', () => {
         const held = readForward(3);
 
