@@ -264,8 +264,8 @@ export function arrivalNoticed(held: HeldTimeline): HeldTimeline {
  * nothing had said anything about.
  *
  * Mail the list holds on no page at all is the other case: the signal is about this folder, so mail it has never drawn
- * came into it, and the leading page is marked exactly as {@link arrivalNoticed} marks it — unless the list has dropped
- * a page, which may be where that mail stands and which is read again once it is reached.
+ * came into it, and the leading page is marked exactly as {@link arrivalNoticed} marks it, which leaves a leading page
+ * already dropped to be read once it is reached.
  *
  * @param held What the list knows now.
  * @param storedEmailIds The rows the deployment named.
@@ -283,10 +283,10 @@ export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly strin
 
     // Mail named for this folder that the list holds on no page is mail that came into it — a move or an archive the
     // deployment carried here — so it is read as an arrival would be rather than left out until somebody refreshes.
-    // A dropped page is the exception: the named row may be standing on it, and it is read again once it is reached, so
-    // a list holding one reads nothing now rather than its leading page for a change it cannot place.
+    // A page dropped further down may be where the named row stands instead, and marking the leading page costs one
+    // read of rows the reader is looking at, where reading nothing would leave mail that did arrive out of the list.
     if (!held.slots.some(holdsAnyNamed)) {
-        return held.slots.some((slot) => slot.emails === null) ? held : arrivalNoticed(held);
+        return arrivalNoticed(held);
     }
 
     // Answered before anything is rebuilt, so a page already marked is left the object it already was: it is being read

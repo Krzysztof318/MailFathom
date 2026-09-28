@@ -435,7 +435,15 @@ describe('changeNoticed', () => {
         expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
     });
 
-    it('reads nothing for mail it cannot place while a page it dropped may be holding it', () => {
+    it('reads the leading page for mail it holds on no page while only a page far below it was dropped', () => {
+        const trimmed = trimmedAround(readForward(2 + pagesKeptEitherSide * 2), 0, 3);
+        const held = changeNoticed(trimmed, ['message-999']);
+
+        expect(held.slots[0]?.stale).toBe(true);
+        expect(held.slots.slice(1).map((slot) => slot.stale)).toStrictEqual(trimmed.slots.slice(1).map(() => false));
+    });
+
+    it('reads nothing for mail it holds on no page while the leading page is itself dropped', () => {
         const trimmed = trimmedAround(readForward(6), 20, 23);
 
         expect(changeNoticed(trimmed, ['message-999'])).toBe(trimmed);
