@@ -13,6 +13,8 @@ import type {
     ManagedMailFolders,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import type { MoveDestinationGroup } from '../mailboxActs/mailboxDestinations';
+import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import {
     SignalledChangesContext,
@@ -255,6 +257,7 @@ function treeUnder(
     marking: ReadMarking = nothingMarkedRead,
     changes: SignalledChanges = nothingSignalled,
     maintenance: FolderMaintenance = noFolderMaintenance,
+    acts: MailboxActs = nothingActed,
 ): ReactElement {
     return (
         <LocalizationProvider>
@@ -262,7 +265,9 @@ function treeUnder(
                 <SignalledChangesContext value={changes}>
                     <ReadMarkingContext value={marking}>
                         <FolderMaintenanceContext value={maintenance}>
-                            <FolderTree session={session} transport={transport} online={online} />
+                            <MailboxActsContext value={acts}>
+                                <FolderTree session={session} transport={transport} online={online} />
+                            </MailboxActsContext>
                         </FolderMaintenanceContext>
                     </ReadMarkingContext>
                 </SignalledChangesContext>
@@ -279,8 +284,9 @@ function renderTree(
     marking?: ReadMarking,
     changes?: SignalledChanges,
     maintenance?: FolderMaintenance,
+    acts?: MailboxActs,
 ): RenderResult {
-    return render(treeUnder(transport, online, marking, changes, maintenance));
+    return render(treeUnder(transport, online, marking, changes, maintenance, acts));
 }
 
 /** A client whose credential may do everything to a folder, recording what each act was asked about. */
@@ -1030,6 +1036,115 @@ describe('FolderTree', () => {
 
         expect(screen.getByText(/This machine is offline\./)).toBeDefined();
         expect(transport).not.toHaveBeenCalled();
+    });
+});
+
+describe('FolderTree, under a drag carrying messages', () => {
+    const fromWorkInbox: readonly ActedMessage[] = [
+        { storedEmailId: 'message-1', account: 'work', folder: 'INBOX', unread: false, flagged: false },
+    ];
+
+    // What the move dialog would offer those messages, which is where a drop is allowed to land.
+    const workFolders: readonly MoveDestinationGroup[] = [
+        {
+            accountId: 'work',
+            accountName: 'Work',
+            ordinal: 1,
+            destinations: [
+                { alias: 'INBOX', name: 'INBOX', role: 'Inbox' },
+                { alias: 'ARCHIWUM', name: 'Archiwum', role: null },
+            ],
+        },
+    ];
+
+    function carrying(): { acts: MailboxActs; perform: ReturnType<typeof vi.fn>; carry: ReturnType<typeof vi.fn> } {
+        const perform = vi.fn();
+        const carry = vi.fn();
+
+        return {
+            perform,
+            carry,
+            acts: {
+                ...nothingActed,
+                carried: fromWorkInbox,
+                refusalOf: () => null,
+                destinationsOf: () => workFolders,
+                perform,
+                carry,
+            },
+        };
+    }
+
+    // Whether the row took the drag, which is what a cancelled `dragover` is to the platform.
+    function takes(on: HTMLElement): boolean {
+        return !fireEvent.dragOver(on, { dataTransfer: { dropEffect: 'none' } });
+    }
+
+    it('rings a folder of the carried messages’ own account while the drag is over it', async () => {
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, carrying().acts);
+
+        await drawn();
+
+        expect(takes(row(/^Archiwum/))).toBe(true);
+        expect(row(/^Archiwum/).className).toContain('inset-ring-2');
+    });
+
+    it('files the carried messages into the folder they are dropped on, and carries nothing afterwards', async () => {
+        const { acts, perform, carry } = carrying();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, acts);
+
+        await drawn();
+        fireEvent.drop(row(/^Archiwum/));
+
+        expect(perform).toHaveBeenCalledWith('move', fromWorkInbox, {
+            alias: 'ARCHIWUM',
+            name: 'Archiwum',
+            role: null,
+        });
+        expect(carry).toHaveBeenCalledWith([]);
+        expect(row(/^Archiwum/).className).not.toContain('inset-ring-2');
+    });
+
+    it('takes no drop on a mailbox’s own row, which names no folder of its own to land in', async () => {
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, carrying().acts);
+
+        await drawn();
+
+        expect(takes(row(/^Work/))).toBe(false);
+    });
+
+    it('takes no drop on the folder the messages are already in, nor on a folder of another account', async () => {
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, carrying().acts);
+
+        await drawn();
+
+        const [workInbox] = screen.getAllByRole('treeitem', { name: /^Inbox12 unread/ });
+        const personalInbox = screen.getAllByRole('treeitem', { name: /^Inbox/ }).at(-1);
+
+        expect(workInbox === undefined ? true : takes(workInbox)).toBe(false);
+        expect(personalInbox === undefined ? true : takes(personalInbox)).toBe(false);
+    });
+
+    it('takes no drop where the move itself is refused, exactly as the move dialog would refuse it', async () => {
+        const { acts } = carrying();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, {
+            ...acts,
+            refusalOf: () => 'notOffered',
+        });
+
+        await drawn();
+
+        expect(takes(row(/^Archiwum/))).toBe(false);
+    });
+
+    it('takes no drop at all while nothing is being carried', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        expect(takes(row(/^Archiwum/))).toBe(false);
     });
 });
 

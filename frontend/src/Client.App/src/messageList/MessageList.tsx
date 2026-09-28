@@ -45,6 +45,7 @@ import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, scopeReaches, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useSignalledChanges } from '../signals/signalledChanges';
+import { useCoarsePointer } from '../shell/useWideWorkspace';
 import {
     answered,
     arrivalNoticed,
@@ -125,6 +126,11 @@ export function MessageList({
     const { workspace, revise } = useWorkspace();
     const listed = useListedMail();
     const acts = useMailboxActs();
+
+    // Dragging a row to a folder is a pointer's gesture alone, which is the design project's own: it leaves the move
+    // dialog as what a finger reaches, and on a touch screen the folder column is a drawer a drag cannot reach while a
+    // held finger is the row's menu — which a platform starting a drag on that same hold would take away.
+    const coarse = useCoarsePointer();
     const composing = useComposing();
     const signalledChanges = useSignalledChanges();
     // Where this list opens: how the folder was last read and where in it the reader was. State rather than a value
@@ -198,7 +204,6 @@ export function MessageList({
     const filing = useRef<HTMLDialogElement>(null);
     const checking = useRef<HTMLDialogElement>(null);
     const elements = useRef(new Map<number, HTMLLIElement>());
-    const dragging = useRef(false);
     const wantsFocus = useRef(false);
 
     // What is drawn is what the deployment answered, less the rows somebody has just asked to have filed elsewhere.
@@ -466,22 +471,6 @@ export function MessageList({
 
         return () => {
             window.removeEventListener('resize', remeasure);
-        };
-    }, []);
-
-    // A drag selects while the pointer is down and stops wherever it is let go, including outside the list — a drag
-    // that ended over the header would otherwise still be selecting when the pointer came back.
-    useEffect(() => {
-        function release(): void {
-            dragging.current = false;
-        }
-
-        window.addEventListener('pointerup', release);
-        window.addEventListener('pointercancel', release);
-
-        return () => {
-            window.removeEventListener('pointerup', release);
-            window.removeEventListener('pointercancel', release);
         };
     }, []);
 
@@ -755,8 +744,7 @@ export function MessageList({
         }
 
         // A plain press opens and picks nothing out, so the bar over the list stays the toolbar: what is open is drawn
-        // as open, and a selection is the modifier's, the drag's, the menu's, or the keyboard's to make.
-        dragging.current = true;
+        // as open, and a selection is the modifier's, the menu's, or the keyboard's to make.
         setAnchor(email.id);
         opened(email);
     }
@@ -823,14 +811,17 @@ export function MessageList({
         (act === 'delete' ? deleting : filing).current?.showModal();
     }
 
-    function dragOver(row: number): void {
+    // What dragging a row carries towards the folder column, which is the design project's own: the whole selection
+    // where the row is one of several picked out, and the row alone otherwise.
+    function carry(row: number): void {
         const email = rowAt(shown, row);
+        const { selected } = workspace;
 
-        if (!dragging.current || email === null || anchor === null) {
-            return;
+        if (email !== null) {
+            acts.carry(
+                actedMessages(listed, selected.length > 1 && selected.includes(email.id) ? selected : [email.id]),
+            );
         }
-
-        select(extendedTo(workspace.selected, rows.map(identityOf), anchor, email.id));
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLUListElement>): void {
@@ -1017,9 +1008,13 @@ export function MessageList({
                                     }}
                                     onAnswer={answering(row)}
                                     onArchive={filingAway(row)}
-                                    onPointerEnter={() => {
-                                        dragOver(row);
-                                    }}
+                                    onCarry={
+                                        coarse
+                                            ? undefined
+                                            : () => {
+                                                  carry(row);
+                                              }
+                                    }
                                     onElement={(element) => {
                                         if (element === null) {
                                             elements.current.delete(row);

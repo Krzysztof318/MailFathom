@@ -403,10 +403,6 @@ export function SearchResults({
                                 onPoint={() => {
                                     open(row);
                                 }}
-                                onPointerEnter={() => {
-                                    // A search result is opened rather than swept over: picking several out is what
-                                    // the folder's list is for, and a drag here would select nothing.
-                                }}
                                 onElement={(element) => {
                                     if (element === null) {
                                         elements.current.delete(row);

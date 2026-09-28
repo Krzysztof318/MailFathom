@@ -4,7 +4,14 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailFolder, MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
-import { deletesPermanently, destinationsFor, filingFor, folderWithRole, refusalFor } from './mailboxDestinations';
+import {
+    deletesPermanently,
+    destinationsFor,
+    dropDestination,
+    filingFor,
+    folderWithRole,
+    refusalFor,
+} from './mailboxDestinations';
 import type { ActedMessage } from './useMailboxActs';
 
 const everythingOffered = { flags: true, moves: true, deletes: true };
@@ -104,6 +111,39 @@ describe('destinationsFor', () => {
 
     it('offers nothing across two accounts, a folder belonging to the account it is in', () => {
         expect(destinationsFor(wholeMailbox, [inWork('message-1'), atHome])).toStrictEqual([]);
+    });
+});
+
+describe('dropDestination', () => {
+    const carried = [inWork('message-1'), inWork('message-2')];
+    const offered = destinationsFor(wholeMailbox, carried);
+
+    it('files a drop on a folder of the account the messages are in into that folder', () => {
+        expect(dropDestination(offered, carried, 'work', 'work-clients')).toStrictEqual({
+            alias: 'work-clients',
+            name: 'Projects / Clients',
+            role: null,
+        });
+    });
+
+    it('files nothing dropped on a folder of another account, which a message cannot move into', () => {
+        expect(dropDestination(offered, carried, 'home', 'home-inbox')).toBeNull();
+    });
+
+    it('files nothing dropped on the folder every one of the messages is already in', () => {
+        expect(dropDestination(offered, carried, 'work', 'work-inbox')).toBeNull();
+    });
+
+    it('files a drop on the folder only some of them are in, since it takes the rest somewhere they are not', () => {
+        const spread = [inWork('message-1'), inWorkTrash('message-2')];
+
+        expect(dropDestination(destinationsFor(wholeMailbox, spread), spread, 'work', 'work-trash')?.alias).toBe(
+            'work-trash',
+        );
+    });
+
+    it('files nothing where nothing is being dropped', () => {
+        expect(dropDestination(offered, [], 'work', 'work-clients')).toBeNull();
     });
 });
 

@@ -176,6 +176,36 @@ export function destinationsFor(
 }
 
 /**
+ * The destination dropping those messages on a folder files them into, or `null` where a drop there would file nothing.
+ *
+ * A drop names a folder by the row it lands on rather than by picking it from what the move dialog offers, so it is
+ * matched against that same offer: a folder of another account is not on it, since a message moves between folders of
+ * its own account and nowhere else, and the folder every one of them is already in is refused here rather than
+ * submitted to be answered `already-in-destination` for each.
+ *
+ * @param groups What the move dialog would offer for those messages.
+ * @param messages The messages being dropped.
+ * @param accountId The account the folder under the drop belongs to.
+ * @param alias MailFathom's own name for that folder.
+ */
+export function dropDestination(
+    groups: readonly MoveDestinationGroup[],
+    messages: readonly ActedMessage[],
+    accountId: string,
+    alias: string,
+): MoveDestination | null {
+    if (messages.every((message) => message.account === accountId && message.folder === alias)) {
+        return null;
+    }
+
+    return (
+        groups
+            .find((group) => group.accountId === accountId)
+            ?.destinations.find((destination) => destination.alias === alias) ?? null
+    );
+}
+
+/**
  * Why the act cannot be performed on those messages, or `null` where it can.
  *
  * @param act What is being asked for.

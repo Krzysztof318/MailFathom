@@ -58,7 +58,6 @@ function drawMoved(moved: {
                         onGone={moved.onGone}
                         onOpen={() => undefined}
                         onPoint={() => undefined}
-                        onPointerEnter={() => undefined}
                         onElement={() => undefined}
                     />
                 </ul>
@@ -104,7 +103,6 @@ function drawRow(
                             note={note}
                             onOpen={() => undefined}
                             onPoint={() => undefined}
-                            onPointerEnter={() => undefined}
                             onElement={() => undefined}
                         />
                     </ul>
@@ -145,7 +143,6 @@ function pointedRow({
                     onPress={onPress}
                     onAnswer={onAnswer}
                     onArchive={onArchive}
-                    onPointerEnter={() => undefined}
                     onElement={() => undefined}
                 />
             </ul>
@@ -345,13 +342,49 @@ describe('MessageRow', () => {
 });
 
 describe('MessageRow, under a pointer', () => {
-    it('acts as a mouse goes down, because that same press may go on to sweep a run of rows', () => {
+    it('acts once a mouse pressed on it is let go on it, the same press being able to become a drag', () => {
         const pointed = vi.fn();
         const row = pointedRow({ onPoint: pointed });
 
         fireEvent.pointerDown(row, { pointerType: 'mouse' });
 
+        expect(pointed).not.toHaveBeenCalled();
+
+        fireEvent.pointerUp(row, { pointerType: 'mouse' });
+
         expect(pointed).toHaveBeenCalledOnce();
+    });
+
+    it('acts on nothing where the press became a drag, which the platform ends without letting it go here', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed });
+
+        fireEvent.pointerDown(row, { pointerType: 'mouse' });
+        fireEvent.pointerCancel(row, { pointerType: 'mouse' });
+        fireEvent.pointerUp(row, { pointerType: 'mouse' });
+
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('acts on nothing where the mouse left the row before it was let go', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed });
+
+        fireEvent.pointerDown(row, { pointerType: 'mouse' });
+        fireEvent.pointerLeave(row, { pointerType: 'mouse' });
+        fireEvent.pointerUp(row, { pointerType: 'mouse' });
+
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('acts on nothing for a button other than the primary one, which asks for the row’s menu instead', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed });
+
+        fireEvent.pointerDown(row, { pointerType: 'mouse', button: 2 });
+        fireEvent.pointerUp(row, { pointerType: 'mouse', button: 2 });
+
+        expect(pointed).not.toHaveBeenCalled();
     });
 
     it('waits for a finger to be lifted before it acts, the same touch being able to become a press', () => {
@@ -698,7 +731,6 @@ function markedRow({
                     onReadings={onReadings}
                     onOpen={() => undefined}
                     onPoint={onPoint}
-                    onPointerEnter={() => undefined}
                     onElement={() => undefined}
                 />
             </ul>
@@ -739,5 +771,75 @@ describe('MessageRow, the mark that opens what was read', () => {
         markedRow({ onReadings: () => undefined });
 
         expect(screen.getByTitle('AI summary').getAttribute('aria-hidden')).toBe('true');
+    });
+});
+
+describe('MessageRow, dragged towards a folder', () => {
+    function draggedRow(acts: MailboxActs, onCarry?: () => void): HTMLElement {
+        render(
+            <LocalizationProvider>
+                <MailboxActsContext value={acts}>
+                    <ul>
+                        <MessageRow
+                            email={email}
+                            position={1}
+                            open={false}
+                            selected={false}
+                            focusable
+                            onOpen={() => undefined}
+                            onPoint={() => undefined}
+                            onCarry={onCarry}
+                            onElement={() => undefined}
+                        />
+                    </ul>
+                </MailboxActsContext>
+            </LocalizationProvider>,
+        );
+
+        return screen.getByRole('option');
+    }
+
+    it('starts carrying the message when it is dragged, as a move and under a type no text field reads', () => {
+        const carried = vi.fn();
+        const row = draggedRow(nothingActed, carried);
+        const transfer = { effectAllowed: 'all', setData: vi.fn() };
+
+        fireEvent.dragStart(row, { dataTransfer: transfer });
+
+        expect(row.getAttribute('draggable')).toBe('true');
+        expect(carried).toHaveBeenCalledOnce();
+        expect(transfer.effectAllowed).toBe('move');
+        expect(transfer.setData).toHaveBeenCalledWith('application/x-mailfathom-message', 'message-1');
+    });
+
+    it('carries nothing once the drag has ended, wherever it was let go', () => {
+        const carry = vi.fn();
+        const row = draggedRow({ ...nothingActed, carry }, () => undefined);
+
+        fireEvent.dragEnd(row);
+
+        expect(carry).toHaveBeenCalledWith([]);
+    });
+
+    it('is not draggable in a list that offers nowhere to drop it', () => {
+        expect(draggedRow(nothingActed).getAttribute('draggable')).toBe('false');
+    });
+
+    it('is drawn faded for as long as a drag is carrying it', () => {
+        const acts: MailboxActs = {
+            ...nothingActed,
+            carried: [{ storedEmailId: 'message-1', account: 'work', folder: 'INBOX', unread: false, flagged: false }],
+        };
+
+        expect(draggedRow(acts, () => undefined).className).toContain('opacity-45');
+    });
+
+    it('is drawn as it was while the drag is carrying other messages', () => {
+        const acts: MailboxActs = {
+            ...nothingActed,
+            carried: [{ storedEmailId: 'message-2', account: 'work', folder: 'INBOX', unread: false, flagged: false }],
+        };
+
+        expect(draggedRow(acts, () => undefined).className).not.toContain('opacity-45');
     });
 });

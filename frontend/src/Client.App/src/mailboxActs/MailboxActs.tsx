@@ -203,6 +203,7 @@ export function MailboxActsProvider({
     // How many times the folders have been asked for, which is what the second attempt is: the read is an effect, so
     // asking again is a value it depends on rather than a call from the toast that offered it.
     const [attempts, setAttempts] = useState(0);
+    const [carried, carry] = useState<readonly ActedMessage[]>([]);
 
     // Derived rather than cleared, for the reason `readMarking/ReadMarking.tsx` gives: signing out and back in on one
     // tab keeps this component mounted, and the previous person's pending acts would otherwise be drawn over the next
@@ -775,6 +776,8 @@ export function MailboxActsProvider({
                   destinationsOf: (messages) => destinationsFor(held.directory, messages),
                   deletesPermanently: destroys,
                   perform,
+                  carried,
+                  carry,
               };
 
     return <MailboxActsContext value={acts}>{children}</MailboxActsContext>;
