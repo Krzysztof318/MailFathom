@@ -8,6 +8,7 @@ import {
     deletesPermanently,
     destinationsFor,
     dropDestination,
+    filesIntoTrash,
     filingFor,
     folderWithRole,
     refusalFor,
@@ -114,6 +115,67 @@ describe('destinationsFor', () => {
     });
 });
 
+// The drafts folder beside the rest, which is what makes a message a draft: nothing but the folder it sits in says so.
+const withDrafts = directoryOf({
+    work: [
+        folder('work-inbox', 'Inbox', ['INBOX']),
+        folder('work-drafts', 'Drafts', ['Drafts']),
+        folder('work-archive', 'Archive', ['Archive']),
+        folder('work-trash', 'Trash', ['Trash']),
+        folder('work-clients', null, ['Projects', 'Clients']),
+    ],
+});
+
+function inWorkDrafts(storedEmailId: string): ActedMessage {
+    return { storedEmailId, account: 'work', folder: 'work-drafts', unread: false, flagged: false };
+}
+
+function offeredAliases(messages: readonly ActedMessage[]): readonly string[] {
+    return destinationsFor(withDrafts, messages).flatMap((group) => group.destinations.map(({ alias }) => alias));
+}
+
+describe('destinationsFor, around the drafts folder', () => {
+    it('offers a message that is not a draft every folder but the drafts folder', () => {
+        expect(offeredAliases([inWork('message-1')])).toStrictEqual([
+            'work-inbox',
+            'work-archive',
+            'work-trash',
+            'work-clients',
+        ]);
+    });
+
+    it('offers a draft the drafts folder, the trash, and the folders somebody made, and no other folder with a role', () => {
+        expect(offeredAliases([inWorkDrafts('message-1')])).toStrictEqual([
+            'work-drafts',
+            'work-trash',
+            'work-clients',
+        ]);
+    });
+
+    it('offers a selection holding a draft among other mail only what the draft may go to, less the drafts folder', () => {
+        expect(offeredAliases([inWorkDrafts('message-1'), inWork('message-2')])).toStrictEqual([
+            'work-trash',
+            'work-clients',
+        ]);
+    });
+
+    it('files nothing dropped on the drafts folder that is not a draft, nor a draft dropped on the archive', () => {
+        const ordinary = [inWork('message-1')];
+        const draft = [inWorkDrafts('message-2')];
+
+        expect(dropDestination(destinationsFor(withDrafts, ordinary), ordinary, 'work', 'work-drafts')).toBeNull();
+        expect(dropDestination(destinationsFor(withDrafts, draft), draft, 'work', 'work-archive')).toBeNull();
+    });
+});
+
+describe('filesIntoTrash', () => {
+    it('reads the trash as the one destination whose filing is deleting', () => {
+        expect(filesIntoTrash({ alias: 'work-trash', name: 'Trash', role: 'Trash' })).toBe(true);
+        expect(filesIntoTrash({ alias: 'work-archive', name: 'Archive', role: 'Archive' })).toBe(false);
+        expect(filesIntoTrash({ alias: 'work-clients', name: 'Projects / Clients', role: null })).toBe(false);
+    });
+});
+
 describe('dropDestination', () => {
     const carried = [inWork('message-1'), inWork('message-2')];
     const offered = destinationsFor(wholeMailbox, carried);
@@ -178,6 +240,11 @@ describe('refusalFor', () => {
     ] as const)('says an account labelling no folder for %s has nowhere to put it', (act, refusal) => {
         expect(refusalFor(act, [atHome], wholeMailbox, everythingOffered)).toBe(refusal);
         expect(refusalFor(act, [inWork('message-1')], wholeMailbox, everythingOffered)).toBeNull();
+    });
+
+    it('refuses to archive a draft, the archive being a folder with a role a draft may not be filed into', () => {
+        expect(refusalFor('archive', [inWorkDrafts('message-1')], withDrafts, everythingOffered)).toBe('draftsStayOut');
+        expect(refusalFor('delete', [inWorkDrafts('message-1')], withDrafts, everythingOffered)).toBeNull();
     });
 
     it('refuses a move across two accounts, and one with nowhere to file into', () => {

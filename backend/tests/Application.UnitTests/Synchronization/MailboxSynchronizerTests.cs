@@ -581,6 +581,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.RelocatedEmailCount);
+        Assert.Equal([relocatedEmailId], result.RelocatedEmails);
         Assert.Equal(0, result.StoredEmailCount);
         await metadataRepository.Received(1).TryCarryToOccurrenceAsync(
             persistenceSession,

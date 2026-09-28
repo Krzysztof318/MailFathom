@@ -10,7 +10,6 @@ import {
     moveMail,
     readMailFolders,
     releaseMailDeletes,
-    withdrawMailDeletes,
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
@@ -24,11 +23,12 @@ import { useLocalization } from '../localization/useLocalization';
 import type { ChangeAct, ChangeSubmission } from '../pendingChanges/changeStandings';
 import { usePendingChanges } from '../pendingChanges/usePendingChanges';
 import { useTelemetry } from '../telemetry/clientTelemetry';
-import { useToasts, type Toast } from '../toasts/useToasts';
+import { useToasts } from '../toasts/useToasts';
 import {
     deletesPermanently,
     destinationName,
     destinationsFor,
+    filesIntoTrash,
     filingFor,
     refusalFor,
     type MoveDestination,
@@ -58,7 +58,11 @@ import {
 // already on its way to a mail server cannot be unsaid, and pretending otherwise would leave the mailbox and the screen
 // disagreeing. The one act that offers no way back is the
 // delete that destroys the mail, which is what *delete* means for a message already in the trash — there is no message
-// left to move back, which is why the question in front of it says so before it is performed.
+// left to move back, which is why the question in front of it says so before it is performed, and why the deployment is
+// told at once that nobody will be offered one.
+//
+// **Filing into the trash is deleting**, whichever surface named the folder: a move naming the account's trash is
+// performed as the delete it is, so it is reported, drawn and taken back exactly as the delete control's is.
 //
 // **What each act may do at all is answered before it is offered**, which is `mailboxDestinations.ts`. An account with
 // no archive folder is a control that says so rather than one that fails once it has been pressed.
@@ -142,7 +146,7 @@ function appliedTo(batches: readonly Submitted[]): ReadonlySet<string> {
 }
 
 /**
- * The records a submission wrote down, which is what taking a delete back and ending its wait each name.
+ * The records a submission wrote down, which is what ending a permanent delete's wait names.
  *
  * Records rather than messages, because a record is the unit the deployment holds, cancels, and takes in hand — and a
  * message it answered `recorded` for is exactly a message whose changes carry one.
@@ -422,15 +426,16 @@ export function MailboxActsProvider({
         recorded: readonly ActedMessage[],
         destination: MoveDestination | undefined,
         destroying: boolean,
-        records: readonly string[],
     ): void {
         if (recorded.length === 0 || changesAFlag(act)) {
             return;
         }
 
         toasts.raise(
+            // A delete that destroys the mail offers nothing to take back, which is the design project's own: the
+            // question in front of it has already said it cannot be undone.
             destroying
-                ? deleting(recorded, records)
+                ? { kind: 'neutral', title: translate('act.purging'), body: counted(recorded.length) }
                 : {
                       kind: 'neutral',
                       title: translate(actReported[act], {
@@ -438,9 +443,7 @@ export function MailboxActsProvider({
                       }),
                       body: counted(recorded.length),
 
-                      // The way back is the toast's single action, which is the design project's own. A delete that
-                      // destroys the mail offers a different one — the wait in front of it rather than a reverse
-                      // move — which is why it is composed apart above rather than folded in here.
+                      // The way back is the toast's single action, which is the design project's own.
                       action: {
                           label: translate('act.undo'),
                           take: () => {
@@ -510,7 +513,7 @@ export function MailboxActsProvider({
         }
     }
 
-    /** Splits records into the batches the two record routes admit, which are bounded exactly as a submission is. */
+    /** Splits records into the batches the release route admits, which are bounded exactly as a submission is. */
     function batchesOf(records: readonly string[]): readonly (readonly string[])[] {
         const batches: (readonly string[])[] = [];
 
@@ -522,100 +525,17 @@ export function MailboxActsProvider({
     }
 
     /**
-     * The toast a permanent delete stands behind, which is also the whole of how long its way back is open.
+     * Tells the deployment it need not hold a permanent delete back, since nobody is being offered a way to take it back.
      *
-     * The deployment holds the delete for as long as this toast stands and no longer, so the card going is what closes
-     * the offer: taken back, the records are cancelled and nothing reaches the mail server; left alone, the client says
-     * so and the deployment stops waiting rather than sitting out a window nobody is watching any more. Both are the
-     * same moment read two ways, which is why one toast carries both rather than a timer somewhere else agreeing with
-     * a card somewhere else.
+     * The deployment holds every delete it writes down for a window of its own, which is there for a client that offers
+     * a way back. This one offers none, so waiting it out would only keep a message somebody destroyed on the mail
+     * server for longer than they were told.
      */
-    function deleting(messages: readonly ActedMessage[], records: readonly string[]): Toast {
-        let takenBack = false;
-
-        return {
-            kind: 'neutral',
-            title: translate('act.deletingPermanently'),
-            body: counted(messages.length),
-            action: {
-                label: translate('act.undo'),
-                take: () => {
-                    takenBack = true;
-                    withdraw(records);
-                },
-            },
-            whenGone: () => {
-                if (!takenBack) {
-                    release(messages, records);
-                }
-            },
-        };
-    }
-
-    /** Takes a permanent delete back, which cancels the records it was written down as before anything goes out. */
-    function withdraw(records: readonly string[]): void {
-        if (session === null) {
-            return;
-        }
-
-        const asking = session;
-
-        void Promise.all(batchesOf(records).map((batch) => withdrawMailDeletes(asking, transport, batch))).then(
-            (answered) => {
-                // Each record's own answer, exactly as the act itself is read: one the deployment has already taken in
-                // hand is refused rather than cancelled, and that message goes on saying it is being deleted, which is
-                // the truth about it.
-                const cancelled = answered.flatMap((answer) =>
-                    answer.outcome === 'read' ? answer.value.filter((record) => record.state === 'cancelled') : [],
-                );
-
-                forget(cancelled.map((record) => record.storedEmailId));
-
-                if (cancelled.length > 0) {
-                    toasts.raise({
-                        kind: 'neutral',
-                        title: translate('act.deleteWithdrawn'),
-                        body: counted(cancelled.length),
-                    });
-                }
-
-                const failed = answered.find((answer) => answer.outcome === 'failed');
-
-                if (failed?.outcome === 'failed') {
-                    toasts.raise({
-                        kind: 'error',
-                        title: translate('act.failed', {
-                            reason: translate(failureLabels[failed.failure.reason]),
-                        }),
-                    });
-                } else if (cancelled.length < records.length) {
-                    toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
-                }
-            },
-        );
-    }
-
-    /**
-     * Says the way back has closed, so the deployment stops holding the delete and takes it in hand at once.
-     *
-     * **The rows go with the offer.** While the card stood there was still a message to put back, so the row stayed
-     * where it was and said what was about to happen to it; the moment the card goes there is nothing left of that
-     * message to draw, and a row that went on standing would be a row claiming a message the deployment is destroying.
-     * It is the same claim the three filing acts write from the press — `leaves` rather than a second kind of state —
-     * so the queue that follows this delete lets go of it exactly as it lets go of an archive, and a delete the
-     * deployment ends up refusing puts the row back rather than leaving a gap nobody can account for.
-     */
-    function release(messages: readonly ActedMessage[], records: readonly string[]): void {
-        if (session === null) {
-            return;
-        }
-
-        remember('delete', messages, true, true);
-
+    function release(asking: ClientSession, records: readonly string[]): void {
         for (const batch of batchesOf(records)) {
             // Nothing is reported and nothing is waited for: what this asks for is what would have happened anyway
-            // once the window ran out, so a client that never asks costs the delete a wait rather than an outcome.
-            void releaseMailDeletes(session, transport, batch);
+            // once the window ran out, so a request that never arrives costs the delete a wait rather than an outcome.
+            void releaseMailDeletes(asking, transport, batch);
         }
     }
 
@@ -687,6 +607,12 @@ export function MailboxActsProvider({
     }
 
     function perform(act: MailboxAct, messages: readonly ActedMessage[], destination?: MoveDestination): void {
+        if (act === 'move' && destination !== undefined && filesIntoTrash(destination)) {
+            perform('delete', messages);
+
+            return;
+        }
+
         if (session === null || refusalOf(act, messages) !== null) {
             return;
         }
@@ -696,10 +622,9 @@ export function MailboxActsProvider({
         // somebody was told was permanent into one reported as a move.
         const destroying = act === 'delete' && destroys(messages);
 
-        // Whether the message is leaving the list it was acted in, which the three filing acts do and a delete that
-        // destroys the mail does not: there is nowhere left for it to go, so it stays where it is and says so until
-        // the wait in front of it is over.
-        const leaves = act === 'archive' || act === 'move' || (act === 'delete' && !destroying);
+        // Whether the message is leaving the list it was acted in, which every act that files it does — a delete that
+        // destroys the mail included, since nothing is offered that would bring it back.
+        const leaves = !changesAFlag(act);
 
         const asking = session;
 
@@ -761,16 +686,16 @@ export function MailboxActsProvider({
                 // A message the deployment filed into the trash rather than holding a record for is not going anywhere,
                 // so it stops being claimed as destroyed and is reported as the delete into the trash it was.
                 forget(filed.map((message) => message.storedEmailId));
-                report(act, filed, destination, false, []);
+                report(act, filed, destination, false);
                 report(
                     act,
                     recorded.filter((message) => !applied.has(message.storedEmailId)),
                     destination,
                     true,
-                    recordsWritten(answered),
                 );
+                release(asking, recordsWritten(answered));
             } else {
-                report(act, recorded, destination, destroying, recordsWritten(answered));
+                report(act, recorded, destination, destroying);
             }
 
             // Asking again is the same act performed afresh over the same messages, naming the folder a move named, so

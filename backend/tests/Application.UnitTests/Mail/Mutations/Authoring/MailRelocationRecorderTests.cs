@@ -43,6 +43,12 @@ public sealed class MailRelocationRecorderTests
 
     private static readonly MailFolderAlias Withheld = MailFolderAlias.Create("Private");
 
+    private static readonly MailFolderAlias Drafts = MailFolderAlias.Create("Drafts");
+
+    private static readonly MailFolderAlias Trash = MailFolderAlias.Create("Trash");
+
+    private static readonly MailFolderAlias Projects = MailFolderAlias.Create("Projects");
+
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7());
 
     private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Command("call-1");
@@ -330,10 +336,47 @@ public sealed class MailRelocationRecorderTests
         Assert.Equal(0, this.records.OpenedRecordCount);
     }
 
-    /// <summary>Maps a folder the account mirrors, and records the binding its own synchronization run would have.</summary>
-    private void MapMirrored(MailFolderAlias alias, string remotePath)
+    /// <summary>
+    /// The drafts folder holds drafts and nothing else, and a draft leaves it only for a folder the user made or for the
+    /// trash: each pair here is a message's folder and a destination, with the answer the service gives the move.
+    /// </summary>
+    [Theory]
+    [InlineData("INBOX", "Drafts", MailRelocationOutcome.DestinationNotAllowed)]
+    [InlineData("Drafts", "Archive", MailRelocationOutcome.DestinationNotAllowed)]
+    [InlineData("Drafts", "Projects", MailRelocationOutcome.Recorded)]
+    [InlineData("Drafts", "Trash", MailRelocationOutcome.Recorded)]
+    [InlineData("INBOX", "Archive", MailRelocationOutcome.Recorded)]
+    public async Task RecordAsync_AMoveInOrOutOfTheDraftsFolder_IsAdmittedOnlyForADraftIntoAFolderWithNoRoleOrTheTrash(
+        string from,
+        string into,
+        MailRelocationOutcome expected)
     {
-        this.mappings.With(Account, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
+        // Arrange
+        this.MapMirrored(Inbox, "INBOX", MailFolderSpecialUse.Inbox);
+        this.MapMirrored(Drafts, "Drafts", MailFolderSpecialUse.Drafts);
+        this.MapMirrored(Archive, "Archive", MailFolderSpecialUse.Archive);
+        this.MapMirrored(Trash, "Trash", MailFolderSpecialUse.Trash);
+        this.MapMirrored(Projects, "Projects");
+        var recorder = this.Recorder(TargetIn(MailFolderAlias.Create(from)));
+
+        // Act
+        var result = await recorder.RecordAsync(
+            LocalEmail,
+            MailFolderAlias.Create(into),
+            Requester,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, result.Outcome);
+        Assert.Equal(expected == MailRelocationOutcome.Recorded ? 1 : 0, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>Maps a folder the account mirrors, and records the binding its own synchronization run would have.</summary>
+    private void MapMirrored(MailFolderAlias alias, string remotePath, MailFolderSpecialUse? role = null)
+    {
+        this.mappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath), specialUse: role));
         this.bindings.Bind(Account, alias, remotePath);
     }
 
@@ -389,11 +432,15 @@ public sealed class MailRelocationRecorderTests
                 StubMailFolderParticipation
                     .Mapping(
                         new MailFolderIdentity(Account, Inbox),
-                        new MailFolderIdentity(Account, Archive))
+                        new MailFolderIdentity(Account, Archive),
+                        new MailFolderIdentity(Account, Drafts),
+                        new MailFolderIdentity(Account, Trash),
+                        new MailFolderIdentity(Account, Projects))
                     .Hiding(new MailFolderIdentity(Account, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
+            this.mappings.Resolver,
             this.DestinationResolver(sessions),
             this.dispositions,
             MailboxChangeSubmissions.Over(this.records),

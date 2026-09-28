@@ -824,6 +824,7 @@ export const pl: Catalogue = {
     'act.noTrashFolder': '{control} — to konto nie wskazuje kosza, więc nie ma dokąd usuwać.',
     'act.severalAccounts': '{control} — wiadomości z kilku kont nie przeniesiemy do jednego katalogu.',
     'act.noOtherFolder': '{control} — to konto nie ma innego katalogu, do którego można przenieść.',
+    'act.draftsStayOut': '{control} — wersję roboczą można przenieść tylko do katalogu utworzonego przez Ciebie.',
     'act.foldersUnknown': '{control} — MailFathom nie odczytał Twoich katalogów, więc nie wie, dokąd to trafi.',
     'act.foldersNotRead': 'Nie odczytaliśmy Twoich katalogów: {reason}.',
     'act.readFoldersAgain': 'Spróbuj ponownie',
@@ -834,10 +835,6 @@ export const pl: Catalogue = {
     'act.deleteQuestion.other': 'Usunąć {count} wiadomości?',
     'act.deleteConsequence': 'Każdą z nich przenosimy do kosza konta, na którym się znajduje.',
     'act.deleteConfirm': 'Przenieś do kosza',
-    'act.purgeQuestion.one': 'Usunąć {count} wiadomość na zawsze?',
-    'act.purgeQuestion.few': 'Usunąć {count} wiadomości na zawsze?',
-    'act.purgeQuestion.many': 'Usunąć {count} wiadomości na zawsze?',
-    'act.purgeQuestion.other': 'Usunąć {count} wiadomości na zawsze?',
     'act.purgeConsequence.one': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomość razem z załącznikami.',
     'act.purgeConsequence.few': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeConsequence.many':
@@ -845,9 +842,8 @@ export const pl: Catalogue = {
     'act.purgeConsequence.other':
         'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeReversal': 'Tego nie da się cofnąć.',
-    'act.purgeConfirm': 'Usuń na zawsze',
-    'act.deletingPermanently': 'Usuwamy na zawsze…',
-    'act.deleteWithdrawn': 'Zostawiamy — nic nie usunęliśmy',
+    'act.purgeConfirm': 'Usuń',
+    'act.purging': 'Usuwamy…',
     'act.moveTitle': 'Przenieś do innego katalogu',
     'act.moveClose': 'Zamknij',
 
@@ -1491,6 +1487,8 @@ export const pl: Catalogue = {
     'pendingChange.destinationNotFound': 'Folderu, do którego miała trafić, już nie ma.',
     'pendingChange.accountNoLongerConfigured': 'To wdrożenie nie czyta już tego konta pocztowego.',
     'pendingChange.changeNotUsable': 'Wskazanej zmiany nie da się wyrazić w jednym żądaniu — zgłoś to jako usterkę.',
+    'pendingChange.destinationNotAllowed':
+        'Ten folder jej nie przyjmie: wersje robocze zostają w folderze wersji roboczych albo w folderze utworzonym przez Ciebie, a nic innego tam nie trafia.',
     'pendingChange.notDelivered': 'Ta zmiana nie dotarła do Twojego wdrożenia.',
     'pendingChange.notDeliveredBody': 'Nic nie zostało zapisane, więc skrzynka pozostaje bez zmian.',
     'pendingChange.retry': 'Spróbuj ponownie',

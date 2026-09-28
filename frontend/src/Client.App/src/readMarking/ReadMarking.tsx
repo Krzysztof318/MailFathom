@@ -31,9 +31,9 @@ import {
 // state below it, because two bodies drawn in one commit both read it before either render happens — and because React
 // invokes an effect twice on mount under `StrictMode`, which is exactly the shape a state-only guard lets through.
 
-/** What is held, and whose it is, so one person's markings never outlive the credential they were made under. */
+/** What is held, and whose it is, so one person's markings never outlive their sign-in. */
 interface HeldMarkings {
-    readonly session: ClientSession | null;
+    readonly signedInAs: string | null;
     readonly marked: Map<string, MarkedIn>;
 }
 
@@ -42,12 +42,20 @@ const emptyMarkings: ReadonlyMap<string, MarkedIn> = new Map();
 
 export function ReadMarkingProvider({
     session,
+    signedInAs,
     transport,
     marking,
     children,
 }: {
     /** Who is asking and where, or `null` where there is nobody to submit for. */
     readonly session: ClientSession | null;
+
+    /**
+     * Who is signed in, which is what the markings belong to. Not the session: a renewal replaces the token inside it
+     * without anybody signing out, and markings keyed on the credential were thrown away with it — every row opened
+     * before the renewal drawn unread again against a list that had not yet heard the mailbox agree.
+     */
+    readonly signedInAs: string | null;
     readonly transport: MailFathomTransport;
 
     /** Whether this reader asked for opening a message to mark it read, and holds the grant that writes a flag. */
@@ -56,8 +64,8 @@ export function ReadMarkingProvider({
     readonly children: ReactNode;
 }) {
     const pending = usePendingChanges();
-    const [drawn, setDrawn] = useState<HeldMarkings>({ session: null, marked: new Map() });
-    const submitted = useRef<HeldMarkings>({ session: null, marked: new Map() });
+    const [drawn, setDrawn] = useState<HeldMarkings>({ signedInAs: null, marked: new Map() });
+    const submitted = useRef<HeldMarkings>({ signedInAs: null, marked: new Map() });
 
     // The markings waiting for the batch they will travel in. Nothing waits for a body that has not been drawn — the
     // flush runs on the microtask after the one that filled it — so what a batch coalesces is the bodies that were
@@ -67,22 +75,23 @@ export function ReadMarkingProvider({
 
     // Derived rather than cleared, for the reason `preferences/useClientPreferences.ts` gives: signing out and back in
     // on one tab keeps this component mounted, and the previous person's markings would otherwise be drawn over the
-    // next person's mail. The session the markings were made under travels beside them for that comparison; the ref
-    // below holds the same pair and is emptied in the handler, where a session change is somebody's act.
-    const inForce = drawn.session === session ? drawn.marked : emptyMarkings;
+    // next person's mail. Who the markings were made for travels beside them for that comparison; the ref below holds
+    // the same pair and is emptied in the handler, where somebody else signing in is somebody's act.
+    const inForce = drawn.signedInAs === signedInAs ? drawn.marked : emptyMarkings;
 
     // Who is signed in now, for the callbacks the queue holds on to after the render that made them has gone. It is
     // the one thing here a render cannot answer: a question raised under one credential is answered from a toast that
     // outlives the render it was raised in, and every closure in that render captured a credential rather than a way
-    // to ask. Nothing reads it while rendering, so it drives nothing on the screen.
-    const signedIn = useRef(session);
+    // to ask. The session travels with it because a question asked again after a renewal goes out under the token that
+    // replaced the one it was first asked under. Nothing reads it while rendering, so it drives nothing on the screen.
+    const signedIn = useRef({ signedInAs, session });
 
     useEffect(() => {
-        signedIn.current = session;
-    }, [session]);
+        signedIn.current = { signedInAs, session };
+    }, [signedInAs, session]);
 
     function keep(): void {
-        setDrawn({ session: submitted.current.session, marked: new Map(submitted.current.marked) });
+        setDrawn({ signedInAs: submitted.current.signedInAs, marked: new Map(submitted.current.marked) });
     }
 
     function forget(storedEmailIds: readonly string[]): void {
@@ -100,14 +109,14 @@ export function ReadMarkingProvider({
 
         waiting.current = [];
 
-        if (session === null) {
+        if (session === null || signedInAs === null) {
             return;
         }
 
         // Split rather than truncated: the route refuses a longer batch whole, and a marking silently dropped here
         // would be a row drawn read against a mailbox nobody told.
         for (let from = 0; from < batch.length; from += mostMessagesPerMutation) {
-            submit(session, batch.slice(from, from + mostMessagesPerMutation));
+            submit(session, signedInAs, batch.slice(from, from + mostMessagesPerMutation));
         }
     }
 
@@ -123,7 +132,7 @@ export function ReadMarkingProvider({
         keep();
     }
 
-    function submit(asking: ClientSession, batch: readonly string[]): void {
+    function submit(asking: ClientSession, askingFor: string, batch: readonly string[]): void {
         // Where each of these was counted as unread, captured before anything can drop it, so that asking again after
         // a refusal restores exactly what letting go took away. It lives as long as some change from this batch is
         // still being followed and no longer, because that is what holds the two callbacks below.
@@ -136,7 +145,7 @@ export function ReadMarkingProvider({
         );
 
         void markMailRead(asking, transport, batch).then((answer) => {
-            if (submitted.current.session !== asking) {
+            if (submitted.current.signedInAs !== askingFor) {
                 return;
             }
 
@@ -152,12 +161,14 @@ export function ReadMarkingProvider({
                     // knows nothing about who is signed in — so who is asking is read at the moment somebody answers
                     // rather than at the moment the question was put. Asking again under a credential that has since
                     // left would be a write the person now signed in never asked for and cannot see.
-                    if (signedIn.current !== asking) {
+                    const now = signedIn.current;
+
+                    if (now.signedInAs !== askingFor || now.session === null) {
                         return;
                     }
 
                     remark(storedEmailIds, markedIn);
-                    submit(asking, storedEmailIds);
+                    submit(now.session, askingFor, storedEmailIds);
                 },
                 letGo: forget,
             });
@@ -165,12 +176,12 @@ export function ReadMarkingProvider({
     }
 
     function markRead(message: MessageOpened): void {
-        if (session === null || !message.unread) {
+        if (session === null || signedInAs === null || !message.unread) {
             return;
         }
 
-        if (submitted.current.session !== session) {
-            submitted.current = { session, marked: new Map() };
+        if (submitted.current.signedInAs !== signedInAs) {
+            submitted.current = { signedInAs, marked: new Map() };
             waiting.current = [];
         }
 

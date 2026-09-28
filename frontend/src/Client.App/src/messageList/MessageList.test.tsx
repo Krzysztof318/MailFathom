@@ -1135,6 +1135,26 @@ describe('MessageList', () => {
         expect(asked.requests.length).toBe(before + 1);
     });
 
+    // A move or an archive lands mail in a folder whose list has never drawn it, and the deployment names that mail for
+    // the folder it landed in once it carried it there — which is the only word the destination's list ever hears.
+    it('reads again for mail the deployment named in this folder that the list has not drawn', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(wholeFolder);
+
+        renderList(asked.transport, { changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['message-moved-here'] });
+        });
+
+        await waitFor(() => {
+            expect(asked.requests.length).toBe(before + 1);
+        });
+    });
+
     // The standing rule for every list in this client: it is drawn as a skeleton once, and a change after that reaches
     // the rows it touched rather than the list. So what is asserted here is which rows carry the design's animation,
     // not that the list read something again — that is the pair of cases above.

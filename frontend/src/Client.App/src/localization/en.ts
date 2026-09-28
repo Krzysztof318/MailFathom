@@ -809,6 +809,7 @@ export const en = {
     'act.noTrashFolder': '{control} — this account names no trash folder, so there is nowhere to delete to.',
     'act.severalAccounts': '{control} — messages from several accounts cannot be filed into one folder.',
     'act.noOtherFolder': '{control} — this account has no other folder to file into.',
+    'act.draftsStayOut': '{control} — a draft can only be filed in a folder you made yourself.',
     'act.foldersUnknown': '{control} — MailFathom has not read your folders, so it cannot say where this would go.',
     'act.foldersNotRead': 'Your folders were not read: {reason}.',
     'act.readFoldersAgain': 'Try again',
@@ -819,10 +820,6 @@ export const en = {
     'act.deleteQuestion.other': 'Delete {count} messages?',
     'act.deleteConsequence': 'Each one is filed in the trash folder of the account it is in.',
     'act.deleteConfirm': 'Move to the trash',
-    'act.purgeQuestion.one': 'Delete {count} message permanently?',
-    'act.purgeQuestion.few': 'Delete {count} messages permanently?',
-    'act.purgeQuestion.many': 'Delete {count} messages permanently?',
-    'act.purgeQuestion.other': 'Delete {count} messages permanently?',
     'act.purgeConsequence.one':
         'Already in the trash — deleting now removes {count} message together with attachments.',
     'act.purgeConsequence.few':
@@ -832,9 +829,8 @@ export const en = {
     'act.purgeConsequence.other':
         'Already in the trash — deleting now removes {count} messages together with attachments.',
     'act.purgeReversal': 'This cannot be undone.',
-    'act.purgeConfirm': 'Delete permanently',
-    'act.deletingPermanently': 'Deleting permanently…',
-    'act.deleteWithdrawn': 'Kept — nothing was deleted',
+    'act.purgeConfirm': 'Delete',
+    'act.purging': 'Deleting…',
     'act.moveTitle': 'File in another folder',
     'act.moveClose': 'Close',
 
@@ -1470,6 +1466,8 @@ export const en = {
     'pendingChange.destinationNotFound': 'The folder it was to be filed into is no longer there.',
     'pendingChange.accountNoLongerConfigured': 'This deployment no longer reads that mail account.',
     'pendingChange.changeNotUsable': 'The change asked for is not one a single request can name — please report it.',
+    'pendingChange.destinationNotAllowed':
+        'That folder does not take it: drafts stay in the drafts folder or a folder you made, and nothing else goes there.',
     'pendingChange.notDelivered': 'This change did not reach your deployment.',
     'pendingChange.notDeliveredBody': 'Nothing was written down, so your mailbox is unchanged.',
     'pendingChange.retry': 'Try again',

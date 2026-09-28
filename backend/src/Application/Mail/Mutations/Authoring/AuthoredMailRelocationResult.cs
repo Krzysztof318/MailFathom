@@ -37,6 +37,10 @@ public enum MailRelocationOutcome
 
     /// <summary>The account holds its mailbox, and the move was committed to stored state; a restoring one also opened the record its source is owed.</summary>
     Applied = 5,
+
+    /// <summary>The destination takes no message of this kind: the drafts folder holds drafts alone, and a draft is filed nowhere with a role but the trash.</summary>
+    /// <remarks>A draft is a message in the account's drafts folder, which is what a client reads to open one in its composer — so an ordinary message filed there would reopen as something somebody was writing, and a draft filed into another special folder would sit among mail it is not.</remarks>
+    DestinationNotAllowed = 6,
 }
 
 /// <summary>What one authored move became: the durable record that now carries it, or the reason there is none.</summary>

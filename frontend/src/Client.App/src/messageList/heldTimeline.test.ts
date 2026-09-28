@@ -428,10 +428,30 @@ describe('changeNoticed', () => {
         expect(changeNoticed(once, ['message-5'])).toBe(once);
     });
 
-    it('leaves the list the object it was where it holds none of them', () => {
+    it('reads mail it holds on no page as mail that came into the folder, marking the leading page alone', () => {
+        const held = changeNoticed(readForward(3), ['message-999']);
+
+        expect(held.slots.map((slot) => slot.stale)).toStrictEqual([true, false, false]);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
+    });
+
+    it('reads the leading page for mail it holds on no page while only a page far below it was dropped', () => {
+        const trimmed = trimmedAround(readForward(2 + pagesKeptEitherSide * 2), 0, 3);
+        const held = changeNoticed(trimmed, ['message-999']);
+
+        expect(held.slots[0]?.stale).toBe(true);
+        expect(held.slots.slice(1).map((slot) => slot.stale)).toStrictEqual(trimmed.slots.slice(1).map(() => false));
+    });
+
+    it('reads nothing for mail it holds on no page while the leading page is itself dropped', () => {
+        const trimmed = trimmedAround(readForward(6), 20, 23);
+
+        expect(changeNoticed(trimmed, ['message-999'])).toBe(trimmed);
+    });
+
+    it('leaves the list the object it was where nothing is named', () => {
         const held = readForward(3);
 
-        expect(changeNoticed(held, ['message-999'])).toBe(held);
         expect(changeNoticed(held, [])).toBe(held);
     });
 

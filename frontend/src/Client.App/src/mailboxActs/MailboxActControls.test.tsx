@@ -141,14 +141,14 @@ describe('MailboxActControls', () => {
 
         const asked = screen.getByRole('dialog');
 
-        expect(within(asked).getByRole('heading', { name: 'Delete 2 messages permanently?' })).toBeDefined();
+        expect(within(asked).getByRole('heading', { name: 'Delete 2 messages?' })).toBeDefined();
         expect(
             within(asked).getByText(
                 'Already in the trash — deleting now removes 2 messages together with attachments.',
             ),
         ).toBeDefined();
         expect(within(asked).getByText('This cannot be undone.')).toBeDefined();
-        expect(within(asked).getByRole('button', { name: 'Delete permanently' })).toBeDefined();
+        expect(within(asked).getByRole('button', { name: 'Delete' })).toBeDefined();
     });
 
     it('deletes nothing where the question was answered with the way back out of it', () => {
@@ -171,6 +171,25 @@ describe('MailboxActControls', () => {
 
         expect(offered).toHaveBeenCalledWith([invoice, receipt]);
         expect(screen.getByRole('button', { name: 'Projects / Clients' })).toBeDefined();
+    });
+
+    // Filing into the trash is deleting, so choosing it asks what Delete asks and then deletes, rather than filing the
+    // mail away as a move with a toast and an animation of its own.
+    it('asks the delete question where the trash is the folder chosen, and deletes once it is answered', () => {
+        const performed = vi.fn();
+        const trash: MoveDestination = { alias: 'work-trash', name: 'Trash', role: 'Trash' };
+
+        drawControls({ perform: performed, destinationsOf: () => [{ ...work, destinations: [trash, clients] }] });
+        fireEvent.click(screen.getByRole('button', { name: 'Move' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Trash' }));
+
+        const asked = screen.getByRole('dialog', { name: 'Delete 1 message?' });
+
+        expect(performed).not.toHaveBeenCalled();
+
+        fireEvent.click(within(asked).getByRole('button', { name: 'Move to the trash' }));
+
+        expect(performed).toHaveBeenCalledWith('delete', [invoice]);
     });
 
     // The record is durable from the press and the account's pass carries it out minutes later, so the control has to

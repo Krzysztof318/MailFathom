@@ -16,7 +16,8 @@ const session: ClientSession = {
     authorization: 'Basic dGVzdA==',
 };
 
-const somebodyElse: ClientSession = { ...session, authorization: 'Basic b3RoZXI=' };
+const signedInAs = `${session.baseAddress}\nreader`;
+const somebodyElse = `${session.baseAddress}\nsomebody-else`;
 
 function opened(storedEmailId: string, message: Partial<MessageOpened> = {}): MessageOpened {
     return { storedEmailId, account: 'work', folder: 'INBOX', unread: true, ...message };
@@ -65,7 +66,12 @@ function marking(
             <LocalizationProvider>
                 <ToastsProvider>
                     <PendingChangesProvider session={signedIn} transport={transport}>
-                        <ReadMarkingProvider session={signedIn} transport={transport} marking={marking}>
+                        <ReadMarkingProvider
+                            session={signedIn}
+                            signedInAs={signedIn === null ? null : signedInAs}
+                            transport={transport}
+                            marking={marking}
+                        >
                             {children}
                         </ReadMarkingProvider>
                     </PendingChangesProvider>
@@ -233,14 +239,14 @@ describe('ReadMarkingProvider', () => {
             return Promise.reject(new Error('the connection was refused'));
         };
 
-        let signedIn: ClientSession = session;
+        let signedIn = signedInAs;
 
         const { result, rerender } = renderHook(() => useReadMarking(), {
             wrapper: ({ children }) => (
                 <LocalizationProvider>
                     <ToastsProvider>
-                        <PendingChangesProvider session={signedIn} transport={refused}>
-                            <ReadMarkingProvider session={signedIn} transport={refused} marking>
+                        <PendingChangesProvider session={session} transport={refused}>
+                            <ReadMarkingProvider session={session} signedInAs={signedIn} transport={refused} marking>
                                 {children}
                             </ReadMarkingProvider>
                         </PendingChangesProvider>
@@ -284,11 +290,11 @@ describe('ReadMarkingProvider', () => {
         const { transport } = recording();
 
         // Held beside the render rather than passed to it, because a wrapper receives no props of its own.
-        let signedIn: ClientSession = session;
+        let signedIn = signedInAs;
 
         const { result, rerender } = renderHook(() => useReadMarking(), {
             wrapper: ({ children }) => (
-                <ReadMarkingProvider session={signedIn} transport={transport} marking>
+                <ReadMarkingProvider session={session} signedInAs={signedIn} transport={transport} marking>
                     {children}
                 </ReadMarkingProvider>
             ),
@@ -306,5 +312,40 @@ describe('ReadMarkingProvider', () => {
         rerender();
 
         expect(result.current.marked.size).toBe(0);
+    });
+
+    // The defect behind rows turning unread again: a renewal replaces the token an hour before it expires, nobody signs
+    // out, and markings keyed on the credential were dropped with it — so every message opened before the renewal was
+    // drawn unread again against a list that had not yet heard the mailbox agree.
+    it('keeps what the person marked when the token they sign in with is renewed', async () => {
+        const { transport, requests } = recording();
+        let presented: ClientSession = session;
+
+        const { result, rerender } = renderHook(() => useReadMarking(), {
+            wrapper: ({ children }) => (
+                <ReadMarkingProvider session={presented} signedInAs={signedInAs} transport={transport} marking>
+                    {children}
+                </ReadMarkingProvider>
+            ),
+        });
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(1);
+        });
+
+        presented = { ...session, authorization: 'Bearer renewed' };
+        rerender();
+
+        expect(drawnUnread(result.current, 'first', true)).toBe(false);
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        expect(requests).toHaveLength(1);
     });
 });

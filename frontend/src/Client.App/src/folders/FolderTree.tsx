@@ -18,8 +18,9 @@ import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { dropDestination } from '../mailboxActs/mailboxDestinations';
-import { useMailboxActs } from '../mailboxActs/useMailboxActs';
+import { DeleteQuestion } from '../mailboxActs/ActQuestions';
+import { dropDestination, filesIntoTrash } from '../mailboxActs/mailboxDestinations';
+import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { scopeKey } from '../workspace/mailScope';
@@ -116,6 +117,10 @@ export function FolderTree({
     // not arrived or did not answer, which draws a column with no acts on it rather than acts drawn on a guess.
     const [managed, setManaged] = useState<ReadonlyMap<string, ManagedMailFolders>>(new Map());
     const elements = useRef(new Map<string, HTMLLIElement>());
+
+    // The messages last dropped on a trash, which the question standing in front of deleting them is about.
+    const [trashed, setTrashed] = useState<readonly ActedMessage[]>([]);
+    const deleting = useRef<HTMLDialogElement>(null);
 
     // A network gap ends the answer it interrupted rather than outliving it. Coming back re-reads with the attempt
     // unchanged, so an answer kept across the gap would report a read that is over while the new one is still running,
@@ -526,6 +531,15 @@ export function FolderTree({
 
         return () => {
             acts.carry([]);
+
+            // A drop on the trash is deleting, so it stands behind the question the delete control asks.
+            if (filesIntoTrash(destination)) {
+                setTrashed(carried);
+                deleting.current?.showModal();
+
+                return;
+            }
+
             acts.perform('move', carried, destination);
         };
     }
@@ -594,6 +608,8 @@ export function FolderTree({
                     />
                 ))}
             </ul>
+
+            <DeleteQuestion messages={trashed} asked={deleting} />
 
             {menu === null || pressed === undefined ? null : (
                 <FolderRowMenu
