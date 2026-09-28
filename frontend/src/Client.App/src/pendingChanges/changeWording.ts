@@ -78,6 +78,7 @@ export const refusalReasons: Readonly<Record<MailMutationOutcome, MessageKey | n
     'destination-not-found': 'pendingChange.destinationNotFound',
     'account-no-longer-configured': 'pendingChange.accountNoLongerConfigured',
     'change-not-usable': 'pendingChange.changeNotUsable',
+    'destination-not-allowed': 'pendingChange.destinationNotAllowed',
 };
 
 /** What a standing the deployment could not settle says, which is the other half of the two a person is shown. */

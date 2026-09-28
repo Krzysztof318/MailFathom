@@ -682,6 +682,9 @@ internal static class ClientMailChangeOutcomes
 
     /// <summary>The destination is a folder this deployment does not mirror, and the account no longer declares what it keeps of mail that leaves it.</summary>
     internal const string AccountNoLongerConfigured = "account-no-longer-configured";
+
+    /// <summary>The destination takes no message of this kind: the drafts folder holds drafts alone, and a draft is filed nowhere with a role but the trash.</summary>
+    internal const string DestinationNotAllowed = "destination-not-allowed";
 }
 
 /// <summary>The names this surface accepts for what a caller wants done with the tags it listed.</summary>
@@ -841,6 +844,7 @@ internal sealed record ClientMailMoveResultResponse(
         MailRelocationOutcome.AlreadyInDestination => ClientMailChangeOutcomes.AlreadyInDestination,
         MailRelocationOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
         MailRelocationOutcome.Applied => ClientMailChangeOutcomes.Applied,
+        MailRelocationOutcome.DestinationNotAllowed => ClientMailChangeOutcomes.DestinationNotAllowed,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome),
             outcome,

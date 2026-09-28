@@ -1106,6 +1106,35 @@ describe('FolderTree, under a drag carrying messages', () => {
         expect(row(/^Archiwum/).className).not.toContain('inset-ring-2');
     });
 
+    // A drop on the trash is a delete however the mail got there, so it asks what the Delete control asks and deletes
+    // on the answer. Which folder is the trash is what the move dialog's offer says, and that is what is faked here.
+    it('asks the delete question for messages dropped on the trash, and deletes them once it is answered', async () => {
+        const { acts, perform, carry } = carrying();
+        const intoTrash: readonly MoveDestinationGroup[] = workFolders.map((group) => ({
+            ...group,
+            destinations: group.destinations.map((destination) =>
+                destination.alias === 'ARCHIWUM' ? { ...destination, role: 'Trash' as const } : destination,
+            ),
+        }));
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, {
+            ...acts,
+            destinationsOf: () => intoTrash,
+        });
+
+        await drawn();
+        fireEvent.drop(row(/^Archiwum/));
+
+        expect(carry).toHaveBeenCalledWith([]);
+        expect(perform).not.toHaveBeenCalled();
+
+        const asked = screen.getByRole('dialog', { name: 'Delete 1 message?' });
+
+        fireEvent.click(within(asked).getByRole('button', { name: 'Move to the trash' }));
+
+        expect(perform).toHaveBeenCalledWith('delete', fromWorkInbox);
+    });
+
     it('takes no drop on a mailbox’s own row, which names no folder of its own to land in', async () => {
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, undefined, carrying().acts);
 

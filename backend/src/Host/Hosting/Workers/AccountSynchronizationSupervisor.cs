@@ -1296,6 +1296,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 folderRun);
 
             this.RecordFolderRun(folder, result);
+            this.AnnounceRelocatedArrivals(result);
 
             return new FolderRunOutcome(Succeeded: true, result.Folder, result.ArrivedEmailCount);
         }
@@ -1343,6 +1344,23 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             return FolderRunOutcome.Failed;
         }
+    }
+
+    /// <summary>Tells an open client that mail MailFathom moved into this folder is now listed there.</summary>
+    /// <remarks>
+    /// The move itself is announced when the mailbox settles it, which is before this run carried the local email into
+    /// the folder it landed in — so a client that re-read the destination on that signal was answered without the
+    /// message, and nothing else says the folder changed: a relocation is no arrival and raises none. This is the moment
+    /// the listing starts answering with it, which is why it is said here rather than there.
+    /// </remarks>
+    private void AnnounceRelocatedArrivals(MailboxSynchronizationResult result)
+    {
+        if (result.RelocatedEmails is not { Count: > 0 } carried || result.Folder is not { } landedIn)
+        {
+            return;
+        }
+
+        this.signals.Publish(ClientSignal.MailChanged(this.account, landedIn.Alias, carried));
     }
 
     /// <summary>Files what a completed folder turn did, translating the run's own outcome into the one an operator reads.</summary>

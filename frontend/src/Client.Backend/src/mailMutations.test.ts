@@ -12,7 +12,6 @@ import {
     moveMail,
     readMailMutationRecords,
     releaseMailDeletes,
-    withdrawMailDeletes,
 } from './mailMutations';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
@@ -305,7 +304,7 @@ describe('moveMail', () => {
         });
     });
 
-    it('answers what became of each message, including one already filed there', async () => {
+    it('answers what became of each message, including one already filed there and one the folder refused', async () => {
         const answer = await moveMail(
             session,
             answering({
@@ -314,6 +313,7 @@ describe('moveMail', () => {
                     results: [
                         { storedEmailId, outcome: 'recorded', destinationFolder: 'work-archive' },
                         { storedEmailId: 'second', outcome: 'already-in-destination', destinationFolder: null },
+                        { storedEmailId: 'third', outcome: 'destination-not-allowed', destinationFolder: null },
                     ],
                 }),
             }),
@@ -325,6 +325,7 @@ describe('moveMail', () => {
             value: [
                 { storedEmailId, outcome: 'recorded', changes: [] },
                 { storedEmailId: 'second', outcome: 'already-in-destination', changes: [] },
+                { storedEmailId: 'third', outcome: 'destination-not-allowed', changes: [] },
             ],
         });
     });
@@ -405,12 +406,9 @@ describe('deleteMail', () => {
     });
 });
 
-// The two ends of the wait in front of a delete. Both name records rather than messages, and both answer with each
-// record as it now stands, so what a client learns from either is read exactly as a read of those records is.
-describe.each([
-    ['withdrawMailDeletes', withdrawMailDeletes, 'withdrawals'],
-    ['releaseMailDeletes', releaseMailDeletes, 'releases'],
-] as const)('%s', (_, ask, route) => {
+// The end of the wait in front of a delete. It names records rather than messages and answers with each record as it
+// now stands, so what a client learns from it is read exactly as a read of those records is.
+describe.each([['releaseMailDeletes', releaseMailDeletes, 'releases']] as const)('%s', (_, ask, route) => {
     it(`names the records on the client surface’s delete ${route} route`, async () => {
         const { transport, requests } = recording({ status: 200, body: JSON.stringify({ changes: [] }) });
 

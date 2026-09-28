@@ -1867,10 +1867,17 @@ Content-Type: application/json
 ```
 
 Each result carries one of `recorded`, `applied`, `message-not-found`, `destination-not-found`,
-`already-in-destination`, or `account-no-longer-configured`, and a flag change may also answer `change-not-usable` when
-the values asked for are not values one request can name. A folder withheld from this caller is reported as a
-destination that is not there, on the same rule that makes mail in a withheld folder a message that is not there: filing
-mail into a folder the caller cannot read would move it out of sight rather than be a capability of its own.
+`destination-not-allowed`, `already-in-destination`, or `account-no-longer-configured`, and a flag change may also answer
+`change-not-usable` when the values asked for are not values one request can name. A folder withheld from this caller is
+reported as a destination that is not there, on the same rule that makes mail in a withheld folder a message that is not
+there: filing mail into a folder the caller cannot read would move it out of sight rather than be a capability of its
+own.
+
+**The drafts folder is kept to drafts.** A draft is a message standing in the folder the account's `Drafts` role names;
+nothing else identifies one, because a draft reaches the mailbox from other clients that set no flag MailFathom could
+rely on. A move of anything else into the drafts folder is `destination-not-allowed`, and so is a move of a draft into
+any folder that carries a role other than the trash: a draft is filed only into a folder with no role — one a person made
+— or into the trash, which is how it is deleted.
 
 **On an account whose mailbox MailFathom holds, a change is made rather than recorded.** There is no server to carry it
 to, so a flag, a keyword, a move, or a delete on a [held account](#the-folder-management-routes) is committed to the stored
@@ -3717,6 +3724,13 @@ message crosses rather than when something else makes it look again. The destina
 into a folder this deployment maps and does not mirror announces the source alone: there is no folder a client holds mail
 for. Everything else — a delete, a keyword change — names the one folder the message is in, exactly as before, and a
 settled flag change says `mail.flags.changed` about that one folder instead.
+
+**The folder a message landed in is named a second time once a run has carried it there.** The settled move is announced
+when the mail server has taken it, which is before the account's next run finds the message in its new folder and moves
+the stored row with it — so a client re-reading on the first statement reads a folder that does not hold the message
+yet. The run that carries it says `mail.changed` for the landing folder again, naming the messages it carried, and that
+is the read that finds them. A client holding none of the named rows reads the folder's leading page again, as it would
+for an arrival.
 
 **Statements are folded per user, per kind, and per place over half a second.** A run committing a folder's worth of
 mail is one arrival to the person who was away from the screen rather than one statement per message, and two folders'

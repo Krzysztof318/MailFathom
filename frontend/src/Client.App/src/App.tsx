@@ -904,7 +904,12 @@ export function App({
                             {/* Above the frame rather than inside a space, because three unrelated places below read what has been
             marked: the row that draws a message, the folder tree that counts unread mail, and the body that marks one
             on being drawn. What it holds goes with the credential, exactly as the workspace does. */}
-                            <ReadMarkingProvider session={session} transport={readMail} marking={markingRead}>
+                            <ReadMarkingProvider
+                                session={session}
+                                signedInAs={signedInAs}
+                                transport={readMail}
+                                marking={markingRead}
+                            >
                                 {/* Above the frame for the same reason: which of the two reading surfaces a message opens on decides
                 how every message anywhere below is drawn, and the two components that read it — the body and the
                 control on the message head — sit several levels under the reading pane and under the conversation

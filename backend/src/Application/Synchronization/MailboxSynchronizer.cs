@@ -1504,6 +1504,19 @@ public sealed record MailboxSynchronizationResult(
     IReadOnlyList<SuppressedMailboxChange> SuppressedChanges,
     MailboxContentVolume ContentVolume)
 {
+    /// <summary>Gets the local emails this run carried into the folder because MailFathom had relocated them there.</summary>
+    /// <remarks>
+    /// Read off the suppressed changes rather than kept beside them, because a carried email is exactly the appearance a
+    /// relocation record accounted for, and this is the moment the folder's listing starts naming it.
+    /// </remarks>
+    public IReadOnlyList<StoredEmailId> RelocatedEmails =>
+    [
+        .. this.SuppressedChanges
+            .Where(static change => change.Kind == MailboxChangeKind.EmailAppearedInFolder
+                && change.Mutation == MailboxMutation.Relocate)
+            .Select(static change => change.StoredEmailId),
+    ];
+
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="folder">The binding the run worked under.</param>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>

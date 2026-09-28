@@ -145,6 +145,7 @@ export const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {
     noTrashFolder: 'act.noTrashFolder',
     severalAccounts: 'act.severalAccounts',
     noOtherFolder: 'act.noOtherFolder',
+    draftsStayOut: 'act.draftsStayOut',
     foldersUnknown: 'act.foldersUnknown',
 };
 

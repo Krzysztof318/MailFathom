@@ -428,10 +428,16 @@ describe('changeNoticed', () => {
         expect(changeNoticed(once, ['message-5'])).toBe(once);
     });
 
-    it('leaves the list the object it was where it holds none of them', () => {
+    it('reads mail it holds on no page as mail that came into the folder, marking the leading page alone', () => {
+        const held = changeNoticed(readForward(3), ['message-999']);
+
+        expect(held.slots.map((slot) => slot.stale)).toStrictEqual([true, false, false]);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
+    });
+
+    it('leaves the list the object it was where nothing is named', () => {
         const held = readForward(3);
 
-        expect(changeNoticed(held, ['message-999'])).toBe(held);
         expect(changeNoticed(held, [])).toBe(held);
     });
 

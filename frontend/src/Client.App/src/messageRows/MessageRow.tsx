@@ -63,20 +63,14 @@ const actPendingSaid: Readonly<Record<FilingAct, MessageKey>> = {
 
 // Deleting is the one act whose sentence turns on what it does rather than on its name. Sent to the trash it files the
 // message somewhere its reader can go and fetch it, and the row leaves the folder saying so; performed on a message
-// already in the trash it destroys the mail, so the row stays where it is for the seconds in which the deployment is
-// still holding the change back — and it says *that*, because a row reading `Moving to the trash…` in the trash would
-// be describing an act that is not the one about to happen.
-//
-// It reads what the act destroys rather than whether the row is leaving, because the two stop agreeing at the exact
-// moment somebody is watching: the way back closes, the released delete takes the row out of the list, and a sentence
-// read off the leaving would turn into `Moving to the trash…` over a message being destroyed — on the last frames
-// anybody sees of it.
+// already in the trash it destroys the mail, and the row leaves saying *that*, because a row reading `Moving to the
+// trash…` in the trash would be describing an act that is not the one being performed.
 function actPendingWording(asked: AskedAct): MessageKey | null {
     if (changesAFlag(asked.act)) {
         return null;
     }
 
-    return asked.destroys ? 'act.deletingPermanently' : actPendingSaid[asked.act];
+    return asked.destroys ? 'act.purging' : actPendingSaid[asked.act];
 }
 
 // What a dragged row is carried as, which no other drop target reads: the folder column learns which messages are on

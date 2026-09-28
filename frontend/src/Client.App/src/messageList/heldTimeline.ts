@@ -263,6 +263,9 @@ export function arrivalNoticed(held: HeldTimeline): HeldTimeline {
  * here: a page is a hundred rows and a signal may name one of them, so dropping the page emptied ninety-nine rows
  * nothing had said anything about.
  *
+ * Mail the list holds on no page at all is the other case: the signal is about this folder, so mail it has never drawn
+ * came into it, and the leading page is marked exactly as {@link arrivalNoticed} marks it.
+ *
  * @param held What the list knows now.
  * @param storedEmailIds The rows the deployment named.
  * @returns What the list knows.
@@ -274,12 +277,17 @@ export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly strin
         return held;
     }
 
-    const holdsNamed = (slot: TimelineSlot): boolean =>
-        !slot.stale && slot.emails?.some((email) => named.has(email.id)) === true;
+    const holdsAnyNamed = (slot: TimelineSlot): boolean => slot.emails?.some((email) => named.has(email.id)) === true;
+    const holdsNamed = (slot: TimelineSlot): boolean => !slot.stale && holdsAnyNamed(slot);
 
-    // Answered before anything is rebuilt, so a change naming mail this list is not holding leaves the list the object
-    // it already was — which is what keeps a signal about another folder from re-rendering every row of this one. A
-    // page already marked is among those: it is being read again already, and marking it twice is the same page.
+    // Mail named for this folder that the list holds on no page is mail that came into it — a move or an archive the
+    // deployment carried here — so it is read as an arrival would be rather than left out until somebody refreshes.
+    if (!held.slots.some(holdsAnyNamed)) {
+        return arrivalNoticed(held);
+    }
+
+    // Answered before anything is rebuilt, so a page already marked is left the object it already was: it is being read
+    // again already, and marking it twice is the same page.
     if (!held.slots.some(holdsNamed)) {
         return held;
     }

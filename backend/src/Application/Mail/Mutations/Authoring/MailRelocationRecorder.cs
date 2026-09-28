@@ -4,10 +4,12 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -37,6 +39,12 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// way of moving mail out of sight rather than a capability of its own.
 /// </para>
 /// <para>
+/// The drafts folder is judged by what it holds as well as by who may see it. A draft is a message in the account's
+/// drafts folder, so a move into that folder is refused unless the message is already a draft, and a draft is refused a
+/// destination with any other role but the trash — the rule a client offers its folders by, held here as well because a
+/// client's offer is not a boundary.
+/// </para>
+/// <para>
 /// Every refusal is a result rather than an exception, because a caller moving several messages at once acts on each
 /// answer and carries on with the rest. The one failure that is not about a message is: a caller without the grant
 /// gets no answer about any of them, which is the whole request's outcome rather than one item's.
@@ -47,6 +55,7 @@ public sealed class MailRelocationRecorder
     private readonly AccessAuthorization authorization;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IAuthoredMailboxTargetReader targets;
+    private readonly MailFolderReferenceResolver folderReferences;
     private readonly MailboxDestinationResolver destinations;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly MailboxChangeSubmission submission;
@@ -57,6 +66,7 @@ public sealed class MailRelocationRecorder
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <param name="scopeResolver">Answers whether a caller may reach the folder an email is in and the folder it is going to.</param>
     /// <param name="targets">Answers where the named email currently is.</param>
+    /// <param name="folderReferences">Answers which role the folder the email is in plays.</param>
     /// <param name="destinations">Turns the folder a caller named into the folder on the server it currently means.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail that leaves the mirror for good.</param>
     /// <param name="submission">Records the move, or commits it where the account is held.</param>
@@ -67,6 +77,7 @@ public sealed class MailRelocationRecorder
         AccessAuthorization authorization,
         MailboxScopeResolver scopeResolver,
         IAuthoredMailboxTargetReader targets,
+        MailFolderReferenceResolver folderReferences,
         MailboxDestinationResolver destinations,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         MailboxChangeSubmission submission,
@@ -76,6 +87,7 @@ public sealed class MailRelocationRecorder
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(targets);
+        ArgumentNullException.ThrowIfNull(folderReferences);
         ArgumentNullException.ThrowIfNull(destinations);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(submission);
@@ -85,6 +97,7 @@ public sealed class MailRelocationRecorder
         this.authorization = authorization;
         this.scopeResolver = scopeResolver;
         this.targets = targets;
+        this.folderReferences = folderReferences;
         this.destinations = destinations;
         this.deleteDispositions = deleteDispositions;
         this.submission = submission;
@@ -147,6 +160,11 @@ public sealed class MailRelocationRecorder
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
         }
 
+        if (!this.Admits(account, target.Folder.Alias, folder.Role))
+        {
+            return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotAllowed);
+        }
+
         AuthoredDeleteEmailDisposition? localDisposition;
 
         try
@@ -205,5 +223,25 @@ public sealed class MailRelocationRecorder
             default:
                 return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.MessageNotFound);
         }
+    }
+
+    /// <summary>Whether a message in the named folder may be filed into a folder playing that role.</summary>
+    /// <remarks>
+    /// Whether the message is a draft is read off the folder it is in rather than off its <c>\Draft</c> flag, because the
+    /// folder is what a client opens a message in its composer by, and a mail server files a draft there whichever
+    /// client wrote it — a flag some clients never set would admit into the drafts folder mail that then reopened as a
+    /// draft all the same.
+    /// </remarks>
+    private bool Admits(MailAccountId account, MailFolderAlias source, MailFolderSpecialUse? destinationRole)
+    {
+        var isDraft = this.folderReferences.Resolve(account, MailFolderReference.ToAlias(source))?.SpecialUse
+            == MailFolderSpecialUse.Drafts;
+
+        return destinationRole switch
+        {
+            MailFolderSpecialUse.Drafts => isDraft,
+            null or MailFolderSpecialUse.Trash => true,
+            _ => !isDraft,
+        };
     }
 }

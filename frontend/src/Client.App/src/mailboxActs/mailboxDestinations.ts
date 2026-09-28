@@ -17,6 +17,13 @@ import { changesAFlag, type ActedMessage, type MailboxAct } from './useMailboxAc
 // Filing somewhere chosen is bounded by what a mail server can do: a message moves between folders of its own account
 // and nowhere else. So a selection spanning two accounts has no one destination to offer, and that is refused here
 // rather than met as half a batch landing.
+//
+// **The drafts folder holds drafts and nothing else, and a draft goes nowhere special but the trash.** A draft is a
+// message in its account's drafts folder — the folder is what a mail server files one into, and what opening a message
+// reads to decide it goes back to the composer — so an ordinary message filed there would open as something somebody
+// was writing. A draft leaves only for a folder somebody made, where nothing reads it as anything else, or for the
+// trash, which is deleting it. The deployment refuses both at its own boundary; this is the half that stops a control
+// offering either.
 
 /** One folder a move may name, as the dialog offering it draws it. */
 export interface MoveDestination {
@@ -80,6 +87,9 @@ export type ActRefusal =
     /** The one account has no other folder to file into. */
     | 'noOtherFolder'
 
+    /** A draft among them would be filed into a folder the mail server gives a role, which only the trash may be. */
+    | 'draftsStayOut'
+
     /** This client has not read the folders, so it does not know where the act would file to. */
     | 'foldersUnknown';
 
@@ -125,6 +135,16 @@ export function deletesPermanently(directory: MailFolderDirectory | null, messag
     );
 }
 
+/** Whether filing into that folder is deleting, which is what the trash is however a surface reached it. */
+export function filesIntoTrash(destination: MoveDestination): boolean {
+    return destination.role === 'Trash';
+}
+
+/** Whether the message is a draft, which is a message in its own account's drafts folder. */
+export function isDraft(directory: MailFolderDirectory | null, message: ActedMessage): boolean {
+    return folderWithRole(directory, message.account, 'Drafts') === message.folder;
+}
+
 /** The accounts the named messages are in, each named once. */
 export function accountsAmong(messages: readonly ActedMessage[]): readonly string[] {
     return [...new Set(messages.map((message) => message.account))];
@@ -140,6 +160,9 @@ export function accountsAmong(messages: readonly ActedMessage[]): readonly strin
  *
  * The folder they are already in is offered like any other: the deployment answers a message already there as its own
  * outcome, so leaving it out would be this client deciding what a folder holds from a list it read minutes ago.
+ *
+ * The drafts folder is offered only where every message is a draft, and where any of them is, nothing is offered with
+ * a role but the drafts folder and the trash — the two rules the note at the top of this module states.
  */
 export function destinationsFor(
     directory: MailFolderDirectory | null,
@@ -159,6 +182,8 @@ export function destinationsFor(
         return [];
     }
 
+    const drafts = messages.filter((message) => isDraft(directory, message)).length;
+
     return [
         {
             accountId: entry.account.id,
@@ -169,6 +194,7 @@ export function destinationsFor(
             // across the two screens.
             ordinal: directory.accounts.length > 1 ? at + 1 : at,
             destinations: entry.folders
+                .filter((folder) => admits(folder.role, drafts === messages.length, drafts > 0))
                 .map((folder) => ({ alias: folder.alias, name: nameOf(folder), role: folder.role }))
                 .sort(byOfferedOrder),
         },
@@ -250,7 +276,11 @@ export function refusalFor(
 
     switch (act) {
         case 'archive':
-            return everyAccountHas(directory, messages, 'Archive') ? null : 'noArchiveFolder';
+            return messages.some((message) => isDraft(directory, message))
+                ? 'draftsStayOut'
+                : everyAccountHas(directory, messages, 'Archive')
+                  ? null
+                  : 'noArchiveFolder';
         case 'delete':
             return everyAccountHas(directory, messages, 'Trash') ? null : 'noTrashFolder';
         case 'move':
@@ -269,6 +299,15 @@ function movesSomething(directory: MailFolderDirectory, messages: readonly Acted
     return destinationsFor(directory, messages).some((group) =>
         group.destinations.some((destination) => messages.some((message) => message.folder !== destination.alias)),
     );
+}
+
+// Whether a folder playing that role may be offered to messages of which all or some are drafts.
+function admits(role: MailFolderRole | null, onlyDrafts: boolean, anyDraft: boolean): boolean {
+    if (role === 'Drafts') {
+        return onlyDrafts;
+    }
+
+    return !anyDraft || role === null || role === 'Trash';
 }
 
 // The order the folders are offered in, which is the folder column's own: the roles first, in the order a mail client

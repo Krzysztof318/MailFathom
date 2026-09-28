@@ -95,10 +95,8 @@ export interface AskedAct {
     /**
      * Whether this delete destroys the message rather than filing it in the trash, and `false` for every other act.
      *
-     * Carried rather than read back off `leaves`, because the two stop agreeing at the moment the way back closes: a
-     * permanent delete is asked for with nothing leaving — the row stays and says what is about to happen to it — and
-     * the released delete then takes the row out of the list, which flips `leaves` and would leave the sentence the
-     * row wears reading *moving to the trash* about a message being destroyed.
+     * Carried rather than read back off the folder, because it is what the row says on its way out: a row leaving the
+     * trash reading *moving to the trash* would be describing an act that is not the one being performed.
      */
     readonly destroys: boolean;
 }
@@ -197,6 +195,8 @@ export function useMailboxActs(): MailboxActs {
  * A draft is a message somebody was writing, so pressing it puts them back where they were writing it. What decides
  * that is the role its folder plays rather than anything on the message: a mail server files a draft where its own
  * configuration says drafts go, and a folder called `Entwürfe` is the drafts folder as surely as one called `Drafts`.
+ * That reading holds because nothing else is filed there: `mailboxDestinations.ts` offers the drafts folder to drafts
+ * alone, and the deployment refuses any other move into it.
  *
  * Stated once, beside the acts, because two lists open a message — the mailbox's own and the search's — and a second
  * reading of *this is a draft* is how the two come to open the same message differently.

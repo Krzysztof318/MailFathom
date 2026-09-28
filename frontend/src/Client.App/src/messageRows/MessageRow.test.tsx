@@ -279,7 +279,7 @@ describe('MessageRow', () => {
             drawRow(undefined, false, nothingMarkedRead, asking('delete', email.id, email.folder, false)),
         );
 
-        expect(reserved?.textContent).toBe('Deleting permanently…');
+        expect(reserved?.textContent).toBe('Deleting…');
     });
 
     // What a flag act does is a mark this row draws from the press, so the outcome is already on the screen and the
