@@ -1449,23 +1449,30 @@ function corpusEvent(id: string): Held | undefined {
 }
 
 /**
- * One page of a book, walked by position from the cursor, which is as far as the last page reached, over the people
- * who carry the search in their name or in one of their addresses, as the service matches it.
+ * One page of a book as the service's keyset serves it: the people from the cursor on who carry the search in their
+ * name or in one of their addresses, as many as were asked for. The cursor is a position in the book's own order rather
+ * than in what the search found, so a walk continued under another search goes on from the same place.
  */
 function contactPage(book: readonly Held[], asked: URLSearchParams) {
     const size = Number(asked.get('pageSize') ?? String(contacts.contactsPerPage));
     const start = Number(asked.get('cursor') ?? '0');
     const term = (asked.get('search') ?? '').trim().toUpperCase();
-    const found = book.filter((contact) =>
-        [
-            contact['displayName'],
-            ...(Array.isArray(contact['addresses']) ? (contact['addresses'] as unknown[]) : []),
-        ].some((text) => typeof text === 'string' && text.toUpperCase().includes(term)),
-    );
+    const found = book
+        .map((contact, position) => ({ contact, position }))
+        .filter(
+            ({ contact, position }) =>
+                position >= start &&
+                [
+                    contact['displayName'],
+                    ...(Array.isArray(contact['addresses']) ? (contact['addresses'] as unknown[]) : []),
+                ].some((text) => typeof text === 'string' && text.toUpperCase().includes(term)),
+        );
+    const served = found.slice(0, size);
+    const last = served.at(-1);
 
     return {
-        contacts: found.slice(start, start + size),
-        nextCursor: start + size < found.length ? String(start + size) : null,
+        contacts: served.map(({ contact }) => contact),
+        nextCursor: found.length > size && last !== undefined ? String(last.position + 1) : null,
     };
 }
 

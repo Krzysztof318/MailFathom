@@ -143,7 +143,7 @@ export function TaskRow({
             tabIndex={-1}
             className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border p-3 transition ${
                 selected ? 'border-accent-line bg-accent-soft' : 'border-line bg-panel hover:bg-hover'
-            } ${task.completed ? 'opacity-60' : ''}`}
+            } ${completed ? 'opacity-60' : ''}`}
             onKeyDown={pressed}
             onContextMenu={press.onContextMenu}
             onPointerDown={press.onPointerDown}
@@ -202,7 +202,7 @@ export function TaskRow({
 
                 <div className="flex min-w-0 flex-col gap-1.5">
                     <div className="flex flex-wrap items-baseline gap-2">
-                        <span className={`text-base text-pretty ${task.completed ? 'text-muted line-through' : ''}`}>
+                        <span className={`text-base text-pretty ${completed ? 'text-muted line-through' : ''}`}>
                             {task.title}
                         </span>
 
@@ -267,7 +267,7 @@ export function TaskRow({
                     <Control label={translate('tasks.accept')} icon="check" shape="primary" onPress={onAccept} />
                 )}
 
-                {task.dueOn === null || task.completed ? null : scheduled ? (
+                {task.dueOn === null || completed ? null : scheduled ? (
                     <span
                         ref={chip}
                         tabIndex={-1}

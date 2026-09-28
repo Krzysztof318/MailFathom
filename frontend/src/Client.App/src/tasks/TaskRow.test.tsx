@@ -35,6 +35,7 @@ function taskOf(held: Partial<PersonalTask> = {}): PersonalTask {
 
 function drawRow({
     task = taskOf(),
+    completed = task.completed,
     selected = false,
     selecting = false,
     scheduled = false,
@@ -48,6 +49,7 @@ function drawRow({
     onElement = vi.fn(),
 }: {
     task?: PersonalTask;
+    completed?: boolean;
     selected?: boolean;
     selecting?: boolean;
     scheduled?: boolean;
@@ -67,6 +69,7 @@ function drawRow({
             <ul>
                 <TaskRow
                     task={task}
+                    completed={completed}
                     now={readingAt}
                     selected={selected}
                     selecting={selecting}
@@ -169,6 +172,19 @@ describe('TaskRow', () => {
         fireEvent.click(screen.getByRole('checkbox', { name: 'Mark Answer the tender as done' }));
 
         expect(onToggleCompleted).toHaveBeenCalledOnce();
+    });
+
+    // A press is drawn before the list has read the write back, and the whole row says what the box says meanwhile:
+    // a ticked box on a row still drawn as open, with the day still on offer, would be two answers to one question.
+    it('draws the whole row as the box was pressed while the list has not read that back yet', () => {
+        drawRow({ task: taskOf({ completed: false }), completed: true });
+
+        expect(screen.getByRole('checkbox', { name: 'Mark Answer the tender as not done' })).toHaveProperty(
+            'checked',
+            true,
+        );
+        expect(screen.getByText('Answer the tender').className).toContain('line-through');
+        expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
     });
 
     it('offers to put a dated task in the day, and says it is already there once it is', () => {

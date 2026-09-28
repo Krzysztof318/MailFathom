@@ -371,3 +371,24 @@ test('searches either book by a fragment of a name or of an address, whatever it
     expect(found('/contacts/collected?search=b.rowe@&pageSize=5')).toStrictEqual(['Bartosz Rowe']);
     expect(found('/contacts?search=%20&pageSize=5')).toHaveLength(5);
 });
+
+test('continues a search from a position in the book, filling each page with what matches from there', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const page = (query: string) =>
+        ask(deployment, 'GET', `/contacts?${query}`) as {
+            contacts: { displayName: string }[];
+            nextCursor: string | null;
+        };
+
+    const walked = page('pageSize=1');
+
+    expect(walked.contacts.map(({ displayName }) => displayName)).toStrictEqual(['Anna Marlow']);
+    expect(page(`search=marlow&cursor=${walked.nextCursor ?? ''}`).contacts).toStrictEqual([]);
+
+    const first = page('search=correspondent&pageSize=2');
+    const next = page(`search=correspondent&pageSize=2&cursor=${first.nextCursor ?? ''}`);
+
+    expect(first.contacts).toHaveLength(2);
+    expect(next.contacts).toHaveLength(2);
+    expect(next.contacts.map(({ displayName }) => displayName)).not.toContain(first.contacts[1]?.displayName);
+});
