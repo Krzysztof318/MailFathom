@@ -98,6 +98,9 @@ interface Conversation {
     stopped: boolean;
 }
 
+/** One row of the notification centre as the fake holds it: what the corpus states, and whether it now stands read. */
+type HeldNotification = Readonly<Record<string, unknown>> & { readonly id: string; read: boolean };
+
 /** Where a conversation that is still composing stops, which is the question, its start, and one status line. */
 const composingEntriesShown = 3;
 
@@ -140,6 +143,11 @@ export class FakeDeployment {
     /** How far each folder's two counts have moved from what the corpus states, by alias. */
     private readonly counted = new Map<string, { stored: number; unread: number }>();
 
+    /** The notification centre, newest first, with every read mark and erasure written since. */
+    private notificationsHeld: HeldNotification[] = notifications.notificationPage.notifications.map((row) => ({
+        ...row,
+    }));
+
     private readonly draftsHeld = new Map<string, typeof drafts.draft>();
     private readonly runs = new Map<string, DiscoveryRun>();
     private readonly conversations = new Map<string, Conversation>([
@@ -180,6 +188,14 @@ export class FakeDeployment {
     /** The requests the page issued with this method to this route, in the order it issued them. */
     requests(method: string, route: string): IssuedRequest[] {
         return this.issued.filter((issued) => issued.method === method && issued.route === route);
+    }
+
+    /**
+     * Raises the corpus's arriving notification at the head of the centre, which is what a deployment does while nobody
+     * is looking at the screen: nothing is pushed, and the client finds it the next time it asks for the count.
+     */
+    raiseNotification(): void {
+        this.notificationsHeld = [{ ...notifications.arrivingNotification }, ...this.notificationsHeld];
     }
 
     /** Makes the next question put to Discover or to the Agent read as running once, and finished on the read after. */
@@ -304,9 +320,28 @@ export class FakeDeployment {
             case 'POST /replies/drafting':
                 return answering(drafts.draftedReply);
             case 'GET /notifications':
-                return answering(notifications.notificationPage);
+                return answering({ notifications: this.notificationsHeld, nextCursor: null });
             case 'GET /notifications/unread-count':
-                return answering(notifications.unreadNotificationCount);
+                return answering({ unreadCount: this.unreadNotifications() });
+            case 'POST /notifications/read': {
+                const markedRead = this.unreadNotifications();
+
+                for (const row of this.notificationsHeld) {
+                    row.read = true;
+                }
+
+                return answering({ markedRead, unreadCount: 0 });
+            }
+            case 'POST /notifications/deletions': {
+                const named = recordIn(request.body)?.['notificationIds'];
+                const ids = new Set(Array.isArray(named) ? named.map(String) : []);
+                const kept = this.notificationsHeld.filter(({ id }) => !ids.has(id));
+                const deleted = this.notificationsHeld.length - kept.length;
+
+                this.notificationsHeld = kept;
+
+                return answering({ deleted, unreadCount: this.unreadNotifications() });
+            }
             case 'GET /tasks':
                 return answering(tasks.committedTasks(dayHere()));
             case 'GET /tasks/proposed':
@@ -328,6 +363,7 @@ export class FakeDeployment {
             default:
                 return (
                     this.telemetryAnswer(request) ??
+                    this.notificationAnswer(request, segments) ??
                     this.messageAnswer(request, segments) ??
                     this.draftAnswer(request, segments) ??
                     this.discoveryAnswer(request, segments) ??
@@ -346,6 +382,30 @@ export class FakeDeployment {
         return method === 'POST' && /^\/telemetry\/v1\/(traces|metrics|logs)$/u.test(route)
             ? { status: 200, body: '', contentType: 'application/x-protobuf' }
             : null;
+    }
+
+    /** Putting one notification into the read state stated, answered with that state and what it leaves on the bell. */
+    private notificationAnswer({ method, body }: IssuedRequest, segments: readonly string[]): FakeAnswer | null {
+        const [space, id = '', part] = segments;
+
+        if (method !== 'POST' || space !== 'notifications' || part !== 'read-state' || segments.length !== 3) {
+            return null;
+        }
+
+        const row = this.notificationsHeld.find((held) => held.id === id);
+        const read = recordIn(body)?.['read'];
+
+        if (row === undefined || typeof read !== 'boolean') {
+            return { status: 404, body: '' };
+        }
+
+        row.read = read;
+
+        return answering({ id, read, unreadCount: this.unreadNotifications() });
+    }
+
+    private unreadNotifications(): number {
+        return this.notificationsHeld.filter(({ read }) => !read).length;
     }
 
     /** One message, its body, a file it carries, and the conversation it belongs to. */

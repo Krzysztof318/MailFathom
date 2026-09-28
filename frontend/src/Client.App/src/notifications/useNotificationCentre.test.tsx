@@ -264,18 +264,16 @@ async function settled(): Promise<void> {
 }
 
 /**
- * Two messages and a calendar reminder arriving at a client nobody has opened the panel on.
+ * Two messages and a calendar reminder arriving at a client nobody has opened the panel on, found by one poll.
  *
- * Two polls rather than one, because the first read a client makes is what it holds rather than what just happened and
- * announces nothing — so the arrival being tested is the second, which is also what the desktop head actually meets.
+ * The page is never read before it, which is what the desktop head actually meets: what arrived is measured by how far
+ * the count rose rather than against a page the client never drew.
  */
 async function threeArrive(): Promise<void> {
-    const { transport, hold } = deployment({ unreadCount: 0, notifications: [] });
+    const { transport, hold } = deployment({ unreadCount: 1, notifications: [mail] });
 
     centreOf(transport);
     await settled();
-    hold(1, [mail]);
-    await polled();
     hold(4, [{ ...mail, id: 'n-second' }, { ...mail, id: 'n-third' }, { ...meeting, read: false }, mail]);
     await polled();
 }
@@ -510,6 +508,21 @@ describe('useNotificationCentre', () => {
         expect(screen.getByText('Ada Lovelace wrote')).toBeDefined();
         expect(screen.getByText('About the engine')).toBeDefined();
         expect(screen.getByRole('button', { name: 'Show' })).toBeDefined();
+    });
+
+    it('says the first arrival of a session out loud, the panel never having been opened', async () => {
+        const { transport, hold } = deployment({ unreadCount: 1, notifications: [meeting, mail] });
+        const { result } = centreOf(transport);
+
+        await settled();
+        hold(2, [{ ...mail, id: 'n-second', title: 'Grace Hopper wrote' }, meeting, mail]);
+        await polled();
+
+        // One toast, for the one row the count rose by: the unread row that was already standing when the client
+        // started is what it holds rather than what arrived.
+        expect(screen.getByText('Grace Hopper wrote')).toBeDefined();
+        expect(screen.queryByText('Ada Lovelace wrote')).toBeNull();
+        expect([...result.current.arrived]).toEqual(['n-second']);
     });
 
     it('tells the operating system how many arrived and of what kind, and nothing a message carried', async () => {

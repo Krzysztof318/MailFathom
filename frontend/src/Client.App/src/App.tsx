@@ -580,8 +580,12 @@ export function App({
     const followNotification = useCallback(
         (target: NotificationTarget): void => {
             followTarget(target, {
+                // Opened where mail is read, whichever space the notification was followed from — the workspace
+                // holds what is open in the Mail space, and a message opened there while another space is in front
+                // is a message nobody is shown.
                 openMail: (storedEmailId) => {
                     openTabs.openMail(storedEmailId, null);
+                    window.location.hash = addressOf('mail');
                 },
                 goTo: (space) => {
                     window.location.hash = addressOf(space);
