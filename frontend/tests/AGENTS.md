@@ -311,8 +311,10 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   before it asks: the fake hands the next answer back running and the next read the journey causes answers it finished.
   A timer the client itself runs — a poll, a notice's lifetime, a
   renewal — is advanced with Playwright's clock, `page.clock.install()` before the page loads and `page.clock.runFor()`
-  over the timer's duration, rather than slept through. So a journey costs what its steps cost, and
-  `page.waitForTimeout` is not a wait this suite writes.
+  over the timer's duration, rather than slept through. An installed clock still runs as a real one, so a journey
+  asserting a state the timer would end calls `holdTheClock` from `client.harness.ts` before the act that reaches it:
+  from there the timer fires on `runFor` and never on a loaded machine's own schedule. So a journey costs what its
+  steps cost, and `page.waitForTimeout` is not a wait this suite writes.
 - **A defect a journey exposes is fixed in the pull request that adds the journey.** No journey is skipped, marked as
   expected to fail, or weakened until it passes: a check that stands aside for the defect it found reports that defect
   as the behaviour the client intends.
@@ -333,7 +335,9 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   covers, and it is not this suite.
 - **Every check signs in to a fake deployment of its own, journey or not.** It starts from the corpus — the resting
   mailbox, its folders, the drafts, the Discover run, the Agent's conversations — and besides the writes above it stops
-  a Discover run and records an answer to an Agent proposal. `client.harness.ts` serves it to the check's browser
+  a Discover run and records an answer to an Agent proposal. A conversation a check starts reads as the corpus's
+  answered one, opening on the question the check asked under the scope it asked it in, with none of its proposals
+  decided yet. `client.harness.ts` serves it to the check's browser
   context before the check starts, a check that opens a context of its own serves that one too, and
   a route a check registers on its page afterwards takes precedence — which is how one refusal or one recording is put
   in front of a single request.

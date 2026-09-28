@@ -73,6 +73,24 @@ export async function signIn(page: Page): Promise<void> {
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
 }
 
+/**
+ * How long the client waits before reading a silent answer again: `silentRunPollInterval` in `Client.Backend`'s
+ * `runFollowing.ts`, which this suite resolves neither package to import. The fake deployment serves no signal channel,
+ * so this interval is what moves an answer the fake handed back running on to its next read.
+ */
+export const silentAnswerInterval = 3_000;
+
+/**
+ * Stops the page's clock where it stands, so a timer the client runs fires only when the check advances it.
+ *
+ * The clock is installed before the page loads and runs as a real one until here, because signing in and drawing the
+ * frame have timers of their own that nothing is proving. Held from here, a running answer reads as running for as long
+ * as the check is looking at it, however loaded the machine is, and reads again only on `page.clock.runFor`.
+ */
+export async function holdTheClock(page: Page): Promise<void> {
+    await page.clock.pauseAt(Date.now() + 1_000);
+}
+
 /** The client opened at an address and signed in, which is where every test about the frame starts. */
 export async function openSignedIn(page: Page, address = '/'): Promise<void> {
     await page.goto(address);
