@@ -99,6 +99,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
     });
@@ -111,6 +112,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByRole('tab', { name: 'Quarterly invoice' })).toBeDefined();
         expect(await screen.findByText('A drawn message.')).toBeDefined();
@@ -156,6 +158,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
         expect(screen.queryByRole('tablist')).toBeNull();
@@ -201,6 +204,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         const conversation = await screen.findByRole('region', { name: 'Conversation' });
 
@@ -218,6 +222,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         await screen.findByText('A drawn message.');
 
@@ -241,6 +246,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         fireEvent.click(await screen.findByRole('button', { name: 'Show the original message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
@@ -272,6 +278,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         fireEvent.click(await screen.findByRole('button', { name: 'Show the original message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
@@ -302,6 +309,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
         await screen.findByText('A drawn message.');
 
         await waitFor(() => {
@@ -323,6 +331,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
         await screen.findByText('A drawn message.');
 
         expect(routesAsked().some((path) => path.includes('/mutations/'))).toBe(false);
@@ -365,6 +374,7 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
 
         expect(await screen.findByRole('main', { name: 'Agent' })).toBeDefined();

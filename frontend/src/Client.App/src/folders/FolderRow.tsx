@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { KeyboardEvent } from 'react';
+import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { useRowPress } from '../contextMenu/rowPress';
 import { Icon } from '../controls/Icon';
@@ -48,11 +48,13 @@ function rowShape({
     group,
     folded,
     selected,
+    droppedOn,
     indent,
 }: {
     readonly group: boolean;
     readonly folded: boolean;
     readonly selected: boolean;
+    readonly droppedOn: boolean;
     readonly indent: string;
 }): string {
     const across = folded ? 'justify-center' : `gap-2 pe-2 ${indent}`;
@@ -65,8 +67,14 @@ function rowShape({
         }`;
     }
 
+    // A folder a drag is over draws the ring the design project draws for it, which is the only thing saying a drop
+    // lands here — so it wins over the selected folder's shape, whose background and colour it shares.
     return `${across} rounded-md ${folded ? 'py-1.25' : 'py-1.75 text-md'} ${
-        selected ? 'bg-accent-soft font-semibold text-accent-deep' : 'text-text-soft hover:bg-hover'
+        droppedOn
+            ? 'bg-accent-soft text-accent-deep inset-ring-2 inset-ring-accent'
+            : selected
+              ? 'bg-accent-soft font-semibold text-accent-deep'
+              : 'text-text-soft hover:bg-hover'
     }`;
 }
 
@@ -82,6 +90,7 @@ export function FolderRow({
     onSelect,
     onToggle,
     onPress,
+    onDrop,
     onKeyDown,
     onElement,
 }: {
@@ -104,6 +113,12 @@ export function FolderRow({
     /** Opens this row's menu at the point the gesture happened, or `undefined` for a row that offers no act. */
     readonly onPress: ((at: MenuPoint) => void) | undefined;
 
+    /**
+     * Files the messages a drag is carrying into this folder, or `undefined` where a drop here would file nothing — a
+     * mailbox's own row, a folder of another account, or no drag at all — and the row then accepts none.
+     */
+    readonly onDrop?: (() => void) | undefined;
+
     readonly onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => void;
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
@@ -111,6 +126,27 @@ export function FolderRow({
     const press = useRowPress(onPress);
     const group = groupOrdinal !== null;
     const indent = group ? '' : (levelIndents[Math.min(Math.max(row.level - 2, 0), levelIndents.length - 1)] ?? '');
+    const [draggedOver, setDraggedOver] = useState(false);
+    const droppedOn = draggedOver && onDrop !== undefined;
+
+    // A drag that ended without leaving the row — let go elsewhere, or given up with Escape — would otherwise leave it
+    // ringed for the next one before that drag had come anywhere near it. Cleared during render, where the drag ending
+    // is first known here, rather than in an effect that would draw one frame of a ring over nothing.
+    if (draggedOver && onDrop === undefined) {
+        setDraggedOver(false);
+    }
+
+    // Accepting is what the platform reads a cancelled `dragover` as, so a row that would file nothing leaves it
+    // alone and the pointer says no drop lands here.
+    function over(event: DragEvent<HTMLLIElement>): void {
+        if (onDrop === undefined) {
+            return;
+        }
+
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        setDraggedOver(true);
+    }
 
     return (
         <li
@@ -134,8 +170,24 @@ export function FolderRow({
             onPointerMove={press.onPointerMove}
             onPointerUp={press.onPointerUp}
             onPointerCancel={press.onPointerCancel}
+            onDragEnter={over}
+            onDragOver={over}
+            onDragLeave={(event) => {
+                // Leaving the row for something inside it is still being over it.
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setDraggedOver(false);
+                }
+            }}
+            onDrop={(event) => {
+                setDraggedOver(false);
+
+                if (onDrop !== undefined) {
+                    event.preventDefault();
+                    onDrop();
+                }
+            }}
             onKeyDown={onKeyDown}
-            className={`flex items-center transition ${row.scope === null ? '' : 'cursor-pointer'} ${rowShape({ group, folded, selected, indent })}`}
+            className={`flex items-center transition ${row.scope === null ? '' : 'cursor-pointer'} ${rowShape({ group, folded, selected, droppedOn, indent })}`}
         >
             {group ? (
                 <MailboxMark ordinal={groupOrdinal} />

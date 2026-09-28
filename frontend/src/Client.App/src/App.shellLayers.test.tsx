@@ -105,7 +105,10 @@ describe('App shell layers', () => {
 
 // The one message the deployment draws, opened the way a reader opens it: a row picked out of the list.
 async function openTheInvoice(): Promise<void> {
-    fireEvent.pointerDown(await screen.findByRole('option', { name: /Quarterly invoice/ }));
+    const invoice = await screen.findByRole('option', { name: /Quarterly invoice/ });
+
+    fireEvent.pointerDown(invoice);
+    fireEvent.pointerUp(invoice);
 
     await screen.findByText('A drawn message.');
 }

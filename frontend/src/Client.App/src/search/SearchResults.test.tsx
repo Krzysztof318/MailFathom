@@ -321,6 +321,7 @@ describe('SearchResults', () => {
         const [found] = await rows();
 
         fireEvent.pointerDown(found ?? document.body);
+        fireEvent.pointerUp(found ?? document.body);
 
         expect(carried().citedAttachment).toStrictEqual({ storedEmailId: 'message-1', position: 1 });
     });
@@ -331,6 +332,7 @@ describe('SearchResults', () => {
         const [found] = await rows();
 
         fireEvent.pointerDown(found ?? document.body);
+        fireEvent.pointerUp(found ?? document.body);
 
         expect(carried().citedAttachment).toBeNull();
     });
@@ -411,6 +413,7 @@ describe('SearchResults', () => {
         const found = await rows();
 
         fireEvent.pointerDown(found[1] ?? document.body);
+        fireEvent.pointerUp(found[1] ?? document.body);
 
         expect(carried().selection).toBe('message-2');
         expect(await rows()).toHaveLength(2);
@@ -432,6 +435,7 @@ describe('SearchResults', () => {
         const found = await rows();
 
         fireEvent.pointerDown(found[0] ?? document.body);
+        fireEvent.pointerUp(found[0] ?? document.body);
 
         expect(carriedOn).toHaveBeenCalledWith('message-1');
         expect(carried().selection).toBeNull();
@@ -447,6 +451,7 @@ describe('SearchResults', () => {
         const found = await rows();
 
         fireEvent.pointerDown(found[0] ?? document.body);
+        fireEvent.pointerUp(found[0] ?? document.body);
 
         expect(carried().selection).toBe('message-1');
     });

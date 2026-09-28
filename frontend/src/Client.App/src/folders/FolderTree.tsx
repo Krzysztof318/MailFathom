@@ -18,6 +18,8 @@ import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { dropDestination } from '../mailboxActs/mailboxDestinations';
+import { useMailboxActs } from '../mailboxActs/useMailboxActs';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { scopeKey } from '../workspace/mailScope';
@@ -94,6 +96,7 @@ export function FolderTree({
     const { workspace, revise } = useWorkspace();
     const { marked } = useReadMarking();
     const maintenance = useFolderMaintenance();
+    const acts = useMailboxActs();
     const signalledChanges = useSignalledChanges();
     const [attempt, setAttempt] = useState(0);
 
@@ -504,6 +507,29 @@ export function FolderTree({
         event.preventDefault();
     }
 
+    // Where the messages a drag is carrying may be dropped, which is where the move dialog would have offered to file
+    // them: a drop is the same act reached by a different gesture, so it is refused wherever the dialog would be.
+    const carried = acts.carried;
+    const offered = carried.length > 0 && acts.refusalOf('move', carried) === null ? acts.destinationsOf(carried) : [];
+
+    // A mailbox's own row is not one of them although pressing it opens its inbox, which is the design project's own:
+    // the rows heading the groups carry no drop at all, so a drop always names the folder it lands on.
+    function droppedOn(row: FolderTreeRow): (() => void) | undefined {
+        const destination =
+            row.scope?.kind === 'folder' && !groupOrdinals.has(row.key)
+                ? dropDestination(offered, carried, row.scope.accountId, row.scope.alias)
+                : null;
+
+        if (destination === null) {
+            return undefined;
+        }
+
+        return () => {
+            acts.carry([]);
+            acts.perform('move', carried, destination);
+        };
+    }
+
     // The row whose menu is open, looked up rather than held, so a tree read again under an open menu draws the menu
     // about the row as it now is rather than about a copy of the row it was opened on.
     const pressed = menu === null ? undefined : visible.find((visibleRow) => visibleRow.row.key === menu.key)?.row;
@@ -554,6 +580,7 @@ export function FolderTree({
                                       setMenu({ key: visibleRow.row.key, at });
                                   }
                         }
+                        onDrop={droppedOn(visibleRow.row)}
                         onKeyDown={(event) => {
                             onKeyDown(event, at, visibleRow);
                         }}

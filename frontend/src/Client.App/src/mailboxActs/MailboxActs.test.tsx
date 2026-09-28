@@ -340,6 +340,32 @@ function said(): readonly HTMLElement[] {
 }
 
 describe('MailboxActsProvider', () => {
+    it('stops carrying once a drag ends, which the window hears while the dragged row is still drawn', () => {
+        const { held } = acting(deploymentAnswering());
+
+        act(() => {
+            held().carry([invoice, receipt]);
+        });
+
+        expect(held().carried).toStrictEqual([invoice, receipt]);
+
+        fireEvent.dragEnd(window);
+
+        expect(held().carried).toStrictEqual([]);
+    });
+
+    it('stops carrying at the first pointer movement after a drag whose row left the document before it ended', () => {
+        const { held } = acting(deploymentAnswering());
+
+        act(() => {
+            held().carry([invoice]);
+        });
+
+        fireEvent.pointerMove(window);
+
+        expect(held().carried).toStrictEqual([]);
+    });
+
     it('asks a deployment to leave a flag where the act puts it, and offers no way back from a flag', async () => {
         const deployment = deploymentAnswering();
         const { held } = acting(deployment);

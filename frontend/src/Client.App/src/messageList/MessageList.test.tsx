@@ -4,12 +4,13 @@
 
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { swipeDistance } from '../controls/swipeAcross';
 import { MailboxActsContext, nothingActed, type AskedAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { LocalizationProvider } from '../localization/Localization';
+import { ListedMailProvider } from './ListedMail';
 import {
     SignalledChangesContext,
     nothingSignalled,
@@ -251,6 +252,23 @@ function going2(): HTMLElement | null {
 
 // By what it is about, which is the last part of a row's name: the name runs its parts together, so the subject is
 // matched to the end of it — which is what keeps the row for message one from also being the row for message ten.
+// A list whose acts record what a drag carries, under the one surface that remembers where each drawn message belongs:
+// what is carried is read from there, so a selection reaching rows scrolled out of the window still travels whole.
+function renderCarrying(carry: MailboxActs['carry'], refusalOf: MailboxActs['refusalOf'] = () => null): RenderResult {
+    return render(
+        <ListedMailProvider>
+            {listUnder(answering(wholeFolder), { acts: { ...nothingActed, carry, refusalOf } })}
+        </ListedMailProvider>,
+    );
+}
+
+// Which messages the list handed the acts to carry, the last time it handed any.
+function carriedIds(carry: Mock<MailboxActs['carry']>): readonly string[] {
+    const [messages] = carry.mock.lastCall ?? [[]];
+
+    return messages.map((message) => message.storedEmailId);
+}
+
 function row(at: number): HTMLElement {
     const list = screen.getByRole('listbox', { name: 'Messages' });
 
@@ -600,6 +618,7 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(2));
+        fireEvent.pointerUp(row(2));
 
         expect(carried().selected).toStrictEqual([]);
         expect(carried().selection).toBe('message-2');
@@ -612,6 +631,7 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(2));
+        fireEvent.pointerUp(row(2));
 
         expect(composing.compose).toHaveBeenCalledWith({ kind: 'draft', storedEmailId: 'message-2' });
         expect(carried().selection).toBeNull();
@@ -622,7 +642,9 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerUp(row(1), { ctrlKey: true });
         fireEvent.pointerDown(row(3));
+        fireEvent.pointerUp(row(3));
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
         expect(carried().selection).toBeNull();
@@ -633,7 +655,9 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerUp(row(1), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerUp(row(3), { ctrlKey: true });
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
     });
@@ -643,8 +667,11 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerUp(row(1), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerUp(row(3), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerUp(row(3), { ctrlKey: true });
 
         expect(carried().selected).toStrictEqual(['message-1']);
     });
@@ -654,30 +681,89 @@ describe('MessageList', () => {
 
         await rows();
         fireEvent.pointerDown(row(1));
+        fireEvent.pointerUp(row(1));
         fireEvent.pointerDown(row(4), { shiftKey: true });
+        fireEvent.pointerUp(row(4), { shiftKey: true });
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-2', 'message-3', 'message-4']);
     });
 
-    it('selects the run a pointer dragged over', async () => {
-        renderList(answering(wholeFolder));
+    it('carries the one message a drag started on where nothing is picked out, and opens nothing', async () => {
+        const carry = vi.fn<MailboxActs['carry']>();
+
+        renderCarrying(carry);
 
         await rows();
-        fireEvent.pointerDown(row(1));
-        fireEvent.pointerEnter(row(3));
+        fireEvent.pointerDown(row(2));
+        fireEvent.dragStart(row(2), { dataTransfer: { setData: () => undefined } });
 
-        expect(carried().selected).toStrictEqual(['message-1', 'message-2', 'message-3']);
+        expect(carriedIds(carry)).toStrictEqual(['message-2']);
+        expect(carried().selection).toBeNull();
     });
 
-    it('stops selecting once the pointer is let go, wherever that happened', async () => {
-        renderList(answering(wholeFolder));
+    it('carries the whole selection where the drag started on one of several picked out', async () => {
+        const carry = vi.fn<MailboxActs['carry']>();
+
+        renderCarrying(carry);
 
         await rows();
-        fireEvent.pointerDown(row(1));
-        fireEvent.pointerUp(window);
-        fireEvent.pointerEnter(row(3));
+        fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerUp(row(1), { ctrlKey: true });
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerUp(row(3), { ctrlKey: true });
+        fireEvent.pointerDown(row(3));
+        fireEvent.dragStart(row(3), { dataTransfer: { setData: () => undefined } });
 
-        expect(carried().selected).toStrictEqual([]);
+        expect(carriedIds(carry)).toStrictEqual(['message-1', 'message-3']);
+        expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
+    });
+
+    it('carries the one message a drag started on outside the selection, leaving the selection as it was', async () => {
+        const carry = vi.fn<MailboxActs['carry']>();
+
+        renderCarrying(carry);
+
+        await rows();
+        fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerUp(row(1), { ctrlKey: true });
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerUp(row(3), { ctrlKey: true });
+        fireEvent.pointerDown(row(2));
+        fireEvent.dragStart(row(2), { dataTransfer: { setData: () => undefined } });
+
+        expect(carriedIds(carry)).toStrictEqual(['message-2']);
+        expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
+    });
+
+    it('offers no drag where the move itself is refused, which no folder would then take', async () => {
+        renderCarrying(vi.fn<MailboxActs['carry']>(), () => 'notOffered');
+
+        expect((await rows()).every((drawn) => drawn.getAttribute('draggable') === 'false')).toBe(true);
+    });
+
+    it('offers no drag under a pointer a finger drives, the move dialog being what a finger reaches', async () => {
+        const declared = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: (query: string) => ({
+                matches: query.includes('coarse'),
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined,
+            }),
+        });
+
+        try {
+            renderCarrying(vi.fn<MailboxActs['carry']>());
+
+            expect((await rows()).every((drawn) => drawn.getAttribute('draggable') === 'false')).toBe(true);
+        } finally {
+            if (declared === undefined) {
+                Reflect.deleteProperty(window, 'matchMedia');
+            } else {
+                Object.defineProperty(window, 'matchMedia', declared);
+            }
+        }
     });
 
     it('answers a right-click on a row with its menu, headed by what the row is about', async () => {

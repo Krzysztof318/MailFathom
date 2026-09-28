@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { PointerEvent, ReactNode } from 'react';
+import { useRef, type PointerEvent, type ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { pressedByFinger, useRowPress } from '../contextMenu/rowPress';
@@ -79,6 +79,10 @@ function actPendingWording(asked: AskedAct): MessageKey | null {
     return asked.destroys ? 'act.deletingPermanently' : actPendingSaid[asked.act];
 }
 
+// What a dragged row is carried as, which no other drop target reads: the folder column learns which messages are on
+// their way from the acts rather than from the drag, because a browser hands a target the data only once it lands.
+const carriedMailType = 'application/x-mailfathom-message';
+
 // What each direction of a swipe shows behind the row it is carrying, which is the design project's own: the act the
 // finger has asked for, named and drawn, against the edge it is uncovering. Filing takes its name and its symbol from
 // `mailboxActs/drawnActs.ts` rather than from a second table here, so a swipe says what the row's menu and the toolbar
@@ -109,7 +113,7 @@ export function MessageRow({
     onPress,
     onAnswer,
     onArchive,
-    onPointerEnter,
+    onCarry,
     onSettled,
     onGone,
     onElement,
@@ -145,10 +149,11 @@ export function MessageRow({
     /**
      * What pointing at this row means: a mouse pressed on it, or a finger lifted off it having only tapped.
      *
-     * The two arrive at different moments and that is the whole of what a press costs the row. A mouse acts as it goes
-     * down, because the same press may go on to sweep a run of rows; a finger's press is not decided until it is
-     * lifted, since the same touch may become the long press that opens this row's menu — and a row that had already
-     * opened its message would put that menu over something nobody asked to see.
+     * Both are decided when they are let go rather than when they land, each for its own reason. A mouse press may
+     * become a drag carrying the message to a folder, and a press that had already opened the message or toggled it in
+     * the selection would have done something nobody asked for by the time it was dropped. A finger's press may become
+     * the long press that opens this row's menu — and a row that had already opened its message would put that menu
+     * over something nobody asked to see.
      */
     readonly onPoint: (event: PointerEvent<HTMLLIElement>) => void;
 
@@ -172,7 +177,14 @@ export function MessageRow({
     /** Files the message away, which is what a finger swiped right asks for. Absent on the same terms as `onAnswer`. */
     readonly onArchive?: (() => void) | undefined;
 
-    readonly onPointerEnter: () => void;
+    /**
+     * Starts carrying the message towards a folder, which is what dragging the row asks for — and with it the rest of
+     * the selection where the row is part of one, which is the list's to decide rather than the row's.
+     *
+     * Absent where a list offers nowhere to drop it, and the row is then not draggable at all: the search's results
+     * stand where the folder column is not the reader's next step.
+     */
+    readonly onCarry?: (() => void) | undefined;
 
     /**
      * That the row has finished saying it moved, so the list stops holding it as a row that did.
@@ -201,6 +213,10 @@ export function MessageRow({
     const acts = useMailboxActs();
     const press = useRowPress(onPress);
     const swipe = useRowSwipe(press, { answer: onAnswer, archive: onArchive });
+
+    // Whether the primary button went down on this row and has neither left it as a drag nor been let go elsewhere,
+    // which is what makes letting it go here a press on the row.
+    const mousePressed = useRef(false);
 
     // The act this row is still waiting on. It is what the reserved line says while it stands, ahead of whatever the
     // screen would otherwise put there: a message on its way out of the folder is the more urgent fact about the row
@@ -243,6 +259,10 @@ export function MessageRow({
     // accident.
     const wash = !acting?.leaves ? null : acting.act === 'delete' ? 'animate-row-deleted' : 'animate-row-filed';
     const going = wash === null ? null : 'pointer-events-none animate-row-going';
+
+    // Every row a drag is carrying is drawn faded for as long as it lasts, which is the design project's own — the
+    // selection travelling with one row it was started on says so on each of them rather than only on that one.
+    const carried = acts.carried.some((message) => message.storedEmailId === email.id);
 
     // What the reserved line holds: what the act says about itself where it says anything, else whatever the screen
     // would otherwise put there. Worked out here rather than in the markup, because the line is also hidden from the
@@ -290,9 +310,7 @@ export function MessageRow({
 
                 // The primary button alone acts. The second one is what asks the row what it offers, and a row that
                 // also selected the message and opened it under the menu would be answering a question with an act.
-                if (!pressedByFinger(event.pointerType) && event.button === 0) {
-                    onPoint(event);
-                }
+                mousePressed.current = !pressedByFinger(event.pointerType) && event.button === 0;
             }}
             onPointerMove={(event) => {
                 // The press first, because it is the one that gives way: it is off at a shorter travel than the swipe
@@ -304,7 +322,9 @@ export function MessageRow({
                 // The tap this lift amounts to, read before the press is cleared so that a lift ending a press which
                 // has opened the menu acts on nothing. The swipe is asked afterwards rather than before, because the
                 // lift is what finishes one — and a lift that has just filed the message away is not also a tap on it.
-                const tapped = pressedByFinger(event.pointerType) && !press.tapSuppressed();
+                const tapped = pressedByFinger(event.pointerType) ? !press.tapSuppressed() : mousePressed.current;
+
+                mousePressed.current = false;
 
                 press.onPointerUp();
                 swipe.onPointerUp(event);
@@ -314,10 +334,27 @@ export function MessageRow({
                 }
             }}
             onPointerCancel={() => {
+                mousePressed.current = false;
                 press.onPointerCancel();
                 swipe.onPointerCancel();
             }}
-            onPointerEnter={onPointerEnter}
+            onPointerLeave={() => {
+                mousePressed.current = false;
+            }}
+            draggable={onCarry !== undefined}
+            onDragStart={(event) => {
+                mousePressed.current = false;
+
+                if (onCarry === undefined) {
+                    return;
+                }
+
+                // Set because a drag carrying no data at all is one Firefox never starts. A type of this client's own
+                // rather than text, so a drop on a text field somewhere else pastes nothing.
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData(carriedMailType, email.id);
+                onCarry();
+            }}
             onDoubleClick={onOpen}
             // Flush and square rather than a card: the rows are one continuous list, each separated from the next by
             // the line it carries, which is what the window's arithmetic needs them to be as well. The line and the
@@ -334,7 +371,7 @@ export function MessageRow({
             // neither the arrival nor the going here carries the height a flowing list's does.
             className={`relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row ${
                 going ?? (arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : '')
-            }`}
+            } ${carried ? 'opacity-45' : ''}`}
         >
             {carrying === undefined ? null : (
                 // What the row is being carried off is showing: the act, named and drawn, against the edge the finger

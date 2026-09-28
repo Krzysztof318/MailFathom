@@ -152,6 +152,19 @@ export interface MailboxActs {
      * arrived cannot file mail into a folder that is not there.
      */
     readonly perform: (act: MailboxAct, messages: readonly ActedMessage[], destination?: MoveDestination) => void;
+
+    /**
+     * The messages a drag is carrying from the list towards a folder, or none while nothing is being dragged.
+     *
+     * Held here rather than in the drag's own data, because the folder column has to answer *would a drop land here*
+     * while the drag is still over it, and a browser hands a drop target the data only once it is dropped. The list
+     * dims exactly these rows and the folder column offers itself only where they could be filed, so the two read one
+     * value rather than each keeping a copy of which messages are on their way.
+     */
+    readonly carried: readonly ActedMessage[];
+
+    /** Starts carrying those messages, or ends the drag with none. */
+    readonly carry: (messages: readonly ActedMessage[]) => void;
 }
 
 /**
@@ -168,6 +181,8 @@ export const nothingActed: MailboxActs = {
     destinationsOf: () => [],
     deletesPermanently: () => false,
     perform: () => undefined,
+    carried: [],
+    carry: () => undefined,
 };
 
 export const MailboxActsContext = createContext<MailboxActs>(nothingActed);
