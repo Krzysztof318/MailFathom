@@ -9794,6 +9794,8 @@ deployment.ts archive2024 GET /api/client/folders
 deployment.ts emptyFolder GET /api/client/folders
 deployment.ts mailFolders GET /api/client/folders
 deployment.ts troubledFolders GET /api/client/folders
+deployment.ts ownTimeZone GET /api/client/time-zone
+deployment.ts managedFolders GET /api/client/managed-folders
 discovery.ts runStarted POST /api/client/discovery/runs
 discovery.ts started GET /api/client/discovery/runs/{runId}
 discovery.ts spent GET /api/client/discovery/runs/{runId}
@@ -9829,6 +9831,7 @@ mail.ts emptyFolderPage GET /api/client/emails
 mail.ts rackingQuote GET /api/client/emails
 mail.ts searchResults GET /api/client/emails/search
 mail.ts noSearchResults GET /api/client/emails/search
+mail.ts readsPhrases GET /api/client/emails/search/phrasing
 mail.ts phraseReading POST /api/client/emails/search/phrasing
 mail.ts conversationRows - -
 mail.ts derivedReading GET /api/client/emails

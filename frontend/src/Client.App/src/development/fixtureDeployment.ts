@@ -307,7 +307,7 @@ function answerFor(
 
     // Before the search itself, because that route's path is a prefix of this one.
     if (route === '/emails/search/phrasing') {
-        return request.method === 'GET' ? answering({ readsPhrases: true }) : answering(mail.phraseReading);
+        return request.method === 'GET' ? answering(mail.readsPhrases) : answering(mail.phraseReading);
     }
 
     if (route === '/emails/search') {

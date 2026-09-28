@@ -316,7 +316,7 @@ async function walk(page: Page, steps: Step[]): Promise<void> {
     }
 }
 
-// Page-side code is written as an expression rather than as a closure, which is the same rule `tests/client.spec.ts`
+// Page-side code is written as an expression rather than as a closure, which is the same rule the browser suite under `tests/`
 // follows and for the same reason: this workspace's own TypeScript is compiled without a DOM declaration, so a
 // function naming `document` or `window` here would be the one thing that changed about it.
 

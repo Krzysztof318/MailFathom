@@ -41,11 +41,19 @@ question is answered again rather than reworded.
   the deployment, language, telemetry, and the shell's layers are seven files over one `App.harness.tsx`. The threshold
   is the same judgement the root instructions ask of a directory rather than a line count: a file stops being one thing
   when its `describe` blocks no longer read as one subject.
+- **The browser suite is split the same way**, into `client.<concern>.spec.ts` files over one `client.harness.ts`:
+  sign-in, navigation, layout, settings, language, message security, attachments, the list window, failure, motion, and
+  what the build publishes. It was one file of eighteen hundred lines holding all of them, which is the condition above.
+  A new check goes into the file whose concern it exercises, and a concern none of them names is a file of its own.
 - **A harness is a module and not a suite.** It exports the doubles, the render, and the helpers, and it carries no
   `describe` and no `it` — the hooks a family shares are exported as one function each file calls at its top level, so
   a reader of that file can see what its tests are given rather than having to know what an import did to them.
   `frontend/vitest.config.ts` leaves a `.harness.tsx` out of the coverage report, because it runs only under a test and
-  asserts nothing itself.
+  asserts nothing itself. `client.harness.ts` is the browser suite's counterpart, and what it shares is Playwright's
+  own form of a hook: the `test` it exports carries the deployment every check signs in to as a fixture, so a spec
+  imports `test` from the harness rather than from `@playwright/test`. Its `openSignedIn` signs in through the screen
+  rather than seeding the stored session before the page loads: the two were measured against each other and took the
+  same time to a signed-in frame, so seeding would buy nothing and would skip the one path every check then stands on.
 
 ## The unit runner
 
@@ -163,8 +171,8 @@ were being invented in three places at once — the browser suite, a throwaway s
 it could take a screenshot — and three copies of one corpus is three places to be wrong about a contract the service
 owns. Reaching a populated screen is most of the work in a client task, and it is work that had already been done.
 
-- **It is data, never routing.** It exports values, and every consumer decides how they reach the client: `page.route`
-  in the browser suite, a transport function in a unit test, and a second `MailFathomTransport` under the development
+- **It is data, never routing.** It exports values, and every consumer decides how they reach the client: the fake
+  deployment in the browser suite, a transport function in a unit test, and a second `MailFathomTransport` under the development
   server — `frontend/README.md` § _Looking at a screen with mail in it_ is that third consumer, and it is why the
   corpus is read by something that is not a test at all. Nothing in it parses a request, names a route, or knows
   what a `fetch` is. Where an answer genuinely depends on what was asked for — how far into a folder somebody has read,
@@ -185,8 +193,9 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
 - **Nothing in it is anybody's.** Every address, name, subject, and sentence is invented, and the hosts are reserved
   names — `.invalid` and `.example` — so no fixture can reach a machine that exists. That is the same rule
   `frontend/AGENTS.md` states about a capture of a signed-in client, read from the other end.
-- **The browser suite is the proof that it is sufficient.** `client.spec.ts` declares no fixture of its own, so a shape
-  the corpus states wrongly fails a committed suite rather than one session's scratch file.
+- **The browser suite is the proof that it is sufficient.** No browser spec declares a fixture of its own and neither
+  does the fake deployment they sign in to, so a shape the corpus states wrongly fails a committed suite rather than one
+  session's scratch file.
 - **What proves it is _right_ is outside this stack.** A suite here can only prove that the corpus and the client agree
   with each other, which is what they do while both disagree with the deployment. So
   `scripts/test-agent-workflow.sh` holds every value in this directory against
@@ -321,6 +330,29 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   into it is invented in the spec and reaches a loopback origin, so nothing here is anybody's mail or anybody's
   credential. Driving a real deployment is the agent's own work with `@playwright/cli`, which `frontend/AGENTS.md`
   covers, and it is not this suite.
+- **What answers is `fakeDeployment.ts`, one per check, and it holds state.** It starts from the corpus — the resting
+  mailbox, its folders, the drafts, the Discover run, the Agent's conversations — and applies what the client writes to
+  it: a move, a delete and the withdrawal that takes one back, a flag or a read mark, a draft saved, revised, and sent,
+  a Discover run stopped, and an answer to an Agent proposal. So a read after an act answers what the act left behind,
+  and a check can tell a client that dropped a row from one that never asked again. `client.harness.ts` serves it to
+  the check's browser context before the check starts, a check that opens a context of its own serves that one too, and
+  a route a check registers on its page afterwards takes precedence — which is how one refusal or one recording is put
+  in front of a single request.
+- **A request it has no answer for fails the check that issued it**, naming the method and the route, rather than being
+  answered with an empty body the screen would draw as something else. Adding the answer is part of the change that
+  first reaches the route, and the answer is a corpus value: the fake builds from the corpus and states no mail of its
+  own.
+- **Nothing in it waits.** What an agent composes is canned and returned at once, and no latency is simulated anywhere.
+  A check that has to look at an answer still running calls `startNextAnswerRunning()` before it asks: the next question
+  reads as running once and finished on the read the check causes after it.
+- **A check asserts what the client asked for through `deployment.requests(method, route)`**, which answers every
+  request of that shape in the order the page issued it, each with its route beneath `/api/client`, its query, and its
+  body as the JSON it was sent as — so the identifiers and the folder an act carried are read off the request rather
+  than inferred from the screen. A header is still read off `page.on('request')`, because the fake is not what put it
+  on the wire.
+- **`fakeDeployment.spec.ts` proves the fake itself**, asking it directly with no page: that each write reaches the read
+  after it. A journey stands on that, and a fake that got it wrong would make a journey pass or fail for a reason nobody
+  could see on the screen.
 - **Nothing here retries.** A check that passes on a second attempt has reported that the client is flaky rather than
   that it works.
 - **A geometry read after `setViewportSize` waits for the composition it is about.** The width is the browser's the

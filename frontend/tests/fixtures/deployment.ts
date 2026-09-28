@@ -176,6 +176,32 @@ export const troubledFolders = {
     ],
 };
 
+/**
+ * The zone the signed-in person's day is read in, as the deployment answers before they have chosen one.
+ *
+ * The default rather than a chosen zone, because nobody in this corpus has chosen one: a client told a zone was the
+ * person's own would place every instant against it instead of against the machine it runs on.
+ */
+export const ownTimeZone = { timeZone: 'UTC', isDefault: true };
+
+/**
+ * The folders of the corpus mailbox as the management route publishes them, with no act this credential may take.
+ *
+ * The same three levels the folders route answers — the inbox, the level nothing is bound to, and the folder beneath
+ * it — because the two routes are two readings of one mailbox. Every `allowedActs` is empty to match the grant
+ * {@link sessionAnswer} states, which reads and asks and changes nothing; the identities are the aliases only because
+ * a corpus needs some value there, and nothing may read meaning into one.
+ */
+export const managedFolders = {
+    allowedActs: [],
+    creatableRoles: [],
+    folders: [
+        { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] },
+        { id: 'ARCHIVE', parentId: null, name: 'Archive', role: null, allowedActs: [] },
+        { id: 'ARCHIVE/2024', parentId: 'ARCHIVE', name: '2024', role: null, allowedActs: [] },
+    ],
+};
+
 /** What a deployment offers somebody signing in at rest: a password and nothing else, which is what every other check reads. */
 export const signInMethods = {
     acceptsPassword: true,
