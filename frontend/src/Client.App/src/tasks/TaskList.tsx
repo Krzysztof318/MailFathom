@@ -44,6 +44,8 @@ const listFailures: Readonly<Record<ClientFailureReason, MessageKey>> = {
     missing: 'tasks.failedUnavailable',
 };
 
+const nothingPressed: ReadonlyMap<string, boolean> = new Map();
+
 export function TaskList({
     tasks,
     reading,
@@ -53,6 +55,7 @@ export function TaskList({
     now,
     selected,
     scheduled,
+    pressedInto = nothingPressed,
     onSelected,
     onToggleCompleted,
     onAccept,
@@ -86,6 +89,9 @@ export function TaskList({
 
     /** Which tasks this screen has already put in the day. */
     readonly scheduled: readonly string[];
+
+    /** The state each box was pressed into, by task, while the write and the read after it are on their way. */
+    readonly pressedInto?: ReadonlyMap<string, boolean>;
 
     readonly onSelected: (selected: readonly string[]) => void;
     readonly onToggleCompleted: (task: PersonalTask) => void;
@@ -191,6 +197,7 @@ export function TaskList({
                                 selected={selected.includes(task.id)}
                                 selecting={selected.length > 0}
                                 scheduled={scheduled.includes(task.id)}
+                                completed={pressedInto.get(task.id) ?? task.completed}
                                 onToggleSelected={() => {
                                     onSelected(withToggled(selected, task.id));
                                 }}

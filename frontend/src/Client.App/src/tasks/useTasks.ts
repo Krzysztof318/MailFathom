@@ -54,8 +54,12 @@ export interface TasksInForce {
     /** Asks for the page after the ones held, which a reader reaching the foot of the list is what calls. */
     readonly readMore: () => void;
 
-    /** Reads the list again from the leading end: the way out of a failure, and what every write is followed by. */
-    readonly readAgain: () => void;
+    /**
+     * Reads the list again from the leading end: the way out of a failure, and what every write is followed by.
+     *
+     * It settles once the read has answered, which is how a write knows the list now says what it did.
+     */
+    readonly readAgain: () => Promise<void>;
 }
 
 // One walk as it stands: the pages read, where it continues, and whether it has anywhere left to go.
@@ -179,7 +183,8 @@ export function useTasks(session: ClientSession | null, transport: MailFathomTra
         },
         readAgain: () => {
             setHeld({ ...standing, reading: true, failure: null });
-            void readFrom(null);
+
+            return readFrom(null);
         },
     };
 }

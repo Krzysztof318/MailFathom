@@ -273,6 +273,40 @@ describe('TasksSpace', () => {
         expect(pathsSent(sent(), 'POST').some((path) => path.endsWith('/tasks/a/completion'))).toBe(true);
     });
 
+    it('keeps a box where it was pressed until the list read after the write answers, and then draws the list', async () => {
+        const { transport: answering } = deployment();
+        let release = (): void => undefined;
+        const transport: MailFathomTransport = (request) =>
+            request.path.endsWith('/completion')
+                ? new Promise<ClientResponse>((resolve) => {
+                      release = () => {
+                          void answering(request).then(resolve);
+                      };
+                  })
+                : answering(request);
+
+        drawSpace(transport);
+
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark Answer the tender as done' }));
+
+        expect(screen.getByRole('checkbox', { name: 'Mark Answer the tender as not done' })).toHaveProperty(
+            'checked',
+            true,
+        );
+
+        release();
+
+        // This deployment still lists the task as open after the write, and the box is the list's again once that
+        // read has answered.
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe('Marked as done.');
+        });
+        expect(await screen.findByRole('checkbox', { name: 'Mark Answer the tender as done' })).toHaveProperty(
+            'checked',
+            false,
+        );
+    });
+
     // A task states a day rather than a time, so what is written claims no hours and this client invents none.
     it('puts a task in the calendar on the day it is due, with no hours claimed', async () => {
         const { transport, sent } = deployment();

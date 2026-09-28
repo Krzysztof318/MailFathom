@@ -83,7 +83,13 @@ function List({
                 ))}
             </ol>
             <button onClick={held.readMore}>{asksForMore}</button>
-            <button onClick={held.readAgain}>{asksAgain}</button>
+            <button
+                onClick={() => {
+                    void held.readAgain();
+                }}
+            >
+                {asksAgain}
+            </button>
         </div>
     );
 }

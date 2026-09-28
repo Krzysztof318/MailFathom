@@ -56,6 +56,7 @@ export function TaskRow({
     selected,
     selecting,
     scheduled,
+    completed = task.completed,
     onToggleSelected,
     onToggleCompleted,
     onAccept,
@@ -78,6 +79,9 @@ export function TaskRow({
 
     /** Whether this screen has already put this task in the day, which is what the design draws in place of the act. */
     readonly scheduled: boolean;
+
+    /** What the box says, which is the state it was last pressed into until the list has read that write back. */
+    readonly completed?: boolean;
 
     /** Puts this row into the selection or takes it out, which a modifier-held press and the mark both reach. */
     readonly onToggleSelected: () => void;
@@ -188,8 +192,8 @@ export function TaskRow({
 
                 <input
                     type="checkbox"
-                    checked={task.completed}
-                    aria-label={translate(task.completed ? 'tasks.markNotDoneRow' : 'tasks.markDoneRow', {
+                    checked={completed}
+                    aria-label={translate(completed ? 'tasks.markNotDoneRow' : 'tasks.markDoneRow', {
                         title: task.title,
                     })}
                     className="mt-0.5 size-5 shrink-0 accent-accent"
