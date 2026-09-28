@@ -339,7 +339,8 @@ root. No threshold is enforced on the figure.
 and drives it with Playwright, so what it proves is the bundle a deployment publishes rather than the source: the
 application loading, the version the build stamped, the screen rendering through roles and accessible names, each space
 reloading at its own address and the back gesture moving through the client's own history, which composition a width
-produces, and the requests the page actually issued. It needs a browser of its own —
+produces, the requests the page actually issued, and what a journey across more than one component leaves on the
+screen. It needs a browser of its own —
 `pnpm exec playwright install chromium` — which is why neither verification gate runs it and the pipeline does, on every
 pull request that reaches this stack. Its configuration is `playwright.config.ts` and its specs are under `tests/`.
 

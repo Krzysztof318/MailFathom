@@ -237,8 +237,9 @@ Five things a first session gets wrong, and each of them wastes a session rather
   it is shorter than guessing.
 
 It is a development tool and not a suite. What it establishes is turned into an assertion a suite runs — `pnpm test`
-where jsdom can answer it, and `pnpm test:browser` where only a browser can — because a run in somebody's session proves
-nothing on the next pull request. `frontend/tests/AGENTS.md` is where that boundary is drawn.
+where jsdom can answer it, and `pnpm test:browser` where only a browser can or where it is a journey across more than
+one component — because a run in somebody's session proves nothing on the next pull request. `frontend/tests/AGENTS.md`
+is where that boundary is drawn.
 
 **A capture of a signed-in client is personal data.** A screenshot, a snapshot, a trace, a video, a console log, and a
 response body from a real deployment each show somebody's mail. They stay in the session's scratch directory and reach
