@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     defaultTelemetryLevel,
-    draftsMailReplies,
     endSession,
     revokeRefreshToken,
     readAuthorizationServer,
@@ -24,6 +23,7 @@ import { Composer } from './composer/Composer';
 import type { ComposerOpening } from './composer/composition';
 import { forgetComposition } from './composer/keptComposition';
 import { ComposingContext } from './composer/useComposing';
+import { useDraftsReplies } from './composer/useDraftsReplies';
 import { Containment } from './containment/Containment';
 import { BrandMark } from './controls/BrandMark';
 import { PlannedControl } from './controls/PlannedControl';
@@ -371,25 +371,7 @@ export function App({
         setHandedToAgent(handOver);
         window.location.hash = addressOf('agent');
     }, []);
-    const [draftsReplies, setDraftsReplies] = useState(false);
-
-    useEffect(() => {
-        if (session === null || !asksMail) {
-            return;
-        }
-
-        let listening = true;
-
-        void draftsMailReplies(session, readMail).then((answer) => {
-            if (listening && answer.outcome === 'read') {
-                setDraftsReplies(answer.value);
-            }
-        });
-
-        return () => {
-            listening = false;
-        };
-    }, [session, readMail, asksMail]);
+    const draftsReplies = useDraftsReplies(session, deploymentSession, readMail);
 
     // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
     // several components below this, and what it replaces is a region this frame composes. It is the opening alone —

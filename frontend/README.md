@@ -287,6 +287,16 @@ not the request builder behind it, which opens the span, composes the request in
 adapter, and closes on the reason the adapter read off the answer. A request composed outside a span would carry no
 trace context and leave no record, so composing one is not something this package lets a caller do.
 
+**Every request, whichever adapter carries it, reaches the wire through
+`src/Client.App/src/deployment/deploymentFetch.ts`**, which is where the client keeps to the deployment's limit on one
+user rather than discovering it. It holds at most six requests in flight and queues the rest, so the burst every space
+makes as it mounts stays under the eight at once a deployment allows one user by default. A request the deployment still refuses with a bare `429` — its transport limiter's answer,
+which says nothing about the request — is put on the wire again up to three times, after a wait that doubles from a
+quarter of a second or after the `Retry-After` the answer named, and one naming more than ten seconds is handed back at
+once. What decides that is `throttledRetryDelay` in `src/Client.Backend/src/throttling.ts`, since a status and a header
+are that package's to read; a `429` carrying a problem document is the service declining the operation itself and is
+never retried. Only a refusal that outlasts those attempts reaches a screen, as a deployment that did not answer.
+
 **That span is also what the request travels under.** It is the active context while the operation composes its
 request, so `headersFor` writes the W3C trace context into the headers and the span the deployment opens is this one's
 child — one trace over the screen, the request, the use case, and the query beneath it.

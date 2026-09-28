@@ -4045,6 +4045,14 @@ the same user draw on one bucket and one concurrency allowance, and a colleague'
 endpoint behaves the same for a roster of twenty as for one person;
 [whose capacity a request spends](mcp-endpoint.md#whose-capacity-a-request-spends) is the rule.
 
+**The MailFathom client keeps to the defaults on its own.** It holds at most six requests in flight, under the eight
+at once the default allows one user, so signing in and drawing every space is refused for nothing. A request the
+limiter still refuses — a second window signed in as the same person, or a deployment configured narrower than the
+default — is sent again up to three times, after a spread wait or after the `Retry-After` the refusal named, and only a
+refusal that outlasts those attempts reaches the screen as a deployment that did not answer. Narrowing
+`MaxConcurrentRequestsPerUser` below six therefore costs the client a slower start rather than a failing one, and a
+`Retry-After` longer than ten seconds is reported at once rather than waited out behind a spinner.
+
 **Both are attached to this surface's routes rather than applied as the process's default policy**, which is what keeps
 the health probes answering while the client endpoint is refusing. A default limiter would count a readiness probe
 against the same capacity a browser is spending, and a deployment under load would start failing the probe that decides

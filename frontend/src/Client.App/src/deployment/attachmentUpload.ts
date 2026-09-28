@@ -5,6 +5,7 @@
 import { createContext, useContext } from 'react';
 import { longestResponseBody, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
+import { fetchFromDeployment } from './deploymentFetch';
 import { deploymentCredentials } from './sendToDeployment';
 
 // Putting one file the author is attaching on the wire. It is the third module in this directory that calls `fetch`
@@ -44,15 +45,17 @@ export function useAttachmentUpload(): AttachmentUpload {
 
 export const uploadAttachment: AttachmentUpload = async (request, file, abandoned) => {
     try {
-        const response = await fetch(request.path, {
-            method: request.method,
-            headers: { ...request.headers },
-            credentials: deploymentCredentials,
-            body: file,
-            signal: abandoned,
-        });
-
-        return await answerOf(response, request.longestAnswer ?? longestResponseBody);
+        return await fetchFromDeployment(
+            request.path,
+            {
+                method: request.method,
+                headers: { ...request.headers },
+                credentials: deploymentCredentials,
+                body: file,
+                signal: abandoned,
+            },
+            (response) => answerOf(response, request.longestAnswer ?? longestResponseBody),
+        );
     } catch {
         // A connection refused, a name that does not resolve, and the author taking the file back off all arrive here
         // as one rejected promise. Which of them it was is the composer's to know — it is what holds the signal — and

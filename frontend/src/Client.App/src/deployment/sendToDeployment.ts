@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { longestResponseBody, type MailFathomTransport } from '@mailfathom/client-backend';
+import { fetchFromDeployment } from './deploymentFetch';
 
 // The adapter `Client.Backend` asks its caller for. That package declares no DOM, so `fetch` is called in this
 // directory and nowhere else in the client — which is what makes the boundary a resolution error rather than a
@@ -33,26 +34,27 @@ export type DeploymentTransport = (abandoned: AbortSignal) => MailFathomTranspor
 export const deploymentCredentials: RequestCredentials = 'omit';
 
 /** Puts one request on the wire, and reports what came back without deciding anything about it. */
-export const sendToDeployment: DeploymentTransport = (abandoned) => async (request) => {
-    const response = await fetch(request.path, {
-        method: request.method,
-        headers: { ...request.headers },
-        credentials: deploymentCredentials,
-        // `null` rather than the absent property, because the compiler is told an optional property is genuinely
-        // absent rather than present and undefined — and `fetch` reads the two the same way.
-        body: request.body ?? null,
-        signal: abandoned,
-    });
+export const sendToDeployment: DeploymentTransport = (abandoned) => (request) =>
+    fetchFromDeployment(
+        request.path,
+        {
+            method: request.method,
+            headers: { ...request.headers },
+            credentials: deploymentCredentials,
+            // `null` rather than the absent property, because the compiler is told an optional property is genuinely
+            // absent rather than present and undefined — and `fetch` reads the two the same way.
+            body: request.body ?? null,
+            signal: abandoned,
+        },
+        async (response) => ({
+            status: response.status,
+            body: await readBoundedBody(response, request.longestAnswer ?? longestResponseBody),
 
-    return {
-        status: response.status,
-        body: await readBoundedBody(response, request.longestAnswer ?? longestResponseBody),
-
-        // Lower-cased already, which is what `ClientResponse` states its names are: the platform's own header
-        // collection normalizes them, so a lookup there needs no second spelling to try.
-        headers: Object.fromEntries(response.headers),
-    };
-};
+            // Lower-cased already, which is what `ClientResponse` states its names are: the platform's own header
+            // collection normalizes them, so a lookup there needs no second spelling to try.
+            headers: Object.fromEntries(response.headers),
+        }),
+    );
 
 /**
  * Reads the answer up to the bound the wire states, and stops there.
