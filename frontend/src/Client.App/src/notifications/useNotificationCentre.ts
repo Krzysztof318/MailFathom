@@ -383,8 +383,8 @@ export function useNotificationCentre(
         const keepsWhatStands = quietly.current;
         quietly.current = false;
 
+        // Spent only by a read that lands: one refused or superseded leaves it for the read after it.
         const risenBy = risen.current?.session === session ? risen.current.count : 0;
-        risen.current = null;
 
         setReading(known.current?.session !== session);
 
@@ -407,6 +407,9 @@ export function useNotificationCentre(
 
             const page = answer.value.notifications;
             const seen = known.current?.session === session ? known.current.ids : null;
+            const stillRisen = (risen.current?.session === session ? risen.current.count : 0) - risenBy;
+
+            risen.current = stillRisen > 0 ? { session, count: stillRisen } : null;
 
             // What arrived is what the last page did not hold. Where no page has been drawn yet, the count is the only
             // thing this client measured before, and it rose by exactly the rows that arrived — which a centre read

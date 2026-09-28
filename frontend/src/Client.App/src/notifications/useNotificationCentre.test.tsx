@@ -525,6 +525,25 @@ describe('useNotificationCentre', () => {
         expect([...result.current.arrived]).toEqual(['n-second']);
     });
 
+    it('still counts an arrival whose page read failed, once a later read of the page is answered', async () => {
+        const { transport: answering, hold } = deployment({ unreadCount: 1, notifications: [meeting, mail] });
+        let refusesThePage = true;
+        const transport: MailFathomTransport = (request) =>
+            refusesThePage && new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 500, headers: {}, body: '' })
+                : answering(request);
+        const { result } = centreOf(transport);
+
+        await settled();
+        hold(2, [{ ...mail, id: 'n-second' }, meeting, mail]);
+        await polled();
+        refusesThePage = false;
+        hold(3, [{ ...mail, id: 'n-third' }, { ...mail, id: 'n-second' }, meeting, mail]);
+        await polled();
+
+        expect([...result.current.arrived].sort()).toEqual(['n-second', 'n-third']);
+    });
+
     it('tells the operating system how many arrived and of what kind, and nothing a message carried', async () => {
         await threeArrive();
 
