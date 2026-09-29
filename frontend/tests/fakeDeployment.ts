@@ -129,8 +129,19 @@ interface FolderRow {
 /** A record the corpus or a write states, held as the JSON it travels as. */
 type Held = Readonly<Record<string, unknown>>;
 
-/** One folder of the mailbox's hierarchy as the management route publishes it. */
-type HeldFolder = (typeof deployment.managedFolders.folders)[number];
+/**
+ * One folder of the mailbox's hierarchy as the management route publishes it.
+ *
+ * Stated rather than read off the corpus, whose literal pins each folder to the parent and role it happens to have — and
+ * a folder act moves a folder under any parent.
+ */
+interface HeldFolder {
+    readonly id: string;
+    readonly parentId: string | null;
+    readonly name: string;
+    readonly role: string | null;
+    readonly allowedActs: readonly string[];
+}
 
 /** The two halves of the task list, as the corpus states them for the day the list was first read on. */
 interface TaskLists {
@@ -194,12 +205,16 @@ export class FakeDeployment {
     private readonly counted = new Map<string, { stored: number; unread: number }>();
 
     /**
-     * The mailbox's folders as the management route reads them, less every folder a folder act deleted since.
+     * The mailbox's folders as the management route reads them, with every folder act applied since.
      *
      * Both folder routes answer from it, because they are two readings of one mailbox: a folder deleted here is one
-     * the tree no longer lists and mail can no longer be moved into.
+     * the tree no longer lists and mail can no longer be moved into, and where a folder sits is read off it — which is
+     * the service's reading of a declaration rather than of the last synchronization.
      */
     private hierarchy: readonly HeldFolder[] = deployment.managedFolders.folders;
+
+    /** The folders a folder act made, which the folders route answers beside the corpus's own. */
+    private readonly made = new Set<string>();
 
     /** The notification centre, newest first, with every read mark and erasure written since. */
     private notificationsHeld: HeldNotification[] = notifications.notificationPage.notifications.map((row) => ({
@@ -381,6 +396,12 @@ export class FakeDeployment {
                 return answering(this.folders());
             case 'GET /managed-folders':
                 return answering({ ...deployment.managedFolders, folders: this.hierarchy });
+            case 'POST /managed-folders':
+                return this.folderMade(request.body);
+            case 'POST /managed-folders/renames':
+                return this.folderRevised(request.body, 'Renamed');
+            case 'POST /managed-folders/moves':
+                return this.folderRevised(request.body, 'Moved');
             case 'POST /managed-folders/deletions':
                 return this.folderDeleted(request.body);
             case 'GET /emails':
@@ -1186,19 +1207,38 @@ export class FakeDeployment {
         return running;
     }
 
-    /** The folders the corpus states that no folder act has deleted, each with its counts moved by what was written. */
+    /**
+     * The folders the corpus states that no folder act has deleted, and the ones a folder act made, each at the place
+     * the hierarchy puts it and with its counts moved by what was written.
+     *
+     * A folder made here has never been synchronized and holds nothing yet, which is how the service answers a folder
+     * declared a moment ago that no pass has reached.
+     */
     private folders() {
         return {
             ...deployment.mailFolders,
             accounts: deployment.mailFolders.accounts.map(({ account, folders }) => ({
                 account,
-                folders: folders
+                folders: [
+                    ...folders,
+                    ...[...this.made].map((alias) => ({
+                        alias,
+                        role: null,
+                        path: [],
+                        storedEmailCount: 0,
+                        unreadEmailCount: 0,
+                        synchronizationState: 'NeverSynchronized',
+                        lastSynchronizedAt: null,
+                        behind: false,
+                    })),
+                ]
                     .filter(({ alias }) => this.hierarchy.some(({ id }) => id === alias))
                     .map((folder) => {
                         const moved = this.counted.get(folder.alias) ?? { stored: 0, unread: 0 };
 
                         return {
                             ...folder,
+                            path: this.lineOf(folder.alias).map(({ name }) => name),
                             storedEmailCount: folder.storedEmailCount + moved.stored,
                             unreadEmailCount: folder.unreadEmailCount + moved.unread,
                         };
@@ -1215,6 +1255,54 @@ export class FakeDeployment {
     }
 
     /**
+     * Makes a folder on the mail server beneath the parent named, and declares it under an alias of its own name —
+     * with a number after it where another folder already holds that one — which is the service's reading: an alias
+     * says nothing about where a folder sits, and nothing afterwards changes it.
+     */
+    private folderMade(body: unknown): FakeAnswer {
+        const asked = recordIn(body);
+        const name = asked?.['name'];
+        const parentId = typeof asked?.['parentId'] === 'string' ? asked['parentId'] : null;
+
+        if (typeof name !== 'string' || (parentId !== null && this.lineOf(parentId).length === 0)) {
+            return folderRefused(typeof name === 'string' ? 'ParentMissing' : 'NameInvalid');
+        }
+
+        const taken = (candidate: string) => this.hierarchy.some(({ id }) => id === candidate);
+        let alias = name.toUpperCase();
+
+        for (let suffix = 2; taken(alias); suffix += 1) {
+            alias = `${name.toUpperCase()}-${String(suffix)}`;
+        }
+
+        const folder: HeldFolder = { id: alias, parentId, name, role: null, allowedActs: ['Rename', 'Move', 'Delete'] };
+
+        this.hierarchy = [...this.hierarchy, folder];
+        this.made.add(alias);
+
+        return answering({ change: 'Created', folder, mailErasureDeferred: false });
+    }
+
+    /** Renames or moves a folder the account declares, which changes where it sits and never the alias it is named by. */
+    private folderRevised(body: unknown, change: 'Renamed' | 'Moved'): FakeAnswer {
+        const asked = recordIn(body);
+        const standing = this.hierarchy.find(({ id }) => id === asked?.['folderId']);
+
+        if (standing === undefined) {
+            return folderRefused('FolderMissing');
+        }
+
+        const revised: HeldFolder =
+            change === 'Renamed'
+                ? { ...standing, name: typeof asked?.['name'] === 'string' ? asked['name'] : standing.name }
+                : { ...standing, parentId: typeof asked?.['parentId'] === 'string' ? asked['parentId'] : null };
+
+        this.hierarchy = this.hierarchy.map((folder) => (folder === standing ? revised : folder));
+
+        return answering({ change, folder: revised, mailErasureDeferred: false });
+    }
+
+    /**
      * Deletes a folder and everything beneath it on the mail server, which takes the mail stored from them out of every
      * read — the change the service reports for an account whose folders a mail server holds, as the corpus's does.
      */
@@ -1222,11 +1310,7 @@ export class FakeDeployment {
         const folder = this.hierarchy.find(({ id }) => id === recordIn(body)?.['folderId']);
 
         if (folder === undefined) {
-            return {
-                status: 404,
-                body: JSON.stringify({ refusal: 'FolderMissing' }),
-                contentType: 'application/problem+json',
-            };
+            return folderRefused('FolderMissing');
         }
 
         const gone = new Set(this.hierarchy.filter(({ id }) => this.lineOf(id).includes(folder)).map(({ id }) => id));
@@ -1602,6 +1686,15 @@ function wordsOf(written: Held): string {
 /** The addresses one header of a save names, skipping anything that is not one. */
 function listed(header: unknown): string[] {
     return Array.isArray(header) ? header.filter((address) => typeof address === 'string') : [];
+}
+
+/** A folder act refused the way the service refuses one, as a problem naming the refusal. */
+function folderRefused(refusal: 'FolderMissing' | 'ParentMissing' | 'NameInvalid'): FakeAnswer {
+    return {
+        status: refusal === 'NameInvalid' ? 400 : 404,
+        body: JSON.stringify({ refusal }),
+        contentType: 'application/problem+json',
+    };
 }
 
 /** One value put on the wire as the deployment behind the preview server would answer with it. */

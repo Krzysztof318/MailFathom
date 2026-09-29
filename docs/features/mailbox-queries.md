@@ -584,7 +584,8 @@ nothing listing messages needs any of it.
 
 `IStoredMailFolderReader` is the port that answers those, over the same mailbox scope every other read narrows by, so a
 folder withheld from a caller is withheld from its counts as well. It answers in two queries: the newest binding of each
-alias, which is where the hierarchy comes from, and one aggregate over the mail those aliases hold. The counts are of
+alias, which records where the last pass found the folder and the delimiter its server nests with, and one aggregate
+over the mail those aliases hold. The counts are of
 every binding's mail together, because an alias rebound after a server recreated the folder still lists what the older
 binding stored, and they admit exactly the rows a listing of the folder would return — a count assembled from its own
 idea of what is readable would be a figure no listing could reproduce.
@@ -592,8 +593,8 @@ idea of what is readable would be a figure no listing could reproduce.
 The folders this port answers are the ones local state knows of, and an alias configuration maps that nothing has ever
 bound to a remote folder is absent from it rather than empty, because there is no binding to read a hierarchy or a count
 from. The reading composed on top of it is wider: `MailFolderDirectoryReader` publishes the folders configuration maps
-as well, so a mapped folder that reading did not name is published beside the mirrored ones as never synchronized, with
-no place in the hierarchy and no mail here. Two cases reach that. A folder an operator asked not to mirror is never
+as well, so a mapped folder that reading did not name is published beside the mirrored ones as never synchronized, at
+the place its declaration names and with no mail here. Two cases reach that. A folder an operator asked not to mirror is never
 scheduled and therefore never discovered; it is still a folder the account has and still a folder
 [a move](../operations/client-endpoint.md#the-mutation-routes) files into, resolution being indifferent to mirroring, so
 a client that could not see one would be told an account has nowhere to put a deleted message while its mailbox has a
@@ -604,6 +605,15 @@ tools is the one that stays absent, for the same reason it is absent from every 
 mail, and the resolved scope left it out on purpose. That reading is what
 [`GET /api/client/folders`](../operations/client-endpoint.md#the-folders-route) publishes; the whole configured list,
 mirrored or not and withheld or not, is [the administrative status route](../operations/admin-endpoint.md).
+
+Where a folder sits is read from its declaration wherever the declaration names a path, and from the newest binding
+only for a folder found by the role it plays. A folder act writes the declaration and nothing else, so a binding is a
+pass behind every act: a folder just made has none, and one just renamed or moved keeps the binding of the path it
+left until the account's next pass reaches it. The declaration is what the act's own `FoldersChanged` re-read reads, so
+the folder is drawn where the act put it at once. A declared path carries no delimiter, being text somebody wrote, so it
+is split by the delimiter the folder's own binding recorded and otherwise by the one the account's other bindings
+recorded; an account no pass has reached yet has recorded none, and its declared paths read as one level each until one
+has.
 
 ## Where the pieces live
 

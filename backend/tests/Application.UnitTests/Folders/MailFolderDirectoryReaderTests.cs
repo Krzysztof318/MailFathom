@@ -138,6 +138,62 @@ public sealed class MailFolderDirectoryReaderTests
     }
 
     /// <summary>
+    /// A folder renamed and moved since the account's last pass keeps the binding of the path it left, and the folder
+    /// act's own re-read has to draw it where the act put it rather than where that pass found it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AFolderDeclaredAtAPathItsBindingHasNotReachedYet_PublishesTheDeclaredPath()
+    {
+        // Arrange
+        var mappings = new StubMailFolderMappings()
+            .With(
+                Work.Id,
+                MailFolderMapping.ToRemotePath(MailFolderAlias.Create("suppliers"), RemoteFolderPath.Create("Archive/Vendors")));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "suppliers", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "suppliers", "Suppliers", storedEmailCount: 2, unreadEmailCount: 1, delimiter: '/')),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var folder = Assert.Single(Assert.Single(directory.Accounts).Folders);
+        Assert.Equal(["Archive", "Vendors"], folder.HierarchyLevels);
+        Assert.Equal(2, folder.StoredEmailCount);
+    }
+
+    /// <summary>
+    /// A folder just made has no binding of its own, and its declared path is split by the delimiter the account's other
+    /// bindings recorded — which is what places it inside the folder it was made in rather than at the top level.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AFolderDeclaredInsideAnotherThatNoRunHasReached_IsNestedByTheAccountsDelimiter()
+    {
+        // Arrange
+        var mappings = new StubMailFolderMappings()
+            .With(Work.Id, MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox))
+            .With(
+                Work.Id,
+                MailFolderMapping.ToRemotePath(MailFolderAlias.Create("suppliers"), RemoteFolderPath.Create("Archiwum.Dostawcy")));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "inbox", "INBOX", storedEmailCount: 1, unreadEmailCount: 0, delimiter: '.')),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var declared = Assert.Single(
+            Assert.Single(directory.Accounts).Folders,
+            folder => folder.Alias.Value == "SUPPLIERS");
+        Assert.Equal(["Archiwum", "Dostawcy"], declared.HierarchyLevels);
+    }
+
+    /// <summary>
     /// An alias nothing has bound to a remote folder yet has no place on a server and no mail, and it is answered as
     /// exactly that rather than left out — its own freshness is what says an empty folder from an unsynchronized one.
     /// </summary>

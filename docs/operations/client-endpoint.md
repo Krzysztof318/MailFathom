@@ -527,13 +527,19 @@ above it is MailFathom's own name for the folder — a configured, upper-cased v
 what everything else on this surface names the folder by. A server that reports no delimiter has a flat mailbox and the
 whole path arrives as one level.
 
-**An alias nests on `/`, and that is a second hierarchy from `path` rather than a spelling of it.** `INBOX/PROJECTS`
-is a folder configuration filed under `INBOX`, wherever on the server either of them actually sits, and it is what a
-client draws a tree from: a folder made inside another is one whose alias extends its parent's, so nothing has to work
-out which server path that turned into. An alias carrying no separator is one level, which is every mapping a
-deployment configured before this existed. **Three segments is as deep as MailFathom's own client goes** — it offers
-no way to make a fourth — but the value is a configured name like any other and this surface neither imposes that
-ceiling nor promises one, so a client reading a deeper alias draws it where it falls.
+**`path` is read from the folder's declaration wherever it names one**, and from what the account's last pass bound
+only for a folder found by the role it plays. A folder act writes the declaration and nothing else, so a folder just
+made, renamed, or moved is answered where the act put it on the `FoldersChanged` re-read that follows the act, rather
+than where the last pass found it — which for a folder just made is nowhere, until the next pass minutes later. A
+declared path is text somebody wrote and carries no delimiter, so it is split by the one the account's own bindings
+recorded; an account no pass has reached yet has recorded none, and each of its declared paths arrives as one level
+until one has.
+
+**`path` is what a tree nests by, and `alias` nests nothing.** A folder made inside another is declared under its own
+name, and neither a rename nor a move changes its alias, so an alias says nothing about where a folder is — and a `/`
+in one is a character of the name rather than a level. **Three levels is as deep as MailFathom's own client goes** —
+it offers no way to make a fourth — but this surface neither imposes that ceiling nor promises one, so a client
+reading a deeper path draws it where it falls.
 
 **The counts are of the local copy, not of the mailbox.** `storedEmailCount` is what this deployment holds and would
 serve, and `unreadEmailCount` is how many of those the mail server last reported without `\Seen`. A folder still being
@@ -2039,7 +2045,7 @@ held, and a removal takes the mapping out. Renaming, deleting, subscribing, and 
 are refused outright by [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
 stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, and so does
 the folder on the server. That is unlike removing a whole mailbox, which erases its stored mail. A removal withdraws only the alias
-it names: a folder nested under it by alias stays declared and is read as a folder of its own from then on.
+it names: a folder sitting beneath it stays declared and is read as a folder of its own from then on.
 
 Each of the three takes the account by the identifier the deployment generated for it — the one the account list the
 client is served names — the folder as the JSON a configuration file would state it in, and the `version` the record

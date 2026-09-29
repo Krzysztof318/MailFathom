@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailFolderRole, ManagedMailFolder } from '@mailfathom/client-backend';
-import { deepestAlias } from './folderTreeRows';
+import { deepestFolder } from './folderTreeRows';
 
 // What the folder dialog is holding while somebody types in it, and the arithmetic over it. It is a module rather than
 // state inside the dialog because every interesting decision here is a function of a few values — and a decision that
@@ -153,7 +153,7 @@ export function refusalOf(draft: FolderDraft, folders: readonly ManagedMailFolde
 
     // The ceiling is the tree's rather than a second decision: a draft that may be saved is one the column can draw.
     // Counted over what the folder brings with it, because a move takes everything beneath it along.
-    if (depthOf(draft.parentId, folders) + 1 + heightOf(draft.standingId, folders) > deepestAlias) {
+    if (depthOf(draft.parentId, folders) + 1 + heightOf(draft.standingId, folders) > deepestFolder) {
         return 'tooDeep';
     }
 
@@ -222,7 +222,7 @@ export function admissibleParents(
         (folder) =>
             folder.id !== draft.standingId &&
             (draft.standingId === null || !beneath(draft.standingId, folder.id, folders)) &&
-            depthOf(folder.id, folders) + 1 + height <= deepestAlias,
+            depthOf(folder.id, folders) + 1 + height <= deepestFolder,
     );
 }
 

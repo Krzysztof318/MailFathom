@@ -9,7 +9,7 @@ import type { FolderTreeRow } from './folderTreeRows';
 function row(stated: Partial<FolderTreeRow>): FolderTreeRow {
     return {
         key: 'row',
-        scope: null,
+        scope: { kind: 'account', accountId: 'work' },
         name: 'Whatever',
         role: null,
         accountId: 'work',
@@ -75,23 +75,21 @@ describe('actsOffered', () => {
         expect(actsOffered(folder, nothingReported)).toEqual(['markAllRead']);
     });
 
-    it('stops offering a folder inside at the third level of an alias, which is the tree’s own ceiling', () => {
-        const deepest = row({ accountId: 'work', alias: 'INBOX/PROJECTS/2026', remotePath: ['INBOX', 'p', '2026'] });
+    it('stops offering a folder inside at the third level of a path, which is the tree’s own ceiling', () => {
+        const deepest = row({ accountId: 'work', alias: '2026', remotePath: ['INBOX', 'Projects', '2026'] });
 
         expect(actsOffered(deepest, everything)).toEqual(['markAllRead', 'editFolder', 'deleteFolder']);
     });
 
-    it('offers a level of an alias nothing is bound to only the folder that would be made inside it', () => {
-        expect(actsOffered(row({ accountId: 'work', alias: 'PROJECTS' }), everything)).toEqual(['newFolderInside']);
+    it('offers a level of a path nothing is declared at nothing at all, there being no folder an act could name', () => {
+        const level = row({ key: 'level:work:["Projects"]', scope: null, accountId: 'work', name: 'Projects' });
+
+        expect(actsOffered(level, everything)).toEqual([]);
     });
 
-    it('offers such a level nothing at all where it already sits at the ceiling', () => {
-        expect(actsOffered(row({ accountId: 'work', alias: 'A/B/C' }), everything)).toEqual([]);
-    });
+    it('offers a folder inside one sitting a level down whatever its alias says, since the alias names no place', () => {
+        const nested = row({ accountId: 'work', alias: 'SUPPLIERS', remotePath: ['Archive', 'Suppliers'] });
 
-    it('offers such a level nothing where the report names no folder to make one beneath', () => {
-        expect(
-            actsOffered(row({ accountId: 'work', alias: 'PROJECTS' }), { account: ['create'], folder: null }),
-        ).toEqual([]);
+        expect(actsOffered(nested, everything)).toContain('newFolderInside');
     });
 });

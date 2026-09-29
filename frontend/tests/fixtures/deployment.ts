@@ -122,11 +122,11 @@ const inbox = {
     behind: false,
 };
 
-// A folder nested under a level of its own alias, which is where the tree nests one and what a tree that has been
-// expanded and collapsed is read against. Nothing is bound to `ARCHIVE` itself, so that level is a heading the tree
-// draws rather than a folder the deployment named — the shape a mail server produces every time somebody files below
-// a folder they never mapped. The alias is upper-cased because that is the one form the service answers with, which
-// is also why the level's own name has to be read off the remote path. It carries no role, as most folders carry none.
+// A folder nested a level down its path, which is where the tree nests one and what a tree that has been expanded and
+// collapsed is read against. Nothing the folders route answers sits at `Archive` itself, so that level is a heading
+// the tree draws rather than a folder the deployment named — the shape a mail server produces every time somebody
+// files below a folder they never mapped. The alias is upper-cased because that is the one form the service answers
+// with, which is why every name a row shows is read off the path. It carries no role, as most folders carry none.
 const archive2024 = {
     alias: 'ARCHIVE/2024',
     role: null,
