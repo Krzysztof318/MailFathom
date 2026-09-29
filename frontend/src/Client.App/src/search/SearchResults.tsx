@@ -124,7 +124,7 @@ export function SearchResults({
     const [scrollTop, setScrollTop] = useState(0);
     const [viewport, setViewport] = useState(0);
     const [rowHeight, setRowHeight] = useState(estimatedRowHeight);
-    const [focusedRow, setFocusedRow] = useState(0);
+    const [keyboardRow, setKeyboardRow] = useState(0);
 
     const scroller = useRef<HTMLDivElement>(null);
     const elements = useRef(new Map<number, HTMLLIElement>());
@@ -134,6 +134,10 @@ export function SearchResults({
     const rowCount = results.length;
     const drawn = windowOf(rowCount, rowHeight, scrollTop, viewport);
     const lastDrawn = drawn.first + drawn.count - 1;
+
+    // The row the keyboard is on, held within what is found: a refresh replaces the results with a head that may be
+    // shorter than the row somebody had reached, and a row past the end would leave the list with no tab stop at all.
+    const focusedRow = Math.min(keyboardRow, Math.max(rowCount - 1, 0));
 
     // Whether the ranked list goes on past what is held. The count is checked as well as the cursor, because how far a
     // ranked list reaches is this surface's bound rather than a promise about the answer: a deployment that kept
@@ -271,7 +275,7 @@ export function SearchResults({
         const reached = Math.min(Math.max(row, 0), Math.max(rowCount - 1, 0));
 
         reveal(reached);
-        setFocusedRow(reached);
+        setKeyboardRow(reached);
         wantsFocus.current = true;
     }
 
@@ -292,7 +296,7 @@ export function SearchResults({
 
         const cited = explainingFileOf(result);
 
-        setFocusedRow(row);
+        setKeyboardRow(row);
         revise({
             citedAttachment:
                 cited === undefined ? null : { storedEmailId: result.id, position: cited.attachmentPosition },
@@ -453,7 +457,9 @@ export function SearchResults({
 
                 <div aria-hidden="true" style={{ height: `${String(drawn.below)}px` }} />
 
-                {wanting ? (
+                {/* A refresh reads the head again under what is drawn, which is not reading more of it, and it says
+                    nothing, as a refresh of the folder's list says nothing. */}
+                {wanting && !refreshing ? (
                     <p className="px-3 py-2 text-sm text-muted" role="status">
                         {translate('search.readingMore')}
                     </p>

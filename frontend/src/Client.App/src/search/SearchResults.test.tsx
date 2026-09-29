@@ -582,16 +582,63 @@ describe('SearchResults', () => {
             deployment.say({ kind: 'refresh' });
         });
 
+        const list = screen.getByRole('listbox', { name: 'What this search found' });
+
+        expect(list.getAttribute('aria-busy')).toBe('true');
+
+        // Busy clears in the commit that takes the unanswered refresh in, which is the one a failure would be raised in.
         await waitFor(() => {
-            expect(reads).toBe(2);
-        });
-        await act(async () => {
-            await Promise.resolve();
+            expect(list.getAttribute('aria-busy')).toBe('false');
         });
 
         expect(await rows()).toHaveLength(2);
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(reads).toBe(2);
+    });
+
+    it('says nothing about reading more while a refresh reads the head again', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        render(
+            resultsUnder(
+                () => {
+                    reads += 1;
+
+                    return reads === 1
+                        ? Promise.resolve({ status: 200, body: pageOf([result(1), result(2)]), headers: {} })
+                        : new Promise(() => undefined);
+                },
+                { changes: deployment.changes },
+            ),
+        );
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        expect(screen.getByRole('listbox', { name: 'What this search found' }).getAttribute('aria-busy')).toBe('true');
+        expect(screen.queryByText('Reading more results…')).toBeNull();
+    });
+
+    it('keeps a tab stop in the list when a refresh answers with fewer results than the row the keyboard was on', async () => {
+        const deployment = deploymentSaying();
+        const { transport } = answeringInTurn(pageOf([result(1), result(2), result(3)]), pageOf([result(4)]));
+
+        render(resultsUnder(transport, { changes: deployment.changes }));
+
+        const list = await screen.findByRole('listbox', { name: 'What this search found' });
+
+        fireEvent.keyDown(list, { key: 'End' });
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(async () => {
+            expect((await rows())[0]?.textContent).toContain('Invoice 4');
+        });
+        expect((await rows())[0]?.tabIndex).toBe(0);
     });
 
     it('keeps what it found on the screen when a later page fails', async () => {
