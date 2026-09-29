@@ -2415,7 +2415,7 @@ fathom_review_carries_the_model_a_comment_named_into_the_request() {
   assert_contains 'dispatch=true' "$step_output_file"
   # The `request` job reads this output into the payload, so a model decided here and dropped there
   # would review with the default while the comment said otherwise and nothing said so.
-  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_contains 'model=claude-opus-5-5' "$step_output_file"
 }
 
 fathom_review_neither_reviews_nor_asks_for_a_comment_that_only_mentions_the_phrase() {
@@ -2446,13 +2446,13 @@ fathom_review_reviews_the_pull_request_a_dispatch_names() {
   local output_file="$test_directory/fathom-review-dispatch-output"
   local step_output_file="$test_directory/fathom-review-dispatch-step-output"
 
-  run_fathom_review_dispatch_gate 'claude-opus-5' "$output_file" "$step_output_file"
+  run_fathom_review_dispatch_gate 'claude-opus-5-5' "$output_file" "$step_output_file"
 
   assert_contains 'review=true' "$step_output_file"
   # Somebody asked for this pass, so the ceiling neither refuses it nor counts it and the bar stays
   # full — the same three consequences a label carries, reached through the comment path instead.
   assert_contains 'explicit=true' "$step_output_file"
-  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_contains 'model=claude-opus-5-5' "$step_output_file"
 }
 
 fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_one() {
@@ -2464,14 +2464,14 @@ fathom_review_reviews_with_the_default_model_when_a_dispatch_names_an_unknown_on
   assert_contains 'review=true' "$step_output_file"
   # The payload arrives over the API rather than from this file, so a model is checked against the
   # identifiers the workflow names instead of being handed to the action.
-  assert_contains 'model=claude-sonnet-5' "$step_output_file"
+  assert_contains 'model=claude-sonnet-5-5' "$step_output_file"
 }
 
 fathom_review_refuses_a_dispatch_that_names_no_pull_request() {
   local output_file="$test_directory/fathom-review-dispatch-empty-output"
   local step_output_file="$test_directory/fathom-review-dispatch-empty-step-output"
 
-  run_fathom_review_dispatch_gate 'claude-sonnet-5' "$output_file" "$step_output_file" ''
+  run_fathom_review_dispatch_gate 'claude-sonnet-5-5' "$output_file" "$step_output_file" ''
 
   assert_contains 'review=false' "$step_output_file"
   assert_contains 'names no pull request' "$output_file"
@@ -3078,8 +3078,8 @@ run_fathom_review_model() {
     export GH_TOKEN='fake-token'
     export REPOSITORY='Krzysztof318/MailFathom'
     export PULL_REQUEST_NUMBER='1'
-    export MODEL='claude-sonnet-5'
-    export SECURITY_MODEL='claude-opus-5'
+    export MODEL='claude-sonnet-5-5'
+    export SECURITY_MODEL='claude-opus-5-5'
     export SECURITY_LABEL='security'
     export LABELLING_WORKFLOW='apply-pull-request-rules.yml'
     # Seconds rather than minutes, for the reason the settle contracts run on short windows: what is
@@ -3103,7 +3103,7 @@ fathom_review_reads_a_security_labelled_change_with_the_costlier_model() {
   run_fathom_review_model '["type:defect","security"]' '0' '10' "$output_file" "$step_output_file"
 
   assert_contains 'security_review=true' "$step_output_file"
-  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_contains 'model=claude-opus-5-5' "$step_output_file"
   assert_contains 'carries the security label' "$output_file"
 }
 
@@ -3116,7 +3116,7 @@ fathom_review_keeps_the_default_model_for_an_ordinary_change() {
   run_fathom_review_model '["type:feature"]' '0' '10' "$output_file" "$step_output_file"
 
   assert_contains 'security_review=false' "$step_output_file"
-  assert_contains 'model=claude-sonnet-5' "$step_output_file"
+  assert_contains 'model=claude-sonnet-5-5' "$step_output_file"
   assert_contains 'carries no security label' "$output_file"
 }
 
@@ -3137,7 +3137,7 @@ fathom_review_waits_for_the_labelling_run_before_reading_the_labels() {
 
   run_fathom_review_model '["security"]' '2' '10' "$output_file" "$step_output_file"
 
-  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_contains 'model=claude-opus-5-5' "$step_output_file"
   assert_seconds_elapsed_at_least 2 "$started_at"
 }
 
@@ -3150,7 +3150,7 @@ fathom_review_reads_the_labels_as_they_stand_at_the_ceiling() {
   run_fathom_review_model '["type:feature"]' '99' '2' "$output_file" "$step_output_file"
 
   assert_contains 'still running' "$output_file"
-  assert_contains 'model=claude-sonnet-5' "$step_output_file"
+  assert_contains 'model=claude-sonnet-5-5' "$step_output_file"
 }
 
 # `Apply pull request labels` is where every condition for a label lives, so that adding one is an

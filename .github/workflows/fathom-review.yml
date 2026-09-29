@@ -314,13 +314,13 @@ jobs:
           # with write access deciding the pass is worth its cost; every other path is the workflow
           # deciding for them, and only that one is bounded below.
           explicit='false'
-          # Sonnet 5 by default, at the exact identifier rather than the `sonnet` alias: an alias
+          # Sonnet 5.5 by default, at the exact identifier rather than the `sonnet` alias: an alias
           # silently re-points at whatever ships next, and a review's findings are only comparable
           # across runs when the model that produced them is the one this file names. The prompt is
           # written for this model, so a run on another one is a deliberate exception. Exactly two
           # are taken: a maintainer writing `opus` in the request below, and the step after this one
           # when the pull request carries the `security` label.
-          model='claude-sonnet-5'
+          model='claude-sonnet-5-5'
           reason='no rule matched this event'
 
           case "$EVENT_NAME" in
@@ -418,7 +418,7 @@ jobs:
                 # The escape hatch to the more expensive model, for a change where the default
                 # reviewer's verdict is worth a second, costlier opinion.
                 if [[ "${COMMENT_BODY,,}" == *opus* ]]; then
-                  model='claude-opus-5'
+                  model='claude-opus-5-5'
                 fi
               fi
               ;;
@@ -440,8 +440,8 @@ jobs:
                 # Checked against the identifier this file names rather than passed through. A
                 # payload carrying anything else reviews with the default model, which is the same
                 # answer a comment that named no model gets.
-                if [[ "$REQUESTED_MODEL" == 'claude-opus-5' ]]; then
-                  model='claude-opus-5'
+                if [[ "$REQUESTED_MODEL" == 'claude-opus-5-5' ]]; then
+                  model='claude-opus-5-5'
                 fi
               fi
               ;;
@@ -602,7 +602,7 @@ jobs:
           # The costlier model, at its exact identifier for the reason the gate names the default at
           # one: a review's findings are comparable across runs only when the model is the one this
           # file states.
-          SECURITY_MODEL: 'claude-opus-5'
+          SECURITY_MODEL: 'claude-opus-5-5'
           SECURITY_LABEL: security
           LABELLING_WORKFLOW: apply-pull-request-rules.yml
           # A short wait, because the labelling run reads a body and a handful of issues and posts
