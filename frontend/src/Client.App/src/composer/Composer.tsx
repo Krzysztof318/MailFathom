@@ -33,12 +33,7 @@ import { DiscardConfirmation } from './DiscardConfirmation';
 import { DraftingBlock, DraftingStanding } from './DraftingBlock';
 import { draftingRead, failureSaid } from './draftingRead';
 import { writtenParagraphs } from './draftWords';
-import {
-    forgetComposition,
-    forgetCompositionIfStill,
-    rememberComposition,
-    rememberedComposition,
-} from './keptComposition';
+import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
 import type { RecipientSuggestion } from './recipientSuggestions';
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
@@ -439,9 +434,10 @@ export function Composer({
     // why — so the corrected message is a revision of that draft rather than a second one beside it.
     //
     // Closing it while the send is still in flight is the design's own order, and asks nothing: the toast is already
-    // following the send and says what became of it. What was written stays in the tab until the send has settled, so
-    // a send refused or failed after the window closed leaves the words for the next composer to open on, and one the
-    // deployment took drops them — unless the tab is already keeping something newer.
+    // following the send and says what became of it. A message in flight is not the tab's composition, so a composer
+    // opened meanwhile opens empty rather than on a copy of what is already on its way; only a send refused or failed
+    // after the window closed hands the words back to the tab, for the next composer to open on — unless the tab is
+    // keeping something written since.
     function sendAndReport(sending: Composition, written: Composition): void {
         // Whether somebody stopped it, which takes the toast following it away. What the stop came to — taken back, or
         // already on its way — is then said by a toast of its own, because the one it would have settled has gone.
@@ -465,16 +461,16 @@ export function Composer({
                 settled(sendReport(outcome));
             }
 
-            if (outcome.kind !== 'queued' && outcome.kind !== 'withdrawn') {
-                return;
-            }
+            const deploymentHasIt = outcome.kind === 'queued' || outcome.kind === 'withdrawn';
 
             // Only while this composer is still the one on the screen: closed in flight, it has already gone, and
             // closing again would close whatever the person opened in its place.
             if (present.current) {
-                close(focusIsHere());
-            } else {
-                forgetCompositionIfStill(written);
+                if (deploymentHasIt) {
+                    close(focusIsHere());
+                }
+            } else if (!deploymentHasIt && rememberedComposition() === null) {
+                rememberComposition(written);
             }
         });
     }
@@ -569,9 +565,9 @@ export function Composer({
                         onDiscard={() => {
                             // A message on its way is not given up by closing the window it was written in: the toast
                             // following the send is where it goes from here, which is closing on the press. What was
-                            // written is kept until the send settles, which is the send's to drop.
+                            // written comes back to the tab only if the send does not go.
                             if (!stillBeingWritten) {
-                                onClosed(true);
+                                close();
 
                                 return;
                             }

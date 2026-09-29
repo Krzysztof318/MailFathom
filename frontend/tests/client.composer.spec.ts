@@ -496,11 +496,13 @@ test('keeps everything when the composer is left for writing again, and takes th
     // The dialog and the composer close in two renders, and each gives back the history entry it stood on: the client
     // is still what the tab shows, rather than whatever the tab showed before it.
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
-    expect(new URL(page.url()).hash).toBe('#/mail');
+    await expect(page).toHaveURL(/#\/mail$/u);
 
     const [staged = ''] = draftRoutesOf(deployment, 'POST', '/attachments');
 
-    expect(draftRoutesOf(deployment, 'DELETE', '')).toStrictEqual([staged.replace(/\/attachments$/u, '')]);
+    await expect
+        .poll(() => draftRoutesOf(deployment, 'DELETE', ''))
+        .toStrictEqual([staged.replace(/\/attachments$/u, '')]);
 
     await page.reload();
     await openDrafts(page);

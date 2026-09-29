@@ -72,20 +72,6 @@ export function forgetComposition(): void {
     }
 }
 
-/**
- * Drops what was being written where it is still the composition named, which is a send settling after its composer
- * was closed: by then the tab may be keeping a newer message somebody started, and that one is not the send's to drop.
- */
-export function forgetCompositionIfStill(composition: Composition): void {
-    try {
-        if (window.sessionStorage.getItem(storageKey) === JSON.stringify(composition)) {
-            window.sessionStorage.removeItem(storageKey);
-        }
-    } catch {
-        // A store that refuses a read or a removal refused the write that would have put the composition there.
-    }
-}
-
 // Read back as untrusted input, because a store is a place a person can write. Anything this client did not write is
 // answered as nothing kept rather than as a message with a hole in it — which is what would otherwise reach the
 // confirmation as a recipient nobody typed.

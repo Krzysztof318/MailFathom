@@ -621,6 +621,22 @@ describe('Composer, a message of its own', () => {
         expect(wordsWritten()).toBe('');
     });
 
+    // A message on its way is not the tab's to offer: a composer opened before the deployment has answered opens empty,
+    // rather than on a copy of a message that is about to go out and would go out twice if sent again.
+    it('opens the next composer empty where it was opened before the send closed in flight was answered', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        writeWords('They are attached.');
+        confirmSend();
+        fireEvent.click(within(composerFrame()).getByRole('button', { name: 'Close the message' }));
+        drawComposer();
+
+        expect(wordsWritten()).toBe('');
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+        expect(wordsWritten()).toBe('');
+    });
+
     // The window goes a round trip after the press, by which time somebody may be reading the list or searching; the
     // keyboard stays where they took it rather than jumping back to the control that opened the composer.
     it('leaves the keyboard where it went when the send is answered after somebody moved on', async () => {
