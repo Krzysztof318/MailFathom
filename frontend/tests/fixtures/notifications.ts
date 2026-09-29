@@ -70,6 +70,22 @@ export const notificationPage = {
     nextCursor: null,
 };
 
+/**
+ * A notification raised after the page above was read, which is what a client polling the count finds arriving:
+ * one message that came in, leading to the message itself rather than to the space it sits in.
+ */
+export const arrivingNotification = {
+    id: '00000000-0000-4000-8000-0000000000f4',
+    kind: 'Mail',
+    statement: { cause: 'MailArrived', counted: 1, outOf: null },
+    title: 'New mail',
+    body: '1 new message arrived.',
+    source: 'Work',
+    target: { kind: 'Message', messageId: newsletterId },
+    occurredAt: '2026-08-31T09:12:00+00:00',
+    read: false,
+};
+
 /** What a centre with nothing in it answers with, which a panel says something of its own about. */
 export const emptyNotificationPage = { notifications: [], nextCursor: null };
 

@@ -264,18 +264,16 @@ async function settled(): Promise<void> {
 }
 
 /**
- * Two messages and a calendar reminder arriving at a client nobody has opened the panel on.
+ * Two messages and a calendar reminder arriving at a client nobody has opened the panel on, found by one poll.
  *
- * Two polls rather than one, because the first read a client makes is what it holds rather than what just happened and
- * announces nothing — so the arrival being tested is the second, which is also what the desktop head actually meets.
+ * The page is never read before it, which is what the desktop head actually meets: what arrived is measured by how far
+ * the count rose rather than against a page the client never drew.
  */
 async function threeArrive(): Promise<void> {
-    const { transport, hold } = deployment({ unreadCount: 0, notifications: [] });
+    const { transport, hold } = deployment({ unreadCount: 1, notifications: [mail] });
 
     centreOf(transport);
     await settled();
-    hold(1, [mail]);
-    await polled();
     hold(4, [{ ...mail, id: 'n-second' }, { ...mail, id: 'n-third' }, { ...meeting, read: false }, mail]);
     await polled();
 }
@@ -510,6 +508,40 @@ describe('useNotificationCentre', () => {
         expect(screen.getByText('Ada Lovelace wrote')).toBeDefined();
         expect(screen.getByText('About the engine')).toBeDefined();
         expect(screen.getByRole('button', { name: 'Show' })).toBeDefined();
+    });
+
+    it('says the first arrival of a session out loud, the panel never having been opened', async () => {
+        const { transport, hold } = deployment({ unreadCount: 1, notifications: [meeting, mail] });
+        const { result } = centreOf(transport);
+
+        await settled();
+        hold(2, [{ ...mail, id: 'n-second', title: 'Grace Hopper wrote' }, meeting, mail]);
+        await polled();
+
+        // One toast, for the one row the count rose by: the unread row that was already standing when the client
+        // started is what it holds rather than what arrived.
+        expect(screen.getByText('Grace Hopper wrote')).toBeDefined();
+        expect(screen.queryByText('Ada Lovelace wrote')).toBeNull();
+        expect([...result.current.arrived]).toEqual(['n-second']);
+    });
+
+    it('still counts an arrival whose page read failed, once a later read of the page is answered', async () => {
+        const { transport: answering, hold } = deployment({ unreadCount: 1, notifications: [meeting, mail] });
+        let refusesThePage = true;
+        const transport: MailFathomTransport = (request) =>
+            refusesThePage && new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 500, headers: {}, body: '' })
+                : answering(request);
+        const { result } = centreOf(transport);
+
+        await settled();
+        hold(2, [{ ...mail, id: 'n-second' }, meeting, mail]);
+        await polled();
+        refusesThePage = false;
+        hold(3, [{ ...mail, id: 'n-third' }, { ...mail, id: 'n-second' }, meeting, mail]);
+        await polled();
+
+        expect([...result.current.arrived].sort()).toEqual(['n-second', 'n-third']);
     });
 
     it('tells the operating system how many arrived and of what kind, and nothing a message carried', async () => {
@@ -818,6 +850,40 @@ describe('useNotificationCentre', () => {
         expect(result.current.unreadCount).toBe(0);
         expect(result.current.notifications).toEqual([]);
         expect(result.current.shown).toBe(false);
+    });
+
+    it('announces nothing of the next person’s centre for a rise the previous person’s count measured', async () => {
+        let counting: ((answered: Answer) => void) | null = null;
+        let holdsTheCount = false;
+
+        const transport: MailFathomTransport = (request) => {
+            if (request.path.endsWith('/unread-count')) {
+                return holdsTheCount
+                    ? new Promise<Answer>((resolve) => {
+                          counting = resolve;
+                      })
+                    : answer(JSON.stringify({ unreadCount: 1 }));
+            }
+
+            return answer(JSON.stringify({ notifications: [mail], nextCursor: null }));
+        };
+
+        const { result, signInAsSomebodyElse } = centreOf(transport);
+
+        await settled();
+        holdsTheCount = true;
+        await polled();
+
+        // The previous person's count rising and somebody else signing in, committed together as one render.
+        await act(async () => {
+            counting?.({ status: 200, headers: {}, body: JSON.stringify({ unreadCount: 2 }) });
+            await vi.advanceTimersByTimeAsync(0);
+            signInAsSomebodyElse();
+        });
+        await settled();
+
+        expect(result.current.arrived.size).toBe(0);
+        expect(screen.queryByText('Ada Lovelace wrote')).toBeNull();
     });
 
     // A read is cancelled by the controller its effect owns; a write cannot be, so what it does when it lands is the

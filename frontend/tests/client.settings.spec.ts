@@ -4,7 +4,15 @@
 
 import { expect, type Locator, type Page } from '@playwright/test';
 
-import { narrowWindow, openAccountMenu, openSettings, openSignedIn, test, wideWindow } from './client.harness';
+import {
+    narrowWindow,
+    openAccountMenu,
+    openApplicationSettings,
+    openSettings,
+    openSignedIn,
+    test,
+    wideWindow,
+} from './client.harness';
 
 // The account menu and the settings screen: the platform behaviour each owes a keyboard, the compositions the settings
 // surface is drawn in, and the preferences a choice on them writes to the deployment and reads back.
@@ -174,4 +182,62 @@ test('draws the settings surface as the whole screen in a single-pane window', a
 
     expect(panel?.width).toBe(narrowWindow.width);
     expect(panel?.height).toBe(narrowWindow.height);
+});
+
+// The two tabs as a person uses them: a value changed on each, the screen that value governs redrawn at once, and the
+// choice read back from the deployment after the page is loaded afresh. What either tab draws in answer to the value
+// it was handed is the unit suite's; what is asked here is whether a *different* surface follows it.
+test('corrects the name on the profile tab, and the account menu carries it at once and after a reload', async ({
+    page,
+    deployment,
+}) => {
+    await openSignedIn(page);
+    await openSettings(page);
+
+    const name = page.getByRole('dialog', { name: 'Settings' }).getByRole('textbox', { name: 'Full name' });
+
+    await name.fill('Iris Marlow-Vane');
+    await name.press('Enter');
+    await expect
+        .poll(() => deployment.requests('POST', '/display-name'))
+        .toMatchObject([{ body: { displayName: 'Iris Marlow-Vane' } }]);
+
+    // Leaving the screen puts back the menu it was opened from, which is where the person's name is drawn.
+    await page.keyboard.press('Escape');
+    await expect(page.getByText('Iris Marlow-Vane', { exact: true })).toBeVisible();
+
+    await page.reload();
+    await openAccountMenu(page);
+
+    await expect(page.getByText('Iris Marlow-Vane', { exact: true })).toBeVisible();
+});
+
+test('takes the AI filters out of the folder column from the application tab, and keeps them out after a reload', async ({
+    page,
+    deployment,
+}) => {
+    await openSignedIn(page, '/#/mail');
+
+    const filters = page.getByRole('region', { name: 'AI filters' });
+
+    await expect(filters).toBeVisible();
+
+    await openApplicationSettings(page);
+    // The switch's input is a clipped pixel its own row covers, as the theme segments' are, so the press lands on the
+    // row a pointer actually reaches.
+    await page.getByRole('dialog', { name: 'Settings' }).getByText('Show the AI filters in the folder tree').click();
+    await expect
+        .poll(() => deployment.requests('POST', '/preferences'))
+        .toMatchObject([{ body: { aiFiltersShown: false } }]);
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+    await expect(filters).toHaveCount(0);
+
+    await page.reload();
+
+    // Waited for rather than assumed: the column is what the section would be drawn in, so its absence is only an
+    // answer once the column itself is on the screen.
+    await expect(page.getByRole('tree', { name: 'Mailboxes and folders' })).toBeVisible();
+    await expect(filters).toHaveCount(0);
 });

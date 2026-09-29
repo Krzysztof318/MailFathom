@@ -63,8 +63,8 @@ export interface NotificationCentre {
 
     /**
      * The rows that were not there the last time this client read the centre, which is what a row opening itself is
-     * drawn from. It is empty after the first read of a credential's centre, because everything is new then and
-     * nothing arrived.
+     * drawn from. On the first read of a credential's centre it holds only the rows the count rose by, because
+     * everything else is what the client already had rather than what arrived.
      */
     readonly arrived: ReadonlySet<string>;
 
@@ -96,7 +96,7 @@ interface Seen {
     readonly ids: ReadonlySet<string>;
 }
 
-/** What the last count answered, and whose it was. */
+/** A count of unread notifications, and whose it was. */
 interface Counted {
     readonly session: ClientSession;
     readonly count: number;
@@ -137,6 +137,11 @@ export function useNotificationCentre(
     // and setting it must not start a read of its own.
     const quietly = useRef(false);
 
+    // How far the count rose since the page was last asked for, handed from the count that saw it to the read it asks
+    // for. It is what an arrival is measured by where this client has drawn no page to compare against — which is every
+    // session until somebody opens the panel — and it is a ref for the reason the flag above is.
+    const risen = useRef<Counted | null>(null);
+
     // What has already been drawn or announced, so an arrival is a notification this client has not seen rather than
     // one it has stopped showing. A ref because nothing on the screen is drawn from it, and it must not restart the
     // reads below when it grows.
@@ -149,7 +154,7 @@ export function useNotificationCentre(
     // Everything held belongs to the credential that read it, so a sign-out and a sign-in as somebody else start from
     // nothing rather than showing the previous person's centre until the first read lands. It is adjusted while
     // rendering rather than from an effect, because a screen drawn once from the previous person's centre is the whole
-    // of what this prevents — and the two refs carry whose they are for the same reason, which is what makes them
+    // of what this prevents — and the refs above carry whose they are for the same reason, which is what makes them
     // nothing to reset.
     const [credential, setCredential] = useState(session);
 
@@ -196,7 +201,8 @@ export function useNotificationCentre(
             }
 
             const before = counted.current?.session === session ? counted.current.count : null;
-            const rose = before !== null && answer.value > before;
+            const rise = before === null ? 0 : answer.value - before;
+            const rose = rise > 0;
 
             counted.current = { session, count: answer.value };
             setUnreadCount(answer.value);
@@ -204,6 +210,9 @@ export function useNotificationCentre(
             // Only a rise asks for the page. A count that fell is this client's own marking landing, and a count that
             // did not move is the ordinary poll — neither is anything a reader has to be told about.
             if (rose && asksForThePage) {
+                const alreadyRisen = risen.current?.session === session ? risen.current.count : 0;
+
+                risen.current = { session, count: alreadyRisen + rise };
                 setAsked((token) => token + 1);
             }
         }
@@ -374,6 +383,9 @@ export function useNotificationCentre(
         const keepsWhatStands = quietly.current;
         quietly.current = false;
 
+        // Spent only by a read that lands: one refused or superseded leaves it for the read after it.
+        const risenBy = risen.current?.session === session ? risen.current.count : 0;
+
         setReading(known.current?.session !== session);
 
         void (async () => {
@@ -395,17 +407,25 @@ export function useNotificationCentre(
 
             const page = answer.value.notifications;
             const seen = known.current?.session === session ? known.current.ids : null;
+            const stillRisen = (risen.current?.session === session ? risen.current.count : 0) - risenBy;
+
+            risen.current = stillRisen > 0 ? { session, count: stillRisen } : null;
+
+            // What arrived is what the last page did not hold. Where no page has been drawn yet, the count is the only
+            // thing this client measured before, and it rose by exactly the rows that arrived — which a centre read
+            // newest first holds at its head among the unread. A first read nothing rose for is what this client has
+            // rather than what just happened, so nothing is announced from it: a person opening the client is not
+            // being told about seven things arriving at once.
+            const unseen =
+                seen === null
+                    ? page.filter((notification) => !notification.read).slice(0, risenBy)
+                    : page.filter((notification) => !seen.has(notification.id));
 
             setFailure(null);
             setNotifications(page);
-            setArrived(seen === null ? new Set() : new Set(page.map((row) => row.id).filter((id) => !seen.has(id))));
+            setArrived(new Set(unseen.map((notification) => notification.id)));
             known.current = { session, ids: new Set(page.map((notification) => notification.id)) };
-
-            // The first read is what this client has, rather than what has just happened, so nothing is announced from
-            // it: a person opening the client is not being told about seven things arriving at once.
-            if (seen !== null) {
-                announcing.current(page.filter((notification) => !notification.read && !seen.has(notification.id)));
-            }
+            announcing.current(unseen.filter((notification) => !notification.read));
         })();
 
         return () => {

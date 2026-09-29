@@ -46,8 +46,8 @@ export function NotificationRow({
 
     /**
      * Whether this row arrived while the reader had the centre in front of them, which is what it opens itself for.
-     * It is false for every row of the first read: somebody opening the client is not watching a hundred things
-     * arrive, they are being shown what is already there.
+     * It is false for every row the client already had when it first read the centre: somebody opening the client is
+     * not watching a hundred things arrive, they are being shown what is already there.
      */
     readonly arrived: boolean;
 

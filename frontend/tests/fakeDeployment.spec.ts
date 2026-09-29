@@ -8,6 +8,7 @@ import { FakeDeployment } from './fakeDeployment';
 import * as agent from './fixtures/agent';
 import * as discovery from './fixtures/discovery';
 import * as mail from './fixtures/mail';
+import * as notifications from './fixtures/notifications';
 
 // The fake deployment every browser check signs in to, asked directly rather than through a page: what a journey
 // relies on is that a read after a write answers what the write left behind, and a check that got that wrong would
@@ -199,6 +200,31 @@ test('opens a conversation started here on the question it was asked, with nothi
     expect(ask(deployment, 'PUT', `${conversation}/proposals/7`, { decision: 'declined' })).toStrictEqual({
         sequence: read.entries.length + 1,
     });
+});
+
+test('answers the centre and the bell with every notification raised, marked, and erased since', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const centre = () =>
+        ask(deployment, 'GET', '/notifications?pageSize=50') as { notifications: { id: string; read: boolean }[] };
+
+    deployment.raiseNotification();
+
+    expect(centre().notifications[0]).toMatchObject({ id: notifications.arrivingNotification.id, read: false });
+    expect(ask(deployment, 'GET', '/notifications/unread-count')).toStrictEqual({ unreadCount: 3 });
+
+    expect(
+        ask(deployment, 'POST', `/notifications/${notifications.notificationId}/read-state`, { read: true }),
+    ).toStrictEqual({ id: notifications.notificationId, read: true, unreadCount: 2 });
+    expect(
+        ask(deployment, 'POST', '/notifications/deletions', {
+            notificationIds: [notifications.arrivingNotification.id, notifications.notificationId],
+        }),
+    ).toStrictEqual({ deleted: 2, unreadCount: 1 });
+    expect(ask(deployment, 'POST', '/notifications/read')).toStrictEqual({ markedRead: 1, unreadCount: 0 });
+
+    expect(centre().notifications.map(({ id }) => id)).not.toContain(notifications.notificationId);
+    expect(centre().notifications.every(({ read }) => read)).toBe(true);
+    expect(ask(deployment, 'GET', '/notifications/unread-count')).toStrictEqual({ unreadCount: 0 });
 });
 
 test('keeps what each request carried, and names the ones it has no answer for', () => {

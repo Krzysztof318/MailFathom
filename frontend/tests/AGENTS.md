@@ -313,8 +313,10 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   renewal — is advanced with Playwright's clock, `page.clock.install()` before the page loads and `page.clock.runFor()`
   over the timer's duration, rather than slept through. An installed clock still runs as a real one, so a journey
   asserting a state the timer would end calls `holdTheClock` from `client.harness.ts` before the act that reaches it:
-  from there the timer fires on `runFor` and never on a loaded machine's own schedule. So a journey costs what its
-  steps cost, and `page.waitForTimeout` is not a wait this suite writes.
+  from there the timer fires on `runFor` and never on a loaded machine's own schedule. A notification arriving is the
+  two together: the journey calls `raiseNotification()`, which puts the corpus's arriving notification at the head of
+  the centre, holds the clock, and runs it over the client's poll of the unread count, which is the only way a client
+  learns of one. So a journey costs what its steps cost, and `page.waitForTimeout` is not a wait this suite writes.
 - **A defect a journey exposes is fixed in the pull request that adds the journey.** No journey is skipped, marked as
   expected to fail, or weakened until it passes: a check that stands aside for the defect it found reports that defect
   as the behaviour the client intends.
