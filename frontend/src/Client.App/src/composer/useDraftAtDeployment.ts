@@ -487,7 +487,9 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
                     }
                 }
 
-                holdWhileCarrying(leftBehind.length > 0 ? { kind: 'notCarried', fileNames: leftBehind } : { kind: 'held' });
+                holdWhileCarrying(
+                    leftBehind.length > 0 ? { kind: 'notCarried', fileNames: leftBehind } : { kind: 'held' },
+                );
             }
 
             const bringing = bringOver();

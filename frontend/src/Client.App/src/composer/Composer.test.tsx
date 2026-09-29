@@ -6,7 +6,11 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
-import { AttachmentExchangeContext, type AttachmentExchange, type AttachmentTaken } from '../deployment/attachmentExchange';
+import {
+    AttachmentExchangeContext,
+    type AttachmentExchange,
+    type AttachmentTaken,
+} from '../deployment/attachmentExchange';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
 import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';

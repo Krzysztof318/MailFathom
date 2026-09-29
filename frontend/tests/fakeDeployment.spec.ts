@@ -122,9 +122,10 @@ test('takes a deleted folder out of both folder routes, the mail filed in it out
     const folders = ask(deployment, 'GET', '/folders') as { accounts: { folders: { alias: string }[] }[] };
     const searchedAgain = ask(deployment, 'GET', '/emails/search?query=renewal') as { results: { id: string }[] };
 
-    expect(managed.folders.map(({ id }) => id)).toStrictEqual(['INBOX', 'ARCHIVE', 'FILED', 'TRASH']);
+    expect(managed.folders.map(({ id }) => id)).toStrictEqual(['INBOX', 'DRAFTS', 'ARCHIVE', 'FILED', 'TRASH']);
     expect(folders.accounts.flatMap((account) => account.folders.map(({ alias }) => alias))).toStrictEqual([
         'INBOX',
+        'DRAFTS',
         'FILED',
         'TRASH',
     ]);
