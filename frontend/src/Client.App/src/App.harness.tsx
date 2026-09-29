@@ -487,6 +487,7 @@ export function deploymentDrawingAConversation(): DeploymentTransport {
 const deliversNothing: AttachmentExchange = {
     deliver: () => Promise.resolve('delivered'),
     read: () => Promise.resolve({ outcome: 'shown', content: '' }),
+    take: () => Promise.resolve({ outcome: 'taken', octets: new Blob() }),
 };
 
 const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);

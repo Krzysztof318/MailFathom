@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
     draftMailReply,
     readMailBody,
@@ -10,6 +10,7 @@ import {
     type ClientFailureReason,
     type ClientSession,
     type MailAccount,
+    type MailAttachment,
     type MailDraftAnswer,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
@@ -180,7 +181,8 @@ export function Composer({
     // Whether the copy headers are drawn, which is a choice only once somebody made one: before that they are drawn
     // exactly where the message already copies somebody in, so an answer to everyone and a draft carried on show the
     // addresses they will go to rather than holding them behind a control nobody pressed. Hiding them keeps what they
-    // hold — the message still goes to those people, and pressing the control again shows them where they were.
+    // hold, so pressing the control again shows them where they were — but nothing goes to an address nobody can see,
+    // so a save, a send, and the question before a send are all written without them while they are hidden.
     const [copiesChosen, setCopiesChosen] = useState<boolean | null>(null);
 
     // What the deployment is doing about a draft, and what the words were before one replaced them. The second is
@@ -240,11 +242,18 @@ export function Composer({
         };
     }, [session, transport, opening]);
 
+    // The files a draft was filed with, taken into the message carrying it on. An effect event because it is what the
+    // read below does once it answers, rather than something the read depends on.
+    const carryTheDraftsFiles = useEffectEvent((storedEmailId: string, attachments: readonly MailAttachment[]) => {
+        void draft.carry(storedEmailId, attachments);
+    });
+
     // A draft is read the same way an answer is, and in two reads rather than one: the message route describes who it
     // is for and what it is about, and the body route is what holds the words. The body is asked for without the
     // sender's own markup, because what goes back into the composer is the reduced tree rather than markup this client
     // never parses — `draftWords.ts` is where that reading is stated. A body that could not be read opens the draft on
-    // what the message route did answer, so the addresses and the subject are not lost with the words.
+    // what the message route did answer, so the addresses and the subject are not lost with the words, and the files it
+    // carries are brought over as well, because a message sent from a draft is sent whole.
     useEffect(() => {
         if (opening.kind !== 'draft') {
             return;
@@ -268,6 +277,7 @@ export function Composer({
 
             setParticipants(offeredFrom(answer.value.headers.participants));
             setComposition((held) => held ?? draftContinued(answer.value, body.outcome === 'read' ? body.value : null));
+            carryTheDraftsFiles(answer.value.storedEmailId, answer.value.attachments);
         });
 
         return () => {
@@ -512,7 +522,7 @@ export function Composer({
                             if (composition !== null) {
                                 // A draft the deployment refused to file is one the composer stays open on, because
                                 // closing on it is how what somebody wrote is lost quietly.
-                                void draft.save(composition).then((filed) => {
+                                void draft.save(sentAs(composition, copiesShown)).then((filed) => {
                                     if (filed) {
                                         close();
                                     }
@@ -615,7 +625,7 @@ export function Composer({
                         </>
                     ) : null}
 
-                    <div className="flex items-center gap-2.5 border-b border-line px-3.75 py-2.25">
+                    <div className="flex items-center gap-2.5 border-b border-line px-3.75 py-2.25 focus-within:ring-2 focus-within:ring-accent focus-within:ring-inset">
                         {/* Two elements rather than one, because only one of the two things the row holds is labelable:
                             an answer's subject is text the deployment writes, and `for` on a paragraph names nothing a
                             screen reader would follow. So the field takes a label and the paragraph is named by the
@@ -700,11 +710,11 @@ export function Composer({
                     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4.25 py-3">
                         <SendConfirmation
                             asked={asked}
-                            composition={composition}
+                            composition={sentAs(composition, copiesShown)}
                             draftUnaccepted={beforeDrafting !== null}
                             disabled={!sendable}
                             onSend={() => {
-                                sendAndReport(composition);
+                                sendAndReport(sentAs(composition, copiesShown));
                             }}
                         />
 
@@ -745,7 +755,7 @@ export function Composer({
                             disabled={!sendable}
                             className="rounded-lg px-2 py-2 text-sm text-muted transition hover:bg-hover hover:text-text disabled:opacity-60"
                             onClick={() => {
-                                void draft.save(composition);
+                                void draft.save(sentAs(composition, copiesShown));
                             }}
                         >
                             {translate('compose.saveDraft')}
@@ -767,6 +777,12 @@ function offeredFrom(
     return named
         .filter((person, index) => named.findIndex((earlier) => earlier.address === person.address) === index)
         .map((person) => ({ address: person.address, name: person.displayName }));
+}
+
+// What leaves the composer for what is written: all of it while the copy headers are shown, and nothing from them while
+// they are hidden, whatever they still hold.
+function sentAs(composition: Composition, copiesShown: boolean): Composition {
+    return copiesShown ? composition : { ...composition, cc: [], bcc: [] };
 }
 
 // Where a composition starts: what this tab was already writing where it matches what is being opened, an empty
@@ -919,6 +935,8 @@ function WhatIsHappening({ standing, online }: { readonly standing: DraftStandin
             return <Said text={translate('compose.saved')} />;
         case 'attaching':
             return <Said text={translate('compose.attaching', { name: standing.fileName })} />;
+        case 'notCarried':
+            return <Said text={translate('compose.notCarried', { name: standing.fileName })} warning />;
         case 'refused':
             return <Said text={translate(refusalSaid[standing.refusal])} warning />;
         case 'refusedSave':

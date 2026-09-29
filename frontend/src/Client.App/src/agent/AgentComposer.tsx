@@ -131,7 +131,7 @@ export function AgentComposer({
             ) : null}
 
             <form
-                className="flex w-full max-w-agent-thread items-center gap-3 rounded-xl border-2 border-accent bg-panel px-3.25 py-2.5"
+                className="flex w-full max-w-agent-thread items-center gap-3 rounded-xl border-2 border-accent bg-panel px-3.25 py-2.5 transition focus-within:ring-3 focus-within:ring-accent-soft"
                 onSubmit={(event) => {
                     event.preventDefault();
                     void send(text);

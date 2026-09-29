@@ -70,6 +70,7 @@ function deliveryHeldOpen(): {
 
             // The strip never shows a file, so a read reaching this is a defect rather than a case to answer.
             read: () => Promise.reject(new Error('The strip asked to show a file rather than to download one.')),
+            take: () => Promise.reject(new Error('The strip asked to take a file rather than to download one.')),
         },
     };
 }

@@ -43,6 +43,7 @@ const messageId = '00000000-0000-4000-8000-000000000000';
 const deliversNothing: AttachmentExchange = {
     deliver: () => Promise.resolve('delivered'),
     read: () => Promise.resolve({ outcome: 'shown', content: '' }),
+    take: () => Promise.resolve({ outcome: 'taken', octets: new Blob() }),
 };
 
 function description(overrides: Readonly<Record<string, unknown>> = {}): string {

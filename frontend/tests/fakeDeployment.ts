@@ -39,6 +39,9 @@ export interface FakeRequest {
     readonly method: string;
     readonly url: string;
     readonly body: string | null;
+
+    /** What the request declared its body to be, which is where a staged file's media type travels. */
+    readonly contentType?: string;
 }
 
 /** What the fake answers one request with, as the route fulfils it. */
@@ -59,6 +62,9 @@ export interface IssuedRequest {
 
     /** The body as the JSON it was sent as, or the text where it was not JSON, or `null` where there was none. */
     readonly body: unknown;
+
+    /** What the request declared its body to be, or `null` where it declared nothing. */
+    readonly contentType: string | null;
 }
 
 /** One change the fake wrote down, read back the way the records route publishes one. */
@@ -129,6 +135,33 @@ interface TaskLists {
     readonly proposed: Held[];
 }
 
+/** One file staged against a draft, with the octets it went up with, which the stored message answers again. */
+interface StagedFile {
+    readonly attachmentId: string;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly octets: string;
+}
+
+/**
+ * A draft the client wrote here: what its last save stated, the files staged against it, and the stored message filed
+ * for it in the drafts folder — which is how a deployment holds one, a row and a stored message in the same act.
+ */
+interface HeldDraft {
+    readonly storedEmailId: string;
+    readonly record: Held;
+    readonly written: Held;
+    readonly files: StagedFile[];
+}
+
+/** The drafts folder of the corpus mailbox, which is where every draft a check writes is filed. */
+const draftsFolder = deployment.mailFolders.accounts
+    .flatMap(({ folders }) => folders)
+    .find(({ role }) => role === 'Drafts')?.alias;
+
+/** Who the corpus mailbox belongs to, as the conversation it answered in names them, which is who a draft is from. */
+const author = mail.conversation().messages.find(({ email }) => email.folder === 'SENT')?.email;
+
 /** Where in the generated folder the one row standing for a correspondence sits, read off the corpus's first page. */
 const conversationRowPosition = mail.timelinePage(0).emails.findIndex(({ threadId }) => threadId !== null);
 
@@ -170,7 +203,7 @@ export class FakeDeployment {
         ...row,
     }));
 
-    private readonly draftsHeld = new Map<string, typeof drafts.draft>();
+    private readonly draftsHeld = new Map<string, HeldDraft>();
     private readonly runs = new Map<string, DiscoveryRun>();
     private readonly conversations = new Map<string, Conversation>([
         [agent.answeredConversationId, this.corpusConversation(agent.answeredConversationId, 'answered')],
@@ -214,7 +247,13 @@ export class FakeDeployment {
         // through the runner to be asked about, and under a loaded machine that is most of a check's time.
         await target.route(servedRoutes, async (route) => {
             const request = route.request();
-            const answer = this.answer({ method: request.method(), url: request.url(), body: request.postData() });
+            const contentType = request.headers()['content-type'];
+            const answer = this.answer({
+                method: request.method(),
+                url: request.url(),
+                body: request.postData(),
+                ...(contentType === undefined ? {} : { contentType }),
+            });
 
             await route.fulfill({
                 status: answer.status,
@@ -267,6 +306,7 @@ export class FakeDeployment {
             route: address.pathname.slice(clientPrefix.length),
             query: address.searchParams,
             body: parsedBody(request.body),
+            contentType: request.contentType ?? null,
         };
 
         this.issued.push(issued);
@@ -717,6 +757,12 @@ export class FakeDeployment {
             return { status: 404, body: '' };
         }
 
+        const filed = this.filedDraft(id);
+
+        if (filed !== undefined) {
+            return this.draftMessageAnswer(filed, part, position);
+        }
+
         const markupOnly = id === messages.markupOnlyId;
 
         if (part === undefined) {
@@ -745,29 +791,160 @@ export class FakeDeployment {
         return null;
     }
 
-    /** Revising, discarding, and sending one draft the client wrote here. */
-    private draftAnswer({ method, body }: IssuedRequest, segments: readonly string[]): FakeAnswer | null {
-        const [space, id = '', part] = segments;
+    /** Revising, discarding, and sending one draft the client wrote here, and staging files against it. */
+    private draftAnswer(
+        { method, body, query, contentType }: IssuedRequest,
+        segments: readonly string[],
+    ): FakeAnswer | null {
+        const [space, id = '', part, attachmentId] = segments;
 
-        if (space !== 'drafts' || segments.length > 3) {
+        if (space !== 'drafts' || segments.length > 4) {
             return null;
         }
 
         const held = this.draftsHeld.get(id);
 
         if (method === 'PUT' && part === undefined) {
-            return held === undefined ? { status: 404, body: '' } : this.draftWritten(id, body, held.revision + 1);
+            return held === undefined
+                ? { status: 404, body: '' }
+                : this.draftWritten(id, body, Number(held.record['revision']) + 1);
         }
 
         if (method === 'DELETE' && part === undefined) {
-            return this.draftsHeld.delete(id) ? nothing : { status: 404, body: '' };
+            return this.draftGone(id) ? nothing : { status: 404, body: '' };
         }
 
         if (method === 'POST' && part === 'send') {
-            return this.draftsHeld.delete(id) ? answering(drafts.queuedSend) : { status: 404, body: '' };
+            return this.draftGone(id) ? answering(drafts.queuedSend) : { status: 404, body: '' };
+        }
+
+        if (part !== 'attachments' || held === undefined) {
+            return part === 'attachments' ? { status: 404, body: '' } : null;
+        }
+
+        if (method === 'POST' && attachmentId === undefined) {
+            const file = {
+                attachmentId: this.mintedIdentity(),
+                fileName: query.get('fileName') ?? '',
+                mediaType: contentType ?? 'application/octet-stream',
+                octets: typeof body === 'string' ? body : JSON.stringify(body),
+            };
+
+            held.files.push(file);
+
+            return answering(stagedRecord(file));
+        }
+
+        if (method === 'DELETE' && attachmentId !== undefined) {
+            const at = held.files.findIndex((file) => file.attachmentId === attachmentId);
+
+            if (at === -1) {
+                return { status: 404, body: '' };
+            }
+
+            held.files.splice(at, 1);
+
+            return nothing;
         }
 
         return null;
+    }
+
+    /** Takes a draft out of the book and its stored message out of the drafts folder, as a send or a give-up does. */
+    private draftGone(draftId: string): boolean {
+        if (!this.draftsHeld.delete(draftId)) {
+            return false;
+        }
+
+        this.count(draftsFolder ?? '', -1, 0);
+
+        return true;
+    }
+
+    /** The draft whose stored message this is, where one filed here stands in the drafts folder under that identity. */
+    private filedDraft(storedEmailId: string): HeldDraft | undefined {
+        return [...this.draftsHeld.values()].find((held) => held.storedEmailId === storedEmailId);
+    }
+
+    /** The drafts folder as a page lists it: every draft filed here, newest first, as the stored message standing for it. */
+    private draftRows(): FolderRow[] {
+        return [...this.draftsHeld.values()].reverse().map(({ storedEmailId, record, written, files }) => ({
+            ...generatedRow(0),
+            id: storedEmailId,
+            account: String(record['account']),
+            folder: draftsFolder ?? '',
+            subject: String(record['subject']),
+            senderAddress: author?.senderAddress ?? '',
+            senderDisplayName: author?.senderDisplayName ?? '',
+            toAddresses: listed(written['to']),
+            unread: false,
+            flagged: false,
+            hasAttachments: files.length > 0,
+            attachmentCount: files.length,
+            sizeOctets: Number(record['sizeOctets']),
+            preview: wordsOf(written),
+        }));
+    }
+
+    /** The stored message filed for a draft, read the way any message is: what it is, its words, and its files. */
+    private draftMessageAnswer(
+        { storedEmailId, record, written, files }: HeldDraft,
+        part: string | undefined,
+        position: string | undefined,
+    ): FakeAnswer | null {
+        const words = wordsOf(written);
+
+        if (part === undefined) {
+            return answering({
+                ...messages.markupOnlyMessage,
+                storedEmailId,
+                account: record['account'],
+                folder: draftsFolder,
+                sizeOctets: record['sizeOctets'],
+                headers: {
+                    ...messages.markupOnlyMessage.headers,
+                    subject: record['subject'],
+                    sentAt: recordedAt,
+                    receivedAt: recordedAt,
+                    participants: [
+                        { role: 'From', address: author?.senderAddress, displayName: author?.senderDisplayName },
+                        ...(['to', 'cc', 'bcc'] as const).flatMap((role) =>
+                            listed(written[role]).map((address) => ({
+                                role: role === 'to' ? 'To' : role === 'cc' ? 'Cc' : 'Bcc',
+                                address,
+                                displayName: null,
+                            })),
+                        ),
+                    ],
+                    messageId: `${storedEmailId}@example.invalid`,
+                },
+                body: { availability: 'Readable', plainText: true, html: typeof written['htmlBody'] === 'string' },
+                attachments: files.map((file, at) => ({
+                    position: at,
+                    fileName: file.fileName,
+                    wasFileNameNormalized: false,
+                    mediaType: file.mediaType,
+                    sizeOctets: file.octets.length,
+                })),
+            });
+        }
+
+        if (part === 'body' && position === undefined) {
+            // No document is stated, so a reader falls back on the words themselves, one paragraph to a line — which
+            // is what the composer wrote them as.
+            return answering({
+                ...messages.markupOnlyBody,
+                storedEmailId,
+                plainText: { text: words, originalCharacterCount: words.length, truncation: 'None' },
+                document: { ...messages.markupOnlyBody.document, blocks: [] },
+            });
+        }
+
+        const file = part === 'attachments' ? files[Number(position)] : undefined;
+
+        return file === undefined
+            ? { status: 404, body: '' }
+            : { status: 200, body: file.octets, contentType: file.mediaType };
     }
 
     /** Following one question put to Discover, and stopping it. */
@@ -1065,7 +1242,8 @@ export class FakeDeployment {
      * One page of a folder, keyset-paged by position the way the corpus pages it, with every write applied.
      *
      * The inbox is the corpus's generated folder, so it is walked a page of the corpus at a time and whatever left it
-     * is skipped; any other folder holds only what was moved into it, which is few enough to answer whole. Asked with
+     * is skipped; the drafts folder holds the drafts written here, newest first; any other folder holds only what was
+     * moved into it, which is few enough to answer whole. Asked with
      * no folder, it is the whole mailbox. The order a check asks for changes nothing, because every corpus row arrived
      * at the same instant and the two orders are therefore the same list.
      */
@@ -1079,6 +1257,15 @@ export class FakeDeployment {
             wanted(asked.get('unread'), row.unread) &&
             wanted(asked.get('flagged'), row.flagged) &&
             wanted(asked.get('hasAttachments'), row.hasAttachments);
+
+        if (folder !== null && folder === draftsFolder) {
+            return {
+                emails: this.draftRows().filter(matches),
+                nextCursor: null,
+                previousCursor: null,
+                pageSize: mail.rowsPerPage,
+            };
+        }
 
         if (folder !== null && folder !== 'INBOX') {
             const emails = [...this.placed]
@@ -1345,6 +1532,7 @@ export class FakeDeployment {
      * rather than being folded into the first.
      */
     private draftWritten(draftId: string, body: unknown, revision: number): FakeAnswer {
+        const held = this.draftsHeld.get(draftId);
         const written = recordIn(body) ?? {};
         const answersMail = typeof written['answeredEmailId'] === 'string';
         const recipients = (['to', 'cc', 'bcc'] as const).flatMap((role) =>
@@ -1364,12 +1552,22 @@ export class FakeDeployment {
                   ? written['subject']
                   : '',
             recipients,
-            attachments: [],
+            attachments: held?.files.map(stagedRecord) ?? [],
             revision,
             sizeOctets: typeof written['plainTextBody'] === 'string' ? written['plainTextBody'].length : 0,
         };
 
-        this.draftsHeld.set(draftId, draft);
+        // The first save files the stored message in the drafts folder, and every later one replaces it where it stands.
+        if (held === undefined) {
+            this.count(draftsFolder ?? '', 1, 0);
+        }
+
+        this.draftsHeld.set(draftId, {
+            storedEmailId: held?.storedEmailId ?? this.mintedIdentity(),
+            record: draft,
+            written,
+            files: held?.files ?? [],
+        });
 
         return answering({ ...drafts.savedDraft, draft });
     }
@@ -1384,6 +1582,23 @@ export class FakeDeployment {
 
 /** An answer that says only that it happened. */
 const nothing: FakeAnswer = { status: 204, body: '' };
+
+/** A staged file the way a draft record lists it and a stage answers it. */
+function stagedRecord({ attachmentId, fileName, mediaType, octets }: StagedFile) {
+    return { attachmentId, fileName, mediaType, sizeOctets: octets.length, stagedAt: recordedAt };
+}
+
+/** The words a save states, which is nothing where it states none. */
+function wordsOf(written: Held): string {
+    const words = written['plainTextBody'];
+
+    return typeof words === 'string' ? words : '';
+}
+
+/** The addresses one header of a save names, skipping anything that is not one. */
+function listed(header: unknown): string[] {
+    return Array.isArray(header) ? header.filter((address) => typeof address === 'string') : [];
+}
 
 /** One value put on the wire as the deployment behind the preview server would answer with it. */
 function answering(answered: unknown): FakeAnswer {

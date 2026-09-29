@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
+import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
 import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
@@ -82,7 +83,7 @@ function readBody(): string {
 }
 
 // The message an answer is written against, which the composer reads before it can address one.
-function messageBody(): string {
+function messageBody(overrides: Readonly<Record<string, unknown>> = {}): string {
     return JSON.stringify({
         storedEmailId: messageId,
         account: 'work',
@@ -109,6 +110,7 @@ function messageBody(): string {
         unread: true,
         flagged: false,
         answered: false,
+        ...overrides,
     });
 }
 
@@ -190,6 +192,22 @@ const stagedFile = {
     sizeOctets: 2_048,
 };
 
+/** One file as the message route describes it, which is what a draft opened from a drafts folder carries. */
+const filedFile = {
+    position: 0,
+    fileName: 'invoice.pdf',
+    wasFileNameNormalized: false,
+    mediaType: 'application/pdf',
+    sizeOctets: 4,
+};
+
+/** An exchange a message carrying no file never reaches, supplied because the composer reads one from the context. */
+const takesNothing: AttachmentExchange = {
+    deliver: () => Promise.reject(new Error('The composer asked to download a file.')),
+    read: () => Promise.reject(new Error('The composer asked to show a file.')),
+    take: () => Promise.reject(new Error('The composer took a file from a message carrying none.')),
+};
+
 const uploadsOneFile: AttachmentUpload = () =>
     Promise.resolve({
         status: 200,
@@ -210,6 +228,7 @@ function drawComposer(
     upload: AttachmentUpload = uploadsOneFile,
     drafts = false,
     telemetry: ClientTelemetry = noTelemetry,
+    exchange: AttachmentExchange = takesNothing,
 ): { closed: ReturnType<typeof vi.fn>; asked: ClientRequest[]; upload: AttachmentUpload } {
     const closed = vi.fn();
     const { transport, asked } = deployment(answers);
@@ -232,21 +251,23 @@ function drawComposer(
         <LocalizationProvider>
             <TelemetryContext value={telemetry}>
                 <ToastsProvider>
-                    <AttachmentUploadContext value={upload}>
-                        <Framed>
-                            {(onClosed) => (
-                                <Composer
-                                    session={session}
-                                    transport={transport}
-                                    accounts={accounts}
-                                    opening={opening}
-                                    online={online}
-                                    drafts={drafts}
-                                    onClosed={onClosed}
-                                />
-                            )}
-                        </Framed>
-                    </AttachmentUploadContext>
+                    <AttachmentExchangeContext value={exchange}>
+                        <AttachmentUploadContext value={upload}>
+                            <Framed>
+                                {(onClosed) => (
+                                    <Composer
+                                        session={session}
+                                        transport={transport}
+                                        accounts={accounts}
+                                        opening={opening}
+                                        online={online}
+                                        drafts={drafts}
+                                        onClosed={onClosed}
+                                    />
+                                )}
+                            </Framed>
+                        </AttachmentUploadContext>
+                    </AttachmentExchangeContext>
                 </ToastsProvider>
             </TelemetryContext>
         </LocalizationProvider>,
@@ -444,7 +465,31 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByText(/Every recipient can see CC addresses/u)).toBeNull();
     });
 
-    it('keeps the copies written when the headers are hidden, and sends to them', async () => {
+    it('files nothing from the copy headers while they are hidden, and keeps what they hold to show again', async () => {
+        const { asked } = drawComposer();
+
+        address('ada@example.invalid');
+        fireEvent.click(screen.getByRole('button', { name: 'Show CC and BCC fields' }));
+        fireEvent.change(screen.getByLabelText('Bcc'), { target: { value: 'bo@example.invalid' } });
+        fireEvent.keyDown(screen.getByLabelText('Bcc'), { key: 'Enter' });
+        fireEvent.click(screen.getByRole('button', { name: 'Hide CC and BCC fields' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await waitFor(() => {
+            expect(asked.some((request) => request.method === 'POST')).toBe(true);
+        });
+        expect(JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}')).toMatchObject({
+            to: ['ada@example.invalid'],
+            cc: [],
+            bcc: [],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show CC and BCC fields' }));
+
+        expect(screen.getByRole('button', { name: 'Remove bo@example.invalid from Bcc' })).toBeDefined();
+    });
+
+    it('keeps the copies written while the headers are hidden, and sends to them once they are shown again', async () => {
         const { asked } = drawComposer();
 
         address('ada@example.invalid');
@@ -991,17 +1036,19 @@ describe('Composer, a message of its own', () => {
         render(
             <LocalizationProvider>
                 <ToastsProvider>
-                    <AttachmentUploadContext value={uploadsOneFile}>
-                        <Composer
-                            session={session}
-                            transport={transport}
-                            accounts={[work]}
-                            opening={{ kind: 'new' }}
-                            drafts={false}
-                            online
-                            onClosed={vi.fn()}
-                        />
-                    </AttachmentUploadContext>
+                    <AttachmentExchangeContext value={takesNothing}>
+                        <AttachmentUploadContext value={uploadsOneFile}>
+                            <Composer
+                                session={session}
+                                transport={transport}
+                                accounts={[work]}
+                                opening={{ kind: 'new' }}
+                                drafts={false}
+                                online
+                                onClosed={vi.fn()}
+                            />
+                        </AttachmentUploadContext>
+                    </AttachmentExchangeContext>
                 </ToastsProvider>
             </LocalizationProvider>,
         );
@@ -1295,6 +1342,63 @@ describe('Composer, a draft', () => {
         drawComposer(continued, { message: { status: 503, body: '' } });
 
         expect(await screen.findByText(/did not answer/u)).toBeDefined();
+    });
+
+    // A save writes a draft of its own beside the one it was opened from, so a file the draft was filed with travels
+    // only if it is taken into this message — fetched from the deployment and put up again with the rest.
+    it('brings the files a draft was filed with into the message, and puts them up with it', async () => {
+        const taken: string[] = [];
+        const uploaded: string[] = [];
+
+        drawComposer(
+            continued,
+            { message: { status: 200, body: messageBody({ attachments: [filedFile] }) } },
+            [work],
+            true,
+            (request, file, abandoned) => {
+                uploaded.push(file instanceof File ? file.name : '');
+
+                return uploadsOneFile(request, file, abandoned);
+            },
+            false,
+            noTelemetry,
+            {
+                ...takesNothing,
+                take: (request) => {
+                    taken.push(request.path);
+
+                    return Promise.resolve({ outcome: 'taken', octets: new Blob(['%PDF']) });
+                },
+            },
+        );
+
+        const files = await screen.findByRole('list', { name: 'Attached files' });
+
+        expect(within(files).getByText('invoice.pdf')).toBeDefined();
+        expect(taken).toHaveLength(1);
+        expect(taken[0]).toMatch(new RegExp(`/messages/${messageId}/attachments/0$`, 'u'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await waitFor(() => {
+            expect(uploaded).toStrictEqual(['invoice.pdf']);
+        });
+    });
+
+    it('says which file could not be brought over from the draft, rather than sending without it quietly', async () => {
+        drawComposer(
+            continued,
+            { message: { status: 200, body: messageBody({ attachments: [filedFile] }) } },
+            [work],
+            true,
+            uploadsOneFile,
+            false,
+            noTelemetry,
+            { ...takesNothing, take: () => Promise.resolve({ outcome: 'refused', refusal: 'unavailable' }) },
+        );
+
+        expect(await screen.findByText(/invoice\.pdf could not be brought over from the draft/u)).toBeDefined();
+        expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
     });
 });
 

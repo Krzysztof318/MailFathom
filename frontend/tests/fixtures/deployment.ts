@@ -138,6 +138,20 @@ const archive2024 = {
     behind: false,
 };
 
+// The drafts folder, which a deployment supplies on the first read that finds it missing whatever the mail server held,
+// and which holds nothing here: what stands in it is what somebody filed there, so a corpus draft would be a message
+// nobody wrote.
+const draftsFolder = {
+    alias: 'DRAFTS',
+    role: 'Drafts',
+    path: ['Drafts'],
+    storedEmailCount: 0,
+    unreadEmailCount: 0,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
 /** A folder holding nothing, which is the state a message list has to be looked at in and cannot reach by scrolling. */
 export const emptyFolder = {
     alias: 'RECEIPTS',
@@ -178,12 +192,12 @@ const filed = {
 };
 
 /**
- * What the folders route answers at rest: one mailbox with an inbox, a folder nested under another, and the archive
- * and the trash its acts file into.
+ * What the folders route answers at rest: one mailbox with an inbox, its drafts, a folder nested under another, and the
+ * archive and the trash its acts file into.
  */
 export const mailFolders = {
     synchronizationEnabled: true,
-    accounts: [{ account: workAccount, folders: [inbox, archive2024, filed, trash] }],
+    accounts: [{ account: workAccount, folders: [inbox, draftsFolder, archive2024, filed, trash] }],
 };
 
 /**
@@ -195,7 +209,7 @@ export const mailFolders = {
 export const troubledFolders = {
     synchronizationEnabled: true,
     accounts: [
-        { account: workAccount, folders: [inbox, archive2024, emptyFolder] },
+        { account: workAccount, folders: [inbox, draftsFolder, archive2024, emptyFolder] },
         {
             account: failingAccount,
             folders: [
@@ -217,10 +231,10 @@ export const ownTimeZone = { timeZone: 'UTC', isDefault: true };
 /**
  * The folders of the corpus mailbox as the management route publishes them, with the acts the mailbox allows.
  *
- * The same levels the folders route answers — the inbox, the level nothing is bound to, the folder beneath it, the
- * archive, and the trash — because the two routes are two readings of one mailbox. The acts are the mailbox's rather
- * than the credential's: the route reads under the grant to read mail, and the client narrows what it reports by the
- * grant it holds, so a check whose credential changes nothing is still offered nothing. Making a folder is the
+ * The same levels the folders route answers — the inbox, the drafts, the level nothing is bound to, the folder beneath
+ * it, the archive, and the trash — because the two routes are two readings of one mailbox. The acts are the mailbox's
+ * rather than the credential's: the route reads under the grant to read mail, and the client narrows what it reports by
+ * the grant it holds, so a check whose credential changes nothing is still offered nothing. Making a folder is the
  * mailbox's act rather than any one folder's, so it is stated once for the account, and a folder playing a role is
  * nested under and never renamed, moved, or deleted. The identities are the aliases the folders route answers, because
  * that is what a tree pairs a row with its acts by, and nothing may read meaning into one.
@@ -230,6 +244,7 @@ export const managedFolders = {
     creatableRoles: [],
     folders: [
         { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] },
+        { id: 'DRAFTS', parentId: null, name: 'Drafts', role: 'Drafts', allowedActs: [] },
         {
             id: 'ARCHIVE',
             parentId: null,

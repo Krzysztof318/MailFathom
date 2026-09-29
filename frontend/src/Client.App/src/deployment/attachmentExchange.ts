@@ -14,9 +14,10 @@ import { asDataUrl } from './dataUrl';
 import { fetchFromDeployment } from './deploymentFetch';
 import { deploymentCredentials } from './sendToDeployment';
 
-// The two things the client does with one file a message carries: hand it to the person to keep, and show it inside the
-// client. Both are one boundary rather than two — one route, one credential, one bound, one way out — which is why they
-// are one interface the application supplies rather than two operations a screen reaches for separately.
+// The three things the client does with one file a message carries: hand it to the person to keep, show it inside the
+// client, and take it into a message being written. All three are one boundary rather than three — one route, one
+// credential, one bound, one way out — which is why they are one interface the application supplies rather than
+// operations a screen reaches for separately.
 //
 // It sits beside `sendToDeployment.ts` because these are the whole of what calls `fetch` here — `Client.Backend`
 // declares no DOM, so a `ReadableStream`, an `AbortSignal`, and a `Blob` can only be named on this side of the
@@ -55,8 +56,13 @@ export type AttachmentRead =
     | { readonly outcome: 'shown'; readonly content: string }
     | { readonly outcome: 'refused'; readonly refusal: ShowingRefusal };
 
+/** What taking one file into the client answered: its octets, or why they did not arrive. */
+export type AttachmentTaken =
+    | { readonly outcome: 'taken'; readonly octets: Blob }
+    | { readonly outcome: 'refused'; readonly refusal: Exclude<AttachmentDeliveryOutcome, 'delivered'> };
+
 /**
- * Fetching one file a message carries, for the two things the client does with one.
+ * Fetching one file a message carries, for the three things the client does with one.
  *
  * It is an interface rather than two loose functions for the reason `portraitExchange.ts` gives about its three: the
  * two are one boundary, so a screen proving what it does about a refusal receives one object and the application
@@ -88,6 +94,15 @@ export interface AttachmentExchange {
      * @returns The address a picture is drawn at or the words text holds, or why neither could be produced.
      */
     read(request: ClientRequest, shown: ShownAs, abandoned: AbortSignal): Promise<AttachmentRead>;
+
+    /**
+     * Takes one file into the client whole, which is what a draft carried on does with the files it was filed with.
+     *
+     * @param request What `mailAttachmentRequest` composed, whose bound is the size the message described.
+     * @param abandoned Discards the read when the message it was for is no longer being written.
+     * @returns The octets, held as the one value a file chosen from the person's own machine is also held as.
+     */
+    take(request: ClientRequest, abandoned: AbortSignal): Promise<AttachmentTaken>;
 }
 
 /**
@@ -122,6 +137,11 @@ export function showingFailureOf(read: AttachmentRead): ClientFailureReason | nu
     }
 
     return read.refusal === 'unreadable' ? 'unreadable' : deliveryFailureOf(read.refusal);
+}
+
+/** Which failure taking a file amounts to, by the same reading, a file that arrived being no failure at all. */
+export function takingFailureOf(taken: AttachmentTaken): ClientFailureReason | null {
+    return taken.outcome === 'taken' ? null : deliveryFailureOf(taken.refusal);
 }
 
 // Reached through a context rather than handed down, for the reason `shellOperations/linkOpener.ts` gives about the
@@ -167,6 +187,14 @@ export const attachmentExchange: AttachmentExchange = {
         } catch {
             return { outcome: 'refused', refusal: 'unreadable' };
         }
+    },
+
+    take: async (request, abandoned) => {
+        const answer = await fetchedOctets(request, () => undefined, abandoned);
+
+        return typeof answer === 'string'
+            ? { outcome: 'refused', refusal: answer }
+            : { outcome: 'taken', octets: new Blob([...answer]) };
     },
 };
 

@@ -956,6 +956,7 @@ export function App({
                                                     flags={writesFlags}
                                                     moves={filesMail}
                                                     deletes={deletesMail}
+                                                    composes={writesMail}
                                                 >
                                                     {/* Above the frame rather than inside the mail space, because what is being written outlives moving
             between the spaces, and because the three controls that ask for it are each several components below here.
