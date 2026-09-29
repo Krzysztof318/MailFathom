@@ -260,9 +260,37 @@ export function TasksSpace({
         return reading.readAgain();
     }
 
-    // The box stays where it was pressed until the list read after the write has answered. The list is the
-    // deployment's and is not corrected here, so without this the box would spring back the moment it was pressed and
-    // stand wrong for as long as the write and the read take — which is a press that looks as if it did nothing.
+    // A box stays where it was pressed until the list read after the write has answered. The list is the deployment's
+    // and is not corrected here, so without this the box would spring back the moment it was pressed and stand wrong for
+    // as long as the write and the read take — which is a press that looks as if it did nothing. The selection bar's
+    // *Mark as done* is the same press over several rows, and holds each of them the same way.
+    function hold(tasks: readonly PersonalTask[], completed: boolean): void {
+        setPressedInto((held) => {
+            const pressed = new Map(held);
+
+            for (const task of tasks) {
+                pressed.set(task.id, completed);
+            }
+
+            return pressed;
+        });
+    }
+
+    // Lets go of the rows once the read after their write has answered, leaving any a later press has since moved.
+    function letGo(tasks: readonly PersonalTask[], completed: boolean): void {
+        setPressedInto((held) => {
+            const left = new Map(held);
+
+            for (const task of tasks) {
+                if (left.get(task.id) === completed) {
+                    left.delete(task.id);
+                }
+            }
+
+            return left;
+        });
+    }
+
     function toggleCompleted(task: PersonalTask): void {
         if (session === null) {
             return;
@@ -270,21 +298,12 @@ export function TasksSpace({
 
         const completed = !(pressedInto.get(task.id) ?? task.completed);
 
-        setPressedInto((held) => new Map(held).set(task.id, completed));
+        hold([task], completed);
 
         void setTaskCompletion(session, transport, task.id, completed)
             .then((answer) => after([wrote(answer)], completed ? 'tasks.markedDone' : 'tasks.markedNotDone'))
             .then(() => {
-                setPressedInto((held) => {
-                    if (held.get(task.id) !== completed) {
-                        return held;
-                    }
-
-                    const left = new Map(held);
-                    left.delete(task.id);
-
-                    return left;
-                });
+                letGo([task], completed);
             });
     }
 
@@ -293,12 +312,17 @@ export function TasksSpace({
             return;
         }
 
-        void Promise.all(tasks.map((task) => setTaskCompletion(session, transport, task.id, true).then(wrote))).then(
-            (answers) => {
+        hold(tasks, true);
+
+        void Promise.all(tasks.map((task) => setTaskCompletion(session, transport, task.id, true).then(wrote)))
+            .then((answers) => {
                 setSelected([]);
-                void after(answers, 'tasks.markedDone');
-            },
-        );
+
+                return after(answers, 'tasks.markedDone');
+            })
+            .then(() => {
+                letGo(tasks, true);
+            });
     }
 
     function accept(task: PersonalTask): void {

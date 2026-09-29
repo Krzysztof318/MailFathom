@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -302,6 +302,50 @@ describe('TasksSpace', () => {
             expect(screen.getByRole('status').textContent).toBe('Marked as done.');
         });
         expect(await screen.findByRole('checkbox', { name: 'Mark Answer the tender as done' })).toHaveProperty(
+            'checked',
+            false,
+        );
+    });
+
+    it('holds every box the selection bar marked done until the list read after those writes answers', async () => {
+        const { transport: answering } = deployment({
+            committed: [taskCalled('a', 'Answer the tender'), taskCalled('b', 'File the return')],
+        });
+        const held: (() => void)[] = [];
+        const transport: MailFathomTransport = (request) =>
+            request.path.endsWith('/completion')
+                ? new Promise<ClientResponse>((resolve) => {
+                      held.push(() => {
+                          void answering(request).then(resolve);
+                      });
+                  })
+                : answering(request);
+
+        drawSpace(transport);
+
+        await screen.findByText('Answer the tender');
+
+        fireEvent.keyDown(screen.getAllByRole('listitem')[0] as Element, { key: 'ContextMenu' });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Select tasks' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Select File the return' }));
+        fireEvent.click(
+            within(screen.getByRole('toolbar', { name: 'Acts over the tasks you picked out' })).getByRole('button', {
+                name: 'Mark as done',
+            }),
+        );
+
+        for (const title of ['Answer the tender', 'File the return']) {
+            expect(screen.getByRole('checkbox', { name: `Mark ${title} as not done` })).toHaveProperty('checked', true);
+        }
+
+        for (const release of held) {
+            release();
+        }
+
+        await waitFor(() => {
+            expect(screen.getByRole('status').textContent).toBe('Marked as done.');
+        });
+        expect(await screen.findByRole('checkbox', { name: 'Mark File the return as done' })).toHaveProperty(
             'checked',
             false,
         );
