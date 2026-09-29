@@ -54,6 +54,7 @@ export const sendToDeployment: DeploymentTransport = (abandoned) => (request) =>
             // collection normalizes them, so a lookup there needs no second spelling to try.
             headers: Object.fromEntries(response.headers),
         }),
+        request.retriedByCaller === true,
     );
 
 /**

@@ -331,6 +331,46 @@ describe('useConnection', () => {
         expect(refused).toBe(0);
     });
 
+    // The first read is the transport's to retry, so a deployment that blinks is never reported lost; once it has
+    // been, the schedule here is the retry, and a transport retrying each of its attempts again would nest the two.
+    it('leaves each automatic attempt to the transport to put on the wire once', async () => {
+        vi.useFakeTimers();
+
+        const retriedByCaller: (true | undefined)[] = [];
+        const recordingFailures: DeploymentTransport = () => (request) => {
+            if (request.path.endsWith('/session')) {
+                retriedByCaller.push(request.retriedByCaller);
+            }
+
+            return Promise.resolve({ status: 503, body: '', headers: {} });
+        };
+
+        const { result } = renderHook(() =>
+            useConnection(baseAddress, firstPerson, recordingFailures, nothingToDo, clock),
+        );
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        for (let spent = 0; spent < 2; spent += 1) {
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+        }
+
+        expect(retriedByCaller).toEqual([undefined, true, true]);
+
+        act(() => {
+            result.current.reread();
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(retriedByCaller.at(-1)).toBeUndefined();
+    });
+
     it('hands the next person a budget of their own rather than one the last one spent', async () => {
         vi.useFakeTimers();
 

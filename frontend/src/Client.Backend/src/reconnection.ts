@@ -6,6 +6,10 @@
 // because two things reach: the polling the shell does when a deployment stops answering, and the signal channel
 // reopening after it dropped. Two schedules would be two answers to one question, and a fleet of clients coming back
 // in step is exactly what the spread below exists to prevent.
+//
+// It is a longer horizon than the transport's retry in `transientFailures.ts` rather than a second one beside it: this
+// begins once the transport has given up and a deployment has been reported lost, and each attempt it makes is marked
+// `retriedByCaller` so the transport puts it on the wire once.
 
 /** The most times the client reaches for a deployment that is not answering before it waits to be asked. */
 export const mostReconnectionAttempts = 5;

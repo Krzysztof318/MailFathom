@@ -123,6 +123,16 @@ describe('readSignalTicket', () => {
         expect(requests[0]?.headers['Authorization']).toBe(session.authorization);
     });
 
+    // The stream mints another ticket on its own schedule whenever one is refused, so a transport that retried the mint
+    // as well would put every refused attempt on the wire several times over.
+    it('leaves retrying a refused mint to the stream rather than to the transport', async () => {
+        const { transport, requests } = recording({ status: 200, body: minted });
+
+        await readSignalTicket(session, transport);
+
+        expect(requests[0]?.retriedByCaller).toBe(true);
+    });
+
     it('reads the ticket and when presenting it stops working', async () => {
         const result = await readSignalTicket(session, answering({ status: 200, body: minted }));
 

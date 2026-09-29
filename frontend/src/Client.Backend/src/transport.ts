@@ -26,6 +26,16 @@ export interface ClientRequest {
      * `unreadable`, which tells them to report a defect for a message that was fine.
      */
     readonly longestAnswer?: number;
+
+    /**
+     * Whoever made this request sends it again on a schedule of its own, so the transport puts it on the wire once.
+     *
+     * The transport retries a failure that passes on its own, and a caller that keeps a longer schedule above it — the
+     * shell reaching for a deployment it has already reported lost, the signal stream minting another ticket — would
+     * otherwise retry every one of its attempts a second time underneath, which is the nested retry the one policy in
+     * `transientFailures.ts` exists to rule out.
+     */
+    readonly retriedByCaller?: true;
 }
 
 /** What came back, reduced to the three things this package reads. */
