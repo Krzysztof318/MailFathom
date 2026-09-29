@@ -79,14 +79,14 @@ test('keeps the folder tree as it was left, across a reload', async ({ page }) =
 
     // The level the corpus nests a folder under, which arrives shut: a mailbox filed three levels deep would
     // otherwise open as everything it has ever held. The corpus holds one mailbox, which is a user the tree offers
-    // no row spanning every mailbox to, so what unfolds here is a level of a folder's own path.
-    const above = tree.getByRole('treeitem', { name: /^Archive/ });
+    // no row spanning every mailbox to, so what unfolds here is a level of a folder's own path. It is the one of the two
+    // rows named *Archive* that unfolds at all: the other is the folder the account files by that role, which is drawn
+    // under the role's name and holds nothing beneath it.
+    await expect(tree.getByRole('treeitem', { name: 'Archive', expanded: false })).toBeVisible();
 
-    await expect(above).toHaveAttribute('aria-expanded', 'false');
-
-    await above.click();
+    await tree.getByRole('treeitem', { name: 'Archive', expanded: false }).click();
     await page.keyboard.press('ArrowRight');
-    await expect(above).toHaveAttribute('aria-expanded', 'true');
+    await expect(tree.getByRole('treeitem', { name: 'Archive', expanded: true })).toBeVisible();
 
     const nested = tree.getByRole('treeitem', { name: /^2024/ });
 
@@ -99,7 +99,7 @@ test('keeps the folder tree as it was left, across a reload', async ({ page }) =
     // same way. Only a real document reloaded proves it was written rather than held: a remount in jsdom re-reads the
     // same process's storage, and what this asks is that a browser wrote it. What was written is the move away from
     // the fold the row opens at rather than the fold itself, so a level opened by hand comes back open.
-    await expect(tree.getByRole('treeitem', { name: /^Archive/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(tree.getByRole('treeitem', { name: 'Archive', expanded: true })).toBeVisible();
 
     // The scope outlives the reload beside the fold, which is the other half of what was left here.
     await expect(tree.getByRole('treeitem', { name: /^2024/ })).toHaveAttribute('aria-selected', 'true');

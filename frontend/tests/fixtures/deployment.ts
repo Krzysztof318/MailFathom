@@ -150,10 +150,40 @@ export const emptyFolder = {
     behind: false,
 };
 
-/** What the folders route answers at rest: one mailbox with an inbox and a folder nested under another. */
+// The two folders the acts on a message file into, each named by the role it plays rather than by where it sits: the
+// trash is where deleting puts a message and where deleting it again destroys it, and the archive is where archiving
+// and a swipe put it. The archive's own name on the mail server is not *Archive*, because a mail server marks whichever
+// folder it likes with that role, and a tree draws the role's name over it. Both start empty, so a list of either holds
+// exactly what an act filed into it.
+const trash = {
+    alias: 'TRASH',
+    role: 'Trash',
+    path: ['Trash'],
+    storedEmailCount: 0,
+    unreadEmailCount: 0,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+const filed = {
+    alias: 'FILED',
+    role: 'Archive',
+    path: ['Filed'],
+    storedEmailCount: 0,
+    unreadEmailCount: 0,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+/**
+ * What the folders route answers at rest: one mailbox with an inbox, a folder nested under another, and the archive
+ * and the trash its acts file into.
+ */
 export const mailFolders = {
     synchronizationEnabled: true,
-    accounts: [{ account: workAccount, folders: [inbox, archive2024] }],
+    accounts: [{ account: workAccount, folders: [inbox, archive2024, filed, trash] }],
 };
 
 /**
@@ -187,8 +217,8 @@ export const ownTimeZone = { timeZone: 'UTC', isDefault: true };
 /**
  * The folders of the corpus mailbox as the management route publishes them, with no act this credential may take.
  *
- * The same three levels the folders route answers — the inbox, the level nothing is bound to, and the folder beneath
- * it — because the two routes are two readings of one mailbox. Every `allowedActs` is empty to match the grant
+ * The same levels the folders route answers — the inbox, the level nothing is bound to, the folder beneath it, the
+ * archive, and the trash — because the two routes are two readings of one mailbox. Every `allowedActs` is empty to match the grant
  * {@link sessionAnswer} states, which reads and asks and changes nothing; the identities are the aliases only because
  * a corpus needs some value there, and nothing may read meaning into one.
  */
@@ -199,6 +229,8 @@ export const managedFolders = {
         { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] },
         { id: 'ARCHIVE', parentId: null, name: 'Archive', role: null, allowedActs: [] },
         { id: 'ARCHIVE/2024', parentId: 'ARCHIVE', name: '2024', role: null, allowedActs: [] },
+        { id: 'FILED', parentId: null, name: 'Filed', role: 'Archive', allowedActs: [] },
+        { id: 'TRASH', parentId: null, name: 'Trash', role: 'Trash', allowedActs: [] },
     ],
 };
 

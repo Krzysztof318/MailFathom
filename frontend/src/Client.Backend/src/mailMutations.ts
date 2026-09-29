@@ -230,7 +230,7 @@ export function changeMailFlags(
         flags: { seen: change.seen, flagged: change.flagged },
     }));
 
-    return submit(session, transport, mailFlagMutationsRoute, { changes: asked });
+    return submit(session, transport, mailFlagMutationsRoute, { changes: asked }, 'changes');
 }
 
 /**
@@ -246,7 +246,13 @@ export function moveMail(
     transport: MailFathomTransport,
     moves: readonly MailMove[],
 ): Promise<ClientResult<readonly MailMutationResult[]>> {
-    return submit(session, transport, mailMoveMutationsRoute, { moves: moves.slice(0, mostMessagesPerMutation) });
+    return submit(
+        session,
+        transport,
+        mailMoveMutationsRoute,
+        { moves: moves.slice(0, mostMessagesPerMutation) },
+        'change',
+    );
 }
 
 /**
@@ -265,9 +271,13 @@ export function deleteMail(
     transport: MailFathomTransport,
     storedEmailIds: readonly string[],
 ): Promise<ClientResult<readonly MailMutationResult[]>> {
-    return submit(session, transport, mailDeleteMutationsRoute, {
-        deletes: storedEmailIds.slice(0, mostMessagesPerMutation).map((storedEmailId) => ({ storedEmailId })),
-    });
+    return submit(
+        session,
+        transport,
+        mailDeleteMutationsRoute,
+        { deletes: storedEmailIds.slice(0, mostMessagesPerMutation).map((storedEmailId) => ({ storedEmailId })) },
+        'change',
+    );
 }
 
 /**
@@ -310,12 +320,21 @@ function overRecords(
     );
 }
 
+/**
+ * Where a route's answer names the records one message's change became.
+ *
+ * The flag route answers a list, because one change there may write both flags and each is a record of its own. A move
+ * and a delete each write one record, and their routes answer it alone, as `null` where nothing was written down.
+ */
+type RecordsNamedIn = 'changes' | 'change';
+
 /** Puts one batch on the wire and reads what came back, which is the same exchange whichever act asked for it. */
 function submit(
     session: ClientSession,
     transport: MailFathomTransport,
     route: string,
     body: object,
+    recordsNamedIn: RecordsNamedIn,
 ): Promise<ClientResult<readonly MailMutationResult[]>> {
     return spanned(`POST ${route}`, async () =>
         answerOf(
@@ -326,6 +345,7 @@ function submit(
                 body: JSON.stringify(body),
                 longestAnswer: longestMutationAnswer,
             }),
+            recordsNamedIn,
         ),
     );
 }
@@ -427,7 +447,10 @@ function parseRecord(entry: unknown): MailMutationRecord | null {
     return { recordId, storedEmailId, state, outcomeUnknown };
 }
 
-function answerOf(response: ClientResponse | null): ClientResult<readonly MailMutationResult[]> {
+function answerOf(
+    response: ClientResponse | null,
+    recordsNamedIn: RecordsNamedIn,
+): ClientResult<readonly MailMutationResult[]> {
     if (response === null) {
         return failed('unavailable', null);
     }
@@ -436,7 +459,7 @@ function answerOf(response: ClientResponse | null): ClientResult<readonly MailMu
         return failed(failureReasonForStatus(response.status), response.status);
     }
 
-    const results = parseResults(response.body);
+    const results = parseResults(response.body, recordsNamedIn);
 
     return results === null ? failed('unreadable', response.status) : read(results);
 }
@@ -458,7 +481,7 @@ function parsedArray(body: string, named: string, bound: number): readonly unkno
     return Array.isArray(answered) && answered.length <= bound ? answered : null;
 }
 
-function parseResults(body: string): readonly MailMutationResult[] | null {
+function parseResults(body: string, recordsNamedIn: RecordsNamedIn): readonly MailMutationResult[] | null {
     const answered = parsedArray(body, 'results', mostMessagesPerMutation);
 
     if (answered === null) {
@@ -468,7 +491,7 @@ function parseResults(body: string): readonly MailMutationResult[] | null {
     const results: MailMutationResult[] = [];
 
     for (const entry of answered) {
-        const result = parseResult(entry);
+        const result = parseResult(entry, recordsNamedIn);
 
         if (result === null) {
             return null;
@@ -480,7 +503,7 @@ function parseResults(body: string): readonly MailMutationResult[] | null {
     return results;
 }
 
-function parseResult(entry: unknown): MailMutationResult | null {
+function parseResult(entry: unknown, recordsNamedIn: RecordsNamedIn): MailMutationResult | null {
     const record = asRecord(entry);
 
     if (record === null) {
@@ -494,7 +517,10 @@ function parseResult(entry: unknown): MailMutationResult | null {
         return null;
     }
 
-    const changes = parseChanges(record['changes']);
+    const named = record[recordsNamedIn];
+    const changes = parseChanges(
+        recordsNamedIn === 'change' && named !== undefined && named !== null ? [named] : named,
+    );
 
     return changes === null ? null : { storedEmailId, outcome, changes };
 }

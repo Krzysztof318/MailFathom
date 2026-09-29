@@ -81,6 +81,13 @@ export async function signIn(page: Page): Promise<void> {
 export const silentAnswerInterval = 3_000;
 
 /**
+ * How long a visible client goes before reading again everything it draws: `refreshInterval` in `Client.App`'s
+ * `signals/useSignals.ts`. The fake deployment serves no signal channel, so this interval is how the client learns what
+ * an act moved that it does not draw by itself — the counts in the folder column among it.
+ */
+export const refreshInterval = 5 * 60_000;
+
+/**
  * Stops the page's clock where it stands, so a timer the client runs fires only when the check advances it.
  *
  * The clock is installed before the page loads and runs as a real one until here, because signing in and drawing the

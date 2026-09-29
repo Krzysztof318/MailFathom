@@ -170,22 +170,23 @@ function deploymentAnswering(
                 deletes?: { storedEmailId: string }[];
             };
 
+            // The flag route answers a list of the records a message's change became, and the move and delete routes
+            // the one record each writes — the shapes the service answers, which the client reads differently.
+            const writtenFor = (storedEmailId: string) => {
+                const outcome = outcomes[storedEmailId] ?? 'recorded';
+                const record =
+                    outcome === 'recorded' ? { recordId: `record-${storedEmailId}`, state: 'pending' } : null;
+
+                return asked.changes === undefined
+                    ? { storedEmailId, outcome, change: record }
+                    : { storedEmailId, outcome, changes: record === null ? [] : [record] };
+            };
+
             return Promise.resolve({
                 status,
                 body: JSON.stringify({
                     results: [...(asked.changes ?? []), ...(asked.moves ?? []), ...(asked.deletes ?? [])].map(
-                        ({ storedEmailId }) => {
-                            const outcome = outcomes[storedEmailId] ?? 'recorded';
-
-                            return {
-                                storedEmailId,
-                                outcome,
-                                changes:
-                                    outcome === 'recorded'
-                                        ? [{ recordId: `record-${storedEmailId}`, state: 'pending' }]
-                                        : [],
-                            };
-                        },
+                        ({ storedEmailId }) => writtenFor(storedEmailId),
                     ),
                 }),
                 headers: {},
@@ -653,9 +654,36 @@ describe('MailboxActsProvider', () => {
         expect(screen.getByText('That mail is no longer in the mailbox this deployment reads.')).toBeDefined();
         expect(screen.getByText('1 message')).toBeDefined();
         await waitFor(() => {
-            expect(held().asked.has('message-1')).toBe(false);
+            expect(held().asked.get('message-2')?.act).toBe('archive');
         });
-        expect(held().asked.get('message-2')?.act).toBe('archive');
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'move',
+            from: 'work-archive',
+            leaves: true,
+            destroys: false,
+        });
+    });
+
+    // A reader who opened the folder the act filed a message in is looking at a list the deployment last answered with
+    // the message in it, so the way back takes it out of there from the press — as the act took it out of where it was —
+    // rather than leaving it drawn there while it is drawn back where it came from.
+    it('takes a message put back out of the folder the act filed it in, from the press', async () => {
+        const { held } = acting(deploymentAnswering());
+
+        await waitFor(() => {
+            expect(held().refusalOf('delete', [invoice])).toBeNull();
+        });
+
+        perform(held, 'delete', [invoice]);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'move',
+            from: 'work-trash',
+            leaves: true,
+            destroys: false,
+        });
     });
 
     it('says a message is being acted on from the press, which is what a row draws while an account is unreachable', async () => {

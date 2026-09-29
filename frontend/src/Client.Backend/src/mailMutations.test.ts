@@ -311,9 +311,24 @@ describe('moveMail', () => {
                 status: 200,
                 body: JSON.stringify({
                     results: [
-                        { storedEmailId, outcome: 'recorded', destinationFolder: 'work-archive' },
-                        { storedEmailId: 'second', outcome: 'already-in-destination', destinationFolder: null },
-                        { storedEmailId: 'third', outcome: 'destination-not-allowed', destinationFolder: null },
+                        {
+                            storedEmailId,
+                            outcome: 'recorded',
+                            destinationFolder: 'work-archive',
+                            change: { recordId, mutation: 'relocate', state: 'pending' },
+                        },
+                        {
+                            storedEmailId: 'second',
+                            outcome: 'already-in-destination',
+                            destinationFolder: null,
+                            change: null,
+                        },
+                        {
+                            storedEmailId: 'third',
+                            outcome: 'destination-not-allowed',
+                            destinationFolder: null,
+                            change: null,
+                        },
                     ],
                 }),
             }),
@@ -323,11 +338,26 @@ describe('moveMail', () => {
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: [
-                { storedEmailId, outcome: 'recorded', changes: [] },
+                { storedEmailId, outcome: 'recorded', changes: [{ recordId, state: 'pending' }] },
                 { storedEmailId: 'second', outcome: 'already-in-destination', changes: [] },
                 { storedEmailId: 'third', outcome: 'destination-not-allowed', changes: [] },
             ],
         });
+    });
+
+    // The move route answers the one record a move writes as `change`, which is not the flag route's list: read as that
+    // list, every move would be followed by nothing and the way its account stopped retrying would never be said.
+    it('refuses an answer naming a move’s record as anything but one record', async () => {
+        const answer = await moveMail(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({ results: [{ storedEmailId, outcome: 'recorded', change: 'one' }] }),
+            }),
+            [{ storedEmailId, destinationFolder: 'work-archive' }],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
     it('names no more messages than one submission may carry', async () => {
@@ -371,18 +401,23 @@ describe('deleteMail', () => {
                 status: 200,
                 body: JSON.stringify({
                     results: [
-                        { storedEmailId, outcome: 'recorded' },
-                        { storedEmailId: 'second', outcome: 'message-not-found' },
+                        {
+                            storedEmailId,
+                            outcome: 'recorded',
+                            change: { recordId, mutation: 'delete', state: 'pending' },
+                        },
+                        { storedEmailId: 'second', outcome: 'message-not-found', change: null },
                     ],
                 }),
             }),
             [storedEmailId, 'second'],
         );
 
+        // The record is what ending the wait in front of a permanent delete names, so it is read off the answer here.
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: [
-                { storedEmailId, outcome: 'recorded', changes: [] },
+                { storedEmailId, outcome: 'recorded', changes: [{ recordId, state: 'pending' }] },
                 { storedEmailId: 'second', outcome: 'message-not-found', changes: [] },
             ],
         });

@@ -9792,6 +9792,8 @@ deployment.ts troubledAccounts GET /api/client/accounts
 deployment.ts inbox GET /api/client/folders
 deployment.ts archive2024 GET /api/client/folders
 deployment.ts emptyFolder GET /api/client/folders
+deployment.ts trash GET /api/client/folders
+deployment.ts filed GET /api/client/folders
 deployment.ts mailFolders GET /api/client/folders
 deployment.ts troubledFolders GET /api/client/folders
 deployment.ts ownTimeZone GET /api/client/time-zone
