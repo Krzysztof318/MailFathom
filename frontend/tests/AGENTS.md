@@ -299,7 +299,7 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
 - **A journey runs against a fake deployment that holds state.** A route fulfilled with one fixed answer answers the
   list after a delete exactly as it answered it before, so it cannot tell a client that dropped the row from one that
   never asked again. The fake a journey drives, `fakeDeployment.ts`, applies what the client writes — a delete, a move, a flag, a read mark,
-  a draft, an undo, an event, a task, a contact, a deleted folder — and answers every later read from what those writes did, in the shapes the service answers, so the
+  a draft, a send taken back, an undo, an event, a task, a contact, a deleted folder — and answers every later read from what those writes did, in the shapes the service answers, so the
   bundle parses them through `Client.Backend` exactly as it would a deployment's.
 - **No journey asserts a service behaviour the fake merely assumes.** The fake holds one reading of what the service
   does — that a moved message leaves the folder it came from, that emptying the trash empties it — and a journey proves
@@ -338,7 +338,7 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
 - **Every check signs in to a fake deployment of its own, journey or not.** It starts from the corpus — the resting
   mailbox, its folders, the drafts, the Discover run, the Agent's conversations, the calendar, the task list, the
   address book — and besides the writes above it stops
-  a Discover run and records an answer to an Agent proposal. A conversation a check starts reads as the corpus's
+  a Discover run, records an answer to an Agent proposal, and renews the session it minted with a token of its own. A conversation a check starts reads as the corpus's
   answered one, opening on the question the check asked under the scope it asked it in, with none of its proposals
   decided yet. Its credential carries the two permissions a frame needs and no more, so a check whose journey reaches
   something another permission guards calls `deployment.grant` with it before signing in, as an operator would grant

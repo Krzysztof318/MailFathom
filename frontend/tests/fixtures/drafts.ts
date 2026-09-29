@@ -63,6 +63,9 @@ export const savedDraft = { draft };
 /** What a send answers with once the message is queued: an identity to watch in the outbox and nothing else. */
 export const queuedSend = { outgoingEmail: '00000000-0000-4000-8000-0000000000e0' };
 
+/** What the outbox answers a queued send taken back before it began transmitting with. */
+export const withdrawnSend = { outgoingEmail: queuedSend.outgoingEmail, outcome: 'Accepted' };
+
 /**
  * What a send answers with when a rule of the deployment refused the message that was written.
  *

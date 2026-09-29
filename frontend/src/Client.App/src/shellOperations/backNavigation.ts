@@ -134,6 +134,14 @@ export function useBackNavigation(steps: number, unwind: (used: number) => void)
     });
 
     useEffect(() => {
+        // A traversal still in flight leaves the entry showing as the one it is leaving, so reading it now would count
+        // from a mark about to be given up — two surfaces closing in two renders would give back three entries for two
+        // steps, and the third is whatever the tab showed before the client. The last traversal to land reconciles
+        // against the steps standing by then, which is this render's.
+        if (travelling.current > 0) {
+            return;
+        }
+
         if (reconcileHistory(steps, !reconciled.current)) {
             travelling.current += 1;
         }

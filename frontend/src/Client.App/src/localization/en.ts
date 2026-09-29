@@ -1641,7 +1641,6 @@ export const en = {
     'toast.keepGoing': 'Keep going',
     'toast.stopIsFinal': 'Stopping is not taken back — the operation would have to be started again.',
     'toast.stopped': 'Stopped',
-    'toast.stoppedNothingWritten': 'The operation was stopped before anything was written, so nothing changed.',
     'people.books': 'Which address book',
     'people.own': 'Own',
     'people.collected': 'Collected',

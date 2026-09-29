@@ -4,11 +4,22 @@
 
 import { expect, type Page, type Request, type Route } from '@playwright/test';
 
-import { openAccountMenu, openSignedIn, signIn, test } from './client.harness';
+import {
+    grantRenewalMargin,
+    openAccountMenu,
+    openSignedIn,
+    refreshInterval,
+    renewalCheckInterval,
+    sessionRenewalMargin,
+    signIn,
+    test,
+} from './client.harness';
 import * as deployment from './fixtures/deployment';
 
 // Getting in and staying in: the credential screen, what the exchange is sent and what every request presents
-// afterwards, how long a session is kept and where, and the provider flow that leaves the page and comes back.
+// afterwards, how long a session is kept and where, the provider flow that leaves the page and comes back, and what
+// becomes of all of it as the clock runs — a session or a grant renewed before it ends, and one the deployment has
+// stopped accepting.
 
 /**
  * What a deployment reached at this address states as the identifier a token has to be issued for.
@@ -224,10 +235,17 @@ async function offeringAProvider(page: Page, authorizations: string[], redemptio
         });
     });
 
+    // A redemption is answered with the token the sign-in was issued and a renewal with the one that replaces it, told
+    // apart the way the server tells them apart: by the grant the request names.
     await page.route(`${issuer}/protocol/openid-connect/token`, (route) => {
-        redemptions.push(route.request().postData() ?? '');
+        const redeemed = route.request().postData() ?? '';
 
-        return answering(route, deployment.issuedToken);
+        redemptions.push(redeemed);
+
+        return answering(
+            route,
+            redeemed.includes('grant_type=refresh_token') ? deployment.renewedToken : deployment.issuedToken,
+        );
     });
 }
 
@@ -321,3 +339,137 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
     );
     expect(overflowing).toBe(false);
 });
+
+/**
+ * Every credential the page presented on the client surface to read or to act, in the order it issued the requests
+ * carrying one.
+ *
+ * What the client recorded about itself is left out: records made under one session are flushed under that session when
+ * it is replaced, which `telemetry/clientTelemetry.ts` does on purpose so no record is attributed to a credential it was
+ * not made under — and that flush can reach the wire after the first request the renewed credential carried.
+ */
+function presentedBy(page: Page): string[] {
+    const presented: string[] = [];
+
+    page.on('request', (request) => {
+        const { pathname } = new URL(request.url());
+
+        if (pathname.startsWith('/api/client/') && !pathname.startsWith('/api/client/telemetry/')) {
+            presented.push(request.headers()['authorization'] ?? '');
+        }
+    });
+
+    return presented;
+}
+
+/**
+ * What the page presented from the first request carrying the renewed credential onwards, once the frame has read
+ * again everything it draws — which is every request the client makes on its own, asked after the renewal rather than
+ * inferred from one of them.
+ */
+async function presentedSinceRenewing(page: Page, presented: readonly string[], renewed: string): Promise<string[]> {
+    await expect.poll(() => presented.includes(renewed)).toBe(true);
+
+    const from = presented.indexOf(renewed);
+
+    await page.clock.runFor(refreshInterval);
+
+    return presented.slice(from);
+}
+
+// The instant a check about renewing starts its clock at: two hours before the corpus session ends, so the renewal it
+// sees is one the running clock brought due rather than one signing in made.
+const beforeTheSessionEnds = new Date(Date.parse(deployment.mintedSession.expiresAt) - 2 * sessionRenewalMargin);
+
+// Renewing is a timer the client runs against an instant the deployment stated, and what it changes is every request
+// afterwards — which is the seam `useSessionRenewal.test.ts` stops short of: it proves the hook hands the renewed
+// session on, and nothing about what the frame then presents.
+test('renews the session before it ends, and presents the renewed one on everything after without asking again', async ({
+    page,
+    deployment: served,
+}) => {
+    const presented = presentedBy(page);
+
+    await page.clock.install({ time: beforeTheSessionEnds });
+    await openSignedIn(page, '/#/mail');
+    await page.clock.runFor(sessionRenewalMargin + renewalCheckInterval);
+
+    const since = await presentedSinceRenewing(page, presented, deployment.expectedRenewedSessionAuthorization);
+
+    expect(since.length).toBeGreaterThan(1);
+    expect(since.filter((credential) => credential !== deployment.expectedRenewedSessionAuthorization)).toStrictEqual(
+        [],
+    );
+    expect(served.requests('POST', '/session/token')).toHaveLength(2);
+    await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Login' })).toHaveCount(0);
+});
+
+test('renews a provider grant with its refresh token before the access token ends, and presents the renewed one after', async ({
+    page,
+}) => {
+    const redemptions: string[] = [];
+    const presented = presentedBy(page);
+
+    await page.clock.install();
+    await offeringAProvider(page, [], redemptions);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Continue to Keycloak' }).click();
+    await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
+
+    await page.clock.runFor(deployment.issuedToken.expires_in * 1_000 - grantRenewalMargin + renewalCheckInterval);
+
+    const since = await presentedSinceRenewing(page, presented, deployment.expectedRenewedGrantAuthorization);
+
+    expect(redemptions.at(-1)).toContain(`refresh_token=${deployment.issuedToken.refresh_token}`);
+    expect(since.filter((credential) => credential !== deployment.expectedRenewedGrantAuthorization)).toStrictEqual(
+        [],
+    );
+    await expect(page.getByRole('textbox', { name: 'Login' })).toHaveCount(0);
+});
+
+// Two ways a deployment says it has stopped accepting the sign-in, and one answer to both: the sign-in screen, saying
+// why, and a reload that draws nothing of the mailbox that was open. The first is the renewal the running clock brings
+// due; the second is a read of a folder somebody opened, which is not the connection's own read and was, before this
+// check, answered in the list as a folder that could not be read while the frame stayed signed in.
+for (const refusal of [
+    {
+        met: 'renewing it',
+        refused: '**/api/client/session/token',
+        async meet(page: Page): Promise<void> {
+            await page.clock.runFor(sessionRenewalMargin + renewalCheckInterval);
+        },
+    },
+    {
+        met: 'reading a folder',
+        refused: '**/api/client/emails?*',
+        async meet(page: Page): Promise<void> {
+            await page
+                .getByRole('tree', { name: 'Mailboxes and folders' })
+                .getByRole('treeitem', { name: /^Drafts/u })
+                .click();
+        },
+    },
+]) {
+    test(`returns to the sign-in saying why when the deployment stops accepting the sign-in on ${refusal.met}, and draws nothing of the mailbox after a reload`, async ({
+        page,
+    }) => {
+        await page.clock.install({ time: beforeTheSessionEnds });
+        await openSignedIn(page, '/#/mail');
+        await expect(page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first()).toBeVisible();
+
+        await page.route(refusal.refused, (route) => route.fulfill({ status: 401 }));
+        await refusal.meet(page);
+
+        await expect(
+            page.getByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.'),
+        ).toBeVisible();
+        await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
+
+        await page.reload();
+
+        await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Spaces' })).toHaveCount(0);
+        await expect(page.getByRole('listbox', { name: 'Messages' })).toHaveCount(0);
+    });
+}

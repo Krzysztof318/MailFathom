@@ -573,18 +573,17 @@ describe('Composer, a message of its own', () => {
         expect(asked).toHaveLength(0);
     });
 
-    // The design project closes the composition on the press and raises the task second, which is what makes sending
-    // feel like sending rather than like starting something to watch. Nothing written is lost by it: the send writes
-    // the draft to the person's own drafts folder before it queues anything.
-    it('closes the composer on the press and says from the corner that the message was queued', async () => {
+    // The composer goes once the deployment has the message rather than on the press: a send refused or never
+    // answered before anything was filed would otherwise have taken the only copy of the words with it.
+    it('closes the composer once the deployment has queued the message, and says from the corner that it was', async () => {
         const { closed } = drawComposer();
 
         address('ada@example.invalid');
         confirmSend();
 
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
         expect(closed).toHaveBeenCalled();
         expect(screen.queryByRole('dialog', { name: 'New message' })).toBeNull();
-        expect(await screen.findByText('Queued to go out.')).toBeDefined();
     });
 
     // A queued message offers no way back, because there is none: the deployment has taken it and the composer the act
@@ -597,6 +596,25 @@ describe('Composer, a message of its own', () => {
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
         expect(screen.queryByRole('button', { name: 'Take it back' })).toBeNull();
+    });
+
+    // Stopping takes the task's own toast away, so what the stop came to is a toast of its own rather than a settling
+    // of one that is no longer there to be read.
+    it('says what a stopped send came to once the deployment has answered the stop', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop the operation' }));
+        fireEvent.click(
+            within(screen.getByRole('dialog', { name: 'Stop the operation?' })).getByRole('button', {
+                name: 'Stop the operation',
+            }),
+        );
+
+        expect(await screen.findByText('Message taken back')).toBeDefined();
+        expect(screen.getByText('Taken back before it went out.')).toBeDefined();
     });
 
     // Stopping the task while the send is still in flight is a different act from taking a queued message back, and it
@@ -735,7 +753,8 @@ describe('Composer, a message of its own', () => {
         address('ada@example.invalid');
         confirmSend();
 
-        expect(await screen.findByText(said)).toBeDefined();
+        // Twice, and deliberately: in the toast for somebody who looked away, and at the foot of the words it refused.
+        expect(await screen.findAllByText(said)).toHaveLength(2);
     });
 
     it('says which of the four failures a save met, rather than that something went wrong', async () => {
@@ -775,10 +794,10 @@ describe('Composer, a message of its own', () => {
         confirmSend();
 
         expect(
-            await screen.findByText(
+            await screen.findAllByText(
                 'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
             ),
-        ).toBeDefined();
+        ).toHaveLength(2);
     });
 
     it('says what is kept while the machine is offline rather than offering a send that cannot happen', () => {
@@ -823,15 +842,24 @@ describe('Composer, a message of its own', () => {
     // A refusal is titled there and said at the foot of the composer, where the words the deployment refused still
     // are: a toast stands for a few seconds, and what somebody has to act on cannot be the thing that goes away.
     it('titles a refused send in the toast and leaves what would change it beside what was written', async () => {
-        drawComposer({ kind: 'new' }, { send: { status: 409, body: JSON.stringify({ errorCode: 56_003 }) } });
+        const { closed } = drawComposer(
+            { kind: 'new' },
+            { send: { status: 409, body: JSON.stringify({ errorCode: 56_003 }) } },
+        );
 
         address('ada@example.invalid');
+        writeWords('They are attached.');
         confirmSend();
 
         expect(await screen.findByText('Message not sent')).toBeDefined();
         expect(
-            screen.getByText('This deployment does not send mail. Whoever runs it can turn sending on.'),
+            within(composerFrame()).getByText(
+                'This deployment does not send mail. Whoever runs it can turn sending on.',
+            ),
         ).toBeDefined();
+        expect(wordsWritten()).toBe('They are attached.');
+        expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+        expect(closed).not.toHaveBeenCalled();
     });
 
     // Nothing of the composer is left to write over the send, because the composer itself is not left: the press that

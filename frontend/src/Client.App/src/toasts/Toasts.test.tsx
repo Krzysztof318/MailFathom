@@ -362,7 +362,7 @@ describe('ToastsProvider', () => {
         expect(standing()[0]).toContain('Packing attachments');
     });
 
-    it('stops it on the other answer, and says that nothing was written', () => {
+    it('stops it on the other answer, and says what stopping it left behind', () => {
         drawSurface();
 
         const stopped = vi.fn();
@@ -374,7 +374,7 @@ describe('ToastsProvider', () => {
 
         expect(stopped).toHaveBeenCalledTimes(1);
         expect(standing()).toEqual([expect.stringContaining('Warning Stopped')]);
-        expect(standing()[0]).toContain('nothing changed');
+        expect(standing()[0]).toContain('The archive is half written, and stopping now throws it away.');
     });
 
     it('asks the same question of a swipe, so no gesture aborts an operation more quietly than the button', () => {

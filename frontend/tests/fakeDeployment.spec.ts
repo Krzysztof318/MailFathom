@@ -6,6 +6,7 @@ import { expect, test } from '@playwright/test';
 
 import { FakeDeployment } from './fakeDeployment';
 import * as agent from './fixtures/agent';
+import * as fixtures from './fixtures/deployment';
 import * as discovery from './fixtures/discovery';
 import * as mail from './fixtures/mail';
 import * as notifications from './fixtures/notifications';
@@ -282,6 +283,43 @@ test('files a draft with its staged file in the drafts folder, reads it back who
 
     expect(listed(deployment, 'folder=DRAFTS')).toStrictEqual([]);
     expect(counts(deployment, 'DRAFTS')).toStrictEqual({ stored: 0, unread: 0 });
+});
+
+test('puts a send taken back into the drafts folder as it was sent, and knows nothing of one it never queued', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const composition = { account: 'work', subject: 'The yard', plainTextBody: 'Tuesday?', to: ['yard@example.invalid'] };
+
+    const written = ask(deployment, 'POST', '/drafts', composition) as { draft: { draftId: string } };
+    const [filed = ''] = listed(deployment, 'folder=DRAFTS');
+    const queued = ask(deployment, 'POST', `/drafts/${written.draft.draftId}/send`) as { outgoingEmail: string };
+
+    expect(listed(deployment, 'folder=DRAFTS')).toStrictEqual([]);
+    expect(ask(deployment, 'POST', '/outbox/cancellation', { outgoingEmail: queued.outgoingEmail })).toStrictEqual({
+        outgoingEmail: queued.outgoingEmail,
+        outcome: 'Accepted',
+    });
+    expect(listed(deployment, 'folder=DRAFTS')).toStrictEqual([filed]);
+    expect(counts(deployment, 'DRAFTS')).toStrictEqual({ stored: 1, unread: 0 });
+    expect(ask(deployment, 'GET', `/messages/${filed}/body`)).toMatchObject({ plainText: { text: 'Tuesday?' } });
+    expect(ask(deployment, 'POST', '/outbox/cancellation', { outgoingEmail: queued.outgoingEmail })).toMatchObject({
+        outcome: 'RecordUnknown',
+    });
+});
+
+test('mints a session for a password and renews one for a session, each with a token of its own', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const exchanged = (authorization: string): unknown =>
+        JSON.parse(
+            deployment.answer({
+                method: 'POST',
+                url: 'http://deployment.invalid/api/client/session/token',
+                body: null,
+                authorization,
+            }).body,
+        );
+
+    expect(exchanged(fixtures.expectedAuthorization)).toStrictEqual(fixtures.mintedSession);
+    expect(exchanged(fixtures.expectedSessionAuthorization)).toStrictEqual(fixtures.renewedSession);
 });
 
 test('answers a question running once when asked to, and finished on the read after', () => {

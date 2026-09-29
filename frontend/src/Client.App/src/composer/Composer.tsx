@@ -206,6 +206,17 @@ export function Composer({
     const frame = useRef<HTMLElement>(null);
     const subjectId = useId();
 
+    // Whether this composer is still mounted, which is what a send settling after it was closed reads.
+    const present = useRef(true);
+
+    useEffect(() => {
+        present.current = true;
+
+        return () => {
+            present.current = false;
+        };
+    }, []);
+
     // An answer opens addressed to the people in the conversation, which means reading the message it answers. A
     // request going out is what an effect is for; the answer is discarded where the composer stopped listening for it,
     // and a message already restored from what this tab was writing needs no read at all.
@@ -398,28 +409,44 @@ export function Composer({
         onClosed();
     }
 
-    // Sending, said where the design project says it: **the composer closes on the press** and a toast stands over
-    // whatever the person turned to next. That order is the design's own — it finishes the composition first and
-    // raises the task second — and it is what makes the press feel like sending rather than like starting something
-    // to watch. Nothing written is lost by it: a send writes the draft to the user's own drafts folder before it
-    // queues anything, so a message the deployment then refused is in their drafts rather than gone.
+    // Sending, said where the design project says it: a toast stands over whatever the person turned to next and
+    // follows the send until the deployment has answered it. **The composer closes once the deployment has the
+    // message** — queued, or taken back into the drafts folder by a stop — rather than on the press, which is one round
+    // trip later on a deployment that answers and the whole difference on one that refuses. A send can fail before it
+    // files anything: the write it performs first can be refused by screening, or never answered, and a composer that
+    // had closed on the press would have taken the only copy of the words with it while the toast said they were kept.
+    // Left open, it holds everything written, every file, and the draft it did file, with the line at its foot saying
+    // why — so the corrected message is a revision of that draft rather than a second one beside it.
     //
-    // Which is also why what became of the send is said in full by the toast rather than half of it at the foot of a
-    // window that is no longer there.
+    // Closing it while the send is still in flight is the design's own order, and asks nothing: the toast is already
+    // following the send and says what became of it.
     function sendAndReport(sending: Composition): void {
-        close();
+        // Whether somebody stopped it, which takes the toast following it away. What the stop came to — taken back, or
+        // already on its way — is then said by a toast of its own, because the one it would have settled has gone.
+        let stopped = false;
 
         const settled = toasts.raiseOperation({
             title: translate('compose.sendingTitle'),
             body: translate('compose.confirmTo', { addresses: addresses.format(sending.to) }),
             stoppingLeavesBehind: translate('compose.stoppingSendLeavesBehind'),
             stop: () => {
+                stopped = true;
                 withdrawAndReport();
             },
         });
 
         void draft.send(sending).then((outcome) => {
-            settled(sendReport(outcome));
+            if (stopped) {
+                toasts.raise(sendReport(outcome));
+            } else {
+                settled(sendReport(outcome));
+            }
+
+            // Only while this composer is still the one on the screen: closed in flight, it has already gone, and
+            // closing again would close whatever the person opened in its place.
+            if ((outcome.kind === 'queued' || outcome.kind === 'withdrawn') && present.current) {
+                close();
+            }
         });
     }
 
@@ -435,9 +462,9 @@ export function Composer({
         });
     }
 
-    // What the standing toast becomes once the deployment has answered, which is the whole answer: the composer closed
-    // on the press, so this is the only place the outcome is said and a title with nothing under it would leave
-    // somebody knowing a message did not go and not why.
+    // What the standing toast becomes once the deployment has answered, which is the whole answer: the composer may
+    // already have been closed while the send was in flight, so this is the one place the outcome is always said, and a
+    // title with nothing under it would leave somebody knowing a message did not go and not why.
     //
     // **A queued message offers no way back.** The design draws none, and this client has nothing to draw one with: the
     // one act that would have to outlive the composer is the one the composer is gone for.
@@ -509,8 +536,16 @@ export function Composer({
                     <DiscardConfirmation
                         inFront={inFront}
                         edged={!wide}
-                        written={authored || draft.attached.length > 0}
+                        written={stillBeingWritten && (authored || draft.attached.length > 0)}
                         onDiscard={() => {
+                            // A message on its way is not given up by closing the window it was written in: the toast
+                            // following the send is where it goes from here, which is closing on the press.
+                            if (!stillBeingWritten) {
+                                close();
+
+                                return;
+                            }
+
                             // The same rule the keep path holds to: a deployment that refused is one the composer
                             // stays open on, because closing on it is how what somebody wrote is lost quietly.
                             void draft.discard().then((given) => {

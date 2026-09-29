@@ -200,8 +200,10 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
     }, []);
 
     // Stopping is the surface's own act rather than the card's: the card asks the question, and what an answer of yes
-    // means — the operation told to stop, its toast taken away, and a warning saying nothing was written — is one
-    // sequence stated here so no caller has to remember two thirds of it.
+    // means — the operation told to stop, its toast taken away, and a warning saying what stopping left behind — is
+    // one sequence stated here so no caller has to remember two thirds of it. What it left behind is the operation's
+    // own sentence, the one the question already showed: a send stopped leaves the message in the drafts folder and a
+    // folder act already on its way is not taken back, so a warning saying nothing changed would contradict both.
     function stopOperation(toast: StandingToast): void {
         if (!('operation' in toast.stands)) {
             return;
@@ -213,7 +215,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             {
                 kind: 'warning',
                 title: translate('toast.stopped'),
-                body: translate('toast.stoppedNothingWritten'),
+                body: toast.stands.operation.stoppingLeavesBehind,
             },
             toast.standFor,
         );

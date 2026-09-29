@@ -35,6 +35,21 @@ export const mintedSession = {
 export const expectedSessionAuthorization = `Bearer ${mintedSession.token}`;
 
 /**
+ * What the exchange answers a session presented to it for renewal, which is a token of its own ending a day later.
+ *
+ * A different token rather than the same one again, because what a check about renewing proves is that every request
+ * afterwards presents what the deployment answered — and a renewal answering the token it was handed would pass that
+ * for a client that never read the answer at all.
+ */
+export const renewedSession = {
+    token: 'mfs_browsersuiterenewed.YnJvd3Nlci1zdWl0ZS1yZW5ld2Vk',
+    expiresAt: '2126-09-01T21:41:00+00:00',
+};
+
+/** @see renewedSession */
+export const expectedRenewedSessionAuthorization = `Bearer ${renewedSession.token}`;
+
+/**
  * What the session route answers, which is what decides how much of the client is offered at all.
  *
  * The grant names both permissions the client acts on: an answer without them opens a frame with Discover and the
@@ -343,3 +358,14 @@ export const issuedToken = {
 
 /** @see issuedToken */
 export const expectedGrantAuthorization = `Bearer ${issuedToken.access_token}`;
+
+/** What that server answers the refresh token above with: a new access token, and a new refresh token in its place. */
+export const renewedToken = {
+    access_token: 'browser-suite-renewed-access-token',
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: 'browser-suite-renewed-refresh-token',
+};
+
+/** @see renewedToken */
+export const expectedRenewedGrantAuthorization = `Bearer ${renewedToken.access_token}`;
