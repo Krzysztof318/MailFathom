@@ -961,6 +961,7 @@ export const pl: Catalogue = {
         'Nie udało się przenieść plików {names} z kopii roboczej, więc ta wiadomość ich nie zawiera. Załącz je ponownie, aby je wysłać.',
     'compose.sendingTitle': 'Wysyłamy wiadomość…',
     'compose.stoppingSendLeavesBehind': 'Wiadomość jest w drodze. Przerwanie wycofa ją i zostawi w Twoich szkicach.',
+    'compose.stoppedSendLeftBehind': 'Wdrożenie zostało poproszone o wycofanie wiadomości do Twoich szkiców.',
     'compose.sentTitle': 'Wiadomość wysłana',
     'compose.notSentTitle': 'Wiadomość nie została wysłana',
     'compose.queued': 'Wiadomość czeka w kolejce do wysłania.',

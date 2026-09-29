@@ -38,8 +38,11 @@ export interface Composing {
     /** Opens the composer on a message of its own or on an answer to one. */
     readonly compose: (opening: ComposerOpening) => void;
 
-    /** Closes it and hands the keyboard back to whatever asked for it, which is what the composer closes through. */
-    readonly close: () => void;
+    /**
+     * Closes it, which is what the composer closes through, and hands the keyboard back to whatever asked for it where
+     * `handFocusBack` says the keyboard was still with the composer.
+     */
+    readonly close: (handFocusBack: boolean) => void;
 }
 
 export const ComposingContext = createContext<Composing | null>(null);

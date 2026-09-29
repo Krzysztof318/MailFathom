@@ -371,8 +371,12 @@ async function presentedSinceRenewing(page: Page, presented: readonly string[], 
     await expect.poll(() => presented.includes(renewed)).toBe(true);
 
     const from = presented.indexOf(renewed);
+    const before = presented.length;
 
     await page.clock.runFor(refreshInterval);
+    // The requests the refresh issued reach the listener after the clock has moved, so they are waited for rather than
+    // assumed to be there once it has.
+    await expect.poll(() => presented.length).toBeGreaterThan(before);
 
     return presented.slice(from);
 }

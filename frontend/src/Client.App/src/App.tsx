@@ -435,9 +435,13 @@ export function App({
 
                 setWritten(writesMail ? asked : null);
             },
-            close: () => {
+            close: (handFocusBack: boolean) => {
                 setWritten(null);
-                askedFrom.current?.focus();
+
+                if (handFocusBack) {
+                    askedFrom.current?.focus();
+                }
+
                 askedFrom.current = null;
             },
         }),

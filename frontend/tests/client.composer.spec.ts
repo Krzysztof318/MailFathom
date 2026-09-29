@@ -458,7 +458,7 @@ for (const held of [
         await expect(notices(page).filter({ hasText: 'Message taken back' })).toContainText(
             'Taken back before it went out.',
         );
-        await expect(notices(page).filter({ hasText: 'Stopped' })).toContainText('leaves it in your own drafts');
+        await expect(notices(page).filter({ hasText: 'Stopped' })).toContainText('take the message back into your own drafts');
         await expect(page.getByRole('region', { name: 'New message' })).toHaveCount(0);
         expect(deployment.requests('POST', '/outbox/cancellation')).toHaveLength(1);
 

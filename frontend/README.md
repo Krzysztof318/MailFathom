@@ -653,8 +653,8 @@ to the composer, so nothing above it can read half a message off the frame.
 store, so a reload returns to it — that is `keptComposition.ts`, and it is the session's store rather than the
 machine's because words, a subject, and the addresses they are for are personal data under the same rules as the mail
 already on the screen; signing out drops it in the same act that empties the workspace. A sign-in the deployment ends
-is not somebody signing out, so what they were writing waits for the same person to sign in again, and is dropped the
-moment anybody else does. The draft in the user's own
+is not somebody signing out, so what they were writing waits for the same person to sign in again in this tab, and is
+dropped the moment anybody else does — or once the tab is reloaded first, since who wrote it is held in memory. The draft in the user's own
 drafts folder is a separate thing that somebody asks for, because every revision of that one reaches their mail
 server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
 author asked for. A message opened from the drafts folder is carried on in the composer by whoever may write drafts,
@@ -680,7 +680,10 @@ success and a failure — a message already being transmitted cannot be recalled
 
 **The composer closes once the deployment has the message, not on the press.** Queued, or taken back into the drafts
 folder by a stop, it closes; refused or failed, it stays open holding everything written and every file, so the
-corrected send revises the draft the first one filed rather than filing a second. A notice follows the send either way,
+corrected send revises the draft the first one filed rather than filing a second. Closed by hand while the send is in
+flight, it keeps what was written in the tab until the send settles, so the next composer opens on it if the send
+failed; and a close that arrives with the answer leaves the keyboard wherever somebody took it meanwhile. A notice
+follows the send either way,
 and a stop says what it came to once the deployment has answered it.
 
 A refusal is a state of the screen rather than an error on it. Screening, the recipient policy, and a spending ceiling

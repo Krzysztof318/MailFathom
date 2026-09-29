@@ -33,7 +33,12 @@ import { DiscardConfirmation } from './DiscardConfirmation';
 import { DraftingBlock, DraftingStanding } from './DraftingBlock';
 import { draftingRead, failureSaid } from './draftingRead';
 import { writtenParagraphs } from './draftWords';
-import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
+import {
+    forgetComposition,
+    forgetCompositionIfStill,
+    rememberComposition,
+    rememberedComposition,
+} from './keptComposition';
 import type { RecipientSuggestion } from './recipientSuggestions';
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
@@ -159,7 +164,13 @@ export function Composer({
     /** Whether the mail space is the one in front, which the composer is written in and stays in while it is aside. */
     readonly inFront?: boolean;
 
-    readonly onClosed: () => void;
+    /**
+     * Takes the composer off the screen.
+     *
+     * @param handFocusBack Whether the keyboard goes back to what opened it, which is false where the close is a send
+     *   answering after somebody had moved on.
+     */
+    readonly onClosed: (handFocusBack: boolean) => void;
 }) {
     const { locale, translate } = useLocalization();
     const wide = useWideWorkspace();
@@ -404,9 +415,18 @@ export function Composer({
         }
     }
 
-    function close(): void {
+    function close(handFocusBack = true): void {
         forgetComposition();
-        onClosed();
+        onClosed(handFocusBack);
+    }
+
+    // Whether the keyboard is still where the composer is, which decides whether a close nobody pressed may take it: a
+    // send answered after somebody moved on to the list or the search closes the composer and leaves them where they
+    // are.
+    function focusIsHere(): boolean {
+        const holder = document.activeElement;
+
+        return holder === null || holder === document.body || (frame.current?.contains(holder) ?? false);
     }
 
     // Sending, said where the design project says it: a toast stands over whatever the person turned to next and
@@ -419,8 +439,10 @@ export function Composer({
     // why — so the corrected message is a revision of that draft rather than a second one beside it.
     //
     // Closing it while the send is still in flight is the design's own order, and asks nothing: the toast is already
-    // following the send and says what became of it.
-    function sendAndReport(sending: Composition): void {
+    // following the send and says what became of it. What was written stays in the tab until the send has settled, so
+    // a send refused or failed after the window closed leaves the words for the next composer to open on, and one the
+    // deployment took drops them — unless the tab is already keeping something newer.
+    function sendAndReport(sending: Composition, written: Composition): void {
         // Whether somebody stopped it, which takes the toast following it away. What the stop came to — taken back, or
         // already on its way — is then said by a toast of its own, because the one it would have settled has gone.
         let stopped = false;
@@ -429,6 +451,7 @@ export function Composer({
             title: translate('compose.sendingTitle'),
             body: translate('compose.confirmTo', { addresses: addresses.format(sending.to) }),
             stoppingLeavesBehind: translate('compose.stoppingSendLeavesBehind'),
+            stoppedLeftBehind: translate('compose.stoppedSendLeftBehind'),
             stop: () => {
                 stopped = true;
                 withdrawAndReport();
@@ -442,10 +465,16 @@ export function Composer({
                 settled(sendReport(outcome));
             }
 
+            if (outcome.kind !== 'queued' && outcome.kind !== 'withdrawn') {
+                return;
+            }
+
             // Only while this composer is still the one on the screen: closed in flight, it has already gone, and
             // closing again would close whatever the person opened in its place.
-            if ((outcome.kind === 'queued' || outcome.kind === 'withdrawn') && present.current) {
-                close();
+            if (present.current) {
+                close(focusIsHere());
+            } else {
+                forgetCompositionIfStill(written);
             }
         });
     }
@@ -539,9 +568,10 @@ export function Composer({
                         written={stillBeingWritten && (authored || draft.attached.length > 0)}
                         onDiscard={() => {
                             // A message on its way is not given up by closing the window it was written in: the toast
-                            // following the send is where it goes from here, which is closing on the press.
+                            // following the send is where it goes from here, which is closing on the press. What was
+                            // written is kept until the send settles, which is the send's to drop.
                             if (!stillBeingWritten) {
-                                close();
+                                onClosed(true);
 
                                 return;
                             }
@@ -750,7 +780,7 @@ export function Composer({
                             draftUnaccepted={beforeDrafting !== null}
                             disabled={!sendable}
                             onSend={() => {
-                                sendAndReport(sentAs(composition, copiesShown));
+                                sendAndReport(sentAs(composition, copiesShown), composition);
                             }}
                         />
 

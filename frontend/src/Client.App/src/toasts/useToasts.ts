@@ -74,6 +74,12 @@ export interface Operation {
      */
     readonly stoppingLeavesBehind: string;
 
+    /**
+     * What stopping it left behind, said once it has been stopped — the same fact as `stoppingLeavesBehind` read after
+     * the act rather than before it, because a sentence written as the premise of a question is false as a report.
+     */
+    readonly stoppedLeftBehind: string;
+
     /** Stops the operation. Called once, and only after somebody confirmed they meant to. */
     readonly stop: () => void;
 }

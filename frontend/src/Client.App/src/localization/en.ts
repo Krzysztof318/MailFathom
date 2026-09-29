@@ -948,6 +948,7 @@ export const en = {
     'compose.sendingTitle': 'Sending your message…',
     'compose.stoppingSendLeavesBehind':
         'The message is on its way. Stopping it takes it back and leaves it in your own drafts.',
+    'compose.stoppedSendLeftBehind': 'Your deployment was asked to take the message back into your own drafts.',
     'compose.sentTitle': 'Message sent',
     'compose.notSentTitle': 'Message not sent',
     'compose.queued': 'Queued to go out.',

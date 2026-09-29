@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
@@ -240,12 +240,12 @@ function drawComposer(
     // The composer goes when it closes, which is what the frame does with it: `App.tsx` stops drawing a composer whose
     // send has been asked for, and a harness that kept one on the screen would be asserting against a window nobody is
     // looking at — the very thing a send now closes.
-    function Framed({ children }: { readonly children: (onClosed: () => void) => ReactNode }) {
+    function Framed({ children }: { readonly children: (onClosed: (handFocusBack: boolean) => void) => ReactNode }) {
         const [open, setOpen] = useState(true);
 
         return open
-            ? children(() => {
-                  closed();
+            ? children((handFocusBack) => {
+                  closed(handFocusBack);
                   setOpen(false);
               })
             : null;
@@ -586,6 +586,57 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByRole('dialog', { name: 'New message' })).toBeNull();
     });
 
+    // Closing the window while the send is in flight gives up the window and not the message: a send that then fails
+    // before anything was filed leaves the words for the next composer to open on, and one the deployment queued
+    // leaves nothing to open on at all.
+    it('keeps what was written for the next composer where the window was closed mid-send and the send failed', async () => {
+        drawComposer({ kind: 'new' }, { save: { status: 503, body: '' } });
+
+        address('ada@example.invalid');
+        writeWords('They are attached.');
+        confirmSend();
+        fireEvent.click(within(composerFrame()).getByRole('button', { name: 'Close the message' }));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Sending your message…')).toBeNull();
+        });
+        cleanup();
+        drawComposer();
+
+        expect(wordsWritten()).toBe('They are attached.');
+    });
+
+    it('keeps nothing for the next composer where the window was closed mid-send and the send was queued', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        writeWords('They are attached.');
+        confirmSend();
+        fireEvent.click(within(composerFrame()).getByRole('button', { name: 'Close the message' }));
+
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+        cleanup();
+        drawComposer();
+
+        expect(wordsWritten()).toBe('');
+    });
+
+    // The window goes a round trip after the press, by which time somebody may be reading the list or searching; the
+    // keyboard stays where they took it rather than jumping back to the control that opened the composer.
+    it('leaves the keyboard where it went when the send is answered after somebody moved on', async () => {
+        const { closed } = drawComposer();
+        const elsewhere = document.body.appendChild(document.createElement('button'));
+
+        address('ada@example.invalid');
+        confirmSend();
+        elsewhere.focus();
+
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+        expect(closed).toHaveBeenCalledExactlyOnceWith(false);
+
+        elsewhere.remove();
+    });
+
     // A queued message offers no way back, because there is none: the deployment has taken it and the composer the act
     // would have belonged to is gone. A control promising otherwise is one nothing behind it could keep.
     it('offers no way to take a queued message back', async () => {
@@ -808,7 +859,8 @@ describe('Composer, a message of its own', () => {
     });
 
     // The message has gone as far as this screen can send it, and neither way of asking is on the screen to ask a
-    // second time: the composer closed on the press, which is what makes a second send unreachable rather than refused.
+    // second time: the composer closed once the deployment queued it, which is what makes a second send unreachable
+    // rather than refused.
     it('offers no second send once one is queued, from the control or from the shortcut', async () => {
         drawComposer();
 

@@ -215,7 +215,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             {
                 kind: 'warning',
                 title: translate('toast.stopped'),
-                body: toast.stands.operation.stoppingLeavesBehind,
+                body: toast.stands.operation.stoppedLeftBehind,
             },
             toast.standFor,
         );
