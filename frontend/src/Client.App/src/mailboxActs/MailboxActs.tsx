@@ -196,7 +196,8 @@ function otherFlagAsked(before: AskedAct | undefined, act: MailboxAct, folder: s
  * What a message is still asked for once one act's claim is taken back.
  *
  * An act writing one flag answers for that flag alone, so taking it back leaves whatever was asked of the other flag
- * standing — beside it or on its own. Anything else goes with it, as it always has.
+ * standing — beside it or on its own. A flag act a later act of the same flag already superseded holds no claim of its
+ * own to take back, so nothing goes with it. Anything else goes with it, as it always has.
  */
 function withoutClaim(asked: AskedAct | undefined, act: MailboxAct): AskedAct | undefined {
     if (asked === undefined) {
@@ -211,10 +212,7 @@ function withoutClaim(asked: AskedAct | undefined, act: MailboxAct): AskedAct | 
         return asked.beside;
     }
 
-    const flag = flagWritten(act);
-    const standing = flagWritten(asked.act);
-
-    return flag !== null && standing !== null && standing !== flag ? asked : undefined;
+    return flagWritten(act) !== null && flagWritten(asked.act) !== null ? asked : undefined;
 }
 
 /**

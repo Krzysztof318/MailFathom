@@ -20,6 +20,7 @@ import {
     refreshUnanswered,
     rowAt,
     rowCountOf,
+    rowOf,
     rowOfSlot,
     trimmedAround,
     wantedFor,
@@ -288,6 +289,18 @@ describe('rowOfSlot', () => {
 
     it('answers nothing for a page the list does not know', () => {
         expect(rowOfSlot(readForward(1), 4)).toBeNull();
+    });
+});
+
+describe('rowOf', () => {
+    it('answers where a message stands, counting the rows of every page before it the list dropped', () => {
+        const held = trimmedAround(readForward(6), 20, 23);
+
+        expect(rowOf(held, 'message-21')).toBe(21);
+    });
+
+    it('answers nothing for a message no held page carries', () => {
+        expect(rowOf(trimmedAround(readForward(6), 20, 23), 'message-0')).toBeNull();
     });
 });
 

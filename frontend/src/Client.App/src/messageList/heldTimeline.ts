@@ -81,6 +81,23 @@ export function rowAt(held: HeldTimeline, row: number): MailTimelineEntry | null
     return null;
 }
 
+/** The row a message stands at, or `null` where no page the list is holding carries it. */
+export function rowOf(held: HeldTimeline, storedEmailId: string): number | null {
+    let passed = 0;
+
+    for (const slot of held.slots) {
+        const at = slot.emails?.findIndex((email) => email.id === storedEmailId) ?? -1;
+
+        if (at >= 0) {
+            return passed + at;
+        }
+
+        passed += slot.rowCount;
+    }
+
+    return null;
+}
+
 /**
  * The list without the rows a person has taken out of this folder, which is what every reading of it is done against.
  *
