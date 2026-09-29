@@ -482,7 +482,8 @@ export function Composer({
 
     // Whether it may be filed, which is the same question and a deployment that answers. Attaching does not ask it:
     // a chosen file is held here until the message is saved or sent, so it costs nothing and is offered offline.
-    const sendable = online && stillBeingWritten;
+    // Nor while a draft carried on is still bringing its files over: what went out then would leave the rest behind.
+    const sendable = online && stillBeingWritten && draft.standing.kind !== 'carrying';
 
     const title = translate(titles[opening.kind === 'answer' ? opening.answers : opening.kind]);
     const copiesShown = copiesChosen ?? (composition !== null && composition.cc.length + composition.bcc.length > 0);
@@ -935,6 +936,8 @@ function WhatIsHappening({ standing, online }: { readonly standing: DraftStandin
             return <Said text={translate('compose.saved')} />;
         case 'attaching':
             return <Said text={translate('compose.attaching', { name: standing.fileName })} />;
+        case 'carrying':
+            return <Said text={translate('compose.carrying', { name: standing.fileName })} />;
         case 'notCarried':
             return (
                 <Said

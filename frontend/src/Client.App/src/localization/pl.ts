@@ -954,6 +954,7 @@ export const pl: Catalogue = {
     'compose.saving': 'Zapisujemy szkic…',
     'compose.saved': 'Szkic zapisany w Twoich szkicach.',
     'compose.attaching': 'Załączamy plik {name}…',
+    'compose.carrying': 'Przenosimy plik {name} z kopii roboczej…',
     'compose.notCarried':
         'Nie udało się przenieść pliku {names} z kopii roboczej, więc ta wiadomość go nie zawiera. Załącz go ponownie, aby go wysłać.',
     'compose.notCarriedSeveral':

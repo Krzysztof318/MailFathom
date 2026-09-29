@@ -940,6 +940,7 @@ export const en = {
     'compose.saving': 'Filing the draft…',
     'compose.saved': 'Draft filed in your own drafts.',
     'compose.attaching': 'Attaching {name}…',
+    'compose.carrying': 'Bringing {name} over from the draft…',
     'compose.notCarried':
         '{names} could not be brought over from the draft, so this message does not carry it. Attach it again to send it.',
     'compose.notCarriedSeveral':

@@ -46,6 +46,7 @@ export type DraftStanding =
     | { readonly kind: 'saving' }
     | { readonly kind: 'saved' }
     | { readonly kind: 'attaching'; readonly fileName: string }
+    | { readonly kind: 'carrying'; readonly fileName: string }
     | { readonly kind: 'notCarried'; readonly fileNames: readonly string[] }
     | { readonly kind: 'sending' }
     | { readonly kind: 'queued'; readonly outgoingEmailId: string }
@@ -162,6 +163,10 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     // The draft whose files were already carried over, so a second read of the same draft brings none over twice.
     const carried = useRef<string | null>(null);
 
+    // The carrying still under way, which every write waits for: a message saved or sent before its draft's files have
+    // arrived would leave behind the ones not yet taken, and nothing would say so.
+    const carrying = useRef<Promise<void> | null>(null);
+
     // Whether somebody has asked to stop the send while the deployment had not yet answered it. A ref rather than
     // state because nothing draws it: what reads it is the send itself, one turn later, and a value read out of a
     // render would be the one from before they asked.
@@ -223,6 +228,10 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     }
 
     async function write(composition: Composition, asked: DraftAct): Promise<string | null> {
+        if (carrying.current !== null) {
+            await carrying.current;
+        }
+
         const draft = draftId.current;
         const wire = wireComposition(composition);
 
@@ -437,36 +446,58 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
             carried.current = storedEmailId;
 
-            // Every file left behind, named together, so a second refusal does not hide the first.
-            const leftBehind: string[] = [];
-
-            for (const attachment of attachments) {
-                const abandoning = new AbortController();
-                taking.current = abandoning;
-
-                const taken = await readMailAttachment(
-                    session,
-                    storedEmailId,
-                    attachment.position,
-                    attachment.sizeOctets,
-                    (request) => exchange.take(request, abandoning.signal),
-                    takingFailureOf,
-                );
-
-                taking.current = null;
-
-                // A file this client staged always has a name; one filed by another mail client may not, and it is
-                // then called what a download would save it as.
-                const fileName = attachment.fileName ?? `attachment-${attachment.position.toFixed(0)}`;
-
-                if (taken.outcome === 'taken') {
-                    attach(new File([taken.octets], fileName, { type: attachment.mediaType }));
-                } else if (taken.refusal === 'abandoned') {
-                    return;
-                } else {
-                    leftBehind.push(fileName);
-                    hold({ kind: 'notCarried', fileNames: [...leftBehind] });
+            // Said only over a composer that is otherwise at rest: a save the author started while the files were
+            // still arriving is saying something of its own, and waits for them before it writes anything.
+            function holdWhileCarrying(next: DraftStanding): void {
+                if (['held', 'carrying', 'notCarried'].includes(settledAs.current.kind)) {
+                    hold(next);
                 }
+            }
+
+            async function bringOver(): Promise<void> {
+                // Every file left behind, named together, so a second refusal does not hide the first.
+                const leftBehind: string[] = [];
+
+                for (const attachment of attachments) {
+                    // A file this client staged always has a name; one filed by another mail client may not, and it
+                    // is then called what a download would save it as.
+                    const fileName = attachment.fileName ?? `attachment-${attachment.position.toFixed(0)}`;
+                    const abandoning = new AbortController();
+
+                    taking.current = abandoning;
+                    holdWhileCarrying({ kind: 'carrying', fileName });
+
+                    const taken = await readMailAttachment(
+                        session,
+                        storedEmailId,
+                        attachment.position,
+                        attachment.sizeOctets,
+                        (request) => exchange.take(request, abandoning.signal),
+                        takingFailureOf,
+                    );
+
+                    taking.current = null;
+
+                    if (taken.outcome === 'taken') {
+                        attach(new File([taken.octets], fileName, { type: attachment.mediaType }));
+                    } else if (taken.refusal === 'abandoned') {
+                        return;
+                    } else {
+                        leftBehind.push(fileName);
+                    }
+                }
+
+                holdWhileCarrying(leftBehind.length > 0 ? { kind: 'notCarried', fileNames: leftBehind } : { kind: 'held' });
+            }
+
+            const bringing = bringOver();
+
+            carrying.current = bringing;
+
+            try {
+                await bringing;
+            } finally {
+                carrying.current = null;
             }
         },
 

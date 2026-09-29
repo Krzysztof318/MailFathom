@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
-import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
+import { AttachmentExchangeContext, type AttachmentExchange, type AttachmentTaken } from '../deployment/attachmentExchange';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
 import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
@@ -1399,6 +1399,40 @@ describe('Composer, a draft', () => {
 
         expect(await screen.findByText(/invoice\.pdf could not be brought over from the draft/u)).toBeDefined();
         expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
+    });
+
+    it('holds the send and the save back while the draft is still bringing its files over', async () => {
+        let arrive: (taken: AttachmentTaken) => void = () => undefined;
+
+        drawComposer(
+            continued,
+            { message: { status: 200, body: messageBody({ attachments: [filedFile] }) } },
+            [work],
+            true,
+            uploadsOneFile,
+            false,
+            noTelemetry,
+            {
+                ...takesNothing,
+                take: () =>
+                    new Promise((resolve) => {
+                        arrive = resolve;
+                    }),
+            },
+        );
+
+        expect(await screen.findByText('Bringing invoice.pdf over from the draft…')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Save draft' }).hasAttribute('disabled')).toBe(true);
+
+        arrive({ outcome: 'taken', octets: new Blob(['%PDF']) });
+
+        expect(
+            within(await screen.findByRole('list', { name: 'Attached files' })).getByText('invoice.pdf'),
+        ).toBeDefined();
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+        });
     });
 
     it('names every file that could not be brought over, so a later one does not hide an earlier one', async () => {
