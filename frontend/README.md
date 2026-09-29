@@ -652,7 +652,9 @@ to the composer, so nothing above it can read half a message off the frame.
 **Two drafts are kept, and they are different promises.** What is being typed is written continuously to the tab's own
 store, so a reload returns to it — that is `keptComposition.ts`, and it is the session's store rather than the
 machine's because words, a subject, and the addresses they are for are personal data under the same rules as the mail
-already on the screen; signing out drops it in the same act that empties the workspace. The draft in the user's own
+already on the screen; signing out drops it in the same act that empties the workspace. A sign-in the deployment ends
+is not somebody signing out, so what they were writing waits for the same person to sign in again in this tab, and is
+dropped the moment anybody else does — or once the tab is reloaded first, since who wrote it is held in memory. The draft in the user's own
 drafts folder is a separate thing that somebody asks for, because every revision of that one reaches their mail
 server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
 author asked for. A message opened from the drafts folder is carried on in the composer by whoever may write drafts,
@@ -675,6 +677,16 @@ recipient, no subject, no words. None of the three refuses the send, because a m
 message somebody meant; the confirmation is the moment to notice rather than the moment to be stopped. Once queued, the
 send can be taken back for as long as the deployment says it can, and what became of that is four answers rather than a
 success and a failure — a message already being transmitted cannot be recalled, and saying so is the answer.
+
+**The composer closes once the deployment has the message, not on the press.** Queued, or taken back into the drafts
+folder by a stop, it closes; refused or failed, it stays open holding everything written and every file, so the
+corrected send revises the draft the first one filed rather than filing a second. Closed by hand while the send is in
+flight, it forgets what was written at once, so a composer opened meanwhile opens empty rather than on a message already
+on its way; a send that then does not go — anything but queued or taken back — hands the words back to the tab for the
+next composer, unless the tab is already holding something written since. A close that arrives with the answer leaves
+the keyboard wherever somebody took it meanwhile. A notice
+follows the send either way,
+and a stop says what it came to once the deployment has answered it.
 
 A refusal is a state of the screen rather than an error on it. Screening, the recipient policy, and a spending ceiling
 each refuse a send, and each is drawn as its own sentence saying what would change it; a temporary refusal says the

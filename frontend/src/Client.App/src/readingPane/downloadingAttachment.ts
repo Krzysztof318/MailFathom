@@ -145,6 +145,7 @@ export function useAttachmentDownloads(session: ClientSession, storedEmailId: st
                 title: translate('attachment.downloading'),
                 body: named,
                 stoppingLeavesBehind: translate('attachment.stoppingLeavesBehind', { name: named }),
+                stoppedLeftBehind: translate('attachment.abandoned'),
                 stop: () => {
                     abandoning.abort();
                 },

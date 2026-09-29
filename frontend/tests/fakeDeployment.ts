@@ -42,6 +42,9 @@ export interface FakeRequest {
 
     /** What the request declared its body to be, which is where a staged file's media type travels. */
     readonly contentType?: string;
+
+    /** The credential the request presented, which is what tells a renewal from a sign-in at the one route both reach. */
+    readonly authorization?: string;
 }
 
 /** What the fake answers one request with, as the route fulfils it. */
@@ -222,6 +225,9 @@ export class FakeDeployment {
     }));
 
     private readonly draftsHeld = new Map<string, HeldDraft>();
+
+    /** The drafts a send queued, by the outgoing identity it answered, until a withdrawal puts one back. */
+    private readonly sendsQueued = new Map<string, { readonly draftId: string; readonly held: HeldDraft }>();
     private readonly runs = new Map<string, DiscoveryRun>();
     private readonly conversations = new Map<string, Conversation>([
         [agent.answeredConversationId, this.corpusConversation(agent.answeredConversationId, 'answered')],
@@ -266,11 +272,13 @@ export class FakeDeployment {
         await target.route(servedRoutes, async (route) => {
             const request = route.request();
             const contentType = request.headers()['content-type'];
+            const authorization = request.headers()['authorization'];
             const answer = this.answer({
                 method: request.method(),
                 url: request.url(),
                 body: request.postData(),
                 ...(contentType === undefined ? {} : { contentType }),
+                ...(authorization === undefined ? {} : { authorization }),
             });
 
             await route.fulfill({
@@ -330,7 +338,7 @@ export class FakeDeployment {
 
         this.issued.push(issued);
 
-        const answer = this.answerFor(issued);
+        const answer = this.answerFor(issued, request.authorization ?? null);
 
         if (answer === null) {
             this.unimplemented.push(`${issued.method} ${issued.route}`);
@@ -341,15 +349,21 @@ export class FakeDeployment {
         return answer;
     }
 
-    private answerFor(request: IssuedRequest): FakeAnswer | null {
+    private answerFor(request: IssuedRequest, authorization: string | null): FakeAnswer | null {
         const { method, route } = request;
         const segments = route.split('/').slice(1).map(decodeURIComponent);
 
         switch (`${method} ${route}`) {
             case 'GET /sign-in-methods':
                 return answering(deployment.signInMethods);
+            // One route mints a session and renews one, told apart by what was presented to it: the password a person
+            // typed, or the session a client is holding, which a deployment destroys as it answers with the next.
             case 'POST /session/token':
-                return answering(deployment.mintedSession);
+                return answering(
+                    authorization?.startsWith('Bearer ') === true
+                        ? deployment.renewedSession
+                        : deployment.mintedSession,
+                );
             case 'POST /session/token/revocation':
                 return nothing;
             case 'GET /session':
@@ -431,6 +445,8 @@ export class FakeDeployment {
                 return answering({ changes: this.recordsNamed(request.query.getAll('record')) });
             case 'POST /drafts':
                 return this.draftWritten(this.mintedIdentity(), request.body, 1);
+            case 'POST /outbox/cancellation':
+                return answering(this.sendWithdrawn(request.body));
             case 'GET /replies/drafting':
                 return answering(drafts.draftsReplies);
             case 'POST /replies/drafting':
@@ -840,7 +856,15 @@ export class FakeDeployment {
         }
 
         if (method === 'POST' && part === 'send') {
-            return this.draftGone(id) ? answering(drafts.queuedSend) : { status: 404, body: '' };
+            if (held === undefined || !this.draftGone(id)) {
+                return { status: 404, body: '' };
+            }
+
+            const outgoingEmail = this.mintedIdentity();
+
+            this.sendsQueued.set(outgoingEmail, { draftId: id, held });
+
+            return answering({ ...drafts.queuedSend, outgoingEmail });
         }
 
         if (part !== 'attachments' || held === undefined) {
@@ -873,6 +897,30 @@ export class FakeDeployment {
         }
 
         return null;
+    }
+
+    /**
+     * Takes a queued send back, which puts the message where the service leaves one it never transmitted: in the drafts
+     * folder, whole, as it stood when it was sent.
+     *
+     * The service keeps a queued draft's copy in the folder until the message is delivered and the fake delivers at
+     * once, so between the two the fake reads the folder as delivery leaves it and a withdrawal puts the copy back —
+     * the two readings meet where a check can look, before the send and after the withdrawal.
+     */
+    private sendWithdrawn(body: unknown): Held {
+        const named = recordIn(body)?.['outgoingEmail'];
+        const outgoingEmail = typeof named === 'string' ? named : '';
+        const queued = this.sendsQueued.get(outgoingEmail);
+
+        if (queued === undefined) {
+            return { ...drafts.withdrawnSend, outgoingEmail, outcome: 'RecordUnknown' };
+        }
+
+        this.sendsQueued.delete(outgoingEmail);
+        this.draftsHeld.set(queued.draftId, queued.held);
+        this.count(draftsFolder ?? '', 1, 0);
+
+        return { ...drafts.withdrawnSend, outgoingEmail };
     }
 
     /** Takes a draft out of the book and its stored message out of the drafts folder, as a send or a give-up does. */

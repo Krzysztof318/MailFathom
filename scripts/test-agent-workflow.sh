@@ -9777,11 +9777,13 @@ contacts.ts contactCorrespondence GET /api/client/contacts/{contactId}/correspon
 contacts.ts noContactCorrespondence GET /api/client/contacts/{contactId}/correspondence
 deployment.ts sessionAnswer GET /api/client/session
 deployment.ts mintedSession POST /api/client/session/token
+deployment.ts renewedSession POST /api/client/session/token
 deployment.ts signInMethods GET /api/client/sign-in-methods
 deployment.ts signInMethodsOffered GET /api/client/sign-in-methods
 deployment.ts protectedResource - -
 deployment.ts authorizationServerMetadata - -
 deployment.ts issuedToken - -
+deployment.ts renewedToken - -
 deployment.ts ownDisplayName GET /api/client/display-name
 deployment.ts clientPreferences GET /api/client/preferences
 deployment.ts workAccount GET /api/client/accounts
@@ -9824,6 +9826,7 @@ drafts.ts answeringDraft GET /api/client/drafts/{draftId}
 drafts.ts drafts - -
 drafts.ts savedDraft POST /api/client/drafts
 drafts.ts queuedSend POST /api/client/drafts/{draftId}/send
+drafts.ts withdrawnSend POST /api/client/outbox/cancellation
 drafts.ts refusedSend - -
 drafts.ts draftsReplies GET /api/client/replies/drafting
 drafts.ts draftedReply POST /api/client/replies/drafting
@@ -9890,9 +9893,10 @@ BINDINGS
 # - `deployment.ts protectedResource` is the RFC 9728 document the client surface publishes at the
 #   root rather than beneath its own prefix, so it is outside the paths this comparison reads, and
 #   its field names are that specification's rather than anything this project chose.
-# - `deployment.ts authorizationServerMetadata` and `deployment.ts issuedToken` belong to the
-#   authorization server rather than to MailFathom. Their shapes are fixed by RFC 8414 and RFC 6749,
-#   this service publishes neither, and the contract records no route that could answer with one.
+# - `deployment.ts authorizationServerMetadata`, `deployment.ts issuedToken`, and
+#   `deployment.ts renewedToken` belong to the authorization server rather than to MailFathom.
+#   Their shapes are fixed by RFC 8414 and RFC 6749, this service publishes none of them, and the
+#   contract records no route that could answer with one.
 
 # Every property name and every enumeration spelling reachable from what a route answers with, as one
 # JSON object, or nothing at all where the contract records no JSON body there.

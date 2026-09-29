@@ -204,6 +204,26 @@ describe('useBackNavigation', () => {
         expect(pushed).toEqual([{ 'mailfathom.back': 1 }, { 'mailfathom.back': 1 }]);
     });
 
+    // Two surfaces closing by their own controls in two renders — a dialog, then the composer it asked about — where the
+    // second render arrives before the entry the first gave back has landed. Counted from the entry still showing, the
+    // second would give back two more, and the third entry is whatever the tab showed before the client.
+    it('gives back one entry per surface closed while its own traversal is still landing', () => {
+        const { rerender } = renderHook(
+            ({ steps }) => {
+                useBackNavigation(steps, () => undefined);
+            },
+            { initialProps: { steps: 2 } },
+        );
+
+        rerender({ steps: 1 });
+        rerender({ steps: 0 });
+
+        theEntryShowing({ 'mailfathom.back': 1 });
+        theGestureIsUsed();
+
+        expect(travelled).toEqual([-1, -1]);
+    });
+
     // The count is spent on the traversal it was kept for and on nothing after it, so the press that follows one is
     // still a press.
     it('unwinds the press that follows a traversal of its own', () => {

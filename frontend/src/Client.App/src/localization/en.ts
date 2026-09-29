@@ -948,6 +948,7 @@ export const en = {
     'compose.sendingTitle': 'Sending your message…',
     'compose.stoppingSendLeavesBehind':
         'The message is on its way. Stopping it takes it back and leaves it in your own drafts.',
+    'compose.stoppedSendLeftBehind': 'Your deployment was asked to take the message back into your own drafts.',
     'compose.sentTitle': 'Message sent',
     'compose.notSentTitle': 'Message not sent',
     'compose.queued': 'Queued to go out.',
@@ -1641,7 +1642,6 @@ export const en = {
     'toast.keepGoing': 'Keep going',
     'toast.stopIsFinal': 'Stopping is not taken back — the operation would have to be started again.',
     'toast.stopped': 'Stopped',
-    'toast.stoppedNothingWritten': 'The operation was stopped before anything was written, so nothing changed.',
     'people.books': 'Which address book',
     'people.own': 'Own',
     'people.collected': 'Collected',

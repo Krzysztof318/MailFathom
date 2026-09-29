@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
     defaultTelemetryLevel,
     endSession,
+    reportingRefusedCredential,
     revokeRefreshToken,
     readAuthorizationServer,
     type ClientEvent,
@@ -224,7 +225,20 @@ export function App({
     // for rather than cancelling it, which is what a screen that may be looking at another message by then actually
     // needs. A download is the one read here that is genuinely abandoned, and it carries a signal of its own from the
     // row that started it.
-    const readMail = useMemo(() => send(new AbortController().signal), [send]);
+    //
+    // This one hears nothing about the credential. It is what the exchanges that decide a sign-in's fate for
+    // themselves go out on — renewing it and ending it — and `readMail` below is what every read of mail goes out on.
+    const onTheWire = useMemo(() => send(new AbortController().signal), [send]);
+
+    // The credential the reads below present, as it stands when an answer arrives rather than when the request left.
+    const holding = useRef(presented);
+
+    useEffect(() => {
+        holding.current = presented;
+    }, [presented]);
+
+    // Who was signed in when the deployment stopped accepting them, which is who what they were writing is kept for.
+    const endedFor = useRef<string | null>(null);
 
     // The view changed, so focus goes to the start of what replaced it rather than staying on a control that is no
     // longer there. Only in this direction: the sign-in screen places focus itself, on the field it is asking to have
@@ -257,6 +271,11 @@ export function App({
     // What is recorded travels with the notice, for the reason the notice itself is split: one occurrence naming the
     // deployment for something the authorization server did sends whoever reads a collector hours later to the same
     // wrong system the wrong sentence would have sent the person in front of the screen.
+    //
+    // What somebody was writing is the one thing that stays, for them alone: an expiry is not their decision, and a
+    // sign-in that ended under a long message would otherwise cost them the message. It is kept in this tab's own
+    // store, which the sign-in screen draws nothing from, and signing in again as anybody else drops it — see
+    // `offerWhatWasWrittenTo` below.
     const signInEnded = useCallback(
         (notice: CredentialNotice, occurrence: ClientEvent) => {
             telemetry.happened(occurrence);
@@ -265,7 +284,7 @@ export function App({
             setGrant(null);
             revise(emptyWorkspace);
             forgetListings();
-            forgetComposition();
+            endedFor.current = signedInAs;
 
             if (baseAddress === null) {
                 return;
@@ -277,12 +296,30 @@ export function App({
                 }
             });
         },
-        [baseAddress, credentials, revise, telemetry],
+        [baseAddress, credentials, revise, signedInAs, telemetry],
     );
 
     const credentialRefused = useCallback(() => {
         signInEnded('credentialNoLongerAccepted', 'credential_no_longer_accepted');
     }, [signInEnded]);
+
+    // Every read of mail, heard for a credential the deployment has stopped accepting: whichever screen met the
+    // refusal, what it means is that the sign-in is over, and that is the frame's to act on rather than the screen's to
+    // report as a folder or a message that could not be read. Heard once, because every read in flight meets it. The
+    // credential held is read as each answer arrives rather than while the frame renders, which is why the transport is
+    // composed per request inside a callback.
+    const readMail = useCallback<MailFathomTransport>(
+        (request) =>
+            reportingRefusedCredential(
+                onTheWire,
+                () => holding.current,
+                () => {
+                    holding.current = null;
+                    credentialRefused();
+                },
+            )(request),
+        [onTheWire, credentialRefused],
+    );
 
     // The authorization server ended the grant — it refused the refresh token, or it issued none and the access token
     // has expired. The deployment said nothing and is still accepting whatever it minted, so the sentence names the
@@ -315,7 +352,7 @@ export function App({
     // A session has a life the deployment decides, so the client renews it rather than letting somebody be signed
     // out mid-morning. It renews only while there is a session to renew and a network to renew over; a client that was
     // offline across its own expiry is signed out at the next request, which is the same path a revoked one takes.
-    useSessionRenewal(session, kept, readMail, connection.online, sessionRenewed, credentialRefused);
+    useSessionRenewal(session, kept, onTheWire, connection.online, sessionRenewed, credentialRefused);
 
     // A renewed grant replaces what is held and what is kept, in that order and for the reason a renewed session does:
     // a server that rotates refresh tokens has already withdrawn the one this replaced, so a run holding the old one
@@ -331,7 +368,7 @@ export function App({
         [baseAddress, credentials],
     );
 
-    useGrantRenewal(grant, readMail, connection.online, grantRenewed, grantEnded);
+    useGrantRenewal(grant, onTheWire, connection.online, grantRenewed, grantEnded);
 
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
@@ -398,9 +435,13 @@ export function App({
 
                 setWritten(writesMail ? asked : null);
             },
-            close: () => {
+            close: (handFocusBack: boolean) => {
                 setWritten(null);
-                askedFrom.current?.focus();
+
+                if (handFocusBack) {
+                    askedFrom.current?.focus();
+                }
+
                 askedFrom.current = null;
             },
         }),
@@ -711,6 +752,20 @@ export function App({
         closeFullHtml();
     }, [space, layers, closeAttachment, closeFullHtml]);
 
+    // What was being written when the deployment ended a sign-in, kept for whoever signs in next only where that is the
+    // person who wrote it. Anybody else — or anybody at all once the tab was reloaded, which is where the record of who
+    // that was goes — arrives to nothing of it, the composer included.
+    // ponytail: who wrote it is held in memory, so a reload on the sign-in screen gives the words up; keep it beside the
+    // composition in the tab's store if losing them there turns out to matter.
+    function offerWhatWasWrittenTo(arriving: string): void {
+        if (endedFor.current !== arriving) {
+            forgetComposition();
+            setWritten(null);
+        }
+
+        endedFor.current = null;
+    }
+
     function signedIn(reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean): void {
         if (adopted === null) {
             storeDeployment(reached);
@@ -724,7 +779,7 @@ export function App({
         // A reload of a signed-in client does not pass through here, so what survives a reload still survives one.
         revise(emptyWorkspace);
         forgetListings();
-        forgetComposition();
+        offerWhatWasWrittenTo(`${reached.baseAddress}\n${session.person}`);
 
         // The screen has already said how long the sign-in will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
@@ -749,7 +804,7 @@ export function App({
         setNotices([]);
         revise(emptyWorkspace);
         forgetListings();
-        forgetComposition();
+        offerWhatWasWrittenTo(`${reached.baseAddress}\n${issued.person}`);
 
         // Its own sentence rather than the password path's: nobody typed a password here, and a deployment that takes
         // none offers no way back in through one — what the next start actually does is hand them to the provider.
@@ -786,7 +841,7 @@ export function App({
         // good for whatever is left of its life. It is asked and not waited on: signing out of the client is what the
         // person pressed, and a deployment that never heard still expires the session on its own.
         if (session !== null) {
-            void endSession(session, readMail);
+            void endSession(session, onTheWire);
         }
 
         // The authorization server is asked to withdraw the refresh token on the same terms the deployment is told:
@@ -796,11 +851,11 @@ export function App({
         if (withdrawn?.refreshToken != null) {
             const presented = withdrawn.refreshToken;
 
-            void readAuthorizationServer(withdrawn.issuer, readMail).then((server) => {
+            void readAuthorizationServer(withdrawn.issuer, onTheWire).then((server) => {
                 if (server.outcome === 'read') {
                     void revokeRefreshToken(
                         { metadata: server.value, clientId: withdrawn.clientId, refreshToken: presented },
-                        readMail,
+                        onTheWire,
                     );
                 }
             });

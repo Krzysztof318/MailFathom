@@ -94,6 +94,18 @@ export const silentAnswerInterval = 3_000;
 export const refreshInterval = 5 * 60_000;
 
 /**
+ * How long before a session ends that the client renews it: `renewalMargin` in `Client.App`'s
+ * `signIn/useSessionRenewal.ts`, which reads the clock against the instant once a minute.
+ */
+export const sessionRenewalMargin = 60 * 60_000;
+
+/** How long before an access token ends that the client renews the grant: `grantRenewalMargin` in `signIn/oauthGrant.ts`. */
+export const grantRenewalMargin = 5 * 60_000;
+
+/** How often either renewal reads the clock, which is the most a renewal that became due waits before it goes out. */
+export const renewalCheckInterval = 60_000;
+
+/**
  * Stops the page's clock where it stands, so a timer the client runs fires only when the check advances it.
  *
  * The clock is installed before the page loads and runs as a real one until here, because signing in and drawing the

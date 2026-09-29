@@ -162,6 +162,7 @@ export function FolderMaintenanceProvider({
             // Nothing to stop: one request is in flight and it is durable the moment the deployment answers, so
             // closing the toast is letting go of the report rather than taking the act back.
             stoppingLeavesBehind: translate('folders.actStopped'),
+            stoppedLeftBehind: translate('folders.actStopped'),
             stop: () => undefined,
         });
     }
@@ -315,6 +316,7 @@ export function FolderMaintenanceProvider({
         const settle = toasts.raiseOperation({
             title: translate('folders.markingRead', { folder: said }),
             stoppingLeavesBehind: translate('folders.markingReadStopped'),
+            stoppedLeftBehind: translate('folders.markingReadStopped'),
 
             // Nothing to stop: what is in flight is a bounded run of reads and one flag mutation per batch, each of
             // which is durable the moment the deployment answers. Closing the toast is therefore letting go of the
