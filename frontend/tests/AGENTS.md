@@ -383,10 +383,11 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   takes ten to twenty minutes on a pull request, so a pipeline held inside twelve is done within the time the review
   already takes, and this suite is never what a merge waits on. That is why it has a job of its own in that workflow,
   running beside the one that lints, type-checks, and runs the unit suites rather than behind it. It runs there on
-  Playwright's default of two workers, half the runner's four cores, and a higher count is not the next step: four
-  were measured on that job and made every check about twice as slow, so 112 checks took 84 seconds where 104 had
-  taken 66 on two — each worker's browser wants more than the one core four workers leave it. Sharding is the next
-  step, and only once that one job no longer fits.
+  four workers, every core the runner has, where Playwright's default would take half: measured on that job, four ran
+  each check about 1.7 times as long as two did and still finished the suite about fifteen percent sooner — 112 checks
+  in 84 seconds on four against 114 in 96 to 102 on two. Each check slows because each worker's browser wants more than
+  the one core four workers leave it, which is also why a higher count is not the next step: sharding is, and only once
+  that one job no longer fits.
 
 What the suite asserts about the network is therefore three things rather than one: that the client reaches the origin
 it was served from and no other, that what it sends there is the credential the bundle composed — the second being the

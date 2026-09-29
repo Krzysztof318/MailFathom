@@ -1276,8 +1276,8 @@ Seven things around those commands are worth knowing before they are discovered:
   Node and pnpm, restores the workspace, and then runs the same commands in the same order the full gate does — the
   linter, the type check, both packages' unit suites, and `pnpm format:check`. The build is the second job's, `Build the
   client and drive it in a browser`, which repeats the checkout, the Node and pnpm setup, the pnpm-store cache, and the
-  frozen restore, then installs Chromium and runs `pnpm test:browser` — `pnpm build` and then Playwright — so the
-  bundle is built once and handed between no jobs. It runs beside the first rather than behind it,
+  frozen restore, then installs Chromium and runs `pnpm test:browser` — `pnpm build` and then Playwright, on four
+  workers — so the bundle is built once and handed between no jobs. It runs beside the first rather than behind it,
   which is what lets the browser suite grow without lengthening the wait on a pull request. A third job, `Drive the
   desktop head`, builds the desktop shell and runs `pnpm test:desktop`; it repeats the same setup and diverges from
   there — the Cargo cache, the WebDriver proxy, the locales, and a shell build are its alone.

@@ -56,6 +56,12 @@ export default defineConfig({
     outputDir: './.playwright',
 
     fullyParallel: true,
+
+    // Four in the pipeline, every core a GitHub-hosted Linux runner has, rather than Playwright's default of half of
+    // them: measured on the browser suite's own job, four finish it sooner than two although each check runs slower,
+    // and `frontend/tests/AGENTS.md` records by how much. Elsewhere the default stands, because a developer's machine is
+    // shared with whatever else they are running.
+    workers: runningInPipeline ? 4 : '50%',
     forbidOnly: runningInPipeline,
 
     // No retries anywhere. A check that passes on a second attempt has reported that the client is flaky rather than
