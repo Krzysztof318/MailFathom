@@ -81,15 +81,15 @@ export async function signIn(page: Page): Promise<void> {
 
 /**
  * How long the client waits before reading a silent answer again: `silentRunPollInterval` in `Client.Backend`'s
- * `runFollowing.ts`, which this suite resolves neither package to import. The fake deployment serves no signal channel,
- * so this interval is what moves an answer the fake handed back running on to its next read.
+ * `runFollowing.ts`, which this suite resolves neither package to import. The fake deployment serves no signal channel
+ * unless a check asks it to, so this interval is what moves an answer the fake handed back running on to its next read.
  */
 export const silentAnswerInterval = 3_000;
 
 /**
  * How long a visible client goes before reading again everything it draws: `refreshInterval` in `Client.App`'s
- * `signals/useSignals.ts`. The fake deployment serves no signal channel, so this interval is how the client learns what
- * an act moved that it does not draw by itself — the counts in the folder column among it.
+ * `signals/useSignals.ts`. The fake deployment serves no signal channel unless a check asks it to, so this interval is how
+ * the client learns what an act moved that it does not draw by itself — the counts in the folder column among it.
  */
 export const refreshInterval = 5 * 60_000;
 
@@ -104,6 +104,17 @@ export const grantRenewalMargin = 5 * 60_000;
 
 /** How often either renewal reads the clock, which is the most a renewal that became due waits before it goes out. */
 export const renewalCheckInterval = 60_000;
+
+/**
+ * Opens the client against a deployment serving its signal channel, and waits for the connection to stand — which is
+ * when a statement said over it reaches a screen rather than a connection still being opened.
+ */
+export async function openWithTheChannel(page: Page, deployment: FakeDeployment, address = '/#/mail'): Promise<void> {
+    deployment.serveSignals();
+
+    await openSignedIn(page, address);
+    await expect.poll(() => deployment.channelsOpen()).toBe(1);
+}
 
 /**
  * Stops the page's clock where it stands, so a timer the client runs fires only when the check advances it.

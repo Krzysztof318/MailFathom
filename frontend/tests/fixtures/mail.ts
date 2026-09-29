@@ -112,6 +112,23 @@ function folderRow(at: number) {
 }
 
 /**
+ * A message that arrives while somebody has the client open, as the folder lists it once it has.
+ *
+ * It is a row of its own rather than one of the generated ones, because the generated folder is what the inbox already
+ * held: a message arriving is one the reader has never been shown, unread, at the head of the folder, and a check
+ * reaching it by its subject cannot mistake it for a row that was there before.
+ */
+export const arrivingRow = {
+    ...folderRow(mailboxSize),
+    id: 'message-arriving',
+    subject: 'A message that has just arrived',
+    senderAddress: 'dispatch@nordwind.example',
+    senderDisplayName: 'Nordwind dispatch',
+    preview: 'The racking left the yard this morning.',
+    unread: true,
+};
+
+/**
  * Where in the folder the one row standing for a correspondence sits.
  *
  * A folder whose every row is a single message draws none of the count the design puts on a row that stands for an

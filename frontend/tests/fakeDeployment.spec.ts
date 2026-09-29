@@ -4,7 +4,7 @@
 
 import { expect, test } from '@playwright/test';
 
-import { FakeDeployment } from './fakeDeployment';
+import { FakeDeployment, type HubSocket } from './fakeDeployment';
 import * as agent from './fixtures/agent';
 import * as fixtures from './fixtures/deployment';
 import * as discovery from './fixtures/discovery';
@@ -559,4 +559,216 @@ test('continues a search from a position in the book, filling each page with wha
     expect(first.contacts).toHaveLength(2);
     expect(next.contacts).toHaveLength(2);
     expect(next.contacts.map(({ displayName }) => displayName)).not.toContain(first.contacts[1]?.displayName);
+});
+
+/** What ends every message of SignalR's JSON protocol. */
+const recordSeparator = '\u001e';
+
+/** The handshake a SignalR client opens every connection with. */
+const handshake = `${JSON.stringify({ protocol: 'json', version: 1 })}${recordSeparator}`;
+
+/**
+ * A connection to the hub as the client opens one, standing in for the socket a page would route: it records what the
+ * hub sent, as the messages the protocol frames, and whether the hub closed it.
+ */
+class OpenedConnection implements HubSocket {
+    readonly received: unknown[] = [];
+    closed = false;
+    private readonly listeners: ((message: string | Buffer) => void)[] = [];
+    private readonly address: string;
+
+    constructor(ticket: string) {
+        this.address = `ws://deployment.invalid/api/client/signals?access_token=${encodeURIComponent(ticket)}`;
+    }
+
+    url(): string {
+        return this.address;
+    }
+
+    onMessage(handler: (message: string | Buffer) => void): void {
+        this.listeners.push(handler);
+    }
+
+    // The hub is told of a close the client made, and nothing here makes one.
+    onClose(): void {
+        return undefined;
+    }
+
+    send(message: string): void {
+        this.received.push(
+            ...message
+                .split(recordSeparator)
+                .filter((frame) => frame !== '')
+                .map((frame): unknown => JSON.parse(frame)),
+        );
+    }
+
+    close(): Promise<void> {
+        this.closed = true;
+
+        return Promise.resolve();
+    }
+
+    /** Sends the hub one message, as the client's own socket would. */
+    say(message: string): void {
+        for (const listener of this.listeners) {
+            listener(message);
+        }
+    }
+}
+
+/** A ticket minted the way the client mints one before every connection. */
+function ticketFrom(deployment: FakeDeployment): string {
+    return (ask(deployment, 'POST', '/signals/ticket') as { ticket: string }).ticket;
+}
+
+/** A deployment serving the channel, with one connection standing on it. */
+function connected(): { deployment: FakeDeployment; connection: OpenedConnection } {
+    const deployment = new FakeDeployment('0.0.0');
+
+    deployment.serveSignals();
+
+    const connection = new OpenedConnection(ticketFrom(deployment));
+
+    deployment.connect(connection);
+    connection.say(handshake);
+
+    return { deployment, connection };
+}
+
+test('refuses the ticket until the channel is served, and opens one connection per ticket after', () => {
+    const deployment = new FakeDeployment('0.0.0');
+
+    expect(ask(deployment, 'POST', '/signals/ticket')).toBe(404);
+
+    deployment.serveSignals();
+
+    const ticket = ticketFrom(deployment);
+    const first = new OpenedConnection(ticket);
+    const second = new OpenedConnection(ticket);
+
+    deployment.connect(first);
+    first.say(handshake);
+    first.say(`${JSON.stringify({ type: 6 })}${recordSeparator}`);
+    deployment.connect(second);
+
+    expect(first.received).toStrictEqual([{}, { type: 6 }]);
+    expect(second.closed).toBe(true);
+    expect(deployment.channelsOpen()).toBe(1);
+});
+
+test('closes the channel when it stops answering and opens none, and opens one again once it answers', () => {
+    const { deployment, connection } = connected();
+    const ticket = ticketFrom(deployment);
+
+    deployment.stopAnswering();
+
+    const refused = new OpenedConnection(ticket);
+
+    deployment.connect(refused);
+
+    expect(connection.closed).toBe(true);
+    expect(refused.closed).toBe(true);
+    expect(deployment.channelsOpen()).toBe(0);
+
+    deployment.answerAgain();
+
+    const reopened = new OpenedConnection(ticketFrom(deployment));
+
+    deployment.connect(reopened);
+    reopened.say(handshake);
+
+    expect(deployment.channelsOpen()).toBe(1);
+});
+
+test('lists mail it delivered at the head of the inbox, moves both counts, and says it arrived', () => {
+    const { deployment, connection } = connected();
+    const before = counts(deployment, 'INBOX');
+
+    deployment.deliver();
+
+    expect(connection.received.at(-1)).toStrictEqual({
+        type: 1,
+        target: 'signal',
+        arguments: [{ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 1 }],
+    });
+    expect(listed(deployment, 'folder=INBOX').slice(0, 2)).toStrictEqual([mail.arrivingRow.id, 'message-0']);
+    expect(listed(deployment, 'folder=INBOX')).toHaveLength(mail.rowsPerPage);
+    expect(listed(deployment, 'folder=INBOX&cursor=99')[0]).toBe('message-99');
+    expect(counts(deployment, 'INBOX')).toStrictEqual({ stored: before.stored + 1, unread: before.unread + 1 });
+});
+
+test('answers every read after a change made elsewhere with that change, and says it in the shape asked for', () => {
+    const { deployment, connection } = connected();
+    const before = counts(deployment, 'INBOX');
+
+    deployment.flagElsewhere('message-8', { flagged: true });
+
+    expect(connection.received.at(-1)).toMatchObject({
+        arguments: [
+            {
+                kind: 'mail.flags.changed',
+                folder: 'INBOX',
+                flags: [{ email: 'message-8', isSeen: null, isFlagged: true }],
+            },
+        ],
+    });
+
+    deployment.changeElsewhere('message-12', { seen: true });
+
+    expect(connection.received.at(-1)).toMatchObject({
+        arguments: [{ kind: 'mail.changed', folder: 'INBOX', emails: ['message-12'] }],
+    });
+    expect(ask(deployment, 'GET', '/messages/message-8')).toMatchObject({ flagged: true });
+    expect(ask(deployment, 'GET', '/messages/message-12')).toMatchObject({ unread: false });
+    expect(listed(deployment, 'folder=INBOX&flagged=true')).toStrictEqual(['message-8']);
+    expect(counts(deployment, 'INBOX')).toStrictEqual({ stored: before.stored, unread: before.unread - 1 });
+});
+
+test('answers the folders and the accounts with what moved elsewhere, and says which of the two moved', () => {
+    const { deployment, connection } = connected();
+
+    deployment.makeFolderElsewhere('Receipts 2026');
+
+    expect(connection.received.at(-1)).toMatchObject({ arguments: [{ kind: 'folders.changed', account: 'work' }] });
+    expect(counts(deployment, 'RECEIPTS 2026')).toStrictEqual({ stored: 0, unread: 0 });
+
+    deployment.troubleTheAccounts();
+
+    expect(connection.received.at(-1)).toMatchObject({ arguments: [{ kind: 'account.state', account: 'club' }] });
+    expect(ask(deployment, 'GET', '/accounts')).toMatchObject({
+        accounts: [{ id: 'work' }, { id: 'club', synchronizationState: 'Failing' }, { id: 'personal' }],
+    });
+});
+
+test('writes a refused change down as one the account stopped retrying and leaves the mailbox as it was, once', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const before = counts(deployment, 'INBOX');
+
+    deployment.refuseNextChange();
+
+    const refused = ask(deployment, 'POST', '/mutations/flags', {
+        changes: [{ storedEmailId: 'message-12', flags: { seen: true } }],
+    }) as { results: { outcome: string; changes: { recordId: string; state: string }[] }[] };
+    const recordId = refused.results[0]?.changes[0]?.recordId ?? '';
+
+    expect(refused.results[0]).toMatchObject({ outcome: 'recorded', changes: [{ state: 'pending' }] });
+    expect(ask(deployment, 'GET', `/mutations?record=${recordId}`)).toMatchObject({
+        changes: [{ recordId, state: 'dead-lettered', outcomeUnknown: false }],
+    });
+    expect(counts(deployment, 'INBOX')).toStrictEqual(before);
+
+    deployment.refuseNextChange();
+    ask(deployment, 'POST', '/mutations/moves', {
+        moves: [{ storedEmailId: 'message-4', destinationFolder: 'ARCHIVE/2024' }],
+    });
+
+    expect(listed(deployment, 'folder=INBOX')).toContain('message-4');
+    expect(listed(deployment, 'folder=ARCHIVE%2F2024')).toStrictEqual([]);
+
+    ask(deployment, 'POST', '/mutations/flags', {
+        changes: [{ storedEmailId: 'message-12', flags: { seen: true } }],
+    });
+
+    expect(counts(deployment, 'INBOX')).toStrictEqual({ stored: before.stored, unread: before.unread - 1 });
 });

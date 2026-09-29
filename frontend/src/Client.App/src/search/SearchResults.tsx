@@ -25,6 +25,7 @@ import { opensAsDraft, useMailboxActs } from '../mailboxActs/useMailboxActs';
 import { useListedMail } from '../messageList/useListedMail';
 import { MessageRow } from '../messageRows/MessageRow';
 import { estimatedRowHeight, offsetOfRow, windowOf } from '../messageRows/rowWindow';
+import { useSignalledChanges } from '../signals/signalledChanges';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { explainingFileOf } from './citedFile';
 import { matchedRuns } from './matchedRuns';
@@ -57,8 +58,11 @@ const wordsOnlyReasons: Readonly<Record<MailSemanticSearch, MessageKey | null>> 
     Available: null,
 };
 
-/** Everything one search has answered so far, which grows a page at a time and is replaced by nothing. */
+/** Everything one search has answered so far, which grows a page at a time and is replaced only by a refresh. */
 interface FoundMail {
+    /** Which refresh the head of the list was read for, so the next refresh is a read that has not happened yet. */
+    readonly refresh: number;
+
     readonly results: readonly MailSearchResult[];
 
     /** The cursor the next page is asked with, or `null` where the ranked list ends here. */
@@ -107,8 +111,15 @@ export function SearchResults({
     const acts = useMailboxActs();
     const listed = useListedMail();
 
+    const signalledChanges = useSignalledChanges();
+
     const [found, setFound] = useState<FoundMail | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
+
+    // How many times every screen has been told to read again what it draws. A search answers one by asking its head
+    // again and replacing what it holds with the answer, because a ranking is recomputed on every read: the pages held
+    // belong to the list they were issued in, and patching a new head onto them would draw two rankings as one.
+    const [refresh, setRefresh] = useState(0);
 
     const [scrollTop, setScrollTop] = useState(0);
     const [viewport, setViewport] = useState(0);
@@ -133,10 +144,12 @@ export function SearchResults({
     // folder's list works it out: two pieces of state that have to agree are one piece of state and a function. A read
     // in flight reads as the same cursor being wanted, so the effect below does not run again until an answer has
     // changed what is wanted — which is what starts one read per page rather than one per render.
+    // A refresh asks for the head while what was found stays drawn, which is what keeps a refresh from blanking the
+    // results a reader is part-way through.
     const wanted =
         !online || failure !== null
             ? null
-            : found === null
+            : found?.refresh !== refresh
               ? { cursor: null }
               : moreToRead && lastDrawn >= rowCount - 1
                 ? { cursor: found.nextCursor }
@@ -144,6 +157,7 @@ export function SearchResults({
 
     const wantedCursor = wanted?.cursor ?? null;
     const wanting = wanted !== null;
+    const refreshing = wanting && wantedCursor === null && found !== null;
 
     // The one effect that puts a request on the wire. An answer to a read this screen has moved on from is discarded
     // rather than cancelled, which is what a screen that may be showing another search by then actually needs.
@@ -159,20 +173,36 @@ export function SearchResults({
                 return;
             }
 
-            if (result.outcome === 'failed') {
+            if (result.outcome === 'failed' && refreshing) {
+                // A refresh the deployment did not answer leaves what was found where it stands and says nothing, as
+                // the folder's list does: it is one the next refresh repeats rather than a search that failed.
+                setFound((current) => (current === null ? current : { ...current, refresh }));
+            } else if (result.outcome === 'failed') {
                 setFailure(result.failure);
             } else {
                 // Written down for the reason the folder's list writes its pages down: a result opened from here is
                 // the message the toolbar acts on, and the toolbar knows where a message belongs only from this.
                 listed.drew(result.value.results);
-                setFound((current) => withPage(current, result.value));
+                setFound((current) => withPage(wantedCursor === null ? null : current, result.value, refresh));
             }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, ask, wantedCursor, wanting, listed]);
+    }, [session, transport, ask, wantedCursor, wanting, refreshing, refresh, listed]);
+
+    useEffect(
+        () =>
+            signalledChanges.listen((signal) => {
+                // A search that had stopped on a failure is let try again, as the folder's list is.
+                if (signal.kind === 'refresh') {
+                    setFailure(null);
+                    setRefresh((current) => current + 1);
+                }
+            }),
+        [signalledChanges],
+    );
 
     // The two measurements the window is arithmetic over, taken after the browser has laid the results out rather than
     // written down as numbers here, for the reason the folder's list measures them: the row's height is a token
@@ -304,7 +334,8 @@ export function SearchResults({
         event.preventDefault();
     }
 
-    if (!online) {
+    // Offline is said here only where nothing was found yet, for the reason the folder's list gives.
+    if (!online && rowCount === 0) {
         return <Note>{translate('connection.offline')}</Note>;
     }
 
@@ -529,9 +560,10 @@ function MarkedExtract({ extract }: { readonly extract: string }) {
 // One more page, appended to what is already on the screen. The retrieval fields are the first page's rather than the
 // newest one's: they describe the search rather than the exchange, and a page that arrived while a provider was
 // recovering would otherwise silently rewrite the sentence explaining the results above it.
-function withPage(current: FoundMail | null, page: MailSearchPage): FoundMail {
+function withPage(current: FoundMail | null, page: MailSearchPage, refresh: number): FoundMail {
     if (current === null) {
         return {
+            refresh,
             results: page.results,
             nextCursor: page.nextCursor,
             retrievalMode: page.retrievalMode,
