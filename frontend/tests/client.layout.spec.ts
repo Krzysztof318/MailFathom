@@ -5,12 +5,19 @@
 import { expect, type Locator } from '@playwright/test';
 
 import {
+    actingGrants,
+    desktopWindow,
+    folder,
+    foldWindow,
+    fromTheMenu,
     messageHeading,
     messageRegion,
     narrowWindow,
     openSignedIn,
     openTheFirstMessage,
     phoneWindow,
+    row,
+    tabletWindow,
     test,
     wideWindow,
 } from './client.harness';
@@ -251,6 +258,163 @@ test.describe('driven by a finger', () => {
             ).toBeGreaterThanOrEqual(44);
         }
     });
+
+    // The three compositions a finger drives, each at the design project's own frame. What sets them apart is which of
+    // three regions stands beside which: the phone draws the list or the message and no toolbar, while the fold and the
+    // tablet draw both panes under the toolbar. All three keep the mailboxes behind a drawer.
+    const touchCompositions = [
+        { name: 'phone', window: phoneWindow, twoPanes: false },
+        { name: 'fold', window: foldWindow, twoPanes: true },
+        { name: 'tablet', window: tabletWindow, twoPanes: true },
+    ] as const;
+
+    for (const composition of touchCompositions) {
+        test(`draws the Mail space at the ${composition.name} composition within the window and at a fingertip’s size`, async ({
+            page,
+        }) => {
+            await page.setViewportSize(composition.window);
+            await openSignedIn(page, '/#/mail');
+
+            const list = page.getByRole('listbox', { name: 'Messages' });
+
+            await expect(list.getByRole('option').first()).toBeVisible();
+
+            // The mailboxes stand behind a drawer at every one of the three, opened from the list's own head and
+            // closed again from inside it. The drawer is the platform's modal dialog, so closing it is what hands focus
+            // back to the control that opened it.
+            const opener = page.getByRole('button', { name: 'Folders and filters' });
+            const drawer = page.getByRole('dialog', { name: 'Folders and filters' });
+
+            await expect(page.getByRole('complementary', { name: 'Folders and filters' })).toHaveCount(0);
+            await opener.click();
+            await expect(drawer.getByRole('tree', { name: 'Mailboxes and folders' })).toBeVisible();
+
+            await drawer.getByRole('button', { name: 'Close the folders' }).click();
+            await expect(drawer).toBeHidden();
+            await expect(opener).toBeFocused();
+
+            await list.getByRole('option').first().click();
+            await expect(page.getByRole('article', messageRegion)).toBeVisible();
+
+            const listColumn = page.getByRole('region', { name: 'Message list' });
+            const readingColumn = page.getByRole('region', { name: 'What is open' });
+            const toolbar = page.getByRole('toolbar', { name: 'Mail actions' });
+
+            if (composition.twoPanes) {
+                // Both panes, side by side, under the toolbar the phone has no room for.
+                const listed = await boxOf(listColumn);
+                const reading = await boxOf(readingColumn);
+
+                expect(listed.x + listed.width).toBeLessThanOrEqual(reading.x);
+                await expect(toolbar).toBeVisible();
+
+                // Whatever the strip had to give up to fit the width, every control on it still says what it does.
+                for (const control of await toolbar.getByRole('button').all()) {
+                    await expect(control).toHaveAccessibleName(/\S/u);
+                }
+            } else {
+                // One pane: the message stands where the list stood, and the list is out of the way rather than
+                // beside it.
+                await expect(readingColumn).toBeVisible();
+                await expect(listColumn).toBeHidden();
+                await expect(toolbar).toHaveCount(0);
+            }
+
+            for (const control of await page.getByRole('main').getByRole('button').all()) {
+                const box = await control.boundingBox();
+
+                if (box === null) {
+                    continue;
+                }
+
+                expect(
+                    Math.min(box.width, box.height),
+                    `${String(await control.textContent())} on the ${composition.name} Mail space is ${String(box.height)} tall`,
+                ).toBeGreaterThanOrEqual(44);
+            }
+
+            expect(
+                await page.evaluate<boolean>(
+                    'document.documentElement.scrollWidth > document.documentElement.clientWidth',
+                ),
+            ).toBe(false);
+        });
+    }
+});
+
+test('keeps the open message, the folder, and the selection as the window crosses every composition', async ({
+    page,
+    deployment,
+}) => {
+    deployment.grant(...actingGrants);
+
+    await page.setViewportSize(desktopWindow);
+    await openSignedIn(page, '/#/mail');
+
+    // A folder of two messages of its own, so the scope is one a width change could lose rather than the inbox every
+    // composition opens on anyway.
+    await fromTheMenu(page, 'Message 4', 'Move…');
+    await page
+        .getByRole('dialog', { name: 'File in another folder' })
+        .getByRole('button', { name: 'Archive / 2024' })
+        .click();
+    await expect(row(page, 'Message 4')).toHaveCount(0);
+
+    await fromTheMenu(page, 'Message 7', 'Move…');
+    await page
+        .getByRole('dialog', { name: 'File in another folder' })
+        .getByRole('button', { name: 'Archive / 2024' })
+        .click();
+    await expect(row(page, 'Message 7')).toHaveCount(0);
+
+    await page.getByRole('treeitem', { name: 'Archive', expanded: false }).click();
+    await page.keyboard.press('ArrowRight');
+    await folder(page, '2024').click();
+
+    const listed = page.getByRole('listbox', { name: 'Messages' }).getByRole('option');
+    const selection = page.getByRole('toolbar', { name: 'Actions on the messages selected' });
+
+    await row(page, 'Message 4').click();
+    await row(page, 'Message 7').click({ modifiers: ['ControlOrMeta'] });
+    await expect(selection.getByRole('status')).toHaveText('1 selected');
+
+    async function holdsWhatItHeld(): Promise<void> {
+        await expect(page.getByRole('article', messageRegion)).toBeVisible();
+        await expect(selection.getByRole('status')).toHaveText('1 selected');
+    }
+
+    // Down to the tablet, which is known by the way into the drawer the desktop has no need of; then the list and the
+    // message are measured side by side, which is the tablet's own shape.
+    await page.setViewportSize(tabletWindow);
+    await expect(page.getByRole('button', { name: 'Folders and filters' })).toBeVisible();
+    await holdsWhatItHeld();
+    await expect(listed).toHaveCount(2);
+    await expect(row(page, 'Message 4')).toHaveAttribute('aria-current', 'true');
+    await expect(row(page, 'Message 7')).toHaveAttribute('aria-selected', 'true');
+
+    const tabletList = await boxOf(page.getByRole('region', { name: 'Message list' }));
+    const tabletReading = await boxOf(page.getByRole('region', { name: 'What is open' }));
+
+    expect(tabletList.x + tabletList.width).toBeLessThanOrEqual(tabletReading.x);
+
+    // Down to the phone, which is known by the bottom bar's overflow: the message stands in front, and the way back
+    // finds the list of the folder it was left in, still holding what was picked out.
+    await page.setViewportSize(phoneWindow);
+    await expect(page.getByRole('button', { name: 'More' })).toBeVisible();
+    await holdsWhatItHeld();
+    await expect(page.getByRole('region', { name: 'Message list' })).toBeHidden();
+
+    await page.getByRole('button', { name: 'Back to the list' }).click();
+    await expect(listed).toHaveCount(2);
+    await expect(row(page, 'Message 7')).toHaveAttribute('aria-selected', 'true');
+
+    // And back to the desktop, which is known by the mailbox column standing beside the list, with the folder still
+    // the one chosen there.
+    await page.setViewportSize(desktopWindow);
+    await expect(page.getByRole('complementary', { name: 'Folders and filters' })).toBeVisible();
+    await expect(folder(page, '2024')).toHaveAttribute('aria-selected', 'true');
+    await expect(listed).toHaveCount(2);
+    await expect(selection.getByRole('status')).toHaveText('1 selected');
 });
 
 test('draws the three columns of the Mail space without the page scrolling sideways', async ({ page }) => {

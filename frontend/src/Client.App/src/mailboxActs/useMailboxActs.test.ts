@@ -8,6 +8,7 @@ import {
     actLeaving,
     actPending,
     drawnFlagged,
+    flagPending,
     nothingActed,
     opensAsDraft,
     type MailboxAct,
@@ -115,6 +116,60 @@ describe('drawnFlagged', () => {
 
     it('leaves an act about another message out of it', () => {
         expect(drawnFlagged(asking('flag', 'another-message'), email)).toBe(false);
+    });
+
+    it('draws the flag asked first while the read flag asked after it is on its way beside it', () => {
+        const markedAfterFlagging: MailboxActs = {
+            ...nothingActed,
+            asked: new Map([
+                [
+                    email.id,
+                    {
+                        act: 'markUnread',
+                        from: email.folder,
+                        leaves: false,
+                        destroys: false,
+                        beside: { act: 'flag', from: email.folder, leaves: false, destroys: false },
+                    },
+                ],
+            ]),
+        };
+
+        expect(drawnFlagged(markedAfterFlagging, email)).toBe(true);
+    });
+});
+
+// A row draws both marks, and a message can be waiting on both flags at once, so each mark is read from the act that
+// writes that flag rather than from whichever act was asked last.
+describe('flagPending', () => {
+    const flaggedAfterMarking: MailboxActs = {
+        ...nothingActed,
+        asked: new Map([
+            [
+                email.id,
+                {
+                    act: 'flag',
+                    from: email.folder,
+                    leaves: false,
+                    destroys: false,
+                    beside: { act: 'markUnread', from: email.folder, leaves: false, destroys: false },
+                },
+            ],
+        ]),
+    };
+
+    it('answers each flag with the act that writes it', () => {
+        expect(flagPending(flaggedAfterMarking, email, 'seen')?.act).toBe('markUnread');
+        expect(flagPending(flaggedAfterMarking, email, 'flagged')?.act).toBe('flag');
+    });
+
+    it('stops answering a flag once the deployment reports what its act asked for', () => {
+        expect(flagPending(flaggedAfterMarking, { ...email, unread: true }, 'seen')).toBeNull();
+        expect(flagPending(flaggedAfterMarking, { ...email, unread: true }, 'flagged')?.act).toBe('flag');
+    });
+
+    it('answers nothing for a flag no act was asked of', () => {
+        expect(flagPending(asking('flag'), email, 'seen')).toBeNull();
     });
 });
 

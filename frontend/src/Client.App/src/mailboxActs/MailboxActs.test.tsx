@@ -704,6 +704,53 @@ describe('MailboxActsProvider', () => {
         expect(held().asked.get('message-1')?.act).toBe('flag');
     });
 
+    // Marking a message unread and then flagging it are two changes to two flags, and a row draws both: a flag asked
+    // second that replaced the first claim would draw the message read again from a listing read before either.
+    it('keeps a message’s claim on one flag when an act on the other flag is asked after it', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        perform(held, 'markUnread', [invoice]);
+        perform(held, 'flag', [invoice]);
+
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'flag',
+            from: 'work-inbox',
+            leaves: false,
+            destroys: false,
+            beside: { act: 'markUnread', from: 'work-inbox', leaves: false, destroys: false },
+        });
+
+        await waitFor(() => {
+            expect(submitted(deployment).length).toBe(2);
+        });
+    });
+
+    it('lets go of one flag’s claim alone where the deployment wrote the other one down', async () => {
+        const writing = deploymentAnswering();
+        const refusing = deploymentAnswering({ 'message-1': 'message-not-found' });
+
+        // Writes the read flag down and refuses the other, which is the one arrangement that tells the two claims apart.
+        const deployment: Deployment = {
+            requests: writing.requests,
+            transport: (request) =>
+                request.body?.includes('"flagged"') === true ? refusing.transport(request) : writing.transport(request),
+        };
+        const { held } = acting(deployment);
+
+        perform(held, 'markUnread', [invoice]);
+        perform(held, 'flag', [invoice]);
+
+        await waitFor(() => {
+            expect(held().asked.get('message-1')).toStrictEqual({
+                act: 'markUnread',
+                from: 'work-inbox',
+                leaves: false,
+                destroys: false,
+            });
+        });
+    });
+
     it('stops claiming a message the deployment answered for without writing anything down', async () => {
         const deployment = deploymentAnswering({ 'message-2': 'message-not-found' });
         const { held } = acting(deployment);

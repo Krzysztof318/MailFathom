@@ -194,7 +194,7 @@ function asking(
 
 /** What a client that has marked exactly this message read carries, which is what a row reads its state through. */
 function marked(storedEmailId: string, place: MarkedIn = { account: 'work', folder: 'INBOX' }): ReadMarking {
-    return { marked: new Map([[storedEmailId, place]]), markRead: () => undefined };
+    return { marked: new Map([[storedEmailId, place]]), markRead: () => undefined, forget: () => undefined };
 }
 
 // The line the row's height reserves whether or not anything is in it, which is what lets the search's row and the

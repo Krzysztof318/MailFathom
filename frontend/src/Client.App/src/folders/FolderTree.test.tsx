@@ -363,6 +363,7 @@ function marked(...places: readonly MarkedIn[]): ReadMarking {
     return {
         marked: new Map(places.map((place, at) => [`message-${String(at)}`, place])),
         markRead: () => undefined,
+        forget: () => undefined,
     };
 }
 

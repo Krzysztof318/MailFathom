@@ -183,10 +183,19 @@ export function MessageList({
     const [focusedRow, setFocusedRow] = useState(0);
     const [anchor, setAnchor] = useState<string | null>(null);
 
-    // The row whose menu is open and where it was asked for, and — separately — the messages a question raised from
-    // that menu is about. The two are apart because the question outlives the menu: choosing *delete* closes the menu
-    // and leaves the question standing, and a state holding both would take the question down with it.
-    const [pressed, setPressed] = useState<{ readonly row: number; readonly at: MenuPoint } | null>(null);
+    // The message whose menu is open, the row it was drawn at, and where the menu was asked for — and, separately, the
+    // messages a question raised from that menu is about. The two are apart because the question outlives the menu:
+    // choosing *delete* closes the menu and leaves the question standing, and a state holding both would take the
+    // question down with it.
+    //
+    // The message is named rather than read back off the row, because the rows move under an open menu: a row above it
+    // finishing its way out shifts every row below up by one, and a menu reading its row again would act on the message
+    // that moved into the place of the one it was opened on.
+    const [pressed, setPressed] = useState<{
+        readonly storedEmailId: string;
+        readonly row: number;
+        readonly at: MenuPoint;
+    } | null>(null);
     const [questioned, setQuestioned] = useState<readonly ActedMessage[]>([]);
 
     // The readings being checked, which outlive the menu they were asked from for the reason a question does.
@@ -250,9 +259,9 @@ export function MessageList({
     const lastDrawn = drawn.first + drawn.count - 1;
     const rows = heldRows(shown);
 
-    // The message the open menu is about, worked out during render rather than held beside which row was pressed: a
-    // page dropped under a menu that is still open would otherwise leave a menu naming mail this list no longer holds.
-    const pressedRow = pressed === null ? null : rowAt(shown, pressed.row);
+    // The message the open menu is about, looked up during render rather than held beside its name: a page dropped
+    // under a menu that is still open would otherwise leave a menu naming mail this list no longer holds.
+    const pressedRow = pressed === null ? null : (rows.find((email) => email.id === pressed.storedEmailId) ?? null);
 
     // Whether the row the keyboard is on is a row rather than the space one is arriving into. The effect below waits on
     // it: a keyboard that reached a dropped page has nothing to put focus on until that page answers, and refilling one
@@ -760,11 +769,12 @@ export function MessageList({
     // own start corner, so the menu reads as belonging to it exactly as one opened by a gesture over it does.
     function menuOnFocusedRow(): void {
         const row = elements.current.get(focusedRow);
+        const email = rowAt(shown, focusedRow);
 
-        if (row !== undefined) {
+        if (row !== undefined && email !== null) {
             const bounds = row.getBoundingClientRect();
 
-            setPressed({ row: focusedRow, at: { x: bounds.left, y: bounds.top } });
+            setPressed({ storedEmailId: email.id, row: focusedRow, at: { x: bounds.left, y: bounds.top } });
         }
     }
 
@@ -1017,7 +1027,7 @@ export function MessageList({
                                     }}
                                     onPress={(pointedAt) => {
                                         setFocusedRow(row);
-                                        setPressed({ row, at: pointedAt });
+                                        setPressed({ storedEmailId: email.id, row, at: pointedAt });
                                     }}
                                     onAnswer={answering(row)}
                                     onArchive={filingAway(row)}

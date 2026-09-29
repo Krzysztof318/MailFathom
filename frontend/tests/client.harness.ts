@@ -4,7 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type Locator, type Page } from '@playwright/test';
 
 import { FakeDeployment } from './fakeDeployment';
 import * as deployment from './fixtures/deployment';
@@ -30,6 +30,12 @@ export const narrowWindow = { width: 380, height: 720 };
 // which the row and the head are drawn differently. It is the project's own number rather than a rounding of the
 // breakpoint, so what is measured against it is what the artboard shows.
 export const phoneWindow = { width: 390, height: 844 };
+
+// The design project's other three frames, each its own number for the reason the phone's is. The fold and the tablet
+// are the two compositions with two panes and a drawer, and the desktop is the artboard's own preview size.
+export const foldWindow = { width: 884, height: 832 };
+export const tabletWindow = { width: 1024, height: 768 };
+export const desktopWindow = { width: 1440, height: 900 };
 
 // The heading the corpus message carries. The sender wrote it as their own first-level heading, and two levels above
 // it are already taken — the space's own title and the subject the reading pane draws — so the pane draws it two
@@ -138,4 +144,66 @@ export async function openTheFirstMessage(page: Page): Promise<void> {
     await openSignedIn(page, '/#/mail');
 
     await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first().click();
+}
+
+/** The three grants the acts on a mailbox are reached under, which the corpus credential does not carry. */
+export const actingGrants = ['mailfathom.mail.flags.write', 'mailfathom.mail.move', 'mailfathom.mail.delete'] as const;
+
+/** One row of the list, found by the subject it ends on, which every generated corpus row numbers. */
+export function row(page: Page, subject: string): Locator {
+    return page
+        .getByRole('listbox', { name: 'Messages' })
+        .getByRole('option', { name: new RegExp(`\\b${subject}$`, 'u') });
+}
+
+/** One folder of the tree, by the name it is drawn with — the inbox's carrying its count. */
+export function folder(page: Page, name: string): Locator {
+    return page.getByRole('tree', { name: 'Mailboxes and folders' }).getByRole('treeitem', { name, exact: true });
+}
+
+/**
+ * The folder the archive act files into, opened from the tree.
+ *
+ * The tree names it by the role it plays, which is the name the level `Archive / 2024` sits under too — so it is
+ * reached the way a keyboard reaches it, one row up from the trash, rather than by a name two rows answer to.
+ */
+export async function openTheArchive(page: Page): Promise<void> {
+    await folder(page, 'Trash').click();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+
+    await expect(
+        page
+            .getByRole('tree', { name: 'Mailboxes and folders' })
+            .getByRole('treeitem', { name: 'Archive', selected: true }),
+    ).toBeVisible();
+}
+
+/** The notice an act raised, found by what it says it did. */
+export function notice(page: Page, title: string): Locator {
+    return page.getByRole('list', { name: 'Notices' }).getByRole('listitem').filter({ hasText: title });
+}
+
+/** What the client sent to one write route, in the order it sent it. */
+export function bodiesOf(deployment: FakeDeployment, route: string): unknown[] {
+    return deployment.requests('POST', route).map(({ body }) => body);
+}
+
+/**
+ * The inbox opened with the acts granted and the clock held, so the notice offering the way back stays for as long as
+ * the check is reading it rather than for as long as a loaded machine lets it.
+ */
+export async function openTheInbox(page: Page, deployment: FakeDeployment): Promise<void> {
+    deployment.grant(...actingGrants);
+
+    await page.clock.install();
+    await openSignedIn(page, '/#/mail');
+    await expect(row(page, 'Message 0')).toBeVisible();
+    await holdTheClock(page);
+}
+
+/** Asks the row's own menu for an act, which is how one message is acted on without opening it. */
+export async function fromTheMenu(page: Page, subject: string, act: string): Promise<void> {
+    await row(page, subject).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: act, exact: true }).click();
 }

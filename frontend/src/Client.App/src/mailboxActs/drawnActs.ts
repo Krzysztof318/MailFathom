@@ -6,7 +6,14 @@ import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { drawnUnread, type ReadMarking } from '../readMarking/useReadMarking';
 import type { ActRefusal } from './mailboxDestinations';
-import type { ActedMessage, AskedAct, FlagAct, MailboxAct, MailboxActs } from './useMailboxActs';
+import {
+    flagWritten,
+    type ActedMessage,
+    type AskedAct,
+    type FlagAct,
+    type MailboxAct,
+    type MailboxActs,
+} from './useMailboxActs';
 
 // What the acts are called and what they are drawn as, for every surface that offers one. It is here rather than
 // beside the controls that draw them because a fourth surface now does — the toolbar, the selection bar, a row's own
@@ -63,11 +70,22 @@ export const actsInARowMenu: readonly MailboxAct[] = ['archive', 'flag', 'markUn
  * take a flag off a row it had itself drawn unflagged. The folder is part of the question rather than a detail of it:
  * an act that files a message elsewhere is finished the moment the message is somewhere else, and the same act name
  * asked there again is a new act rather than the old one still travelling.
+ *
+ * Asked about one act, because a message can be waiting on both flags at once: what is answered for an act writing a
+ * flag is whichever act was asked of that same flag, and for an act filing the message, the act asked last.
  */
-function askedHere(acts: MailboxActs, message: ActedMessage): AskedAct | undefined {
+function askedHere(acts: MailboxActs, message: ActedMessage, about: MailboxAct): AskedAct | undefined {
     const asked = acts.asked.get(message.storedEmailId);
 
-    return asked?.from === message.folder ? asked : undefined;
+    if (asked?.from !== message.folder) {
+        return undefined;
+    }
+
+    const flag = flagWritten(about);
+
+    return flag === null
+        ? asked
+        : [asked, asked.beside].find((one) => one !== undefined && flagWritten(one.act) === flag);
 }
 
 /**
@@ -88,7 +106,7 @@ function askedHere(acts: MailboxActs, message: ActedMessage): AskedAct | undefin
  */
 export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: readonly ActedMessage[]): FlagAct {
     function unreadNow(message: ActedMessage): boolean {
-        const asked = askedHere(acts, message);
+        const asked = askedHere(acts, message, 'markRead');
 
         if (asked?.act === 'markUnread') {
             return true;
@@ -121,7 +139,7 @@ export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: re
  */
 export function flagActFor(acts: MailboxActs, messages: readonly ActedMessage[]): FlagAct {
     function flaggedNow(message: ActedMessage): boolean {
-        const asked = askedHere(acts, message);
+        const asked = askedHere(acts, message, 'flag');
 
         if (asked?.act === 'flag') {
             return true;
@@ -166,7 +184,7 @@ export function underway(acts: MailboxActs, act: MailboxAct, messages: readonly 
     return (
         messages.length > 0 &&
         messages.every((message) => {
-            return askedHere(acts, message)?.act === act;
+            return askedHere(acts, message, act)?.act === act;
         })
     );
 }

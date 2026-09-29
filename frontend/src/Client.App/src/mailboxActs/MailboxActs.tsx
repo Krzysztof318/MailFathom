@@ -23,6 +23,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { ChangeAct, ChangeSubmission } from '../pendingChanges/changeStandings';
 import { usePendingChanges } from '../pendingChanges/usePendingChanges';
+import { useReadMarking } from '../readMarking/useReadMarking';
 import { useTelemetry } from '../telemetry/clientTelemetry';
 import { useToasts } from '../toasts/useToasts';
 import {
@@ -36,6 +37,7 @@ import {
 } from './mailboxDestinations';
 import {
     changesAFlag,
+    flagWritten,
     MailboxActsContext,
     nothingActed,
     type ActedMessage,
@@ -162,6 +164,59 @@ function recordsWritten(batches: readonly Submitted[]): readonly string[] {
     );
 }
 
+/** An asked act on its own, without what it held beside it. */
+function alone({ act, from, leaves, destroys }: AskedAct): AskedAct {
+    return { act, from, leaves, destroys };
+}
+
+/**
+ * The act a message is still asked of the other flag, which an act writing one flag keeps beside it rather than
+ * replacing: marking a message unread and then flagging it are two changes to two flags, and each still stands.
+ *
+ * Nothing is kept for an act that files the message, which takes it out of the folder every flag act was asked in, nor
+ * across folders, where the earlier act is finished rather than waiting.
+ */
+function otherFlagAsked(before: AskedAct | undefined, act: MailboxAct, folder: string): AskedAct | undefined {
+    const flag = flagWritten(act);
+
+    if (before === undefined || flag === null || before.from !== folder) {
+        return undefined;
+    }
+
+    const other = [before, before.beside].find((one) => {
+        const written = one === undefined ? null : flagWritten(one.act);
+
+        return written !== null && written !== flag;
+    });
+
+    return other === undefined ? undefined : alone(other);
+}
+
+/**
+ * What a message is still asked for once one act's claim is taken back.
+ *
+ * An act writing one flag answers for that flag alone, so taking it back leaves whatever was asked of the other flag
+ * standing — beside it or on its own. Anything else goes with it, as it always has.
+ */
+function withoutClaim(asked: AskedAct | undefined, act: MailboxAct): AskedAct | undefined {
+    if (asked === undefined) {
+        return undefined;
+    }
+
+    if (asked.beside?.act === act) {
+        return alone(asked);
+    }
+
+    if (asked.act === act) {
+        return asked.beside;
+    }
+
+    const flag = flagWritten(act);
+    const standing = flagWritten(asked.act);
+
+    return flag !== null && standing !== null && standing !== flag ? asked : undefined;
+}
+
 /**
  * One batch as it went out: the messages it carried, beside what the deployment answered about them.
  *
@@ -212,6 +267,7 @@ export function MailboxActsProvider({
     const toasts = useToasts();
     const telemetry = useTelemetry();
     const pending = usePendingChanges();
+    const marking = useReadMarking();
     const foldersChanged = useFolderMaintenance().changed;
     const [kept, setKept] = useState<Held>(heldForNobody);
 
@@ -339,20 +395,39 @@ export function MailboxActsProvider({
             const asked = new Map(current.session === session ? current.asked : []);
 
             for (const message of messages) {
-                asked.set(message.storedEmailId, { act, from: message.folder, leaves, destroys });
+                const beside = otherFlagAsked(asked.get(message.storedEmailId), act, message.folder);
+
+                asked.set(message.storedEmailId, {
+                    act,
+                    from: message.folder,
+                    leaves,
+                    destroys,
+                    ...(beside === undefined ? {} : { beside }),
+                });
             }
 
             return { session, directory: current.session === session ? current.directory : null, asked };
         });
     }
 
-    /** Takes back what a message was asked for, which is what an act the deployment did not write down leaves behind. */
-    function forget(storedEmailIds: readonly string[]): void {
+    /**
+     * Takes back what a message was asked for, which is what an act the deployment did not write down leaves behind.
+     *
+     * Only that act's claim: where the message is also waiting on the other flag, that act was written down on its own
+     * and still stands.
+     */
+    function forget(storedEmailIds: readonly string[], act: MailboxAct): void {
         setKept((current) => {
             const asked = new Map(current.asked);
 
             for (const storedEmailId of storedEmailIds) {
-                asked.delete(storedEmailId);
+                const left = withoutClaim(asked.get(storedEmailId), act);
+
+                if (left === undefined) {
+                    asked.delete(storedEmailId);
+                } else {
+                    asked.set(storedEmailId, left);
+                }
             }
 
             return { ...current, asked };
@@ -711,10 +786,20 @@ export function MailboxActsProvider({
             const written = writtenDown(answered);
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
 
+            // A message the deployment has written down as unread is no longer one this client marked read by opening
+            // it, so that marking stops standing over what the deployment reports. Left in place, it would draw the row
+            // read and count it read however many times the deployment answered otherwise.
+            if (act === 'markUnread') {
+                marking.forget(recorded.map((message) => message.storedEmailId));
+            }
+
             // Everything that was not written down stops being claimed here, rather than only where the queue lets go
             // of it: a message already where it was asked to go is a refusal nobody is told about, and an act filing
             // it into the folder it is already in has not taken it out of the list it is drawn in either.
-            forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
+            forget(
+                messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId),
+                act,
+            );
 
             // What this adds to what the deployment already wrote down is the screen: it had drawn the act as done and
             // has just put itself back, which somebody using it experiences as the client undoing their work. That is a
@@ -745,7 +830,10 @@ export function MailboxActsProvider({
 
                 // A message the deployment filed into the trash rather than holding a record for is not going anywhere,
                 // so it stops being claimed as destroyed and is reported as the delete into the trash it was.
-                forget(filed.map((message) => message.storedEmailId));
+                forget(
+                    filed.map((message) => message.storedEmailId),
+                    act,
+                );
                 report(act, filed, destination, false);
                 report(
                     act,
@@ -767,10 +855,15 @@ export function MailboxActsProvider({
                 act,
                 answered,
                 (again) => {
-                    forget(again.map((message) => message.storedEmailId));
+                    forget(
+                        again.map((message) => message.storedEmailId),
+                        act,
+                    );
                     perform(act, again, destination);
                 },
-                forget,
+                (storedEmailIds) => {
+                    forget(storedEmailIds, act);
+                },
             );
         });
     }

@@ -17,7 +17,11 @@ function message(storedEmailId: string, unread: boolean, flagged = false): Acted
 function marked(...storedEmailIds: readonly string[]): ReadMarking {
     const place: MarkedIn = inbox;
 
-    return { marked: new Map(storedEmailIds.map((id) => [id, place])), markRead: () => undefined };
+    return {
+        marked: new Map(storedEmailIds.map((id) => [id, place])),
+        markRead: () => undefined,
+        forget: () => undefined,
+    };
 }
 
 /** What a client holding exactly these acts carries, which is what a second press reads the first press's state from. */
