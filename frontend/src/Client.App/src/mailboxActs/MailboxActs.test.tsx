@@ -239,11 +239,13 @@ function acting(
         flags = true,
         moves = true,
         deletes = true,
+        composes = false,
         telemetry = noTelemetry,
     }: {
         flags?: boolean;
         moves?: boolean;
         deletes?: boolean;
+        composes?: boolean;
         telemetry?: ClientTelemetry;
     } = {},
 ): { readonly held: () => MailboxActs; readonly signIn: (next: ClientSession) => void } {
@@ -263,6 +265,7 @@ function acting(
                                 flags={flags}
                                 moves={moves}
                                 deletes={deletes}
+                                composes={composes}
                             >
                                 {children}
                             </MailboxActsProvider>
@@ -1049,6 +1052,18 @@ describe('MailboxActsProvider', () => {
         const { held } = acting(deploymentAnswering(), { moves: false, deletes: false });
 
         expect(held().folderRoleOf(invoice)).toBeNull();
+    });
+
+    // Writing a draft is not an act on the mailbox, so it offers none of them — but a draft is opened where it was
+    // written only if the list can tell it is one, and that is the account's own label on the folder it stands in.
+    it('names the folder a message is in for a credential that writes drafts and acts on no mail', async () => {
+        const { held } = acting(deploymentAnswering(), { flags: false, moves: false, deletes: false, composes: true });
+
+        await waitFor(() => {
+            expect(held().folderRoleOf(invoice)).toBe('Inbox');
+        });
+
+        expect(held().refusalOf('archive', [invoice])).toBe('notOffered');
     });
 
     it('reads no folders for a credential that may neither file mail nor delete it, both acts being refused', () => {

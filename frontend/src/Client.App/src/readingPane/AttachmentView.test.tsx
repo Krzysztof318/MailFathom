@@ -69,6 +69,7 @@ function reading(...answers: readonly AttachmentRead[]): { exchange: AttachmentE
 
                 return answer === undefined ? new Promise<AttachmentRead>(() => undefined) : Promise.resolve(answer);
             },
+            take: () => Promise.reject(new Error('The viewer asked to take a file rather than to show one.')),
         },
     };
 }
@@ -102,6 +103,7 @@ function delivering(): {
                 });
             },
             read: () => new Promise<AttachmentRead>(() => undefined),
+            take: () => Promise.reject(new Error('The viewer asked to take a file rather than to show one.')),
         },
     };
 }

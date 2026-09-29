@@ -9,6 +9,7 @@ import {
     deliveryFailureOf,
     drawnFrom,
     showingFailureOf,
+    takingFailureOf,
 } from './attachmentExchange';
 
 // Three things are proven here. What an answer to the attachment route amounts to, asked of an answer this file
@@ -165,6 +166,23 @@ describe('showingFailureOf', () => {
     // than a person stopping the download is. Counting it would report a working policy as a deployment at fault.
     it('reports a screened file as an answer the client acted on rather than as a failure', () => {
         expect(showingFailureOf({ outcome: 'refused', refusal: 'screened' })).toBeNull();
+    });
+});
+
+describe('takingFailureOf', () => {
+    it('reports a file that arrived as no failure at all', () => {
+        expect(takingFailureOf({ outcome: 'taken', octets: new Blob([]) })).toBeNull();
+    });
+
+    it.each([
+        ['unauthenticated', 'unauthenticated'],
+        ['unauthorized', 'unauthorized'],
+        ['unavailable', 'unavailable'],
+        ['largerThanDescribed', 'unreadable'],
+        ['abandoned', null],
+        ['screened', null],
+    ] as const)('reports a %s refusal as the failure a download reports it as', (refusal, reported) => {
+        expect(takingFailureOf({ outcome: 'refused', refusal })).toBe(reported);
     });
 });
 

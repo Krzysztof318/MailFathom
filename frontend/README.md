@@ -641,7 +641,10 @@ machine's because words, a subject, and the addresses they are for are personal 
 already on the screen; signing out drops it in the same act that empties the workspace. The draft in the user's own
 drafts folder is a separate thing that somebody asks for, because every revision of that one reaches their mail
 server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
-author asked for.
+author asked for. A message opened from the drafts folder is carried on in the composer by whoever may write drafts,
+whether or not they may also act on mail. A save writes a draft of its own rather than revising the stored one, so the
+files the stored draft carries are brought over from the deployment as if chosen again, and one that could not be is
+named rather than dropped.
 
 **The body is rich text, and what leaves carries both readings of one message.** `writtenText.ts` holds what somebody
 wrote as a closed tree of the elements the formatting controls produce, never as markup: nothing on this path turns a
@@ -672,9 +675,11 @@ the search text rather than the client trusting itself to. When a book the grant
 says so beside whatever the other one found, and leaves the address to be written in full; a book the grant does not
 reach says nothing, since nothing would change it.
 
-**Hiding the copy headers never drops an address in them.** The control only decides whether the two rows are drawn, so
-a copy written before they were hidden is still saved and still sent — and the confirmation, which names every address,
-is where it is seen again. A composition that already carries copies — an answer to everyone, a draft carried on — opens with them drawn.
+**Hiding the copy headers never drops an address in them, and never sends to one either.** What the two rows hold is
+kept while they are hidden, so pressing the control again shows every copy where it was. Nothing goes to an address
+nobody can see, though: while they are hidden, a save, a send, and the confirmation before a send are all written
+without them. A composition that already carries copies — an answer to everyone, a draft carried on — opens with them
+drawn.
 
 One thing it does not do yet, and it is somebody else's route rather than a decision taken here: **the subject of an
 answer is read-only**. A save either names an account and a subject or names the message it answers and lets the

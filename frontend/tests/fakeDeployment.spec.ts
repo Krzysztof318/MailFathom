@@ -122,9 +122,10 @@ test('takes a deleted folder out of both folder routes, the mail filed in it out
     const folders = ask(deployment, 'GET', '/folders') as { accounts: { folders: { alias: string }[] }[] };
     const searchedAgain = ask(deployment, 'GET', '/emails/search?query=renewal') as { results: { id: string }[] };
 
-    expect(managed.folders.map(({ id }) => id)).toStrictEqual(['INBOX', 'ARCHIVE', 'FILED', 'TRASH']);
+    expect(managed.folders.map(({ id }) => id)).toStrictEqual(['INBOX', 'DRAFTS', 'ARCHIVE', 'FILED', 'TRASH']);
     expect(folders.accounts.flatMap((account) => account.folders.map(({ alias }) => alias))).toStrictEqual([
         'INBOX',
+        'DRAFTS',
         'FILED',
         'TRASH',
     ]);
@@ -204,6 +205,54 @@ test('keeps a draft across saves as a revision each time, and forgets it once it
     });
     expect(ask(deployment, 'POST', `/drafts/${draftId}/send`)).toHaveProperty('outgoingEmail');
     expect(ask(deployment, 'PUT', `/drafts/${draftId}`, composition)).toBe(404);
+});
+
+test('files a draft with its staged file in the drafts folder, reads it back whole, and takes it out once sent', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const composition = {
+        account: 'work',
+        subject: 'The yard',
+        plainTextBody: 'Tuesday?',
+        to: ['yard@example.invalid'],
+    };
+
+    const written = ask(deployment, 'POST', '/drafts', composition) as { draft: { draftId: string } };
+    const { draftId } = written.draft;
+
+    deployment.answer({
+        method: 'POST',
+        url: `http://deployment.invalid/api/client/drafts/${draftId}/attachments?fileName=plan.txt`,
+        // Text that also reads as JSON, so a fake that parsed what it was handed would give back something else.
+        body: '{ "bay": 4 }',
+        contentType: 'text/plain',
+    });
+
+    const [filed = ''] = listed(deployment, 'folder=DRAFTS');
+
+    expect(counts(deployment, 'DRAFTS')).toStrictEqual({ stored: 1, unread: 0 });
+    expect(ask(deployment, 'GET', `/messages/${filed}`)).toMatchObject({
+        folder: 'DRAFTS',
+        headers: {
+            subject: 'The yard',
+            participants: expect.arrayContaining([
+                { role: 'To', address: 'yard@example.invalid', displayName: null },
+            ]) as unknown,
+        },
+        attachments: [{ position: 0, fileName: 'plan.txt', mediaType: 'text/plain', sizeOctets: 12 }],
+    });
+    expect(ask(deployment, 'GET', `/messages/${filed}/body`)).toMatchObject({ plainText: { text: 'Tuesday?' } });
+    expect(
+        deployment.answer({
+            method: 'GET',
+            url: `http://deployment.invalid/api/client/messages/${filed}/attachments/0`,
+            body: null,
+        }),
+    ).toStrictEqual({ status: 200, body: '{ "bay": 4 }', contentType: 'text/plain' });
+
+    ask(deployment, 'POST', `/drafts/${draftId}/send`);
+
+    expect(listed(deployment, 'folder=DRAFTS')).toStrictEqual([]);
+    expect(counts(deployment, 'DRAFTS')).toStrictEqual({ stored: 0, unread: 0 });
 });
 
 test('answers a question running once when asked to, and finished on the read after', () => {

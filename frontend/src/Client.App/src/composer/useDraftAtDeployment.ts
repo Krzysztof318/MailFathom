@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     discardMailDraft,
+    readMailAttachment,
     reviseMailDraft,
     sendMailDraft,
     stageMailDraftAttachment,
@@ -14,10 +15,12 @@ import {
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
+    type MailAttachment,
     type MailFathomTransport,
     type MailSendRefusal,
     type MailSendWithdrawal,
 } from '@mailfathom/client-backend';
+import { takingFailureOf, useAttachmentExchange } from '../deployment/attachmentExchange';
 import { useAttachmentUpload } from '../deployment/attachmentUpload';
 import { useTelemetry } from '../telemetry/clientTelemetry';
 import { wireComposition, type Composition } from './composition';
@@ -43,6 +46,8 @@ export type DraftStanding =
     | { readonly kind: 'saving' }
     | { readonly kind: 'saved' }
     | { readonly kind: 'attaching'; readonly fileName: string }
+    | { readonly kind: 'carrying'; readonly fileName: string }
+    | { readonly kind: 'notCarried'; readonly fileNames: readonly string[] }
     | { readonly kind: 'sending' }
     | { readonly kind: 'queued'; readonly outgoingEmailId: string }
     | { readonly kind: 'withdrawn'; readonly withdrawal: MailSendWithdrawal }
@@ -90,6 +95,15 @@ export interface DraftAtDeployment {
     readonly detach: (attachmentId: string) => Promise<void>;
 
     /**
+     * Takes the files a draft in a drafts folder was filed with into the message carrying it on.
+     *
+     * A save writes a draft of its own rather than taking the stored one over, so a file the draft carried would be
+     * left behind unless it is chosen again — here, from the deployment, exactly as if its author had chosen it from
+     * their machine. A file that could not be brought over is said by name rather than dropped quietly.
+     */
+    readonly carry: (storedEmailId: string, attachments: readonly MailAttachment[]) => Promise<void>;
+
+    /**
      * Queues the message, saving what has been written since first, and answers what it came to.
      *
      * The standing is answered as well as held because the surface says what became of a send where the design project
@@ -120,6 +134,7 @@ export interface DraftAtDeployment {
 
 export function useDraftAtDeployment(session: ClientSession, transport: MailFathomTransport): DraftAtDeployment {
     const upload = useAttachmentUpload();
+    const exchange = useAttachmentExchange();
     const telemetry = useTelemetry();
     const [standing, setStanding] = useState<DraftStanding>({ kind: 'held' });
     const [attached, setAttached] = useState<readonly AttachedFile[]>([]);
@@ -143,6 +158,14 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     const saving = useRef<Promise<string | null> | null>(null);
     const queued = useRef<string | null>(null);
     const uploading = useRef<AbortController | null>(null);
+    const taking = useRef<AbortController | null>(null);
+
+    // The draft whose files were already carried over, so a second read of the same draft brings none over twice.
+    const carried = useRef<string | null>(null);
+
+    // The carrying still under way, which every write waits for: a message saved or sent before its draft's files have
+    // arrived would leave behind the ones not yet taken, and nothing would say so.
+    const carrying = useRef<Promise<void> | null>(null);
 
     // Whether somebody has asked to stop the send while the deployment had not yet answered it. A ref rather than
     // state because nothing draws it: what reads it is the send itself, one turn later, and a value read out of a
@@ -173,13 +196,20 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     }
 
     // An upload whose composer has gone is an upload nobody is waiting for, and letting it finish would stage a file
-    // against a draft the author has closed.
+    // against a draft the author has closed. A file still being carried over from a draft is the same.
     useEffect(
         () => () => {
             uploading.current?.abort();
+            taking.current?.abort();
         },
         [],
     );
+
+    function attach(file: File): void {
+        named.current += 1;
+
+        holdFiles([...held.current, { attachmentId: String(named.current), file, stagedAs: null }]);
+    }
 
     function saved(composition: Composition, asked: DraftAct): Promise<string | null> {
         const already = saving.current;
@@ -198,6 +228,10 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     }
 
     async function write(composition: Composition, asked: DraftAct): Promise<string | null> {
+        if (carrying.current !== null) {
+            await carrying.current;
+        }
+
         const draft = draftId.current;
         const wire = wireComposition(composition);
 
@@ -403,10 +437,70 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return true;
         },
 
-        attach: (file) => {
-            named.current += 1;
+        attach,
 
-            holdFiles([...held.current, { attachmentId: String(named.current), file, stagedAs: null }]);
+        carry: async (storedEmailId, attachments) => {
+            if (carried.current === storedEmailId) {
+                return;
+            }
+
+            carried.current = storedEmailId;
+
+            // Said only over a composer that is otherwise at rest: a save the author started while the files were
+            // still arriving is saying something of its own, and waits for them before it writes anything.
+            function holdWhileCarrying(next: DraftStanding): void {
+                if (['held', 'carrying', 'notCarried'].includes(settledAs.current.kind)) {
+                    hold(next);
+                }
+            }
+
+            async function bringOver(): Promise<void> {
+                // Every file left behind, named together, so a second refusal does not hide the first.
+                const leftBehind: string[] = [];
+
+                for (const attachment of attachments) {
+                    // A file this client staged always has a name; one filed by another mail client may not, and it
+                    // is then called what a download would save it as.
+                    const fileName = attachment.fileName ?? `attachment-${attachment.position.toFixed(0)}`;
+                    const abandoning = new AbortController();
+
+                    taking.current = abandoning;
+                    holdWhileCarrying({ kind: 'carrying', fileName });
+
+                    const taken = await readMailAttachment(
+                        session,
+                        storedEmailId,
+                        attachment.position,
+                        attachment.sizeOctets,
+                        (request) => exchange.take(request, abandoning.signal),
+                        takingFailureOf,
+                    );
+
+                    taking.current = null;
+
+                    if (taken.outcome === 'taken') {
+                        attach(new File([taken.octets], fileName, { type: attachment.mediaType }));
+                    } else if (taken.refusal === 'abandoned') {
+                        return;
+                    } else {
+                        leftBehind.push(fileName);
+                    }
+                }
+
+                holdWhileCarrying(
+                    leftBehind.length > 0 ? { kind: 'notCarried', fileNames: leftBehind } : { kind: 'held' },
+                );
+            }
+
+            const bringing = bringOver();
+
+            carrying.current = bringing;
+
+            try {
+                await bringing;
+            } finally {
+                carrying.current = null;
+            }
         },
 
         detach: async (attachmentId) => {

@@ -181,6 +181,7 @@ export function MailboxActsProvider({
     flags,
     moves,
     deletes,
+    composes,
     children,
 }: {
     /** Who is asking and where, or `null` where there is nobody to act for. */
@@ -196,6 +197,14 @@ export function MailboxActsProvider({
 
     /** Whether this credential may delete mail from the mail server, which is the grant with no way back. */
     readonly deletes: boolean;
+
+    /**
+     * Whether this credential may write drafts, which makes a message in a drafts folder one to carry on writing.
+     *
+     * It is not an act on the mailbox, so it offers none of the acts above. What it needs from here is which role a
+     * message's folder plays, and that is the same folders read the acts name their destinations from.
+     */
+    readonly composes: boolean;
 
     readonly children: ReactNode;
 }) {
@@ -253,7 +262,8 @@ export function MailboxActsProvider({
     // them. Read where the credential may file mail or delete it: without either grant those three acts are refused
     // before a destination is looked for, so asking would be a request every session pays for and no screen reads.
     // Deleting needs them for a second reason — which folder an account calls its trash is what says whether *delete*
-    // files a message or destroys it.
+    // files a message or destroys it. Writing drafts needs them for a third: which folder an account calls its drafts
+    // is what says whether opening a message carries it on in the composer or reads it in the pane.
     //
     // It is a read of its own rather than the tree's, which the mailbox column performs for what it draws: the two
     // answer the same route and neither is derived from the other, so a shared read would be one more thing to own than
@@ -269,7 +279,7 @@ export function MailboxActsProvider({
     // A folder made, renamed, moved, or deleted here reads them again, for the reason the tree does: the destinations
     // this offers are those folders, and a folder somebody has just made is one they mean to file into at once.
     useEffect(() => {
-        if (session === null || !online || !(moves || deletes)) {
+        if (session === null || !online || !(moves || deletes || composes)) {
             return;
         }
 
@@ -307,7 +317,7 @@ export function MailboxActsProvider({
         return () => {
             listening = false;
         };
-    }, [session, transport, online, moves, deletes, attempts, foldersChanged, toasts, translate]);
+    }, [session, transport, online, moves, deletes, composes, attempts, foldersChanged, toasts, translate]);
 
     function refusalOf(act: MailboxAct, messages: readonly ActedMessage[]) {
         return refusalFor(act, messages, held.directory, { flags, moves, deletes });
@@ -765,19 +775,23 @@ export function MailboxActsProvider({
         });
     }
 
+    // A credential that may act on no mail is still told which folder a message stands in, because a draft is carried on
+    // in the composer by whoever may write one, whether or not they may also move it.
     const acts: MailboxActs =
-        session === null || !(flags || moves || deletes)
+        session === null
             ? nothingActed
-            : {
-                  asked: held.asked,
-                  refusalOf,
-                  folderRoleOf,
-                  destinationsOf: (messages) => destinationsFor(held.directory, messages),
-                  deletesPermanently: destroys,
-                  perform,
-                  carried,
-                  carry,
-              };
+            : !(flags || moves || deletes)
+              ? { ...nothingActed, folderRoleOf }
+              : {
+                    asked: held.asked,
+                    refusalOf,
+                    folderRoleOf,
+                    destinationsOf: (messages) => destinationsFor(held.directory, messages),
+                    deletesPermanently: destroys,
+                    perform,
+                    carried,
+                    carry,
+                };
 
     return <MailboxActsContext value={acts}>{children}</MailboxActsContext>;
 }

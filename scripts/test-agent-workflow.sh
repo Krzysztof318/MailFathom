@@ -9791,6 +9791,7 @@ deployment.ts mailAccounts GET /api/client/accounts
 deployment.ts troubledAccounts GET /api/client/accounts
 deployment.ts inbox GET /api/client/folders
 deployment.ts archive2024 GET /api/client/folders
+deployment.ts draftsFolder GET /api/client/folders
 deployment.ts emptyFolder GET /api/client/folders
 deployment.ts trash GET /api/client/folders
 deployment.ts filed GET /api/client/folders
