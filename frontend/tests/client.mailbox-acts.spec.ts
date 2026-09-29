@@ -18,6 +18,7 @@ import {
     row,
     test,
 } from './client.harness';
+import type { FakeDeployment } from './fakeDeployment';
 
 // The acts that change a mailbox from the Mail space — delete, purge, move, drag, flag, read, and undo — each performed
 // the way a person performs it and read back off every pane it should have moved: the list the message left, the counts
