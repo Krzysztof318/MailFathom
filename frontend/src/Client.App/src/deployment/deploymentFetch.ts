@@ -2,23 +2,24 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { throttledRetryDelay } from '@mailfathom/client-backend';
+import { retryDelay } from '@mailfathom/client-backend';
 
 // The one place in this client a request to the deployment is put on the wire. The four modules in this directory that
 // call `fetch` each read a different kind of answer, and they share what happens before any answer is read: how many
-// requests this client has in flight at once, and what it does about a request the deployment refused for its rate.
+// requests this client has in flight at once, and what it does about a failure that passes on its own.
 //
-// Both are this client keeping to the deployment's own limit rather than discovering it. The client endpoint allows one
-// user a handful of requests at once and refuses the rest outright, and every space this client draws reads what it
+// The first is this client keeping to the deployment's own limit rather than discovering it. The client endpoint allows
+// one user a handful of requests at once and refuses the rest outright, and every space this client draws reads what it
 // shows the moment it is mounted — so a client that put all of them on the wire together would be refused for most of
-// them on every sign-in, and each refusal would reach a screen as a deployment that did not answer.
+// them on every sign-in, and each refusal would reach a screen as a deployment that did not answer. The second is the
+// one policy `transientFailures.ts` in `Client.Backend` states, applied here so no adapter and no screen keeps its own.
 
 /**
  * How many requests this client has on the wire at once.
  *
  * Six is what a browser already allows itself on one connection to an origin, and it sits below the eight a
  * deployment allows one user by default, so a second window signed in as the same person still has room beside it.
- * A deployment configured narrower than that is met by the retry below rather than by a smaller number here: this
+ * A deployment configured narrower than that is met by the retry policy rather than by a smaller number here: this
  * client cannot know what a deployment was configured with, and does not need to.
  */
 export const mostRequestsInFlight = 6;
@@ -33,18 +34,21 @@ export type Pausing = (milliseconds: number, abandoned: AbortSignal | null | und
  * Puts a request on the wire within the client's share of the deployment, and hands the answer to whoever reads it.
  *
  * @param path Where the request goes.
- * @param init The request itself; its body is sent again unchanged when a throttled request is retried, which is what
- * every body this client sends — a string, a `Blob`, or nothing — allows.
+ * @param init The request itself; its body is sent again unchanged when the request is retried, which is what every
+ * body this client sends — a string, a `Blob`, or nothing — allows.
  * @param answered Reads the answer that is final. The request keeps its place among those in flight until this
  * settles, because the deployment counts a request until its answer has been sent in full.
+ * @param retriedByCaller Whether the caller sends this request again on a schedule of its own, in which case it is put
+ * on the wire once — see `ClientRequest.retriedByCaller`.
  * @returns What `answered` returned.
- * @throws What `fetch` throws — a network failure or an abandoned request — which every caller already reads as
- * nothing having answered.
+ * @throws What `fetch` throws — a network failure that outlasted the retries, or an abandoned request — which every
+ * caller already reads as nothing having answered.
  */
 export type DeploymentFetch = <TAnswer>(
     path: string,
     init: RequestInit,
     answered: (response: Response) => Promise<TAnswer>,
+    retriedByCaller?: boolean,
 ) => Promise<TAnswer>;
 
 /**
@@ -107,8 +111,22 @@ export function deploymentFetchOver(
         });
     };
 
-    return async (path, init, answered) => {
+    return async (path, init, answered, retriedByCaller = false) => {
+        const method = init.method ?? 'GET';
+
         for (let made = 0; ; made += 1) {
+            const delayAfter = (answer: Response | null): number | null =>
+                retriedByCaller
+                    ? null
+                    : retryDelay(
+                          method,
+                          answer === null
+                              ? null
+                              : { status: answer.status, headers: Object.fromEntries(answer.headers) },
+                          made,
+                          drawing(),
+                      );
+
             await acquire(init.signal);
 
             let response: Response;
@@ -118,14 +136,19 @@ export function deploymentFetchOver(
             } catch (failure) {
                 release();
 
-                throw failure;
+                // An abandoned request is the caller's act rather than a failure, so it ends the attempts at once.
+                const delay = init.signal?.aborted === true ? null : delayAfter(null);
+
+                if (delay === null) {
+                    throw failure;
+                }
+
+                await pausing(delay, init.signal);
+
+                continue;
             }
 
-            const delay = throttledRetryDelay(
-                { status: response.status, headers: Object.fromEntries(response.headers) },
-                made,
-                drawing(),
-            );
+            const delay = delayAfter(response);
 
             if (delay === null) {
                 try {

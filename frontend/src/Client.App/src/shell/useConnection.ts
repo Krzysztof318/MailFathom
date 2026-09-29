@@ -12,6 +12,7 @@ import {
     type ClientSession,
     type DeploymentSession,
     type MailAccountDirectory,
+    type MailFathomTransport,
 } from '@mailfathom/client-backend';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import { offers } from './capabilities';
@@ -204,6 +205,9 @@ export function useConnection(
     // Whether the next read is a refresh, handed from the call asking for one to the read it starts. A ref because
     // nothing is drawn from it and setting it must not start a read of its own.
     const quietly = useRef(false);
+
+    // Whether the next read is one of the automatic attempts below, handed over the same way and for the same reason.
+    const automatically = useRef(false);
     const [read, setRead] = useState(0);
     const [reaching, setReaching] = useState<Reaching>(noneMade);
     const [answered, setAnswered] = useState<Answered>(nothingRead);
@@ -230,12 +234,21 @@ export function useConnection(
         // unless it was asked for as one.
         const keepsWhatStands = quietly.current;
         quietly.current = false;
+        const retriedByCaller = automatically.current;
+        automatically.current = false;
 
         // Abandoning is what says an answer is nobody's to render any more, and it is one mechanism rather than two:
         // the signal already has to travel to the transport, so a second flag beside it would be a second thing to
         // keep true.
         const attempted = new AbortController();
-        const transport = send(attempted.signal);
+        const onTheWire = send(attempted.signal);
+
+        // The first read after an answer is retried by the transport like every other, so a deployment that blinks is
+        // never reported lost. Once it has been, the schedule below is what reaches for it, and each of its attempts goes
+        // on the wire once rather than being retried a second time underneath.
+        const transport: MailFathomTransport = retriedByCaller
+            ? (request) => onTheWire({ ...request, retriedByCaller: true })
+            : onTheWire;
 
         // Read per request rather than once per effect, so a renewal landing between the two reads below presents the
         // token the deployment now holds. The one it replaced stopped working the moment the renewal answered.
@@ -367,6 +380,7 @@ export function useConnection(
 
         const waiting = setTimeout(
             () => {
+                automatically.current = true;
                 setReaching({ made: attempts + 1, presentedAt: baseAddress, presenting });
                 setRead((token) => token + 1);
             },

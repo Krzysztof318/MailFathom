@@ -164,6 +164,9 @@ export function readSignalTicket(
             path: routeFor(session, signalTicketRoute),
             headers: headersFor(session),
             longestAnswer: longestTicketAnswer,
+
+            // The stream this ticket opens mints another on its own schedule whenever one is refused, and never stops.
+            retriedByCaller: true,
         });
 
         if (response === null) {

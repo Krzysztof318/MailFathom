@@ -30,4 +30,18 @@ describe('sendToDeployment', () => {
             expect.objectContaining({ credentials: 'omit' }),
         );
     });
+
+    it('puts a request its caller retries on the wire once, whatever it was answered', async () => {
+        const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 503 }));
+
+        const answer = await sendToDeployment(new AbortController().signal)({
+            method: 'GET',
+            path: 'https://mail.example/api/client/session',
+            headers: {},
+            retriedByCaller: true,
+        });
+
+        expect(answer.status).toBe(503);
+        expect(sent).toHaveBeenCalledOnce();
+    });
 });

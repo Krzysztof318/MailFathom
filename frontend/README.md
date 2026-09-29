@@ -289,13 +289,27 @@ trace context and leave no record, so composing one is not something this packag
 
 **Every request, whichever adapter carries it, reaches the wire through
 `src/Client.App/src/deployment/deploymentFetch.ts`**, which is where the client keeps to the deployment's limit on one
-user rather than discovering it. It holds at most six requests in flight and queues the rest, so the burst every space
-makes as it mounts stays under the eight at once a deployment allows one user by default. A request the deployment still refuses with a bare `429` — its transport limiter's answer,
-which says nothing about the request — is put on the wire again up to three times, after a wait that doubles from a
-quarter of a second or after the `Retry-After` the answer named, and one naming more than ten seconds is handed back at
-once. What decides that is `throttledRetryDelay` in `src/Client.Backend/src/throttling.ts`, since a status and a header
-are that package's to read; a `429` carrying a problem document is the service declining the operation itself and is
-never retried. Only a refusal that outlasts those attempts reaches a screen, as a deployment that did not answer.
+user rather than discovering it, and where it retries a failure that passes on its own. It holds at most six requests in
+flight and queues the rest, so the burst every space makes as it mounts stays under the eight at once a deployment
+allows one user by default.
+
+**One policy decides what is retried, and no adapter, hook, or screen keeps a retry of its own.** It is `retryDelay` in
+`src/Client.Backend/src/transientFailures.ts`, since a status and a header are that package's to read. A bare `429` —
+the transport limiter's answer, which proves the request was not acted on — is retried whatever the method. A `502`,
+`503`, or `504`, and a connection that was refused, reset, or cut short, prove nothing about whether the request was
+acted on, so they are retried for a `GET` alone: no client route takes an idempotency key, and a write whose first
+attempt landed is answered differently the second time. A `429` carrying a problem document is the service declining
+the operation itself and is never retried. Each request is put on the wire again at most three times, after a wait that
+doubles from a quarter of a second or after the `Retry-After` the answer named, and one naming more than ten seconds is
+handed back at once — so the most one read waits is 37.5 seconds, and 2.2 seconds when nothing names a moment. A
+request abandoned before or between its attempts ends them at once and is never reported as a failure. Only a failure
+that outlasts those attempts reaches a screen, as a deployment that did not answer.
+
+**A caller that keeps a longer schedule of its own marks its requests `retriedByCaller`, and the transport puts them on
+the wire once.** Two do: the shell reaching for a deployment it has already reported lost, whose first read is the
+transport's to retry and whose later attempts are its own, and the signal stream minting a ticket, which mints another
+on its own schedule for as long as it is open. Following a change the client asked for is not a third: it reads on the
+same interval whether or not the last read answered, and counts only the reads that outlasted the transport's retries.
 
 **That span is also what the request travels under.** It is the active context while the operation composes its
 request, so `headersFor` writes the W3C trace context into the headers and the span the deployment opens is this one's

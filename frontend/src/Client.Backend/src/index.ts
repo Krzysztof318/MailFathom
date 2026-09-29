@@ -454,7 +454,7 @@ export {
     type OwnTimeZoneChange,
 } from './ownTimeZone';
 export { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
-export { mostThrottledRetries, throttledRetryDelay } from './throttling';
+export { mostRetries, retryDelay } from './transientFailures';
 export {
     followRun,
     silentRunPollInterval,

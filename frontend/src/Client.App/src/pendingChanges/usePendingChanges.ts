@@ -21,6 +21,10 @@ export const followedChangeInterval = 5_000;
  *
  * Bounded rather than endless because what is being followed has already been written down durably: the change is not
  * at risk while nobody is watching it, so asking forever would spend a phone's battery to learn nothing.
+ *
+ * It is a count rather than a retry: the client asks on the same interval whether the last read was answered or not,
+ * so a failure changes nothing about when the next one goes out. What passes within a single read is the transport's
+ * to retry, and this counts only the reads that outlasted it.
  */
 export const mostFollowingAttempts = 5;
 
