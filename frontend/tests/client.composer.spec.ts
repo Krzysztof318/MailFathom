@@ -256,7 +256,7 @@ test('keeps a draft with its file when the composer is left, lists it in Drafts,
         ({ method, route }) => method === 'POST' && route.startsWith('/drafts/') && route.endsWith('/attachments'),
     );
 
-    expect(staged.map(({ query, body }) => [query.get('fileName'), body])).toStrictEqual([
+    expect(staged.map(({ query, text }) => [query.get('fileName'), text])).toStrictEqual([
         [file.name, file.buffer.toString()],
         [file.name, file.buffer.toString()],
     ]);

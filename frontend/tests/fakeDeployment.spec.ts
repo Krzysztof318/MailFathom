@@ -222,7 +222,8 @@ test('files a draft with its staged file in the drafts folder, reads it back who
     deployment.answer({
         method: 'POST',
         url: `http://deployment.invalid/api/client/drafts/${draftId}/attachments?fileName=plan.txt`,
-        body: 'bay 4',
+        // Text that also reads as JSON, so a fake that parsed what it was handed would give back something else.
+        body: '{ "bay": 4 }',
         contentType: 'text/plain',
     });
 
@@ -237,7 +238,7 @@ test('files a draft with its staged file in the drafts folder, reads it back who
                 { role: 'To', address: 'yard@example.invalid', displayName: null },
             ]) as unknown,
         },
-        attachments: [{ position: 0, fileName: 'plan.txt', mediaType: 'text/plain', sizeOctets: 5 }],
+        attachments: [{ position: 0, fileName: 'plan.txt', mediaType: 'text/plain', sizeOctets: 12 }],
     });
     expect(ask(deployment, 'GET', `/messages/${filed}/body`)).toMatchObject({ plainText: { text: 'Tuesday?' } });
     expect(
@@ -246,7 +247,7 @@ test('files a draft with its staged file in the drafts folder, reads it back who
             url: `http://deployment.invalid/api/client/messages/${filed}/attachments/0`,
             body: null,
         }),
-    ).toStrictEqual({ status: 200, body: 'bay 4', contentType: 'text/plain' });
+    ).toStrictEqual({ status: 200, body: '{ "bay": 4 }', contentType: 'text/plain' });
 
     ask(deployment, 'POST', `/drafts/${draftId}/send`);
 

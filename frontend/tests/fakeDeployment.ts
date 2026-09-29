@@ -63,6 +63,9 @@ export interface IssuedRequest {
     /** The body as the JSON it was sent as, or the text where it was not JSON, or `null` where there was none. */
     readonly body: unknown;
 
+    /** The body exactly as it travelled, which is what a staged file is: its octets, whatever they happen to parse as. */
+    readonly text: string | null;
+
     /** What the request declared its body to be, or `null` where it declared nothing. */
     readonly contentType: string | null;
 }
@@ -306,6 +309,7 @@ export class FakeDeployment {
             route: address.pathname.slice(clientPrefix.length),
             query: address.searchParams,
             body: parsedBody(request.body),
+            text: request.body,
             contentType: request.contentType ?? null,
         };
 
@@ -793,7 +797,7 @@ export class FakeDeployment {
 
     /** Revising, discarding, and sending one draft the client wrote here, and staging files against it. */
     private draftAnswer(
-        { method, body, query, contentType }: IssuedRequest,
+        { method, body, text, query, contentType }: IssuedRequest,
         segments: readonly string[],
     ): FakeAnswer | null {
         const [space, id = '', part, attachmentId] = segments;
@@ -827,7 +831,7 @@ export class FakeDeployment {
                 attachmentId: this.mintedIdentity(),
                 fileName: query.get('fileName') ?? '',
                 mediaType: contentType ?? 'application/octet-stream',
-                octets: typeof body === 'string' ? body : JSON.stringify(body),
+                octets: text ?? '',
             };
 
             held.files.push(file);
