@@ -1230,7 +1230,7 @@ Two things ask for a review anyway, whichever skip refused it:
   look; the comment path applies none of the checks above, because somebody with
   write access typing the phrase has already decided the run is worth its cost.
   Adding `opus` to that comment buys a second, costlier opinion;
-  `claude-sonnet-5` is the default.
+  `claude-sonnet-5-5` is the default.
 
   A comment reaches the reviewer as two runs rather than one. The run the comment
   itself creates only decides, and when the answer is yes it asks for the review
@@ -1434,7 +1434,7 @@ a single review: `event: COMMENT` when the answer holds any finding at all, and
 `event: APPROVE` when it holds none, described under **What a later pass is for**
 below.
 
-The model is named exactly rather than by alias: `claude-sonnet-5` at
+The model is named exactly rather than by alias: `claude-sonnet-5-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
 comparable across runs when the model that produced them is the one the workflow
 names.
@@ -1724,7 +1724,7 @@ grow:
   nobody outside the project can spend the subscription by typing;
 - an automatic review is capped at six per pull request, as described above, and a
   review somebody asked for is outside that count in both directions;
-- the model is `claude-sonnet-5` rather than the costlier Opus, which exactly two
+- the model is `claude-sonnet-5-5` rather than the costlier Opus, which exactly two
   things reach: a review request asking for it by name, and the `security` label
   on the pull request, described below;
 - every collected input carries an explicit ceiling, and what a ceiling dropped is
@@ -1784,7 +1784,7 @@ reading of a path no fix moved is reading what four passes already read and let
 through. The label's other consequence is untouched, and the paragraph below is why
 that matters more: the costlier model performs the pass at every count.
 
-The second is the model. `claude-opus-5` performs that pass, which is the same shape
+The second is the model. `claude-opus-5-5` performs that pass, which is the same shape
 of exception as a maintainer writing `opus` in a request, taken by the project rather
 than by a hand: the change whose defect would be a security defect is the one a
 second, costlier opinion most repays. Nothing else escalates.
