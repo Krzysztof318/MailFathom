@@ -64,8 +64,8 @@ export type AttachmentTaken =
 /**
  * Fetching one file a message carries, for the three things the client does with one.
  *
- * It is an interface rather than two loose functions for the reason `portraitExchange.ts` gives about its three: the
- * two are one boundary, so a screen proving what it does about a refusal receives one object and the application
+ * It is an interface rather than three loose functions for the reason `portraitExchange.ts` gives about its own three:
+ * they are one boundary, so a screen proving what it does about a refusal receives one object and the application
  * supplies one at its edge.
  */
 export interface AttachmentExchange {
