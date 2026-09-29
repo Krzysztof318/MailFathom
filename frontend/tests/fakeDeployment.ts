@@ -6,6 +6,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import * as agent from './fixtures/agent';
 import * as calendar from './fixtures/calendar';
+import * as changes from './fixtures/changes';
 import * as contacts from './fixtures/contacts';
 import * as deployment from './fixtures/deployment';
 import * as discovery from './fixtures/discovery';
@@ -33,6 +34,36 @@ const protectedResourcePath = `/.well-known/oauth-protected-resource${clientPref
 
 /** The addresses the fake answers, on whatever origin the preview server took. */
 const servedRoutes = /^[^?#]*\/(?:api\/client\/|\.well-known\/oauth-protected-resource\/api\/client(?:[/?#]|$))/u;
+
+/** The address the client opens its signal connection at, with the ticket on it. */
+const hubAddress = /^[^?#]*\/api\/client\/signals(?:\?|$)/u;
+
+/** What ends every message of SignalR's JSON protocol, which is how several arrive in one frame. */
+const recordSeparator = '\u001e';
+
+/** The SignalR message types the hub speaks: a method invoked on the client, and the ping that keeps a connection. */
+const invocation = 1;
+const ping = 6;
+
+/**
+ * The half of a routed WebSocket the hub speaks through.
+ *
+ * Playwright's own route is one, and it is named apart so the hub can be asked with no page at all, as the rest of the
+ * fake is: `fakeDeployment.spec.ts` stands a socket of its own in front of it.
+ */
+export interface HubSocket {
+    url(): string;
+    onMessage(handler: (message: string | Buffer) => void): void;
+    onClose(handler: () => void): void;
+    send(message: string): void;
+    close(options?: { code?: number; reason?: string }): Promise<void>;
+}
+
+/** The flags a change from elsewhere writes, each left alone where it is not stated. */
+interface WrittenFlags {
+    readonly seen?: boolean;
+    readonly flagged?: boolean;
+}
 
 /** One request the page issued, as the fake reads it. */
 export interface FakeRequest {
@@ -78,7 +109,7 @@ interface MutationRecord {
     readonly recordId: string;
     readonly storedEmailId: string;
     readonly mutation: 'set-seen' | 'set-flagged' | 'relocate' | 'delete';
-    state: 'pending' | 'completed' | 'cancelled';
+    state: 'pending' | 'completed' | 'cancelled' | 'dead-lettered';
 }
 
 /** Where a message stands in the corpus before anything is written to it. */
@@ -119,6 +150,14 @@ const composingEntriesShown = 3;
 
 /** When every record the fake writes down was written, which no check reads and the record route requires. */
 const recordedAt = '2026-08-31T09:41:00+00:00';
+
+/** How many passes stand behind a record in each state: a refused one is one the account stopped retrying. */
+const attemptsBehind: Readonly<Record<MutationRecord['state'], number>> = {
+    pending: 0,
+    completed: 1,
+    cancelled: 0,
+    'dead-lettered': 5,
+};
 
 /** What the fake reads of a row a folder page lists; every other field travels as the corpus states it. */
 interface FolderRow {
@@ -254,6 +293,26 @@ export class FakeDeployment {
     private readonly contactsWritten: Held[] = [];
     private readonly contactsErased = new Set<string>();
 
+    /** Mail that arrived while the check ran, newest first, which the inbox lists ahead of what the corpus holds. */
+    private readonly arrived: FolderRow[] = [];
+
+    private accounts: Held = deployment.mailAccounts;
+
+    /** Whether the ticket is minted at all, which is whether this deployment serves a signal channel. */
+    private signalsServed = false;
+
+    /** Tickets minted and not yet presented, because a ticket opens exactly one connection. */
+    private readonly ticketsUnspent = new Set<string>();
+
+    /** The connections whose handshake has been answered, which are the ones a signal is said on. */
+    private readonly connections = new Set<HubSocket>();
+
+    /** Whether the deployment has stopped answering, which refuses every request and every connection. */
+    private unreachable = false;
+
+    /** Whether the next change the client asks for is written down and never taken. */
+    private refusingNextChange = false;
+
     private minted = 0;
     private nextAnswerRunning = false;
 
@@ -273,13 +332,25 @@ export class FakeDeployment {
             const request = route.request();
             const contentType = request.headers()['content-type'];
             const authorization = request.headers()['authorization'];
-            const answer = this.answer({
+            const asked: FakeRequest = {
                 method: request.method(),
                 url: request.url(),
                 body: request.postData(),
                 ...(contentType === undefined ? {} : { contentType }),
                 ...(authorization === undefined ? {} : { authorization }),
-            });
+            };
+
+            // Refused as a network refuses it rather than answered with a status, because a deployment that stopped
+            // answering answers nothing. What was asked is still written down, which is how a check reads how often
+            // the client reached for it.
+            if (this.unreachable) {
+                this.issued.push(issuedFrom(asked));
+                await route.abort('connectionrefused');
+
+                return;
+            }
+
+            const answer = this.answer(asked);
 
             await route.fulfill({
                 status: answer.status,
@@ -287,6 +358,109 @@ export class FakeDeployment {
                 ...(answer.contentType === undefined ? {} : { contentType: answer.contentType }),
             });
         });
+
+        await target.routeWebSocket(hubAddress, (socket) => {
+            this.connect(socket);
+        });
+    }
+
+    /**
+     * Takes one connection the client opened at the hub, speaking SignalR's JSON protocol as the service's hub does.
+     *
+     * The ticket on its address opens it once and is spent by opening it, so a client reopening the channel has to mint
+     * another — which is the service's rule, and what makes a reopening visible in the requests a check reads.
+     */
+    connect(socket: HubSocket): void {
+        const ticket = new URL(socket.url()).searchParams.get('access_token');
+
+        if (this.unreachable || ticket === null || !this.ticketsUnspent.delete(ticket)) {
+            void socket.close({ code: 1008, reason: 'The ticket opens no connection.' });
+
+            return;
+        }
+
+        socket.onMessage((message) => {
+            for (const frame of String(message).split(recordSeparator)) {
+                this.heard(socket, recordIn(parsedBody(frame)));
+            }
+        });
+        socket.onClose(() => {
+            this.connections.delete(socket);
+        });
+    }
+
+    /** How many connections stand, which is what a check waits for before anything is said over one. */
+    channelsOpen(): number {
+        return this.connections.size;
+    }
+
+    /** Serves the signal channel from the next ticket the client asks for; until then the ticket is refused. */
+    serveSignals(): void {
+        this.signalsServed = true;
+    }
+
+    /** Stops answering anything at all, closing whatever connection stands, until {@link answerAgain}. */
+    stopAnswering(): void {
+        this.unreachable = true;
+
+        for (const socket of this.connections) {
+            void socket.close({ code: 1011, reason: 'The deployment stopped.' });
+        }
+
+        this.connections.clear();
+    }
+
+    /** Answers again, holding everything it held before it stopped. */
+    answerAgain(): void {
+        this.unreachable = false;
+    }
+
+    /**
+     * Writes the next change the client asks for down and never takes it: the record stands as the account's
+     * reconciliation leaves one it stopped retrying, and the mailbox is as it was before the change was asked for.
+     */
+    refuseNextChange(): void {
+        this.refusingNextChange = true;
+    }
+
+    /** Delivers the corpus's arriving message to the head of the inbox, and says so over the channel. */
+    deliver(): void {
+        const { account, folder } = mail.arrivingRow;
+
+        this.arrived.unshift(mail.arrivingRow);
+        this.count(folder, 1, 1);
+        this.signal({ kind: 'mail.arrived', account, folder, count: 1 });
+    }
+
+    /** Marks a message from another client of the same mailbox, and states the flags it now carries over the channel. */
+    flagElsewhere(storedEmailId: string, flags: WrittenFlags): void {
+        const facts = this.flagsWritten(storedEmailId, flags);
+
+        this.signal({
+            kind: 'mail.flags.changed',
+            account: 'work',
+            folder: facts.folder,
+            flags: [{ email: storedEmailId, isSeen: flags.seen ?? null, isFlagged: flags.flagged ?? null }],
+        });
+    }
+
+    /** Marks a message from elsewhere and says no more over the channel than that it changed, which it is read again for. */
+    changeElsewhere(storedEmailId: string, flags: WrittenFlags): void {
+        const facts = this.flagsWritten(storedEmailId, flags);
+
+        this.signal({ kind: 'mail.changed', account: 'work', folder: facts.folder, emails: [storedEmailId] });
+    }
+
+    /** Makes a folder on the mail server from elsewhere, which the account declares and the channel says moved. */
+    makeFolderElsewhere(name: string): void {
+        this.folderMade({ name, parentId: null });
+        this.signal({ kind: 'folders.changed', account: 'work' });
+    }
+
+    /** Moves the accounts to the corpus's troubled reading, and says an account's state moved. */
+    troubleTheAccounts(): void {
+        this.accounts = deployment.troubledAccounts;
+        this.signal({ kind: 'account.state', account: deployment.failingAccount.id });
     }
 
     /** The requests the page issued with this method to this route, in the order it issued them. */
@@ -327,14 +501,7 @@ export class FakeDeployment {
             return answering({ ...deployment.protectedResource, resource: `${address.origin}${clientPrefix}` });
         }
 
-        const issued: IssuedRequest = {
-            method: request.method,
-            route: address.pathname.slice(clientPrefix.length),
-            query: address.searchParams,
-            body: parsedBody(request.body),
-            text: request.body,
-            contentType: request.contentType ?? null,
-        };
+        const issued = issuedFrom(request);
 
         this.issued.push(issued);
 
@@ -347,6 +514,45 @@ export class FakeDeployment {
         }
 
         return answer;
+    }
+
+    /**
+     * One message a connection sent. The handshake names the protocol and is answered with an empty record, which is
+     * when the connection stands; a ping is answered with one, which is what keeps the client's own timeout from
+     * closing a connection nothing else is said on. Everything else a client may send is nothing the hub acts on.
+     */
+    private heard(socket: HubSocket, message: Held | null): void {
+        if (message === null) {
+            return;
+        }
+
+        if (typeof message['protocol'] === 'string') {
+            socket.send(`{}${recordSeparator}`);
+            this.connections.add(socket);
+
+            return;
+        }
+
+        if (message['type'] === ping) {
+            socket.send(`${JSON.stringify({ type: ping })}${recordSeparator}`);
+        }
+    }
+
+    /** Says one statement on every connection that stands, as the hub invokes the one method the client listens on. */
+    private signal(payload: Held): void {
+        const said = `${JSON.stringify({ type: invocation, target: 'signal', arguments: [payload] })}${recordSeparator}`;
+
+        for (const socket of this.connections) {
+            socket.send(said);
+        }
+    }
+
+    private ticketMinted() {
+        const ticket = this.mintedIdentity();
+
+        this.ticketsUnspent.add(ticket);
+
+        return { ...changes.signalTicket, ticket };
     }
 
     private answerFor(request: IssuedRequest, authorization: string | null): FakeAnswer | null {
@@ -400,12 +606,12 @@ export class FakeDeployment {
 
                 return answering(this.timeZone);
             }
-            // A deployment built before the signal channel existed refuses the ticket, which every screen already
-            // reads as a channel that is down and carries on without.
+            // Until a check serves the channel, the ticket is refused the way a deployment built before the channel
+            // existed refuses it, which every screen already reads as a channel that is down and carries on without.
             case 'POST /signals/ticket':
-                return { status: 404, body: '' };
+                return this.signalsServed ? answering(this.ticketMinted()) : { status: 404, body: '' };
             case 'GET /accounts':
-                return answering(deployment.mailAccounts);
+                return answering(this.accounts);
             case 'GET /folders':
                 return answering(this.folders());
             case 'GET /managed-folders':
@@ -807,9 +1013,14 @@ export class FakeDeployment {
         const markupOnly = id === messages.markupOnlyId;
 
         if (part === undefined) {
+            const read = markupOnly ? messages.markupOnlyMessage : messages.newsletterMessage;
+            const flags = this.flags.get(id);
+
             return answering({
-                ...(markupOnly ? messages.markupOnlyMessage : messages.newsletterMessage),
+                ...read,
                 storedEmailId: id,
+                unread: flags?.unread ?? read.unread,
+                flagged: flags?.flagged ?? read.flagged,
             });
         }
 
@@ -1422,7 +1633,9 @@ export class FakeDeployment {
     }
 
     private pageFrom(start: number, matches: (row: FolderRow | null) => boolean) {
-        const emails: unknown[] = [];
+        // What arrived heads the folder, and only a read from its head lists it: a cursor names a position among the
+        // corpus's own rows, so the page after the first goes on from wherever the first stopped reading them.
+        const emails: unknown[] = start === 0 ? this.arrived.map((row) => this.shaped(row)).filter(matches) : [];
         let position = start;
 
         while (emails.length < mail.rowsPerPage && position < mail.mailboxSize) {
@@ -1525,24 +1738,57 @@ export class FakeDeployment {
                 return { storedEmailId, outcome: 'message-not-found', detail: null, changes: [] };
             }
 
-            const written: MutationRecord[] = [];
-            const held = this.flags.get(storedEmailId) ?? {};
+            const asked: WrittenFlags = {
+                ...(typeof flags?.['seen'] === 'boolean' ? { seen: flags['seen'] } : {}),
+                ...(typeof flags?.['flagged'] === 'boolean' ? { flagged: flags['flagged'] } : {}),
+            };
+            const applied = !this.refusesThisChange();
 
-            if (typeof flags?.['seen'] === 'boolean') {
-                this.count(facts.folder, 0, Number(!flags['seen']) - Number(facts.unread));
-                held.unread = !flags['seen'];
-                written.push(this.recorded(storedEmailId, 'set-seen', 'completed'));
+            if (applied) {
+                this.flagsWritten(storedEmailId, asked);
             }
 
-            if (typeof flags?.['flagged'] === 'boolean') {
-                held.flagged = flags['flagged'];
-                written.push(this.recorded(storedEmailId, 'set-flagged', 'completed'));
-            }
-
-            this.flags.set(storedEmailId, held);
+            const state = applied ? 'completed' : 'dead-lettered';
+            const written = [
+                ...(asked.seen === undefined ? [] : [this.recorded(storedEmailId, 'set-seen', state)]),
+                ...(asked.flagged === undefined ? [] : [this.recorded(storedEmailId, 'set-flagged', state)]),
+            ];
 
             return { storedEmailId, outcome: 'recorded', detail: null, changes: written.map(submitted) };
         });
+    }
+
+    /** Writes a message's flags as its mailbox now holds them, moving the unread count with the read mark. */
+    private flagsWritten(storedEmailId: string, flags: WrittenFlags): MessageFacts {
+        const facts = this.factsOf(storedEmailId);
+
+        if (facts === null) {
+            throw new Error(`The corpus holds no message ${storedEmailId} to mark.`);
+        }
+
+        const held = this.flags.get(storedEmailId) ?? {};
+
+        if (flags.seen !== undefined) {
+            this.count(facts.folder, 0, Number(!flags.seen) - Number(facts.unread));
+            held.unread = !flags.seen;
+        }
+
+        if (flags.flagged !== undefined) {
+            held.flagged = flags.flagged;
+        }
+
+        this.flags.set(storedEmailId, held);
+
+        return facts;
+    }
+
+    /** Whether the change being written is the one a check asked to be refused, which spends that ask. */
+    private refusesThisChange(): boolean {
+        const refused = this.refusingNextChange;
+
+        this.refusingNextChange = false;
+
+        return refused;
     }
 
     private moved(body: unknown) {
@@ -1563,6 +1809,12 @@ export class FakeDeployment {
 
             if (facts.folder === destinationFolder) {
                 return { storedEmailId, outcome: 'already-in-destination', destinationFolder, change: null };
+            }
+
+            if (this.refusesThisChange()) {
+                const change = submitted(this.recorded(storedEmailId, 'relocate', 'dead-lettered'));
+
+                return { storedEmailId, outcome: 'recorded', destinationFolder, change };
             }
 
             this.count(facts.folder, -1, -Number(facts.unread));
@@ -1636,7 +1888,7 @@ export class FakeDeployment {
                 mutation: record.mutation,
                 state: record.state,
                 outcomeUnknown: false,
-                attemptCount: record.state === 'completed' ? 1 : 0,
+                attemptCount: attemptsBehind[record.state],
                 lastFailure: null,
                 recordedAt,
                 stateChangedAt: recordedAt,
@@ -1742,6 +1994,20 @@ function folderRefused(refusal: 'FolderMissing' | 'ParentMissing' | 'NameInvalid
         status: refusal === 'NameInvalid' ? 400 : 404,
         body: JSON.stringify({ refusal }),
         contentType: 'application/problem+json',
+    };
+}
+
+/** One request as a check reads it back: the route beneath the prefix, its query, and its body. */
+function issuedFrom(request: FakeRequest): IssuedRequest {
+    const address = new URL(request.url);
+
+    return {
+        method: request.method,
+        route: address.pathname.slice(clientPrefix.length),
+        query: address.searchParams,
+        body: parsedBody(request.body),
+        text: request.body,
+        contentType: request.contentType ?? null,
     };
 }
 

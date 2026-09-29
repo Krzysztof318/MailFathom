@@ -886,7 +886,9 @@ export function MessageList({
         event.preventDefault();
     }
 
-    if (!online) {
+    // Offline is said here only where there is nothing to draw instead, which is the reading pane's rule: rows already
+    // on the screen are the truest thing anybody has, and the frame above them already says the machine is offline.
+    if (!online && rowCount === 0) {
         return <Note>{translate('connection.offline')}</Note>;
     }
 

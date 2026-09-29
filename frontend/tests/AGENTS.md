@@ -43,7 +43,8 @@ question is answered again rather than reworded.
   when its `describe` blocks no longer read as one subject.
 - **The browser suite is split the same way**, into `client.<concern>.spec.ts` files over one `client.harness.ts`:
   sign-in, navigation, layout, settings, language, message security, attachments, the list window, the field under an
-  open message, failure, motion, and what the build publishes. It was one file of eighteen hundred lines holding all of them, which is the condition above.
+  open message, failure, motion, the connection, what the deployment signals, the changes still on their way, and what
+  the build publishes. It was one file of eighteen hundred lines holding all of them, which is the condition above.
   A new check goes into the file whose concern it exercises, and a concern none of them names is a file of its own.
 - **A harness is a module and not a suite.** It exports the doubles, the render, and the helpers, and it carries no
   `describe` and no `it` — the hooks a family shares are exported as one function each file calls at its top level, so
@@ -301,6 +302,15 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   never asked again. The fake a journey drives, `fakeDeployment.ts`, applies what the client writes — a delete, a move, a flag, a read mark,
   a draft, a send taken back, an undo, an event, a task, a contact, a deleted folder — and answers every later read from what those writes did, in the shapes the service answers, so the
   bundle parses them through `Client.Backend` exactly as it would a deployment's.
+- **What changes without the client asking is the fake's to say, and only once a check asks it to.** It refuses the
+  signal ticket as a deployment built before the channel did, until a check calls `serveSignals()`; from then it serves
+  the hub the client opens over Playwright's WebSocket routing, speaking SignalR's JSON protocol, and each change a
+  check makes happen elsewhere — mail delivered, a message marked or changed, a folder made, an account's state moved —
+  is applied to what every later read answers and said over every connection that stands. A journey waits for
+  `channelsOpen()` before it makes one happen, because a statement said before the connection stands was said to
+  nobody. The same fake stops answering on `stopAnswering()`, refusing every request as a network refuses one, and
+  writes the next change down and never takes it on `refuseNextChange()`, which is how a change the mailbox would not
+  take is reached without a clock running out an account's retries.
 - **No journey asserts a service behaviour the fake merely assumes.** The fake holds one reading of what the service
   does — that a moved message leaves the folder it came from, that emptying the trash empties it — and a journey proves
   the client agrees with that reading, never that the service does. Agreement with a real service stays with the

@@ -636,6 +636,21 @@ describe('MessageList', () => {
         ).toBeDefined();
     });
 
+    it('keeps the rows it drew when the machine goes offline, and leaves saying so to the frame', async () => {
+        const transport = answering(wholeFolder);
+        const drawn = renderList(transport);
+        const before = (await rows()).length;
+
+        drawn.rerender(listUnder(transport, { online: false }));
+
+        expect((await rows()).length).toBe(before);
+        expect(
+            screen.queryByText(
+                'This machine is offline. The client reconnects on its own when the network comes back.',
+            ),
+        ).toBeNull();
+    });
+
     it('reads the folder again under a filter the reader turned on, from its leading end', async () => {
         const { transport, requests } = recording(wholeFolder);
 

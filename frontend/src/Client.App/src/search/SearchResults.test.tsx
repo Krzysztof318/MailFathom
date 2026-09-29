@@ -3,11 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import {
+    nothingSignalled,
+    SignalledChangesContext,
+    type SignalledChange,
+    type SignalledChanges,
+    type SignalListener,
+} from '../signals/signalledChanges';
 import { everything } from '../workspace/mailScope';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -115,6 +122,30 @@ interface Drawn {
     readonly onWiden: () => void;
     readonly acts: MailboxActs;
     readonly onOpenDraft: ((storedEmailId: string) => void) | null;
+    readonly changes: SignalledChanges;
+}
+
+/** A deployment a test speaks for, so what a signal does to the results is asserted rather than waited for. */
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: SignalledChange) => void } {
+    const listeners = new Set<SignalListener>();
+
+    return {
+        changes: {
+            refresh: () => undefined,
+            listen: (listener) => {
+                listeners.add(listener);
+
+                return () => {
+                    listeners.delete(listener);
+                };
+            },
+        },
+        say: (signal) => {
+            for (const listener of [...listeners]) {
+                listener(signal);
+            }
+        },
+    };
 }
 
 // Opening is the frame's, exactly as it is for the message list, so this stands in for what the frame does with the
@@ -149,21 +180,24 @@ function resultsUnder(
         onWiden = () => undefined,
         acts = nothingActed,
         onOpenDraft = null,
+        changes = nothingSignalled,
     }: Partial<Drawn> = {},
 ): ReactElement {
     return (
         <LocalizationProvider>
             <MailboxActsContext value={acts}>
                 <WorkspaceProvider>
-                    <ResultsOpeningIntoTheWorkspace
-                        session={session}
-                        transport={transport}
-                        ask={ask}
-                        online={online}
-                        narrowed={narrowed}
-                        onWiden={onWiden}
-                        onOpenDraft={onOpenDraft}
-                    />
+                    <SignalledChangesContext value={changes}>
+                        <ResultsOpeningIntoTheWorkspace
+                            session={session}
+                            transport={transport}
+                            ask={ask}
+                            online={online}
+                            narrowed={narrowed}
+                            onWiden={onWiden}
+                            onOpenDraft={onOpenDraft}
+                        />
+                    </SignalledChangesContext>
                     <SelectionProbe />
                 </WorkspaceProvider>
             </MailboxActsContext>
@@ -492,6 +526,119 @@ describe('SearchResults', () => {
         render(resultsUnder(answering(pageOf([])), { online: false }));
 
         expect(screen.getByText(/This machine is offline/)).toBeTruthy();
+    });
+
+    it('keeps what it found on the screen when the machine goes offline, and leaves saying so to the frame', async () => {
+        const transport = answering(pageOf([result(1), result(2)]));
+        const drawn = render(resultsUnder(transport));
+
+        await rows();
+        drawn.rerender(resultsUnder(transport, { online: false }));
+
+        expect(await rows()).toHaveLength(2);
+        expect(screen.queryByText(/This machine is offline/)).toBeNull();
+    });
+
+    it('asks the search again from its head on a refresh, and draws what that answers in place of what it held', async () => {
+        const deployment = deploymentSaying();
+        const { transport, asked } = answeringInTurn(pageOf([result(1), result(2)]), pageOf([result(3)]));
+
+        render(resultsUnder(transport, { changes: deployment.changes }));
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(async () => {
+            expect(await rows()).toHaveLength(1);
+        });
+        expect((await rows())[0]?.textContent).toContain('Invoice 3');
+        expect(asked).toHaveLength(2);
+        expect(asked[1]?.path).not.toContain('cursor=');
+    });
+
+    it('keeps what it found and says nothing when a refresh is not answered', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        render(
+            resultsUnder(
+                () => {
+                    reads += 1;
+
+                    return Promise.resolve(
+                        reads === 1
+                            ? { status: 200, body: pageOf([result(1), result(2)]), headers: {} }
+                            : { status: 503, body: '', headers: {} },
+                    );
+                },
+                { changes: deployment.changes },
+            ),
+        );
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        const list = screen.getByRole('listbox', { name: 'What this search found' });
+
+        expect(list.getAttribute('aria-busy')).toBe('true');
+
+        // Busy clears in the commit that takes the unanswered refresh in, which is the one a failure would be raised in.
+        await waitFor(() => {
+            expect(list.getAttribute('aria-busy')).toBe('false');
+        });
+
+        expect(await rows()).toHaveLength(2);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('says nothing about reading more while a refresh reads the head again', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        render(
+            resultsUnder(
+                () => {
+                    reads += 1;
+
+                    return reads === 1
+                        ? Promise.resolve({ status: 200, body: pageOf([result(1), result(2)]), headers: {} })
+                        : new Promise(() => undefined);
+                },
+                { changes: deployment.changes },
+            ),
+        );
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        expect(screen.getByRole('listbox', { name: 'What this search found' }).getAttribute('aria-busy')).toBe('true');
+        expect(screen.queryByText('Reading more results…')).toBeNull();
+    });
+
+    it('keeps a tab stop in the list when a refresh answers with fewer results than the row the keyboard was on', async () => {
+        const deployment = deploymentSaying();
+        const { transport } = answeringInTurn(pageOf([result(1), result(2), result(3)]), pageOf([result(4)]));
+
+        render(resultsUnder(transport, { changes: deployment.changes }));
+
+        const list = await screen.findByRole('listbox', { name: 'What this search found' });
+
+        fireEvent.keyDown(list, { key: 'End' });
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(async () => {
+            expect((await rows())[0]?.textContent).toContain('Invoice 4');
+        });
+        expect((await rows())[0]?.tabIndex).toBe(0);
     });
 
     it('keeps what it found on the screen when a later page fails', async () => {
