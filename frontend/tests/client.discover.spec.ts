@@ -50,18 +50,15 @@ test('follows a question asked in Discover from its first block to the finished 
     ).toStrictEqual([null, '6']);
 });
 
-test('carries a question and its mailbox from the mail space through Discover into the agent', async ({
-    page,
-    deployment,
-}) => {
-    await openSignedIn(page, '/#/mail');
+test('carries a question and its mailbox from Discover into the agent', async ({ page, deployment }) => {
+    await openSignedIn(page, '/#/discover');
 
     const question = page.getByRole('searchbox', { name: 'Ask your mail' });
     await question.fill('How many bays were confirmed?');
     await page.getByRole('combobox', { name: 'What the question is asked about' }).selectOption({ label: 'Work' });
     await question.press('Enter');
 
-    // Asked where the mail is and answered where questions are, under the mailbox the question named.
+    // Answered under the mailbox the question named.
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
     await expect(page.getByText(theAnswer)).toBeVisible();
 
