@@ -142,6 +142,7 @@ export function Composer({
     opening,
     online,
     drafts,
+    inFront = true,
     onClosed,
 }: {
     readonly session: ClientSession;
@@ -161,6 +162,9 @@ export function Composer({
      * would move the fields under whoever was already writing in them.
      */
     readonly drafts: boolean;
+
+    /** Whether the mail space is the one in front, which the composer is written in and stays in while it is aside. */
+    readonly inFront?: boolean;
 
     readonly onClosed: () => void;
 }) {
@@ -501,6 +505,7 @@ export function Composer({
 
                 <div className="ms-auto flex items-center">
                     <DiscardConfirmation
+                        inFront={inFront}
                         edged={!wide}
                         written={authored || draft.attached.length > 0}
                         onDiscard={() => {

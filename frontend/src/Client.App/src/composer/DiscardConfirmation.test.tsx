@@ -8,7 +8,10 @@ import { LocalizationProvider } from '../localization/Localization';
 import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from '../shell/screenLayers';
 import { DiscardConfirmation } from './DiscardConfirmation';
 
-function drawConfirmation(written: boolean): {
+function drawConfirmation(
+    written: boolean,
+    inFront = true,
+): {
     discarded: ReturnType<typeof vi.fn>;
     kept: ReturnType<typeof vi.fn>;
     shell: { readonly current: ScreenLayers };
@@ -24,7 +27,13 @@ function drawConfirmation(written: boolean): {
     render(
         <LocalizationProvider>
             <ScreenLayersContext value={result.current}>
-                <DiscardConfirmation written={written} edged={false} onDiscard={discarded} onKeep={kept} />
+                <DiscardConfirmation
+                    written={written}
+                    inFront={inFront}
+                    edged={false}
+                    onDiscard={discarded}
+                    onKeep={kept}
+                />
             </ScreenLayersContext>
         </LocalizationProvider>,
     );
@@ -139,5 +148,29 @@ describe('DiscardConfirmation', () => {
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(theGestureIsUsed(shell)).toBe(true);
         expect(screen.getByRole('dialog').hasAttribute('open')).toBe(true);
+    });
+
+    // Moving to another space clears the screen of what stands over it, and a message being written is not one of those:
+    // it outlives the move, so clearing asks nothing — a question put inside a space being stood aside is one nobody can
+    // reach — and the composer is met by the gesture again once its space is back in front.
+    it('stays, asking nothing, when the screen is cleared on the way to another space', () => {
+        const { discarded, shell } = drawConfirmation(true);
+
+        act(() => {
+            shell.current.closeEvery();
+        });
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(discarded).not.toHaveBeenCalled();
+        expect(theGestureIsUsed(shell)).toBe(true);
+        expect(screen.getByRole('dialog').hasAttribute('open')).toBe(true);
+    });
+
+    it('stands over nothing while the space it is written in is aside', () => {
+        const { discarded, shell } = drawConfirmation(true, false);
+
+        expect(theGestureIsUsed(shell)).toBe(false);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(discarded).not.toHaveBeenCalled();
     });
 });

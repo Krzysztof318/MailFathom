@@ -6,6 +6,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import * as agent from './fixtures/agent';
 import * as calendar from './fixtures/calendar';
+import * as contacts from './fixtures/contacts';
 import * as deployment from './fixtures/deployment';
 import * as discovery from './fixtures/discovery';
 import * as drafts from './fixtures/drafts';
@@ -116,6 +117,15 @@ interface FolderRow {
     readonly hasAttachments: boolean;
 }
 
+/** A record the corpus or a write states, held as the JSON it travels as. */
+type Held = Readonly<Record<string, unknown>>;
+
+/** The two halves of the task list, as the corpus states them for the day the list was first read on. */
+interface TaskLists {
+    readonly committed: Held[];
+    readonly proposed: Held[];
+}
+
 /** Where in the generated folder the one row standing for a correspondence sits, read off the corpus's first page. */
 const conversationRowPosition = mail.timelinePage(0).emails.findIndex(({ threadId }) => threadId !== null);
 
@@ -126,6 +136,7 @@ export class FakeDeployment {
     /** Every request the fake has no answer for, as `METHOD /route`, which the harness fails the check on. */
     readonly unimplemented: string[] = [];
 
+    private permissions: readonly string[] = deployment.sessionAnswer.permissions;
     private preferences: Readonly<Record<string, unknown>> = { ...deployment.clientPreferences };
     private displayName = { ...deployment.ownDisplayName };
     private timeZone = { ...deployment.ownTimeZone };
@@ -157,6 +168,23 @@ export class FakeDeployment {
             .filter(({ archived }) => archived)
             .map(({ id }) => [id, this.corpusConversation(id, 'answered')] as const),
     ]);
+
+    /**
+     * Events written or amended here, by identity, which every window they fall in answers with.
+     *
+     * An amended corpus event is held here under its own identity too, because the corpus places its entries against
+     * the span that was asked for and an amendment states an instant — so from then on it is where the amendment put it.
+     */
+    private readonly eventsWritten = new Map<string, Held>();
+
+    /** Events a delete took off the calendar, which no window answers with any more. */
+    private readonly eventsGone = new Set<string>();
+
+    /** Read on the first request for either half rather than built here, because the day it is stated for is the zone's. */
+    private taskLists: TaskLists | null = null;
+
+    private readonly contactsWritten: Held[] = [];
+    private readonly contactsErased = new Set<string>();
 
     private minted = 0;
     private nextAnswerRunning = false;
@@ -196,6 +224,16 @@ export class FakeDeployment {
      */
     raiseNotification(): void {
         this.notificationsHeld = [{ ...notifications.arrivingNotification }, ...this.notificationsHeld];
+    }
+
+    /**
+     * Grants the credential more than the corpus's reading and asking, from the next time the session is read.
+     *
+     * The corpus states the two permissions a frame needs and no more, so a check whose journey writes something one
+     * of the others guards grants it before it signs in, exactly as a deployment's operator would.
+     */
+    grant(...permissions: readonly string[]): void {
+        this.permissions = [...this.permissions, ...permissions];
     }
 
     /** Makes the next question put to Discover or to the Agent read as running once, and finished on the read after. */
@@ -245,7 +283,7 @@ export class FakeDeployment {
             case 'POST /session/token/revocation':
                 return nothing;
             case 'GET /session':
-                return answering({ ...deployment.sessionAnswer, version: this.version });
+                return answering({ ...deployment.sessionAnswer, version: this.version, permissions: this.permissions });
             case 'GET /preferences':
                 return answering(this.preferences);
             case 'POST /preferences':
@@ -343,17 +381,30 @@ export class FakeDeployment {
                 return answering({ deleted, unreadCount: this.unreadNotifications() });
             }
             case 'GET /tasks':
-                return answering(tasks.committedTasks(dayHere()));
+                return answering({ tasks: this.tasks().committed, nextCursor: null });
             case 'GET /tasks/proposed':
-                return answering(tasks.proposedTasks(dayHere()));
+                return answering({ tasks: this.tasks().proposed, nextCursor: null });
+            case 'POST /tasks':
+                return answering(this.taskWritten(request.body));
             case 'GET /tasks/today/layout':
                 return answering(tasks.daysArranged);
             case 'GET /calendar':
-                return answering(
-                    calendar.calendarWindow(request.query.get('from') ?? '', request.query.get('until') ?? ''),
-                );
+                return answering(this.calendarWindow(request.query));
+            case 'POST /calendar':
+                return answering(this.eventWritten(this.mintedIdentity(), request.body, null));
             case 'GET /calendar/drafts':
                 return answering(calendar.calendarDescriptionsRead);
+            case 'GET /contacts':
+                return answering(contactPage(this.ownBook(), request.query));
+            case 'GET /contacts/collected':
+                return answering(
+                    contactPage(
+                        contacts.collectedContactPage.contacts.filter(({ id }) => !this.contactsErased.has(id)),
+                        request.query,
+                    ),
+                );
+            case 'POST /contacts':
+                return answering(this.contactWritten(request.body));
             case 'POST /discovery/runs':
                 this.runs.set(discovery.runId, { reads: 0, startsRunning: this.takeRunning(), stopped: false });
 
@@ -367,9 +418,230 @@ export class FakeDeployment {
                     this.messageAnswer(request, segments) ??
                     this.draftAnswer(request, segments) ??
                     this.discoveryAnswer(request, segments) ??
-                    this.agentAnswer(request, segments)
+                    this.agentAnswer(request, segments) ??
+                    this.eventAnswer(request, segments) ??
+                    this.taskAnswer(request, segments) ??
+                    this.contactAnswer(request, segments)
                 );
         }
+    }
+
+    /** Amending and deleting one event, whether the corpus stated it or a write here did. */
+    private eventAnswer({ method, body }: IssuedRequest, segments: readonly string[]): FakeAnswer | null {
+        const [space, id = '', part] = segments;
+
+        if (space !== 'calendar' || segments.length !== 2 || part !== undefined) {
+            return null;
+        }
+
+        const standing = this.eventsGone.has(id) ? undefined : (this.eventsWritten.get(id) ?? corpusEvent(id));
+
+        if (method === 'PUT') {
+            return standing === undefined
+                ? { status: 404, body: '' }
+                : answering(this.eventWritten(id, body, standing));
+        }
+
+        if (method === 'DELETE') {
+            this.eventsWritten.delete(id);
+            this.eventsGone.add(id);
+
+            return standing === undefined ? { status: 404, body: '' } : nothing;
+        }
+
+        return null;
+    }
+
+    /** Marking one task done or not done, and erasing it, from whichever half holds it. */
+    private taskAnswer({ method, body }: IssuedRequest, segments: readonly string[]): FakeAnswer | null {
+        const [space, id = '', part] = segments;
+
+        if (space !== 'tasks' || segments.length > 3) {
+            return null;
+        }
+
+        const lists = this.tasks();
+        const half = [lists.committed, lists.proposed].find((held) => held.some((task) => task['id'] === id));
+        const at = half?.findIndex((task) => task['id'] === id) ?? -1;
+        const standing = half?.[at];
+
+        if (method === 'POST' && part === 'completion') {
+            if (half === undefined || standing === undefined) {
+                return { status: 404, body: '' };
+            }
+
+            const completed = { ...standing, completed: recordIn(body)?.['completed'] === true };
+
+            half.splice(at, 1, completed);
+
+            return answering(completed);
+        }
+
+        if (method === 'DELETE' && part === undefined) {
+            half?.splice(at, 1);
+
+            return answering({ id, erased: standing !== undefined });
+        }
+
+        return null;
+    }
+
+    /** Erasing one person from whichever book holds them, and what the mail index says about them. */
+    private contactAnswer({ method }: IssuedRequest, segments: readonly string[]): FakeAnswer | null {
+        const [space, id = '', part] = segments;
+
+        if (space !== 'contacts' || segments.length > 3) {
+            return null;
+        }
+
+        const books: Held[] = [...this.ownBook(), ...contacts.collectedContactPage.contacts];
+        const standing = books
+            .filter((contact) => !this.contactsErased.has(String(contact['id'])))
+            .find((contact) => contact['id'] === id);
+
+        if (method === 'DELETE' && part === undefined) {
+            this.contactsErased.add(id);
+
+            const addresses = standing?.['addresses'];
+
+            return answering({
+                contact: id,
+                wasHeld: standing !== undefined,
+                addressesErased: Array.isArray(addresses) ? addresses.length : 0,
+            });
+        }
+
+        if (method === 'GET' && part === 'correspondence') {
+            if (standing === undefined) {
+                return { status: 404, body: '' };
+            }
+
+            return answering(
+                id === contacts.contactCorrespondence.contactId
+                    ? contacts.contactCorrespondence
+                    : { ...contacts.noContactCorrespondence, contactId: id },
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * One window of the calendar: the corpus placed against the span, less what was deleted or amended out of it, and
+     * every event a write placed inside the span, earliest first.
+     */
+    private calendarWindow(asked: URLSearchParams) {
+        const from = asked.get('from') ?? '';
+        const until = asked.get('until') ?? '';
+        const opens = Date.parse(from);
+        const closes = Date.parse(until);
+
+        const placed = calendar
+            .calendarWindow(from, until)
+            .events.map(recordIn)
+            .filter((event): event is Held => event !== null)
+            .filter(({ id }) => !this.eventsGone.has(String(id)) && !this.eventsWritten.has(String(id)));
+        const written = [...this.eventsWritten.values()].filter((event) => {
+            const begins = Date.parse(String(event['start']));
+            const ends = typeof event['end'] === 'string' ? Date.parse(event['end']) : begins;
+
+            return begins < closes && ends >= opens;
+        });
+
+        return {
+            events: [...placed, ...written].sort(
+                (one, other) => Date.parse(String(one['start'])) - Date.parse(String(other['start'])),
+            ),
+        };
+    }
+
+    /**
+     * Holds the event a write states, under the identity it is written at, and answers the record the calendar now has.
+     *
+     * An amendment restates everything but where the event came from, so that is carried over from what it amends.
+     */
+    private eventWritten(id: string, body: unknown, amends: Held | null) {
+        const stated = recordIn(body) ?? {};
+        const start = String(stated['start']);
+        const reminders = Array.isArray(stated['reminders']) ? stated['reminders'].map(Number) : [];
+        const event = {
+            id,
+            title: stated['title'],
+            start,
+            end: stated['end'] ?? null,
+            isAllDay: stated['isAllDay'] === true,
+            reminders,
+            remindsAt: reminders.map((lead) => new Date(Date.parse(start) - lead * 60_000).toISOString()),
+            origin: 'Asserted',
+            sourceMessage: amends === null ? (stated['sourceMessage'] ?? null) : (amends['sourceMessage'] ?? null),
+            recordedAt: amends?.['recordedAt'] ?? recordedAt,
+            amendedAt: recordedAt,
+        };
+
+        this.eventsWritten.set(id, event);
+
+        return { ...calendar.calendarEventWritten, ...event };
+    }
+
+    /** The two halves of the task list, stated by the corpus for the day the deployment's own zone is on. */
+    private tasks(): TaskLists {
+        if (this.taskLists === null) {
+            const day = dayIn(this.timeZone.timeZone);
+
+            this.taskLists = {
+                committed: [...tasks.committedTasks(day).tasks],
+                proposed: [...tasks.proposedTasks(day).tasks],
+            };
+        }
+
+        return this.taskLists;
+    }
+
+    /**
+     * Writes down a task the person committed to, as the last of the committed half.
+     *
+     * No lead is held, because the client states none on a task it writes down: what announces one is written afterwards,
+     * from the row.
+     */
+    private taskWritten(body: unknown): Held {
+        const stated = recordIn(body) ?? {};
+        const task = {
+            ...tasks.taskWritten,
+            id: this.mintedIdentity(),
+            title: stated['title'],
+            dueOn: stated['dueOn'] ?? null,
+            sourceMessageId: stated['sourceMessageId'] ?? null,
+        };
+
+        this.tasks().committed.push(task);
+
+        return task;
+    }
+
+    /** The people this user wrote down, the corpus's and those written here, in the order the book is walked in. */
+    private ownBook(): Held[] {
+        const book: Held[] = [...contacts.assertedContactPage.contacts, ...this.contactsWritten];
+
+        return book
+            .filter((contact) => !this.contactsErased.has(String(contact['id'])))
+            .sort((one, other) => String(one['displayName']).localeCompare(String(other['displayName']), 'en'));
+    }
+
+    /** Writes somebody down as a person this user asserted, and answers the write as the book answers one. */
+    private contactWritten(body: unknown) {
+        const stated = recordIn(body) ?? {};
+        const contact = {
+            ...contacts.assertedContact,
+            id: this.mintedIdentity(),
+            displayName: stated['displayName'],
+            addresses: stated['addresses'],
+            preferredAddress: stated['preferredAddress'],
+            note: stated['note'] ?? null,
+        };
+
+        this.contactsWritten.push(contact);
+
+        return { ...contacts.contactWritten, contact };
     }
 
     /**
@@ -1154,11 +1426,54 @@ function corpusFacts(storedEmailId: string): MessageFacts | null {
     return row === null ? null : { folder: row.folder, unread: row.unread, flagged: row.flagged };
 }
 
-/** The day the machine running this is on, as a calendar day is spelled, which is the day a task list is grouped by. */
-function dayHere(): string {
-    const now = new Date();
+/**
+ * The day it is in a zone, as a calendar day is spelled, which is the day a task list is grouped by.
+ *
+ * The deployment's zone rather than the machine's, because that is the zone the client reads the list in: a machine
+ * standing on a different day from the deployment would otherwise file today's work under another heading.
+ */
+function dayIn(timeZone: string): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+        new Date(),
+    );
+}
 
-    return `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+/** One event the corpus states, whichever span it is placed in, or `undefined` for an identity it does not hold. */
+function corpusEvent(id: string): Held | undefined {
+    return (
+        calendar
+            .calendarWindow('2026-01-05T00:00:00Z', '2026-01-12T00:00:00Z')
+            .events.map(recordIn)
+            .find((event) => event?.['id'] === id) ?? undefined
+    );
+}
+
+/**
+ * One page of a book as the service's keyset serves it: the people from the cursor on who carry the search in their
+ * name or in one of their addresses, as many as were asked for. The cursor is a position in the book's own order rather
+ * than in what the search found, so a walk continued under another search goes on from the same place.
+ */
+function contactPage(book: readonly Held[], asked: URLSearchParams) {
+    const size = Number(asked.get('pageSize') ?? String(contacts.contactsPerPage));
+    const start = Number(asked.get('cursor') ?? '0');
+    const term = (asked.get('search') ?? '').trim().toUpperCase();
+    const found = book
+        .map((contact, position) => ({ contact, position }))
+        .filter(
+            ({ contact, position }) =>
+                position >= start &&
+                [
+                    contact['displayName'],
+                    ...(Array.isArray(contact['addresses']) ? (contact['addresses'] as unknown[]) : []),
+                ].some((text) => typeof text === 'string' && text.toUpperCase().includes(term)),
+        );
+    const served = found.slice(0, size);
+    const last = served.at(-1);
+
+    return {
+        contacts: served.map(({ contact }) => contact),
+        nextCursor: found.length > size && last !== undefined ? String(last.position + 1) : null,
+    };
 }
 
 function sequenceOf(event: Readonly<Record<string, unknown>>): number {

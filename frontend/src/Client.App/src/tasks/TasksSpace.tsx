@@ -161,6 +161,7 @@ export function TasksSpace({
 
     const [selected, setSelected] = useState<readonly string[]>([]);
     const [scheduled, setScheduled] = useState<readonly string[]>([]);
+    const [pressedInto, setPressedInto] = useState<ReadonlyMap<string, boolean>>(new Map());
     const [showDone, setShowDone] = useState(false);
     const [erasing, setErasing] = useState<readonly PersonalTask[]>([]);
     const [said, setSaid] = useState<WriteSaid | null>(null);
@@ -247,7 +248,7 @@ export function TasksSpace({
             : { said: 'tasks.writeFailedBecause', names: { reason: translate(failureLabels[reason]) } };
     }
 
-    function after(answers: readonly TaskWrite[], done: MessageKey): void {
+    function after(answers: readonly TaskWrite[], done: MessageKey): Promise<void> {
         setSaid(
             saidAbout(
                 answers.filter((answer) => answer.failed),
@@ -256,7 +257,38 @@ export function TasksSpace({
             ),
         );
 
-        reading.readAgain();
+        return reading.readAgain();
+    }
+
+    // A box stays where it was pressed until the list read after the write has answered. The list is the deployment's
+    // and is not corrected here, so without this the box would spring back the moment it was pressed and stand wrong for
+    // as long as the write and the read take — which is a press that looks as if it did nothing. The selection bar's
+    // *Mark as done* is the same press over several rows, and holds each of them the same way.
+    function hold(tasks: readonly PersonalTask[], completed: boolean): void {
+        setPressedInto((held) => {
+            const pressed = new Map(held);
+
+            for (const task of tasks) {
+                pressed.set(task.id, completed);
+            }
+
+            return pressed;
+        });
+    }
+
+    // Lets go of the rows once the read after their write has answered, leaving any a later press has since moved.
+    function letGo(tasks: readonly PersonalTask[], completed: boolean): void {
+        setPressedInto((held) => {
+            const left = new Map(held);
+
+            for (const task of tasks) {
+                if (left.get(task.id) === completed) {
+                    left.delete(task.id);
+                }
+            }
+
+            return left;
+        });
     }
 
     function toggleCompleted(task: PersonalTask): void {
@@ -264,9 +296,15 @@ export function TasksSpace({
             return;
         }
 
-        void setTaskCompletion(session, transport, task.id, !task.completed).then((answer) => {
-            after([wrote(answer)], task.completed ? 'tasks.markedNotDone' : 'tasks.markedDone');
-        });
+        const completed = !(pressedInto.get(task.id) ?? task.completed);
+
+        hold([task], completed);
+
+        void setTaskCompletion(session, transport, task.id, completed)
+            .then((answer) => after([wrote(answer)], completed ? 'tasks.markedDone' : 'tasks.markedNotDone'))
+            .then(() => {
+                letGo([task], completed);
+            });
     }
 
     function complete(tasks: readonly PersonalTask[]): void {
@@ -274,12 +312,17 @@ export function TasksSpace({
             return;
         }
 
-        void Promise.all(tasks.map((task) => setTaskCompletion(session, transport, task.id, true).then(wrote))).then(
-            (answers) => {
+        hold(tasks, true);
+
+        void Promise.all(tasks.map((task) => setTaskCompletion(session, transport, task.id, true).then(wrote)))
+            .then((answers) => {
                 setSelected([]);
-                after(answers, 'tasks.markedDone');
-            },
-        );
+
+                return after(answers, 'tasks.markedDone');
+            })
+            .then(() => {
+                letGo(tasks, true);
+            });
     }
 
     function accept(task: PersonalTask): void {
@@ -288,7 +331,7 @@ export function TasksSpace({
         }
 
         void acceptTask(session, transport, task.id).then((answer) => {
-            after([wrote(answer)], 'tasks.accepted');
+            void after([wrote(answer)], 'tasks.accepted');
         });
     }
 
@@ -303,7 +346,7 @@ export function TasksSpace({
         void Promise.all(tasks.map((task) => eraseTask(session, transport, task.id).then(wrote))).then((answers) => {
             setSelected([]);
             setErasing([]);
-            after(answers, 'tasks.erased');
+            void after(answers, 'tasks.erased');
         });
     }
 
@@ -352,7 +395,7 @@ export function TasksSpace({
             ]);
             setSelected([]);
             day.readAgain();
-            after(answers, 'tasks.scheduled');
+            void after(answers, 'tasks.scheduled');
         });
     }
 
@@ -411,7 +454,7 @@ export function TasksSpace({
                 ...answers.filter((answer) => !answer.failed).map((answer) => answer.id),
             ]);
             day.readAgain();
-            after(answers, 'tasks.scheduled');
+            void after(answers, 'tasks.scheduled');
         });
     }
 
@@ -433,7 +476,7 @@ export function TasksSpace({
             dueDayOffsetMinutes: dueDayOffsetMinutes(task.dueOn, timeZone),
             sourceMessageId: task.sourceMessageId,
         }).then((answer) => {
-            after([wrote(answer)], 'tasks.remindersWritten');
+            void after([wrote(answer)], 'tasks.remindersWritten');
         });
     }
 
@@ -451,7 +494,7 @@ export function TasksSpace({
             dueDayOffsetMinutes: null,
             sourceMessageId: null,
         }).then((answer) => {
-            after([wrote(answer)], 'tasks.written');
+            void after([wrote(answer)], 'tasks.written');
         });
     }
 
@@ -524,6 +567,7 @@ export function TasksSpace({
                     now={now}
                     selected={selected}
                     scheduled={scheduled}
+                    pressedInto={pressedInto}
                     onSelected={setSelected}
                     onToggleCompleted={toggleCompleted}
                     onAccept={accept}
@@ -536,7 +580,9 @@ export function TasksSpace({
                     onSchedule={schedule}
                     onAskErasure={askErasure}
                     onReadMore={reading.readMore}
-                    onReadAgain={reading.readAgain}
+                    onReadAgain={() => {
+                        void reading.readAgain();
+                    }}
                 />
 
                 {/* Beside the list where there is room and under it where there is not, and reached by scrolling

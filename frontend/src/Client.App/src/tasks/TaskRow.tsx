@@ -56,6 +56,7 @@ export function TaskRow({
     selected,
     selecting,
     scheduled,
+    completed = task.completed,
     onToggleSelected,
     onToggleCompleted,
     onAccept,
@@ -78,6 +79,9 @@ export function TaskRow({
 
     /** Whether this screen has already put this task in the day, which is what the design draws in place of the act. */
     readonly scheduled: boolean;
+
+    /** What the box says, which is the state it was last pressed into until the list has read that write back. */
+    readonly completed?: boolean;
 
     /** Puts this row into the selection or takes it out, which a modifier-held press and the mark both reach. */
     readonly onToggleSelected: () => void;
@@ -139,7 +143,7 @@ export function TaskRow({
             tabIndex={-1}
             className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border p-3 transition ${
                 selected ? 'border-accent-line bg-accent-soft' : 'border-line bg-panel hover:bg-hover'
-            } ${task.completed ? 'opacity-60' : ''}`}
+            } ${completed ? 'opacity-60' : ''}`}
             onKeyDown={pressed}
             onContextMenu={press.onContextMenu}
             onPointerDown={press.onPointerDown}
@@ -188,8 +192,8 @@ export function TaskRow({
 
                 <input
                     type="checkbox"
-                    checked={task.completed}
-                    aria-label={translate(task.completed ? 'tasks.markNotDoneRow' : 'tasks.markDoneRow', {
+                    checked={completed}
+                    aria-label={translate(completed ? 'tasks.markNotDoneRow' : 'tasks.markDoneRow', {
                         title: task.title,
                     })}
                     className="mt-0.5 size-5 shrink-0 accent-accent"
@@ -198,7 +202,7 @@ export function TaskRow({
 
                 <div className="flex min-w-0 flex-col gap-1.5">
                     <div className="flex flex-wrap items-baseline gap-2">
-                        <span className={`text-base text-pretty ${task.completed ? 'text-muted line-through' : ''}`}>
+                        <span className={`text-base text-pretty ${completed ? 'text-muted line-through' : ''}`}>
                             {task.title}
                         </span>
 
@@ -263,7 +267,7 @@ export function TaskRow({
                     <Control label={translate('tasks.accept')} icon="check" shape="primary" onPress={onAccept} />
                 )}
 
-                {task.dueOn === null || task.completed ? null : scheduled ? (
+                {task.dueOn === null || completed ? null : scheduled ? (
                     <span
                         ref={chip}
                         tabIndex={-1}

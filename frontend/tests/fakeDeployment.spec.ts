@@ -234,11 +234,161 @@ test('keeps what each request carried, and names the ones it has no answer for',
         moves: [{ storedEmailId: 'message-4', destinationFolder: 'ARCHIVE/2024' }],
     });
     ask(deployment, 'GET', '/emails?folder=ARCHIVE%2F2024');
-    ask(deployment, 'POST', '/contacts', {});
+    ask(deployment, 'POST', '/calendar/import', {});
 
     expect(deployment.requests('POST', '/mutations/moves').map(({ body }) => body)).toStrictEqual([
         { moves: [{ storedEmailId: 'message-4', destinationFolder: 'ARCHIVE/2024' }] },
     ]);
     expect(deployment.requests('GET', '/emails')[0]?.query.get('folder')).toBe('ARCHIVE/2024');
-    expect(deployment.unimplemented).toStrictEqual(['POST /contacts']);
+    expect(deployment.unimplemented).toStrictEqual(['POST /calendar/import']);
+});
+
+test('places an event it was written in every window it falls in, where an amendment moves it, and nowhere once deleted', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const titles = (from: string, until: string) =>
+        (
+            ask(deployment, 'GET', `/calendar?from=${from}&until=${until}&count=200`) as {
+                events: { id: string; title: string }[];
+            }
+        ).events.map(({ title }) => title);
+
+    const { id } = ask(deployment, 'POST', '/calendar', {
+        title: 'Dentist appointment',
+        start: '2026-09-29T13:00:00.000Z',
+        end: '2026-09-29T13:30:00.000Z',
+        isAllDay: false,
+        reminders: [],
+        sourceMessage: null,
+    }) as { id: string };
+
+    expect(titles('2026-09-28T00:00:00.000Z', '2026-10-05T00:00:00.000Z')).toContain('Dentist appointment');
+    expect(titles('2026-09-29T00:00:00.000Z', '2026-09-30T00:00:00.000Z')).toContain('Dentist appointment');
+    expect(titles('2026-09-30T00:00:00.000Z', '2026-10-01T00:00:00.000Z')).not.toContain('Dentist appointment');
+
+    ask(deployment, 'PUT', `/calendar/${id}`, {
+        title: 'Dental check-up',
+        start: '2026-09-30T15:00:00.000Z',
+        end: '2026-09-30T15:45:00.000Z',
+        isAllDay: false,
+        reminders: [],
+    });
+
+    expect(titles('2026-09-29T00:00:00.000Z', '2026-09-30T00:00:00.000Z')).not.toContain('Dentist appointment');
+    expect(titles('2026-09-30T00:00:00.000Z', '2026-10-01T00:00:00.000Z')).toContain('Dental check-up');
+    expect(ask(deployment, 'DELETE', `/calendar/${id}`)).toBe(204);
+    expect(titles('2026-09-30T00:00:00.000Z', '2026-10-01T00:00:00.000Z')).not.toContain('Dental check-up');
+    expect(ask(deployment, 'DELETE', `/calendar/${id}`)).toBe(404);
+});
+
+test('holds a corpus event where an amendment put it, rather than where the next window would place it', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const window = (from: string, until: string) =>
+        ask(deployment, 'GET', `/calendar?from=${from}&until=${until}&count=200`) as {
+            events: { id: string; title: string; start: string }[];
+        };
+
+    ask(deployment, 'PUT', '/calendar/calendar-1', {
+        title: 'Warehouse handover',
+        start: '2026-10-07T09:00:00.000Z',
+        end: '2026-10-07T10:00:00.000Z',
+        isAllDay: false,
+        reminders: [],
+    });
+
+    expect(window('2026-09-28T00:00:00.000Z', '2026-10-05T00:00:00.000Z').events.map(({ id }) => id)).not.toContain(
+        'calendar-1',
+    );
+    expect(window('2026-10-07T00:00:00.000Z', '2026-10-08T00:00:00.000Z').events).toContainEqual(
+        expect.objectContaining({ id: 'calendar-1', start: '2026-10-07T09:00:00.000Z' }),
+    );
+});
+
+test('lists a task it was written in the committed half, marks it done, and forgets it once erased', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const committed = () =>
+        (ask(deployment, 'GET', '/tasks?pageSize=50') as { tasks: { id: string; completed: boolean }[] }).tasks;
+
+    const { id } = ask(deployment, 'POST', '/tasks', {
+        title: 'Book the carrier for Friday',
+        dueOn: '2026-09-29',
+        reminders: [],
+        dueDayOffsetMinutes: null,
+        sourceMessageId: null,
+    }) as { id: string };
+
+    expect(committed()).toContainEqual(expect.objectContaining({ id, completed: false }));
+
+    ask(deployment, 'POST', `/tasks/${id}/completion`, { completed: true });
+
+    expect(committed()).toContainEqual(expect.objectContaining({ id, completed: true }));
+    expect(ask(deployment, 'DELETE', `/tasks/${id}`)).toStrictEqual({ id, erased: true });
+    expect(committed().map((task) => task.id)).not.toContain(id);
+    expect(ask(deployment, 'POST', `/tasks/${id}/completion`, { completed: false })).toBe(404);
+});
+
+test('walks the address book in name order across pages, with a person it was written and without one erased', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const page = (query: string) =>
+        ask(deployment, 'GET', `/contacts?${query}`) as {
+            contacts: { id: string; displayName: string }[];
+            nextCursor: string | null;
+        };
+
+    const written = ask(deployment, 'POST', '/contacts', {
+        displayName: 'Beatrice Holm',
+        addresses: ['beatrice@carrier.example'],
+        preferredAddress: 'beatrice@carrier.example',
+        note: null,
+    }) as { outcome: string; contact: { id: string } };
+
+    expect(written.outcome).toBe('Written');
+
+    const first = page('pageSize=50');
+
+    expect(first.contacts.slice(0, 2).map(({ displayName }) => displayName)).toStrictEqual([
+        'Anna Marlow',
+        'Beatrice Holm',
+    ]);
+    expect(page(`pageSize=50&cursor=${first.nextCursor ?? ''}`).contacts).toHaveLength(1);
+
+    expect(ask(deployment, 'DELETE', `/contacts/${written.contact.id}`)).toStrictEqual({
+        contact: written.contact.id,
+        wasHeld: true,
+        addressesErased: 1,
+    });
+    expect(page('pageSize=50').nextCursor).toBeNull();
+    expect(ask(deployment, 'GET', `/contacts/${written.contact.id}/correspondence`)).toBe(404);
+});
+
+test('searches either book by a fragment of a name or of an address, whatever its case', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const found = (route: string) =>
+        (ask(deployment, 'GET', route) as { contacts: { displayName: string }[] }).contacts.map(
+            ({ displayName }) => displayName,
+        );
+
+    expect(found('/contacts?search=MARLOW&pageSize=5')).toStrictEqual(['Anna Marlow']);
+    expect(found('/contacts/collected?search=b.rowe@&pageSize=5')).toStrictEqual(['Bartosz Rowe']);
+    expect(found('/contacts?search=%20&pageSize=5')).toHaveLength(5);
+});
+
+test('continues a search from a position in the book, filling each page with what matches from there', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const page = (query: string) =>
+        ask(deployment, 'GET', `/contacts?${query}`) as {
+            contacts: { displayName: string }[];
+            nextCursor: string | null;
+        };
+
+    const walked = page('pageSize=1');
+
+    expect(walked.contacts.map(({ displayName }) => displayName)).toStrictEqual(['Anna Marlow']);
+    expect(page(`search=marlow&cursor=${walked.nextCursor ?? ''}`).contacts).toStrictEqual([]);
+
+    const first = page('search=correspondent&pageSize=2');
+    const next = page(`search=correspondent&pageSize=2&cursor=${first.nextCursor ?? ''}`);
+
+    expect(first.contacts).toHaveLength(2);
+    expect(next.contacts).toHaveLength(2);
+    expect(next.contacts.map(({ displayName }) => displayName)).not.toContain(first.contacts[1]?.displayName);
 });
