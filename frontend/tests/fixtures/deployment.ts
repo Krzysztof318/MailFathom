@@ -220,7 +220,8 @@ export const ownTimeZone = { timeZone: 'UTC', isDefault: true };
  * The same levels the folders route answers — the inbox, the level nothing is bound to, the folder beneath it, the
  * archive, and the trash — because the two routes are two readings of one mailbox. The acts are the mailbox's rather
  * than the credential's: the route reads under the grant to read mail, and the client narrows what it reports by the
- * grant it holds, so a check whose credential changes nothing is still offered nothing. A folder playing a role is
+ * grant it holds, so a check whose credential changes nothing is still offered nothing. Making a folder is the
+ * mailbox's act rather than any one folder's, so it is stated once for the account, and a folder playing a role is
  * nested under and never renamed, moved, or deleted. The identities are the aliases the folders route answers, because
  * that is what a tree pairs a row with its acts by, and nothing may read meaning into one.
  */
@@ -228,23 +229,23 @@ export const managedFolders = {
     allowedActs: ['Create'],
     creatableRoles: [],
     folders: [
-        { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: ['Create'] },
+        { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] },
         {
             id: 'ARCHIVE',
             parentId: null,
             name: 'Archive',
             role: null,
-            allowedActs: ['Create', 'Rename', 'Move', 'Delete'],
+            allowedActs: ['Rename', 'Move', 'Delete'],
         },
         {
             id: 'ARCHIVE/2024',
             parentId: 'ARCHIVE',
             name: '2024',
             role: null,
-            allowedActs: ['Create', 'Rename', 'Move', 'Delete'],
+            allowedActs: ['Rename', 'Move', 'Delete'],
         },
-        { id: 'FILED', parentId: null, name: 'Filed', role: 'Archive', allowedActs: ['Create'] },
-        { id: 'TRASH', parentId: null, name: 'Trash', role: 'Trash', allowedActs: ['Create'] },
+        { id: 'FILED', parentId: null, name: 'Filed', role: 'Archive', allowedActs: [] },
+        { id: 'TRASH', parentId: null, name: 'Trash', role: 'Trash', allowedActs: [] },
     ],
 };
 
