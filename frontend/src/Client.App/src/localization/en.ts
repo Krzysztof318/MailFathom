@@ -1191,7 +1191,7 @@ export const en = {
     'grant.sendMail':
         'This credential may not send mail from this deployment, so a message can be written and filed as a draft but not sent. Whoever runs the deployment can grant that.',
     'grant.manageFolders':
-        'This credential may not change which folders this deployment reads, so making, renaming and removing a folder are not offered. Whoever runs the deployment can grant that.',
+        'This credential may not make, rename, move or delete the folders of your mailboxes, so none of that is offered. Whoever runs the deployment can grant that.',
     'grant.readContacts':
         'This credential may not read the address book on this deployment, so the People space is not offered. Whoever runs the deployment can grant that.',
     'grant.writeContacts':

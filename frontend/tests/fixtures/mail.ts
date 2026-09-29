@@ -10,7 +10,14 @@
 // Nothing here parses a request. Where an answer depends on what was asked for — how far into the folder somebody has
 // read — the corpus states it as a function of that question, and the consumer routing it decides what was asked.
 
-import { markupOnlyId, markupOnlySubject, newsletterId, newsletterSubject } from './messages';
+import {
+    markupOnlyBody,
+    markupOnlyId,
+    markupOnlySubject,
+    newsletterId,
+    newsletterMessage,
+    newsletterSubject,
+} from './messages';
 
 /**
  * How many messages the folder behind the corpus holds.
@@ -385,44 +392,112 @@ export const conversationState = {
  * shape a list row is published in — the field and all — and a corpus that left it off would be stating this route
  * answering like the search route, which is the one route that genuinely publishes no derivation. Only one of the five
  * carries a reading, for the reason {@link derivedReading} gives about a folder page.
+ *
+ * What a read asks for decides whether each message arrives with its head and its words, which is the one question
+ * this answer depends on: a screen drawing the conversation asks for them, so revealing its history costs no further
+ * read, and a read that asked for none is answered with the rows alone. `content` is that question, as the route's own
+ * `content` asks it.
  */
-export const conversation = {
-    threadId: conversationId,
-    messages: conversationRows.map((row, position) => ({
-        position,
-        answeredId: row.answersRow === null ? null : (conversationRows[row.answersRow]?.id ?? null),
-        email: {
-            id: row.id,
-            account: 'work',
+export function conversation({ content = false } = {}) {
+    return {
+        threadId: conversationId,
+        messages: conversationRows.map((row, position) => ({
+            position,
+            answeredId: row.answersRow === null ? null : (conversationRows[row.answersRow]?.id ?? null),
+            email: conversationEmail(row, position),
+            ...(content ? conversationContent(row) : {}),
+        })),
+        participants: [
+            { address: 'sales@nordwind.example', displayName: 'Nordwind', messageCount: 3 },
+            { address: 'user@example.invalid', displayName: 'Iris Marlow', messageCount: 2 },
+        ],
+        messageCount: conversationRows.length,
+        moreMessagesNotAssembled: false,
+        moreParticipantsNotNamed: false,
+        nextCursor: null,
+        pageSize: 10,
+    };
+}
+
+/** One message of the conversation as a row, which is the shape the thread route publishes a message in. */
+function conversationEmail(row: (typeof conversationRows)[number], position: number) {
+    return {
+        id: row.id,
+        account: 'work',
+        folder: row.folder,
+        threadId: conversationId,
+        subject: row.subject,
+        receivedAt: row.sentAt,
+        sentAt: row.sentAt,
+        senderAddress: row.senderAddress,
+        senderDisplayName: row.senderDisplayName,
+        toAddresses: [recipientOf(row)],
+        unread: false,
+        flagged: false,
+        answered: false,
+        hasAttachments: false,
+        attachmentCount: 0,
+        sizeOctets: 3_120,
+        preview: row.preview,
+        enrichment: derivedReading(position),
+        threadMessageCount: conversationRows.length,
+    };
+}
+
+/**
+ * What a read asking for the messages themselves carries beside one row: the head the message route answers for it and
+ * the words the body route answers, each for that message rather than the newsletter they are shaped after.
+ *
+ * Each message says what its row previews and nothing else, as a plain-text message a correspondence like this one is
+ * written in — so what a screen draws under a message is the sentence a list row already promised about it.
+ */
+function conversationContent(row: (typeof conversationRows)[number]) {
+    return {
+        message: {
+            ...newsletterMessage,
+            storedEmailId: row.id,
             folder: row.folder,
             threadId: conversationId,
-            subject: row.subject,
-            receivedAt: row.sentAt,
-            sentAt: row.sentAt,
-            senderAddress: row.senderAddress,
-            senderDisplayName: row.senderDisplayName,
-            toAddresses: [row.folder === 'SENT' ? 'sales@nordwind.example' : 'user@example.invalid'],
-            unread: false,
-            flagged: false,
-            answered: false,
-            hasAttachments: false,
-            attachmentCount: 0,
             sizeOctets: 3_120,
-            preview: row.preview,
-            enrichment: derivedReading(position),
-            threadMessageCount: conversationRows.length,
+            headers: {
+                subject: row.subject,
+                sentAt: row.sentAt,
+                receivedAt: row.sentAt,
+                participants: [
+                    { role: 'From', address: row.senderAddress, displayName: row.senderDisplayName },
+                    { role: 'To', address: recipientOf(row), displayName: null },
+                ],
+                messageId: `${row.id}@nordwind.example`,
+                inReplyTo: null,
+                references: [],
+            },
+            body: { availability: 'Readable', plainText: true, html: false },
+            attachments: [],
+            unread: false,
         },
-    })),
-    participants: [
-        { address: 'sales@nordwind.example', displayName: 'Nordwind', messageCount: 3 },
-        { address: 'user@example.invalid', displayName: 'Iris Marlow', messageCount: 2 },
-    ],
-    messageCount: conversationRows.length,
-    moreMessagesNotAssembled: false,
-    moreParticipantsNotNamed: false,
-    nextCursor: null,
-    pageSize: 10,
-};
+        body: {
+            ...markupOnlyBody,
+            storedEmailId: row.id,
+            plainText: { ...markupOnlyBody.plainText, text: row.preview, originalCharacterCount: row.preview.length },
+            document: {
+                ...markupOnlyBody.document,
+                blocks: [
+                    {
+                        type: 'paragraph',
+                        version: 1,
+                        content: [{ text: row.preview, emphasis: 'None', foreground: null, link: null }],
+                        alignment: 'Inherited',
+                    },
+                ],
+            },
+        },
+    };
+}
+
+/** Who one message of the conversation was written to, which is the other side of the exchange from its folder. */
+function recipientOf(row: (typeof conversationRows)[number]): string {
+    return row.folder === 'SENT' ? 'sales@nordwind.example' : 'user@example.invalid';
+}
 
 /** That this deployment reads a typed sentence into filters at all, which is what the search field asks before offering it. */
 export const readsPhrases = { readsPhrases: true };

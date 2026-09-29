@@ -86,6 +86,26 @@ describe('App session', () => {
         ).toBeDefined();
     });
 
+    // Changing which mailboxes a deployment reads and changing the folders inside one are two grants on the service,
+    // and the folder acts are refused under the first alone — so the client offers them under the second.
+    it('offers the folder acts under the grant the deployment asks them of, rather than the one for the record', async () => {
+        const folderSentence =
+            'This credential may not make, rename, move or delete the folders of your mailboxes, so none of that is offered. Whoever runs the deployment can grant that.';
+
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read', 'mailfathom.mail.accounts.write'));
+        await framed();
+
+        expect(screen.getByText(folderSentence)).toBeDefined();
+    });
+
+    it('says nothing is withheld about folders from a credential that may change them', async () => {
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read', 'mailfathom.mail.folders.write'));
+        await framed();
+
+        expect(screen.getByText(/This credential may not ask questions of your mail/)).toBeDefined();
+        expect(screen.queryByText(/may not make, rename, move or delete the folders/)).toBeNull();
+    });
+
     it('offers nothing to ask with where the credential may not ask', async () => {
         renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
         await framed();

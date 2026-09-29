@@ -215,22 +215,36 @@ export const troubledFolders = {
 export const ownTimeZone = { timeZone: 'UTC', isDefault: true };
 
 /**
- * The folders of the corpus mailbox as the management route publishes them, with no act this credential may take.
+ * The folders of the corpus mailbox as the management route publishes them, with the acts the mailbox allows.
  *
  * The same levels the folders route answers — the inbox, the level nothing is bound to, the folder beneath it, the
- * archive, and the trash — because the two routes are two readings of one mailbox. Every `allowedActs` is empty to match the grant
- * {@link sessionAnswer} states, which reads and asks and changes nothing; the identities are the aliases only because
- * a corpus needs some value there, and nothing may read meaning into one.
+ * archive, and the trash — because the two routes are two readings of one mailbox. The acts are the mailbox's rather
+ * than the credential's: the route reads under the grant to read mail, and the client narrows what it reports by the
+ * grant it holds, so a check whose credential changes nothing is still offered nothing. A folder playing a role is
+ * nested under and never renamed, moved, or deleted. The identities are the aliases the folders route answers, because
+ * that is what a tree pairs a row with its acts by, and nothing may read meaning into one.
  */
 export const managedFolders = {
-    allowedActs: [],
+    allowedActs: ['Create'],
     creatableRoles: [],
     folders: [
-        { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] },
-        { id: 'ARCHIVE', parentId: null, name: 'Archive', role: null, allowedActs: [] },
-        { id: 'ARCHIVE/2024', parentId: 'ARCHIVE', name: '2024', role: null, allowedActs: [] },
-        { id: 'FILED', parentId: null, name: 'Filed', role: 'Archive', allowedActs: [] },
-        { id: 'TRASH', parentId: null, name: 'Trash', role: 'Trash', allowedActs: [] },
+        { id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: ['Create'] },
+        {
+            id: 'ARCHIVE',
+            parentId: null,
+            name: 'Archive',
+            role: null,
+            allowedActs: ['Create', 'Rename', 'Move', 'Delete'],
+        },
+        {
+            id: 'ARCHIVE/2024',
+            parentId: 'ARCHIVE',
+            name: '2024',
+            role: null,
+            allowedActs: ['Create', 'Rename', 'Move', 'Delete'],
+        },
+        { id: 'FILED', parentId: null, name: 'Filed', role: 'Archive', allowedActs: ['Create'] },
+        { id: 'TRASH', parentId: null, name: 'Trash', role: 'Trash', allowedActs: ['Create'] },
     ],
 };
 

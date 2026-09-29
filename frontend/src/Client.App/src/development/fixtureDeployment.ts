@@ -698,7 +698,11 @@ function messageAnswer(route: string, asked: URLSearchParams): ClientResponse | 
         // The conversation and where it stands are two reads of one correspondence, and the corpus answers both: a
         // deployment that had derived nothing would draw the absence instead, which is a state of the block rather
         // than the one worth serving as the example.
-        return answering(route.endsWith('/state') ? mail.conversationState : mail.conversation);
+        return answering(
+            route.endsWith('/state')
+                ? mail.conversationState
+                : mail.conversation({ content: asked.get('content') === 'true' }),
+        );
     }
 
     if (!route.startsWith('/messages/')) {

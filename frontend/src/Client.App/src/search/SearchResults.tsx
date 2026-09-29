@@ -22,6 +22,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization, type Translate } from '../localization/useLocalization';
 import { opensAsDraft, useMailboxActs } from '../mailboxActs/useMailboxActs';
+import { useListedMail } from '../messageList/useListedMail';
 import { MessageRow } from '../messageRows/MessageRow';
 import { estimatedRowHeight, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -104,6 +105,7 @@ export function SearchResults({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const acts = useMailboxActs();
+    const listed = useListedMail();
 
     const [found, setFound] = useState<FoundMail | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -160,6 +162,9 @@ export function SearchResults({
             if (result.outcome === 'failed') {
                 setFailure(result.failure);
             } else {
+                // Written down for the reason the folder's list writes its pages down: a result opened from here is
+                // the message the toolbar acts on, and the toolbar knows where a message belongs only from this.
+                listed.drew(result.value.results);
                 setFound((current) => withPage(current, result.value));
             }
         });
@@ -167,7 +172,7 @@ export function SearchResults({
         return () => {
             listening = false;
         };
-    }, [session, transport, ask, wantedCursor, wanting]);
+    }, [session, transport, ask, wantedCursor, wanting, listed]);
 
     // The two measurements the window is arithmetic over, taken after the browser has laid the results out rather than
     // written down as numbers here, for the reason the folder's list measures them: the row's height is a token

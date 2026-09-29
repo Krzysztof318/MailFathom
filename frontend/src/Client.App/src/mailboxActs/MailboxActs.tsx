@@ -18,6 +18,7 @@ import {
     type MailFolderRole,
     type MailMutationResult,
 } from '@mailfathom/client-backend';
+import { useFolderMaintenance } from '../folders/useFolderMaintenance';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { ChangeAct, ChangeSubmission } from '../pendingChanges/changeStandings';
@@ -202,6 +203,7 @@ export function MailboxActsProvider({
     const toasts = useToasts();
     const telemetry = useTelemetry();
     const pending = usePendingChanges();
+    const foldersChanged = useFolderMaintenance().changed;
     const [kept, setKept] = useState<Held>(heldForNobody);
 
     // How many times the folders have been asked for, which is what the second attempt is: the read is an effect, so
@@ -263,6 +265,9 @@ export function MailboxActsProvider({
     // A read that does not answer is said rather than dropped, and it is said once with the way out on it: without the
     // folders the three acts that file a message are refused as `foldersUnknown`, which is a sentence nobody can act on
     // unless the client offers them the second attempt.
+    //
+    // A folder made, renamed, moved, or deleted here reads them again, for the reason the tree does: the destinations
+    // this offers are those folders, and a folder somebody has just made is one they mean to file into at once.
     useEffect(() => {
         if (session === null || !online || !(moves || deletes)) {
             return;
@@ -302,7 +307,7 @@ export function MailboxActsProvider({
         return () => {
             listening = false;
         };
-    }, [session, transport, online, moves, deletes, attempts, toasts, translate]);
+    }, [session, transport, online, moves, deletes, attempts, foldersChanged, toasts, translate]);
 
     function refusalOf(act: MailboxAct, messages: readonly ActedMessage[]) {
         return refusalFor(act, messages, held.directory, { flags, moves, deletes });
