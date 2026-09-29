@@ -65,7 +65,8 @@ function stated(answer: ClientResponse): Record<string, unknown> {
 
 const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/folders', deployment.troubledFolders],
-    [`/threads/${mail.conversationId}`, mail.conversation],
+    [`/threads/${mail.conversationId}`, mail.conversation()],
+    [`/threads/${mail.conversationId}?content=true`, mail.conversation({ content: true })],
     ['/emails/search?text=renewal', mail.searchResults],
     ['/emails/search/phrasing', { readsPhrases: true }],
     ['/notifications?pageSize=20', notifications.notificationPage],

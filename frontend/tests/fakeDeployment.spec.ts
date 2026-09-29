@@ -89,7 +89,7 @@ test('files a moved message in the folder it was moved to, and moves both folder
 
 test('files a message the folder never listed, one out of a thread or a search answer, where it was moved to', () => {
     const deployment = new FakeDeployment('0.0.0');
-    const threaded = mail.conversation.messages[1]?.email.id ?? '';
+    const threaded = mail.conversation().messages[1]?.email.id ?? '';
     const searched = mail.searchResults.results[0]?.id ?? '';
 
     ask(deployment, 'POST', '/mutations/moves', {
@@ -100,6 +100,53 @@ test('files a message the folder never listed, one out of a thread or a search a
     });
 
     expect(listed(deployment, 'folder=ARCHIVE%2F2024')).toStrictEqual([threaded, searched]);
+});
+
+test('takes a deleted folder out of both folder routes, the mail filed in it out of every read, and refuses it after', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const searched = mail.searchResults.results[0]?.id ?? '';
+
+    ask(deployment, 'POST', '/mutations/moves', {
+        moves: [{ storedEmailId: searched, destinationFolder: 'ARCHIVE/2024' }],
+    });
+
+    expect(
+        ask(deployment, 'POST', '/managed-folders/deletions', { account: 'work', folderId: 'ARCHIVE/2024' }),
+    ).toMatchObject({
+        change: 'Deleted',
+        folder: { id: 'ARCHIVE/2024' },
+        mailErasureDeferred: false,
+    });
+
+    const managed = ask(deployment, 'GET', '/managed-folders?account=work') as { folders: { id: string }[] };
+    const folders = ask(deployment, 'GET', '/folders') as { accounts: { folders: { alias: string }[] }[] };
+    const searchedAgain = ask(deployment, 'GET', '/emails/search?query=renewal') as { results: { id: string }[] };
+
+    expect(managed.folders.map(({ id }) => id)).toStrictEqual(['INBOX', 'ARCHIVE', 'FILED', 'TRASH']);
+    expect(folders.accounts.flatMap((account) => account.folders.map(({ alias }) => alias))).toStrictEqual([
+        'INBOX',
+        'FILED',
+        'TRASH',
+    ]);
+    expect(searchedAgain.results.map(({ id }) => id)).not.toContain(searched);
+    expect(ask(deployment, 'GET', `/messages/${searched}`)).toBe(404);
+    expect(
+        ask(deployment, 'POST', '/managed-folders/deletions', { account: 'work', folderId: 'ARCHIVE/2024' }),
+    ).toMatchObject({
+        refusal: 'FolderMissing',
+    });
+});
+
+test('answers a conversation with each message and its body where the reader asked for them', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const bare = ask(deployment, 'GET', `/threads/${mail.conversationId}`) as { messages: object[] };
+    const whole = ask(deployment, 'GET', `/threads/${mail.conversationId}?content=true`) as {
+        messages: { email: { preview: string }; message: object; body: { plainText: { text: string } } }[];
+    };
+
+    expect(bare.messages.every((message) => !('body' in message))).toBe(true);
+    expect(whole.messages).toHaveLength(bare.messages.length);
+    expect(whole.messages.every(({ email, body }) => body.plainText.text === email.preview)).toBe(true);
 });
 
 test('answers a later read with the flags a change left, and filters on them', () => {

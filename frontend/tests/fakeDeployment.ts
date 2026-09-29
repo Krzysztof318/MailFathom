@@ -120,6 +120,9 @@ interface FolderRow {
 /** A record the corpus or a write states, held as the JSON it travels as. */
 type Held = Readonly<Record<string, unknown>>;
 
+/** One folder of the mailbox's hierarchy as the management route publishes it. */
+type HeldFolder = (typeof deployment.managedFolders.folders)[number];
+
 /** The two halves of the task list, as the corpus states them for the day the list was first read on. */
 interface TaskLists {
     readonly committed: Held[];
@@ -153,6 +156,14 @@ export class FakeDeployment {
 
     /** How far each folder's two counts have moved from what the corpus states, by alias. */
     private readonly counted = new Map<string, { stored: number; unread: number }>();
+
+    /**
+     * The mailbox's folders as the management route reads them, less every folder a folder act deleted since.
+     *
+     * Both folder routes answer from it, because they are two readings of one mailbox: a folder deleted here is one
+     * the tree no longer lists and mail can no longer be moved into.
+     */
+    private hierarchy: readonly HeldFolder[] = deployment.managedFolders.folders;
 
     /** The notification centre, newest first, with every read mark and erasure written since. */
     private notificationsHeld: HeldNotification[] = notifications.notificationPage.notifications.map((row) => ({
@@ -325,7 +336,9 @@ export class FakeDeployment {
             case 'GET /folders':
                 return answering(this.folders());
             case 'GET /managed-folders':
-                return answering(deployment.managedFolders);
+                return answering({ ...deployment.managedFolders, folders: this.hierarchy });
+            case 'POST /managed-folders/deletions':
+                return this.folderDeleted(request.body);
             case 'GET /emails':
                 return answering(this.folderPage(request.query));
             case 'GET /emails/search':
@@ -689,7 +702,11 @@ export class FakeDeployment {
         }
 
         if (space === 'threads' && segments.length <= 3) {
-            return answering(part === 'state' ? mail.conversationState : mail.conversation);
+            return answering(
+                part === 'state'
+                    ? mail.conversationState
+                    : mail.conversation({ content: query.get('content') === 'true' }),
+            );
         }
 
         if (space !== 'messages') {
@@ -988,23 +1005,60 @@ export class FakeDeployment {
         return running;
     }
 
-    /** The folders the corpus states, with each count moved by what was written since. */
+    /** The folders the corpus states that no folder act has deleted, each with its counts moved by what was written. */
     private folders() {
         return {
             ...deployment.mailFolders,
             accounts: deployment.mailFolders.accounts.map(({ account, folders }) => ({
                 account,
-                folders: folders.map((folder) => {
-                    const moved = this.counted.get(folder.alias) ?? { stored: 0, unread: 0 };
+                folders: folders
+                    .filter(({ alias }) => this.hierarchy.some(({ id }) => id === alias))
+                    .map((folder) => {
+                        const moved = this.counted.get(folder.alias) ?? { stored: 0, unread: 0 };
 
-                    return {
-                        ...folder,
-                        storedEmailCount: folder.storedEmailCount + moved.stored,
-                        unreadEmailCount: folder.unreadEmailCount + moved.unread,
-                    };
-                }),
+                        return {
+                            ...folder,
+                            storedEmailCount: folder.storedEmailCount + moved.stored,
+                            unreadEmailCount: folder.unreadEmailCount + moved.unread,
+                        };
+                    }),
             })),
         };
+    }
+
+    /** The folder named and every folder above it, from the top of the hierarchy down, or none for one it does not hold. */
+    private lineOf(id: string | null): readonly HeldFolder[] {
+        const folder = this.hierarchy.find((held) => held.id === id);
+
+        return folder === undefined ? [] : [...this.lineOf(folder.parentId), folder];
+    }
+
+    /**
+     * Deletes a folder and everything beneath it on the mail server, which takes the mail stored from them out of every
+     * read — the change the service reports for an account whose folders a mail server holds, as the corpus's does.
+     */
+    private folderDeleted(body: unknown): FakeAnswer {
+        const folder = this.hierarchy.find(({ id }) => id === recordIn(body)?.['folderId']);
+
+        if (folder === undefined) {
+            return {
+                status: 404,
+                body: JSON.stringify({ refusal: 'FolderMissing' }),
+                contentType: 'application/problem+json',
+            };
+        }
+
+        const gone = new Set(this.hierarchy.filter(({ id }) => this.lineOf(id).includes(folder)).map(({ id }) => id));
+
+        for (const [storedEmailId, alias] of this.placed) {
+            if (gone.has(alias)) {
+                this.deleted.add(storedEmailId);
+            }
+        }
+
+        this.hierarchy = this.hierarchy.filter(({ id }) => !gone.has(id));
+
+        return answering({ change: 'Deleted', folder, mailErasureDeferred: false });
     }
 
     /**
@@ -1169,9 +1223,7 @@ export class FakeDeployment {
     }
 
     private moved(body: unknown) {
-        const aliases = new Set(
-            deployment.mailFolders.accounts.flatMap(({ folders }) => folders.map(({ alias }) => alias)),
-        );
+        const aliases = new Set(this.folders().accounts.flatMap(({ folders }) => folders.map(({ alias }) => alias)));
 
         return listIn(body, 'moves').map((move) => {
             const storedEmailId = String(move['storedEmailId']);
@@ -1380,7 +1432,7 @@ function corpusRow(storedEmailId: string): FolderRow | null {
         return generatedRow(position);
     }
 
-    const threaded = mail.conversation.messages.find(({ email }) => email.id === storedEmailId)?.email;
+    const threaded = mail.conversation().messages.find(({ email }) => email.id === storedEmailId)?.email;
 
     if (threaded !== undefined) {
         return threaded;

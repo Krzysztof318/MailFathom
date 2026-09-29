@@ -299,7 +299,7 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
 - **A journey runs against a fake deployment that holds state.** A route fulfilled with one fixed answer answers the
   list after a delete exactly as it answered it before, so it cannot tell a client that dropped the row from one that
   never asked again. The fake a journey drives, `fakeDeployment.ts`, applies what the client writes — a delete, a move, a flag, a read mark,
-  a draft, an undo, an event, a task, a contact — and answers every later read from what those writes did, in the shapes the service answers, so the
+  a draft, an undo, an event, a task, a contact, a deleted folder — and answers every later read from what those writes did, in the shapes the service answers, so the
   bundle parses them through `Client.Backend` exactly as it would a deployment's.
 - **No journey asserts a service behaviour the fake merely assumes.** The fake holds one reading of what the service
   does — that a moved message leaves the folder it came from, that emptying the trash empties it — and a journey proves

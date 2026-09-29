@@ -1208,7 +1208,7 @@ export const pl: Catalogue = {
     'grant.sendMail':
         'To poświadczenie nie może wysyłać poczty z tego wdrożenia, więc wiadomość można napisać i zapisać jako szkic, ale nie wysłać. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.manageFolders':
-        'To poświadczenie nie może zmieniać tego, które foldery czyta to wdrożenie, więc nie oferujemy tworzenia, zmiany nazwy ani usuwania folderu. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+        'To poświadczenie nie może tworzyć, zmieniać nazwy, przenosić ani usuwać folderów Twoich skrzynek, więc nie oferujemy żadnej z tych czynności. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.readContacts':
         'To poświadczenie nie może czytać książki adresowej w tym wdrożeniu, więc nie oferujemy przestrzeni Osoby. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.writeContacts':

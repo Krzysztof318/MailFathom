@@ -42,7 +42,7 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     deleteMail: 'mailfathom.mail.delete',
     composeMail: 'mailfathom.mail.drafts.write',
     sendMail: 'mailfathom.mail.send',
-    manageFolders: 'mailfathom.mail.accounts.write',
+    manageFolders: 'mailfathom.mail.folders.write',
     readContacts: 'mailfathom.mail.contacts.read',
     writeContacts: 'mailfathom.mail.contacts.write',
 };
