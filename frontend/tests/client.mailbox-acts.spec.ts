@@ -54,6 +54,15 @@ function bodiesOf(deployment: FakeDeployment, route: string): unknown[] {
     return deployment.requests('POST', route).map(({ body }) => body);
 }
 
+/** Every record the page asked to release, in the order it asked. */
+function recordsReleased(deployment: FakeDeployment): string[] {
+    return bodiesOf(deployment, '/mutations/deletes/releases').flatMap((body) =>
+        typeof body === 'object' && body !== null && 'recordIds' in body && Array.isArray(body.recordIds)
+            ? body.recordIds.map(String)
+            : [],
+    );
+}
+
 test('files a deleted message into the trash and puts it back where it was on undo, out of the trash it was shown in', async ({
     page,
     deployment,
@@ -110,6 +119,12 @@ test('destroys a message deleted from the trash only after the question saying s
     const question = page.getByRole('dialog', { name: 'Delete 1 message?' });
 
     await expect(question).toContainText('This cannot be undone.');
+
+    const deleting = page.waitForResponse(
+        (response) =>
+            response.request().method() === 'POST' && response.url().endsWith('/api/client/mutations/deletes'),
+    );
+
     await question.getByRole('button', { name: 'Delete', exact: true }).click();
 
     await expect(notice(page, 'Deleting…')).toContainText('1 message');
@@ -120,18 +135,17 @@ test('destroys a message deleted from the trash only after the question saying s
     // already in, and the deployment is told at once that nobody is being offered the way back it would hold it for.
     expect(bodiesOf(deployment, '/mutations/deletes')).toStrictEqual([{ deletes: [{ storedEmailId: 'message-2' }] }]);
     expect(bodiesOf(deployment, '/mutations/moves')).toHaveLength(1);
-    await expect.poll(() => bodiesOf(deployment, '/mutations/deletes/releases')).toHaveLength(1);
+    await expect
+        .poll(() => bodiesOf(deployment, '/mutations/deletes/releases'))
+        .toStrictEqual([{ recordIds: [expect.any(String)] }]);
 
-    // What is released is the record the delete wrote, which a later read of that record answers as carried out.
-    const [released] = bodiesOf(deployment, '/mutations/deletes/releases') as { recordIds: string[] }[];
-    const standing = deployment.answer({
-        method: 'GET',
-        url: `http://deployment.invalid/api/client/mutations?record=${released?.recordIds[0] ?? ''}`,
-        body: null,
-    });
+    // What is released is the record the delete answered with, rather than any record the page happened to be holding.
+    const written: unknown = await (await deleting).json();
 
-    expect(JSON.parse(standing.body)).toMatchObject({
-        changes: [{ storedEmailId: 'message-2', mutation: 'delete', state: 'completed' }],
+    expect(written).toMatchObject({
+        results: [
+            { storedEmailId: 'message-2', outcome: 'recorded', change: { recordId: recordsReleased(deployment)[0] } },
+        ],
     });
 });
 
