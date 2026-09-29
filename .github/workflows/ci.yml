@@ -184,7 +184,7 @@ jobs:
   #
   # It is named after the stack it gates rather than after the act of gating, which is the whole of what
   # `Backend` buys over the `Verify` this job used to be called. A check arrives at a reader as one line —
-  # `Backend / dotnet format`, `Frontend / Check, build, and test the client` — and that line is
+  # `Backend / dotnet format`, `Frontend / Check and test the client` — and that line is
   # where a skipped job is either read as work the change could not reach or misread as a stack nobody
   # verified. Under the old name the two stacks were not comparable at a glance: `Verify` said which
   # question was asked and never which half of the repository it was asked about, so a client-only change
@@ -222,9 +222,10 @@ jobs:
   #
   # What that workflow asserts is everything `scripts/verify-full.sh` asks the client — the linter, the type check,
   # both packages' unit suites, the formatting pass, and the build — plus the browser suite, which is the one check the
-  # client's own unit suite structurally cannot make. The draft exemption is kept for the reason the server's build has
-  # one — this is an expensive job, downloading a browser and building a bundle — and the `frontend` filter above is
-  # what keeps a change that cannot reach the client from paying either cost.
+  # client's own unit suite structurally cannot make, and the desktop suite, each in a job of its own. They report here
+  # as one `frontend` result, which is what `Required CI` reads however many jobs sit behind it. The draft exemption is
+  # kept for the reason the server's build has one — these are expensive jobs, downloading a browser and building a
+  # bundle — and the `frontend` filter above is what keeps a change that cannot reach the client from paying either cost.
   frontend:
     name: Frontend
     needs:

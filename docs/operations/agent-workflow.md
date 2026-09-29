@@ -285,7 +285,7 @@ stronger version of the same reason: it builds the desktop shell and drives the
 WebView that shell renders in, so it wants a Rust toolchain, the platform's
 WebView packages, a WebDriver for them, and a display.
 `.github/workflows/build-test-frontend.yml` carries the argument for gating both
-there rather than nightly or locally — they are two jobs in it rather than one —
+there rather than nightly or locally — each is a job of its own in it —
 and `frontend/tests/AGENTS.md` says which checks belong to each rather than to
 `pnpm test`.
 
@@ -367,8 +367,8 @@ Three things follow that are worth knowing before they are discovered.
   `verify_fast_runs_the_client_flow_for_a_change_under_frontend` and
   `verify_full_runs_the_client_flow_for_a_change_under_frontend` hold both to it,
   each by comparing the whole of what the flow invoked. `CI`'s `Frontend` job runs
-  the same commands in the same order: the four checks ahead of the browser steps,
-  and then the build as the first half of `pnpm test:browser`, which is what drives
+  the same commands: the four checks in the same order in one job, and the build in
+  another beside it, as the first half of `pnpm test:browser`, which is what drives
   the bundle rather than a separate step in front of it.
   `the_client_job_runs_every_check_the_full_gate_runs` holds the workflow to the
   same list — so a lint violation, a type error, or a formatting difference fails

@@ -4,10 +4,11 @@
 
 name: Build and test the frontend
 
-# The client stack's half of the required check, and it asks the client exactly what `scripts/verify-full.sh` asks it,
-# in the same order: the linter, the type check, both packages' unit suites, the formatting pass, and the build. The
-# browser suite is the one step that has no counterpart in either local gate — #1404 decided it runs here because it
-# cannot affordably run anywhere else — and it sits last because it is the only step that downloads a browser.
+# The client stack's half of the required check, and it asks the client exactly what `scripts/verify-full.sh` asks it:
+# the linter, the type check, both packages' unit suites, and the formatting pass in the first job, and the build in the
+# second. The browser suite is the one check that has no counterpart in either local gate — #1404 decided it runs here
+# because it cannot affordably run anywhere else — and it has a job of its own because it is the only check that
+# downloads a browser, and the one whose growth would otherwise lengthen every client pull request by as much.
 #
 # **The linting is held at the service's severity rather than at a lower one.** `frontend/eslint.config.ts` is to the
 # client what `TreatWarningsAsErrors` and the analyzer set are to the server: every rule reports as an error and
@@ -49,12 +50,10 @@ permissions:
   contents: read
 
 jobs:
-  check-build-and-test-the-client:
-    name: Check, build, and test the client
+  check-and-test-the-client:
+    name: Check and test the client
     runs-on: ubuntu-latest
     steps:
-      # A full checkout rather than a shallow one, because the client's build reads `Version.props` through
-      # `scripts/read-declared-version.sh` and the browser suite asserts the number that reached the bundle.
       - name: Check out repository
         uses: actions/checkout@v7
         with:
@@ -88,9 +87,9 @@ jobs:
       - name: Restore the client workspace
         run: pnpm --dir frontend install --frozen-lockfile
 
-      # The four checks the full gate runs before it builds, in the order it runs them, and ahead of the browser steps
-      # because none of them needs a browser: a lint violation is answered here without the 300 MB download below. The
-      # type check is the closest thing the client has to the Release build, because Vite strips types rather than
+      # The four checks the full gate runs before it builds, in the order it runs them, and in a job apart from the
+      # browser because none of them needs one: a lint violation is answered here without waiting on a 300 MB download.
+      # The type check is the closest thing the client has to the Release build, because Vite strips types rather than
       # checking them, and the unit suites run behind it for the reason `dotnet test` runs behind `dotnet build`.
       - name: Lint the client
         run: pnpm --dir frontend run lint
@@ -107,6 +106,44 @@ jobs:
       - name: Verify the client's formatting
         if: inputs.run-format
         run: pnpm --dir frontend run format:check
+
+  # The browser suite, in a job of its own beside the checks above rather than behind them, so the suite can grow without
+  # lengthening the wait on a pull request — the two run at once, and the longer of them is what a reader waits on. It
+  # repeats the checkout, the Node and pnpm setup, the pnpm-store cache, and the frozen restore, and builds the bundle
+  # itself rather than downloading one from another job: an artifact handed between jobs is an upload, and this workflow
+  # uploads nothing. Sharding is the next step only once this one job no longer fits beside the others.
+  build-and-drive-the-client-in-a-browser:
+    name: Build the client and drive it in a browser
+    runs-on: ubuntu-latest
+    steps:
+      # A full checkout rather than a shallow one, because the client's build reads `Version.props` through
+      # `scripts/read-declared-version.sh` and the browser suite asserts the number that reached the bundle.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      - name: Install pnpm
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
 
       # Which browser build Playwright downloads is decided by the Playwright version, which the lock file pins, so the
       # same key covers both. Without this the browser is fetched on every run of every client change.

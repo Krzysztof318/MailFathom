@@ -221,7 +221,7 @@ Neither verification script builds a desktop head. A *bundle* takes a Rust toolc
 packages, and minutes of compilation, none of which a change to a screen should wait on, so no gate on a developer's
 machine asks for one and the bundle is built where a bundle is actually wanted.
 
-**A pull request does build the head, and drives it.** `Drive the desktop head`, the second job of
+**A pull request does build the head, and drives it.** `Drive the desktop head`, the third job of
 `.github/workflows/build-test-frontend.yml`, builds the shell in debug without bundles and drives the WebView it renders
 in over the WebDriver protocol, which is what `pnpm test:desktop` is. What it costs is the toolchain and a debug
 compilation on a runner rather than on the machine the change is being written on, and what it buys is the one class of
