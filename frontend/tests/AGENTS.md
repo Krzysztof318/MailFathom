@@ -382,9 +382,11 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
 - **It is held to a budget: the suite never pushes a pull request's `CI` run past twelve minutes.** `Fathom review`
   takes ten to twenty minutes on a pull request, so a pipeline held inside twelve is done within the time the review
   already takes, and this suite is never what a merge waits on. That is why it has a job of its own in that workflow,
-  running beside the one that lints, type-checks, and runs the unit suites rather than behind it, on four workers —
-  every core the runner has, a count measured there and set in `frontend/playwright.config.ts`. Sharding comes only
-  once that one job no longer fits.
+  running beside the one that lints, type-checks, and runs the unit suites rather than behind it. It runs there on
+  Playwright's default of two workers, half the runner's four cores, and a higher count is not the next step: four
+  were measured on that job and made every check about twice as slow, so 112 checks took 84 seconds where 104 had
+  taken 66 on two — each worker's browser wants more than the one core four workers leave it. Sharding is the next
+  step, and only once that one job no longer fits.
 
 What the suite asserts about the network is therefore three things rather than one: that the client reaches the origin
 it was served from and no other, that what it sends there is the credential the bundle composed — the second being the
