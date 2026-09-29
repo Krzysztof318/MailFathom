@@ -374,15 +374,17 @@ dropping it is not, and neither is asserting it in jsdom where it would pass for
   link can download is the wrong place for either. A pipeline
   failure is therefore read from the job log and reproduced locally — where the trace is, on the machine that produced
   it.
-- **Where it runs is decided**: on every pull request that reaches the client stack, in
-  `.github/workflows/build-test-frontend.yml`, which carries the argument for that rather than nightly or local-only.
+- **Where it runs is decided**: on every pull request that reaches the client stack, in the
+  `Build the client and drive it in a browser` job of `.github/workflows/build-test-frontend.yml`, which carries the
+  argument for that rather than nightly or local-only.
   Neither verification gate runs it, journeys included, because it needs a browser install the gates would otherwise
   demand of every machine — so the local gate costs the same however far this suite grows.
 - **It is held to a budget: the suite never pushes a pull request's `CI` run past twelve minutes.** `Fathom review`
   takes ten to twenty minutes on a pull request, so a pipeline held inside twelve is done within the time the review
-  already takes, and this suite is never what a merge waits on. When it nears the budget the first answer is a job of
-  its own in that workflow, beside the one that lints, type-checks, and runs the unit suites, with its worker count
-  measured on the runner. Sharding comes only once that one job no longer fits.
+  already takes, and this suite is never what a merge waits on. That is why it has a job of its own in that workflow,
+  running beside the one that lints, type-checks, and runs the unit suites rather than behind it, on four workers —
+  every core the runner has, a count measured there and set in `frontend/playwright.config.ts`. Sharding comes only
+  once that one job no longer fits.
 
 What the suite asserts about the network is therefore three things rather than one: that the client reaches the origin
 it was served from and no other, that what it sends there is the credential the bundle composed — the second being the

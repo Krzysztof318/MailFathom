@@ -204,8 +204,8 @@ Node process joins any deployment shape.
 The repository's own shape around it was kept when the old client went. `CI` still runs a `Frontend` job, gated on a
 `frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
 job before they publish. What that workflow asserts is everything the full gate asks the client — the linter, the
-type check, both packages' unit suites, the formatting pass, and the build — plus the browser suite and, in a second job
-beside it, the desktop suite, both gated on a pull request because a break only a real head can see is otherwise found
+type check, both packages' unit suites, the formatting pass, and the build — plus the browser suite and the desktop
+suite, each in a job of its own beside the checks, both gated on a pull request because a break only a real head can see is otherwise found
 the morning after a merge. Both verification gates run the same client flow, and deliberately neither of those two —
 [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where both are decided.
 

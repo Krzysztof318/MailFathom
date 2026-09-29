@@ -56,6 +56,11 @@ export default defineConfig({
     outputDir: './.playwright',
 
     fullyParallel: true,
+
+    // Four in the pipeline, which is every core a GitHub-hosted Linux runner has, rather than Playwright's default of
+    // half of them — the preview server is the only other process on the runner, and it serves static files. Elsewhere
+    // the default stands, because a developer's machine is shared with whatever else they are running.
+    workers: runningInPipeline ? 4 : '50%',
     forbidOnly: runningInPipeline,
 
     // No retries anywhere. A check that passes on a second attempt has reported that the client is flaky rather than
