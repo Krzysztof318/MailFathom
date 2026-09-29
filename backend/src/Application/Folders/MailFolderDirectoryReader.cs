@@ -29,9 +29,9 @@ namespace MailFathom.Application.Folders;
 /// The folders are the ones configuration maps, which is a wider answer than the composed reading gives: that reading
 /// is of local state, and a folder an operator asked not to mirror is never scheduled, so no run ever discovers it. It
 /// is still a folder the account has and still a folder MailFathom files into — resolution is indifferent to
-/// mirroring — so it is published beside the mirrored ones as never synchronized, with no place in the hierarchy and
-/// no mail here. A client that could not see it would be told an account has nowhere to put a deleted message while
-/// its mailbox has a trash folder.
+/// mirroring — so it is published beside the mirrored ones as never synchronized, at the place its declaration names
+/// and with no mail here. A client that could not see it would be told an account has nowhere to put a deleted message
+/// while its mailbox has a trash folder.
 /// </para>
 /// <para>
 /// It reaches no mail server and returns no mail. Folder names, roles, counts, and instants are the whole of it, and
@@ -107,8 +107,8 @@ public sealed class MailFolderDirectoryReader
     /// reading — which is of local state — does not name it. It is still a folder the account has and still a folder
     /// MailFathom files into, resolution being indifferent to mirroring, so leaving it out would answer a client asking
     /// <em>where does a deleted message go</em> with <em>nowhere</em> for a mailbox that has a trash folder. It is
-    /// therefore published beside the mirrored ones, as what it is: never synchronized, no place in the hierarchy, and
-    /// no mail here.
+    /// therefore published beside the mirrored ones, as what it is: never synchronized, at the place its declaration
+    /// names, and no mail here.
     /// <para>
     /// A mirrored mapping no run has reached yet is added for the same reason and is the commoner case: a folder
     /// somebody has just declared takes part in everything by default, so no run has discovered it and local state
@@ -124,16 +124,21 @@ public sealed class MailFolderDirectoryReader
     /// </remarks>
     private MailAccountFolders Describe(
         MailAccountFreshness account,
-        IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder) =>
-        new(
+        IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder)
+    {
+        var delimiter = HierarchyDelimiterOf(account.Account.Id, storedByFolder);
+
+        return new(
             account,
             [
-                .. account.Folders.Select(folder => this.Describe(account.Account.Id, folder, storedByFolder)),
-                .. this.UnreachedFolders(account),
+                .. account.Folders.Select(folder =>
+                    this.Describe(account.Account.Id, folder, storedByFolder, delimiter)),
+                .. this.UnreachedFolders(account, delimiter),
             ]);
+    }
 
     /// <summary>Describes the folders configuration maps for an account that no run has ever reached.</summary>
-    private IEnumerable<DescribedMailFolder> UnreachedFolders(MailAccountFreshness account)
+    private IEnumerable<DescribedMailFolder> UnreachedFolders(MailAccountFreshness account, char? delimiter)
     {
         var reached = account.Folders.Select(static folder => folder.Alias).ToHashSet();
 
@@ -141,10 +146,10 @@ public sealed class MailFolderDirectoryReader
             .FoldersOf(account.Account.Id)
             .Where(mapping => !reached.Contains(mapping.Alias) && !IsWithheldFromTools(mapping))
             .OrderBy(static mapping => mapping.Alias.Value, StringComparer.Ordinal)
-            .Select(static mapping => new DescribedMailFolder(
+            .Select(mapping => new DescribedMailFolder(
                 new MailFolderFreshness(mapping.Alias, MailSynchronizationState.NeverSynchronized, null, false),
                 mapping.SpecialUse,
-                [],
+                HierarchyOf(mapping, stored: null, delimiter),
                 0,
                 0));
     }
@@ -157,22 +162,66 @@ public sealed class MailFolderDirectoryReader
     /// <summary>Describes one folder, with what local state holds about it where local state holds anything.</summary>
     /// <remarks>
     /// A folder whose alias has a binding but no mail reads as zero of both counts, and one whose alias has no binding
-    /// at all reads as zero and no hierarchy. The two are separable through the folder's own freshness rather than
-    /// through a count that is absent instead of nought, because "how much is here" and "has anything ever arrived" are
-    /// the questions the state and the instant already answer.
+    /// at all reads as zero. The two are separable through the folder's own freshness rather than through a count that
+    /// is absent instead of nought, because "how much is here" and "has anything ever arrived" are the questions the
+    /// state and the instant already answer.
     /// </remarks>
     private DescribedMailFolder Describe(
         MailAccountId accountId,
         MailFolderFreshness folder,
-        IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder)
+        IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder,
+        char? delimiter)
     {
         var stored = storedByFolder.GetValueOrDefault(new MailFolderIdentity(accountId, folder.Alias));
+        var mapping = this.folderMappings.FindFolderNamed(accountId, folder.Alias);
 
         return new DescribedMailFolder(
             folder,
-            this.folderMappings.FindFolderNamed(accountId, folder.Alias)?.SpecialUse,
-            stored?.RemotePath.ToHierarchyLevels() ?? [],
+            mapping?.SpecialUse,
+            HierarchyOf(mapping, stored, delimiter),
             stored?.StoredEmailCount ?? 0,
             stored?.UnreadEmailCount ?? 0);
     }
+
+    /// <summary>Reads where a folder sits, from the path its declaration names wherever it names one.</summary>
+    /// <remarks>
+    /// <para>
+    /// The declaration rather than the binding, because a folder act writes the declaration and nothing else: a folder
+    /// just made has no binding at all, and one just renamed or moved keeps the binding of the path it left until the
+    /// account's next pass reaches it — minutes, during which the act's own <c>FoldersChanged</c> re-read would draw the
+    /// folder where it no longer is. The binding is read only for a folder found by the role it plays, whose declaration
+    /// names no path.
+    /// </para>
+    /// <para>
+    /// A declared path is the text somebody wrote, which carries no hierarchy delimiter, so it is split by the delimiter
+    /// the folder's own binding recorded and otherwise by the one the account's other bindings recorded — one server's
+    /// namespace nests every folder with the same character. An account no pass has reached yet has recorded none, and
+    /// its declared paths read as one level each until one does.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<string> HierarchyOf(
+        MailFolderMapping? mapping,
+        StoredMailFolder? stored,
+        char? delimiter)
+    {
+        if (mapping?.RemotePath is not { } declared)
+        {
+            return stored?.RemotePath.ToHierarchyLevels() ?? [];
+        }
+
+        var nesting = stored?.RemotePath.HierarchyDelimiter ?? delimiter;
+
+        return RemoteFolderPath.TryCreate(declared.Value, nesting, out var placed)
+            ? placed.ToHierarchyLevels()
+            : [declared.Value];
+    }
+
+    /// <summary>Reads the hierarchy delimiter the account's bindings recorded, or nothing where none recorded one.</summary>
+    private static char? HierarchyDelimiterOf(
+        MailAccountId accountId,
+        IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder) =>
+        storedByFolder.Values
+            .Where(folder => folder.Folder.AccountId == accountId)
+            .Select(static folder => folder.RemotePath.HierarchyDelimiter)
+            .FirstOrDefault(static delimiter => delimiter is not null);
 }

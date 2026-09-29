@@ -16,8 +16,8 @@ import { admitsNesting, type FolderTreeRow } from './folderTreeRows';
 //
 // What is left here is what the report has no opinion about, because it is about this *column* rather than about the
 // mailbox. **A row spanning every account offers nothing**, because a folder is made, marked and removed inside one
-// mailbox and a row standing for all of them stands for no place to put one. **Nesting stops at the third segment of
-// an alias**, which is the column's own ceiling. **A level of an alias nothing is bound to is not a folder**, so no act
+// mailbox and a row standing for all of them stands for no place to put one. **Nesting stops at the third level of a
+// path**, which is the column's own ceiling. **A level of a path nothing is declared at is not a folder**, so no act
 // that names one reaches it. And **marking everything read is a second grant**, asked of the credential rather than of
 // the folder.
 
@@ -46,8 +46,9 @@ export const nothingReported: ReportedFolderActs = { account: [], folder: null }
 export function actsOffered(row: FolderTreeRow, reported: ReportedFolderActs): readonly FolderAct[] {
     // Every act names one mailbox, so the two rows that span them all — the whole workspace, and a role across it —
     // carry none. That is the design project's *All accounts carries none*, and it falls out of the row rather than
-    // being asked about the row's kind.
-    if (row.accountId === null) {
+    // being asked about the row's kind. A level of a path nothing is declared at scopes to nothing and has no identity
+    // an act could name, so it offers nothing either.
+    if (row.accountId === null || row.scope === null) {
         return [];
     }
 
@@ -58,13 +59,8 @@ export function actsOffered(row: FolderTreeRow, reported: ReportedFolderActs): r
     }
 
     // A folder can only be made beneath one the service named, since a creation names its parent by that folder's own
-    // identity. A level of an alias nothing is bound to has none, so it offers nothing at all.
-    const nestable = mayCreate && admitsNesting(row.alias) && reported.folder !== null;
-
-    if (row.remotePath === null) {
-        return nestable ? ['newFolderInside'] : [];
-    }
-
+    // identity.
+    const nestable = mayCreate && admitsNesting(row.remotePath ?? []) && reported.folder !== null;
     const allowed = reported.folder ?? [];
 
     return [

@@ -99,11 +99,15 @@ describe('folderTreeOf', () => {
     it('places the folders playing a role before the ones playing none, in the order they are offered in', () => {
         const work = find(folderTreeOf(directory), 'account:work');
 
-        expect(keysOf(work?.children ?? [])).toEqual(['folder:work:INBOX', 'folder:work:SENT', 'level:work:ARCHIVE']);
+        expect(keysOf(work?.children ?? [])).toEqual([
+            'folder:work:INBOX',
+            'folder:work:SENT',
+            'level:work:["Archiwum"]',
+        ]);
     });
 
-    it('nests a folder where its alias nests it, and names it by the level its mail server calls it', () => {
-        const archive = find(folderTreeOf(directory), 'level:work:ARCHIVE');
+    it('nests a folder where its path nests it, and names it by the level its mail server calls it', () => {
+        const archive = find(folderTreeOf(directory), 'level:work:["Archiwum"]');
         const nested = archive?.children[0];
 
         expect(archive?.scope).toBeNull();
@@ -113,23 +117,38 @@ describe('folderTreeOf', () => {
         expect(nested?.level).toBe(3);
     });
 
-    // The alias is upper-cased by the service, so a level read off it would draw a mailbox in capitals nobody typed.
-    it('names a level nothing is bound to by what the mail server calls it rather than by its alias segment', () => {
-        expect(find(folderTreeOf(directory), 'level:work:ARCHIVE')?.name).toBe('Archiwum');
+    it('names a level nothing is declared at by what the mail server calls it, and stands it for no folder', () => {
+        const archive = find(folderTreeOf(directory), 'level:work:["Archiwum"]');
+
+        expect(archive?.name).toBe('Archiwum');
+        expect(archive?.alias).toBeNull();
     });
 
-    it('falls back to the alias segment for a level nothing beneath it states a remote path for', () => {
-        const unbound = {
+    // A folder made inside another is declared under its own name, and neither a rename nor a move changes its alias,
+    // so an alias says nothing about where a folder is — and a held account's folders are named by nothing the tree
+    // could read a place from at all.
+    it('nests a folder by where it sits whatever its alias is', () => {
+        const filed = {
             synchronizationEnabled: true,
             accounts: [
                 {
                     account: account('work', 'Work'),
-                    folders: [folder({ alias: 'ARCHIVE/2024', path: [] })],
+                    folders: [
+                        folder({ alias: 'ARCHIVE', path: ['Archiwum'] }),
+                        folder({ alias: 'SUPPLIERS', path: ['Archiwum', 'Dostawcy'] }),
+                        folder({ alias: '0b9f3c1e', path: ['Archiwum', 'Dostawcy', '2026'] }),
+                    ],
                 },
             ],
         };
 
-        expect(find(folderTreeOf(unbound), 'level:work:ARCHIVE')?.name).toBe('ARCHIVE');
+        const archive = find(folderTreeOf(filed), 'folder:work:ARCHIVE');
+        const suppliers = archive?.children[0];
+
+        expect(keysOf(find(folderTreeOf(filed), 'account:work')?.children ?? [])).toEqual(['folder:work:ARCHIVE']);
+        expect(suppliers?.key).toBe('folder:work:SUPPLIERS');
+        expect(suppliers?.name).toBe('Dostawcy');
+        expect(keysOf(suppliers?.children ?? [])).toEqual(['folder:work:0b9f3c1e']);
     });
 
     it('shows a folder nothing has bound to a remote folder under the name MailFathom knows it by', () => {
@@ -246,7 +265,7 @@ describe('visibleRows', () => {
             'account:work',
             'folder:work:INBOX',
             'folder:work:SENT',
-            'level:work:ARCHIVE',
+            'level:work:["Archiwum"]',
             'account:personal',
             'folder:personal:INBOX',
             'folder:personal:NEWS',
@@ -256,7 +275,7 @@ describe('visibleRows', () => {
     });
 
     it('draws what nests inside a folder somebody opened, which is the same set read the other way', () => {
-        const visible = visibleRows(folderTreeOf(directory), new Set(['level:work:ARCHIVE']));
+        const visible = visibleRows(folderTreeOf(directory), new Set(['level:work:["Archiwum"]']));
 
         expect(visible.map((row) => row.row.key)).toContain('folder:work:ARCHIVE/2024');
     });

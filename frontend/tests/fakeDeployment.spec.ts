@@ -138,6 +138,35 @@ test('takes a deleted folder out of both folder routes, the mail filed in it out
     });
 });
 
+test('answers a folder made, renamed, and moved at the place each act put it, under the alias it was made with', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const placed = () => {
+        const folders = ask(deployment, 'GET', '/folders') as {
+            accounts: { folders: { alias: string; path: string[] }[] }[];
+        };
+
+        return folders.accounts.flatMap((account) => account.folders).find(({ alias }) => alias === 'SUPPLIERS')?.path;
+    };
+
+    expect(
+        ask(deployment, 'POST', '/managed-folders', { account: 'work', parentId: 'ARCHIVE/2024', name: 'Suppliers' }),
+    ).toMatchObject({ change: 'Created', folder: { id: 'SUPPLIERS', parentId: 'ARCHIVE/2024', name: 'Suppliers' } });
+    expect(placed()).toStrictEqual(['Archive', '2024', 'Suppliers']);
+
+    ask(deployment, 'POST', '/managed-folders/renames', { account: 'work', folderId: 'SUPPLIERS', name: 'Vendors' });
+    expect(placed()).toStrictEqual(['Archive', '2024', 'Vendors']);
+
+    ask(deployment, 'POST', '/managed-folders/moves', { account: 'work', folderId: 'SUPPLIERS', parentId: 'INBOX' });
+    expect(placed()).toStrictEqual(['INBOX', 'Vendors']);
+
+    const managed = ask(deployment, 'GET', '/managed-folders?account=work') as { folders: { id: string }[] };
+
+    expect(managed.folders.map(({ id }) => id)).toContain('SUPPLIERS');
+    expect(
+        ask(deployment, 'POST', '/managed-folders', { account: 'work', parentId: null, name: 'suppliers' }),
+    ).toMatchObject({ folder: { id: 'SUPPLIERS-2' } });
+});
+
 test('answers a conversation with each message and its body where the reader asked for them', () => {
     const deployment = new FakeDeployment('0.0.0');
     const bare = ask(deployment, 'GET', `/threads/${mail.conversationId}`) as { messages: object[] };
