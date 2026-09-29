@@ -681,8 +681,10 @@ success and a failure — a message already being transmitted cannot be recalled
 **The composer closes once the deployment has the message, not on the press.** Queued, or taken back into the drafts
 folder by a stop, it closes; refused or failed, it stays open holding everything written and every file, so the
 corrected send revises the draft the first one filed rather than filing a second. Closed by hand while the send is in
-flight, it keeps what was written in the tab until the send settles, so the next composer opens on it if the send
-failed; and a close that arrives with the answer leaves the keyboard wherever somebody took it meanwhile. A notice
+flight, it forgets what was written at once, so a composer opened meanwhile opens empty rather than on a message already
+on its way; a send that then does not go — anything but queued or taken back — hands the words back to the tab for the
+next composer, unless the tab is already holding something written since. A close that arrives with the answer leaves
+the keyboard wherever somebody took it meanwhile. A notice
 follows the send either way,
 and a stop says what it came to once the deployment has answered it.
 
