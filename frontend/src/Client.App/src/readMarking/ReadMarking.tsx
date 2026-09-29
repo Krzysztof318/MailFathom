@@ -203,7 +203,7 @@ export function ReadMarkingProvider({
         }
     }
 
-    const value: ReadMarking = marking ? { marked: inForce, markRead } : nothingMarkedRead;
+    const value: ReadMarking = marking ? { marked: inForce, markRead, forget } : nothingMarkedRead;
 
     return <ReadMarkingContext value={value}>{children}</ReadMarkingContext>;
 }

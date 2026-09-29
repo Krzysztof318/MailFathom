@@ -14,6 +14,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { PendingChangeLines } from '../pendingChanges/PendingChangeLines';
+import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { PendingChangesProvider } from '../pendingChanges/PendingChanges';
 import { followedChangeInterval } from '../pendingChanges/usePendingChanges';
 import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
@@ -241,12 +242,14 @@ function acting(
         deletes = true,
         composes = false,
         telemetry = noTelemetry,
+        marking = nothingMarkedRead,
     }: {
         flags?: boolean;
         moves?: boolean;
         deletes?: boolean;
         composes?: boolean;
         telemetry?: ClientTelemetry;
+        marking?: ReadMarking;
     } = {},
 ): { readonly held: () => MailboxActs; readonly signIn: (next: ClientSession) => void } {
     let signedIn = session;
@@ -255,22 +258,24 @@ function acting(
         return (
             <LocalizationProvider>
                 <TelemetryContext value={telemetry}>
-                    <ToastsProvider>
-                        <PendingChangesProvider session={signedIn} transport={deployment.transport}>
-                            <PendingChangeLines />
-                            <MailboxActsProvider
-                                session={signedIn}
-                                transport={deployment.transport}
-                                online
-                                flags={flags}
-                                moves={moves}
-                                deletes={deletes}
-                                composes={composes}
-                            >
-                                {children}
-                            </MailboxActsProvider>
-                        </PendingChangesProvider>
-                    </ToastsProvider>
+                    <ReadMarkingContext value={marking}>
+                        <ToastsProvider>
+                            <PendingChangesProvider session={signedIn} transport={deployment.transport}>
+                                <PendingChangeLines />
+                                <MailboxActsProvider
+                                    session={signedIn}
+                                    transport={deployment.transport}
+                                    online
+                                    flags={flags}
+                                    moves={moves}
+                                    deletes={deletes}
+                                    composes={composes}
+                                >
+                                    {children}
+                                </MailboxActsProvider>
+                            </PendingChangesProvider>
+                        </ToastsProvider>
+                    </ReadMarkingContext>
                 </TelemetryContext>
             </LocalizationProvider>
         );
@@ -702,6 +707,106 @@ describe('MailboxActsProvider', () => {
         });
 
         expect(held().asked.get('message-1')?.act).toBe('flag');
+    });
+
+    // Marking a message unread and then flagging it are two changes to two flags, and a row draws both: a flag asked
+    // second that replaced the first claim would draw the message read again from a listing read before either.
+    it('keeps a message’s claim on one flag when an act on the other flag is asked after it', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        perform(held, 'markUnread', [invoice]);
+        perform(held, 'flag', [invoice]);
+
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'flag',
+            from: 'work-inbox',
+            leaves: false,
+            destroys: false,
+            beside: { act: 'markUnread', from: 'work-inbox', leaves: false, destroys: false },
+        });
+
+        await waitFor(() => {
+            expect(submitted(deployment).length).toBe(2);
+        });
+    });
+
+    it('lets go of one flag’s claim alone where the deployment wrote the other one down', async () => {
+        const writing = deploymentAnswering();
+        const refusing = deploymentAnswering({ 'message-1': 'message-not-found' });
+
+        // Writes the read flag down and refuses the other, which is the one arrangement that tells the two claims apart.
+        const deployment: Deployment = {
+            requests: writing.requests,
+            transport: (request) =>
+                request.body?.includes('"flagged"') === true ? refusing.transport(request) : writing.transport(request),
+        };
+        const { held } = acting(deployment);
+
+        perform(held, 'markUnread', [invoice]);
+        perform(held, 'flag', [invoice]);
+
+        await waitFor(() => {
+            expect(held().asked.get('message-1')).toStrictEqual({
+                act: 'markUnread',
+                from: 'work-inbox',
+                leaves: false,
+                destroys: false,
+            });
+        });
+    });
+
+    // A flag asked, then taken off again before either landed: the refusal of the first answers for an act the second
+    // already superseded, so it holds no claim to take back and the claim on the read flag stands untouched beside.
+    it('keeps the claim on the other flag where an act a later one superseded is refused', async () => {
+        const writing = deploymentAnswering();
+        const refusing = deploymentAnswering({ 'message-1': 'message-not-found' });
+        const deployment: Deployment = {
+            requests: writing.requests,
+            transport: (request) =>
+                request.body?.includes('"flagged":true') === true
+                    ? refusing.transport(request)
+                    : writing.transport(request),
+        };
+        const { held } = acting(deployment);
+
+        perform(held, 'markUnread', [invoice]);
+        perform(held, 'flag', [invoice]);
+        perform(held, 'unflag', [invoice]);
+
+        await screen.findByText('One message was not flagged.');
+
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'unflag',
+            from: 'work-inbox',
+            leaves: false,
+            destroys: false,
+            beside: { act: 'markUnread', from: 'work-inbox', leaves: false, destroys: false },
+        });
+    });
+
+    // ADR 0026: marking unread is the reader's own choice about a message, so it outranks the read this session drew
+    // from opening it — and what is forgotten is exactly the messages the deployment wrote the change down for.
+    it('forgets the read an opening drew for each message the deployment recorded as marked unread, and for no other', async () => {
+        const forget = vi.fn();
+        const deployment = deploymentAnswering({ 'message-2': 'message-not-found' });
+        const { held } = acting(deployment, { marking: { ...nothingMarkedRead, forget } });
+
+        perform(held, 'markUnread', [invoice, receipt]);
+
+        await waitFor(() => {
+            expect(forget).toHaveBeenCalledWith(['message-1']);
+        });
+
+        perform(held, 'flag', [invoice]);
+        perform(held, 'markRead', [receipt]);
+
+        await waitFor(() => {
+            expect(submitted(deployment).length).toBe(3);
+        });
+        await screen.findByText('One message was not marked read.');
+
+        expect(forget).toHaveBeenCalledTimes(1);
     });
 
     it('stops claiming a message the deployment answered for without writing anything down', async () => {

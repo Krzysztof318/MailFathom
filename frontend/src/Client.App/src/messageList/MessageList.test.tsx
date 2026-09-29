@@ -320,6 +320,73 @@ describe('MessageList', () => {
         expect(row(2)).toBeDefined();
     });
 
+    // A row above an open menu finishing its way out moves every row below it up by one, so a menu that read its row
+    // again would act on whichever message had moved into that place.
+    it('acts on the message its menu was opened on after a row above it has gone', async () => {
+        const performed = vi.fn();
+
+        render(
+            <ListedMailProvider>
+                {listUnder(answering(wholeFolder), {
+                    acts: {
+                        ...nothingActed,
+                        refusalOf: () => null,
+                        perform: performed,
+                        asked: new Map([
+                            ['message-2', { act: 'archive', from: 'INBOX', leaves: true, destroys: false }],
+                        ]),
+                    },
+                })}
+            </ListedMailProvider>,
+        );
+
+        await rows();
+        fireEvent.contextMenu(row(4));
+
+        act(() => {
+            animationEnded(going2() as Element);
+        });
+
+        await waitFor(() => {
+            expect(going2()).toBeNull();
+        });
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Flag' }));
+
+        expect(performed).toHaveBeenCalledWith('flag', [expect.objectContaining({ storedEmailId: 'message-4' })]);
+    });
+
+    it('hands focus back to the message its menu was opened on after a row above it has gone', async () => {
+        render(
+            <ListedMailProvider>
+                {listUnder(answering(wholeFolder), {
+                    acts: {
+                        ...nothingActed,
+                        refusalOf: () => null,
+                        asked: new Map([
+                            ['message-2', { act: 'archive', from: 'INBOX', leaves: true, destroys: false }],
+                        ]),
+                    },
+                })}
+            </ListedMailProvider>,
+        );
+
+        await rows();
+        fireEvent.contextMenu(row(4));
+
+        act(() => {
+            animationEnded(going2() as Element);
+        });
+
+        await waitFor(() => {
+            expect(going2()).toBeNull();
+        });
+
+        fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Flag' }), { key: 'Escape' });
+
+        expect(document.activeElement).toBe(row(4));
+    });
+
     // The other half of the same rule. An act performed on the selection reaches every row the list holds, and most of
     // them are past the window's edges, where nothing is mounted and nothing reports an animation ending. Held for an
     // animation they cannot play, those rows would stand in the length of the list until a scroll swept the lot — and

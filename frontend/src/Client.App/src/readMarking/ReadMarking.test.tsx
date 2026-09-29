@@ -126,6 +126,33 @@ describe('ReadMarkingProvider', () => {
         expect(named(requests)).toStrictEqual([['first']]);
     });
 
+    it('draws a message it forgot as the deployment reports it, and marks it again when it is next drawn', async () => {
+        const { transport, requests } = recording();
+        const { result } = marking(transport);
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(1);
+        });
+
+        act(() => {
+            result.current.forget(['first']);
+        });
+
+        expect(drawnUnread(result.current, 'first', true)).toBe(true);
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        await waitFor(() => {
+            expect(named(requests)).toStrictEqual([['first'], ['first']]);
+        });
+    });
+
     it('submits nothing for a message the deployment already reports as read', () => {
         const { transport, requests } = recording();
         const { result } = marking(transport);

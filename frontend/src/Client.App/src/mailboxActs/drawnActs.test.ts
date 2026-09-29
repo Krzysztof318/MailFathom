@@ -17,7 +17,11 @@ function message(storedEmailId: string, unread: boolean, flagged = false): Acted
 function marked(...storedEmailIds: readonly string[]): ReadMarking {
     const place: MarkedIn = inbox;
 
-    return { marked: new Map(storedEmailIds.map((id) => [id, place])), markRead: () => undefined };
+    return {
+        marked: new Map(storedEmailIds.map((id) => [id, place])),
+        markRead: () => undefined,
+        forget: () => undefined,
+    };
 }
 
 /** What a client holding exactly these acts carries, which is what a second press reads the first press's state from. */
@@ -160,6 +164,41 @@ describe('underway', () => {
 
     it('reads nothing at all as nothing under way, so a control over an empty selection is refused rather than held', () => {
         expect(underway(askedFrom('archive', 'work-inbox'), 'archive', [])).toBe(false);
+    });
+});
+
+// A message marked unread and then flagged before either landed waits on both flags at once, so each control reads the
+// act asked of its own flag rather than whichever was asked last.
+describe('a message waiting on both flags', () => {
+    const markedUnreadThenFlagged: MailboxActs = {
+        ...nothingActed,
+        asked: new Map([
+            [
+                'message-1',
+                {
+                    act: 'flag',
+                    from: inbox.folder,
+                    leaves: false,
+                    destroys: false,
+                    beside: { act: 'markUnread', from: inbox.folder, leaves: false, destroys: false },
+                },
+            ],
+        ]),
+    };
+    const read = [message('message-1', false)];
+
+    it('offers to mark it read, the read flag being asked of before the flag was', () => {
+        expect(readActFor(markedUnreadThenFlagged, nothingMarkedRead, read)).toBe('markRead');
+    });
+
+    it('offers to take the flag off, the flag being the act asked last', () => {
+        expect(flagActFor(markedUnreadThenFlagged, read)).toBe('unflag');
+    });
+
+    it('reads each act as under way from the act writing its own flag', () => {
+        expect(underway(markedUnreadThenFlagged, 'markUnread', read)).toBe(true);
+        expect(underway(markedUnreadThenFlagged, 'flag', read)).toBe(true);
+        expect(underway(markedUnreadThenFlagged, 'markRead', read)).toBe(false);
     });
 });
 

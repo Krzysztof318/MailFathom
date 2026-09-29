@@ -121,6 +121,7 @@ describe('OpenedMessage', () => {
             markRead: (message) => {
                 opened.push(message);
             },
+            forget: () => undefined,
         });
 
         expect(opened).toStrictEqual([{ storedEmailId, account: 'work', folder: 'INBOX', unread: true }]);

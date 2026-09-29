@@ -51,6 +51,15 @@ export interface ReadMarking {
      * an implementation that marks nothing, so nothing below has to ask.
      */
     readonly markRead: (message: MessageOpened) => void;
+
+    /**
+     * Stops counting messages as marked read here, because somebody has since had them marked unread.
+     *
+     * Without it a message opened and then marked unread is drawn read, and counted read, for as long as the tab lives:
+     * both readers take what the deployment reports *less* what is held here, so a marking left behind outweighs every
+     * later answer saying the message is unread again. Safe for a message this client never marked.
+     */
+    readonly forget: (storedEmailIds: readonly string[]) => void;
 }
 
 /**
@@ -64,6 +73,7 @@ export interface ReadMarking {
 export const nothingMarkedRead: ReadMarking = {
     marked: new Map(),
     markRead: () => undefined,
+    forget: () => undefined,
 };
 
 export const ReadMarkingContext = createContext<ReadMarking>(nothingMarkedRead);

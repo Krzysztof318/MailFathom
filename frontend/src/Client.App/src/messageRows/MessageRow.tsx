@@ -19,6 +19,7 @@ import {
     actPending,
     changesAFlag,
     drawnFlagged,
+    flagPending,
     useMailboxActs,
     type AskedAct,
     type FilingAct,
@@ -231,8 +232,9 @@ export function MessageRow({
     // them was asked for last.
     // A message this client has just asked to be marked unread is drawn unread from the press, and one asked to be
     // marked read is drawn read from it, which is the same rule in both directions.
+    const reading = flagPending(acts, email, 'seen');
     const unread =
-        acting?.act === 'markUnread' || (acting?.act !== 'markRead' && drawnUnread(marking, email.id, email.unread));
+        reading?.act === 'markUnread' || (reading?.act !== 'markRead' && drawnUnread(marking, email.id, email.unread));
 
     // The flag the row draws, which is the mark either flag act reports and the whole of what it reports.
     const flagged = drawnFlagged(acts, email);

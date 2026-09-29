@@ -42,6 +42,18 @@ export function changesAFlag(act: MailboxAct): act is FlagAct {
     return act === 'flag' || act === 'unflag' || act === 'markRead' || act === 'markUnread';
 }
 
+/** The two flags a mail server keeps, named as the service names them. */
+export type MailFlag = 'seen' | 'flagged';
+
+/** Which of the two flags an act writes, or `null` for an act that files the message instead. */
+export function flagWritten(act: MailboxAct): MailFlag | null {
+    if (act === 'markRead' || act === 'markUnread') {
+        return 'seen';
+    }
+
+    return act === 'flag' || act === 'unflag' ? 'flagged' : null;
+}
+
 /** One message an act is about: what names it, and where it is, which is what filing and taking that back both need. */
 export interface ActedMessage {
     readonly storedEmailId: string;
@@ -99,6 +111,17 @@ export interface AskedAct {
      * trash reading *moving to the trash* would be describing an act that is not the one being performed.
      */
     readonly destroys: boolean;
+
+    /**
+     * The act still asked of the *other* flag, where one was asked in the same folder before this one and has not been
+     * let go of.
+     *
+     * A message waits on both flags at once when somebody marks it unread and then flags it before either has
+     * converged, and a row draws both marks. Held beside rather than replaced, because the act asked second says
+     * nothing about the flag the first one wrote: replacing it drew a message just marked unread as read again, from a
+     * listing read before either act, until the folder happened to be read again.
+     */
+    readonly beside?: AskedAct;
 }
 
 export interface MailboxActs {
@@ -235,8 +258,25 @@ export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boole
  * sentence about it, which is the same rule read from the other end.
  */
 export function actPending(acts: MailboxActs, email: MailTimelineEntry): AskedAct | null {
+    return pendingOf(acts.asked.get(email.id), email);
+}
+
+/**
+ * The act a row is still waiting on for one of the two flags, or `null` where it is waiting on none there.
+ *
+ * Asked per flag because a row draws both marks and a message can be waiting on both: whichever act was asked last is
+ * what the row's own line reports, while each mark is drawn from the act that writes it.
+ */
+export function flagPending(acts: MailboxActs, email: MailTimelineEntry, flag: MailFlag): AskedAct | null {
     const asked = acts.asked.get(email.id);
 
+    return pendingOf(
+        [asked, asked?.beside].find((one) => one !== undefined && flagWritten(one.act) === flag),
+        email,
+    );
+}
+
+function pendingOf(asked: AskedAct | undefined, email: MailTimelineEntry): AskedAct | null {
     if (asked?.from !== email.folder) {
         return null;
     }
@@ -274,7 +314,7 @@ export function actPending(acts: MailboxActs, email: MailTimelineEntry): AskedAc
  * is flagged* is how two screens come to disagree about one message.
  */
 export function drawnFlagged(acts: MailboxActs, email: MailTimelineEntry): boolean {
-    const asked = actPending(acts, email);
+    const asked = flagPending(acts, email, 'flagged');
 
     if (asked?.act === 'flag') {
         return true;
