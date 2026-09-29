@@ -423,6 +423,21 @@ describe('deleteMail', () => {
         });
     });
 
+    // The delete route answers its one record as `change`, exactly as the move route does, and that record is what a
+    // release names — so a value in any other shape is refused rather than read as a delete that wrote nothing down.
+    it('refuses an answer naming a delete’s record as anything but one record', async () => {
+        const answer = await deleteMail(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({ results: [{ storedEmailId, outcome: 'recorded', change: [{ recordId }] }] }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
     it('names no more messages than one submission may carry', async () => {
         const asked = Array.from({ length: mostMessagesPerMutation + 5 }, (_, at) => `message-${String(at)}`);
         const { transport, requests } = recording(recorded());

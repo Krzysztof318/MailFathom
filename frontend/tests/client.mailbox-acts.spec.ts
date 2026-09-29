@@ -121,6 +121,18 @@ test('destroys a message deleted from the trash only after the question saying s
     expect(bodiesOf(deployment, '/mutations/deletes')).toStrictEqual([{ deletes: [{ storedEmailId: 'message-2' }] }]);
     expect(bodiesOf(deployment, '/mutations/moves')).toHaveLength(1);
     await expect.poll(() => bodiesOf(deployment, '/mutations/deletes/releases')).toHaveLength(1);
+
+    // What is released is the record the delete wrote, which a later read of that record answers as carried out.
+    const [released] = bodiesOf(deployment, '/mutations/deletes/releases') as { recordIds: string[] }[];
+    const standing = deployment.answer({
+        method: 'GET',
+        url: `http://deployment.invalid/api/client/mutations?record=${released?.recordIds[0] ?? ''}`,
+        body: null,
+    });
+
+    expect(JSON.parse(standing.body)).toMatchObject({
+        changes: [{ storedEmailId: 'message-2', mutation: 'delete', state: 'completed' }],
+    });
 });
 
 test('files a message by the menu and another by dragging it onto a folder, and the folder holds both', async ({
