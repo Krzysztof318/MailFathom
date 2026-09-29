@@ -170,7 +170,7 @@ export function RecipientField({
     }
 
     return (
-        <div className="relative flex flex-wrap items-center gap-2.5 border-b border-line-soft px-3.75 py-2.25 focus-within:ring-2 focus-within:ring-accent focus-within:ring-inset">
+        <div className="relative flex flex-wrap items-center gap-2.5 border-b border-line-soft px-3.75 py-2.25 focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft focus-within:ring-inset">
             <label htmlFor={fieldId} className="w-22 shrink-0 text-sm text-muted">
                 {label}
             </label>

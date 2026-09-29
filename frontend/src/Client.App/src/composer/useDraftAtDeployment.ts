@@ -46,7 +46,7 @@ export type DraftStanding =
     | { readonly kind: 'saving' }
     | { readonly kind: 'saved' }
     | { readonly kind: 'attaching'; readonly fileName: string }
-    | { readonly kind: 'notCarried'; readonly fileName: string }
+    | { readonly kind: 'notCarried'; readonly fileNames: readonly string[] }
     | { readonly kind: 'sending' }
     | { readonly kind: 'queued'; readonly outgoingEmailId: string }
     | { readonly kind: 'withdrawn'; readonly withdrawal: MailSendWithdrawal }
@@ -437,6 +437,9 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
             carried.current = storedEmailId;
 
+            // Every file left behind, named together, so a second refusal does not hide the first.
+            const leftBehind: string[] = [];
+
             for (const attachment of attachments) {
                 const abandoning = new AbortController();
                 taking.current = abandoning;
@@ -461,7 +464,8 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
                 } else if (taken.refusal === 'abandoned') {
                     return;
                 } else {
-                    hold({ kind: 'notCarried', fileName });
+                    leftBehind.push(fileName);
+                    hold({ kind: 'notCarried', fileNames: [...leftBehind] });
                 }
             }
         },

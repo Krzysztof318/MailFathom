@@ -625,7 +625,7 @@ export function Composer({
                         </>
                     ) : null}
 
-                    <div className="flex items-center gap-2.5 border-b border-line px-3.75 py-2.25 focus-within:ring-2 focus-within:ring-accent focus-within:ring-inset">
+                    <div className="flex items-center gap-2.5 border-b border-line px-3.75 py-2.25 focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft focus-within:ring-inset">
                         {/* Two elements rather than one, because only one of the two things the row holds is labelable:
                             an answer's subject is text the deployment writes, and `for` on a paragraph names nothing a
                             screen reader would follow. So the field takes a label and the paragraph is named by the
@@ -917,7 +917,7 @@ function AttachedFiles({
 // with. A refusal is the one the toast and this line both carry, and deliberately — the toast is what reaches somebody
 // who has looked away, and the line is what is still there when they come back to the words the deployment refused.
 function WhatIsHappening({ standing, online }: { readonly standing: DraftStanding; readonly online: boolean }) {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
 
     if (!online) {
         return <Said text={translate('compose.offline')} warning />;
@@ -936,7 +936,19 @@ function WhatIsHappening({ standing, online }: { readonly standing: DraftStandin
         case 'attaching':
             return <Said text={translate('compose.attaching', { name: standing.fileName })} />;
         case 'notCarried':
-            return <Said text={translate('compose.notCarried', { name: standing.fileName })} warning />;
+            return (
+                <Said
+                    text={translate(
+                        standing.fileNames.length === 1 ? 'compose.notCarried' : 'compose.notCarriedSeveral',
+                        {
+                            names: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
+                                standing.fileNames,
+                            ),
+                        },
+                    )}
+                    warning
+                />
+            );
         case 'refused':
             return <Said text={translate(refusalSaid[standing.refusal])} warning />;
         case 'refusedSave':

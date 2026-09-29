@@ -1400,6 +1400,32 @@ describe('Composer, a draft', () => {
         expect(await screen.findByText(/invoice\.pdf could not be brought over from the draft/u)).toBeDefined();
         expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
     });
+
+    it('names every file that could not be brought over, so a later one does not hide an earlier one', async () => {
+        drawComposer(
+            continued,
+            {
+                message: {
+                    status: 200,
+                    body: messageBody({
+                        attachments: [filedFile, { ...filedFile, position: 1, fileName: 'receipt.pdf' }],
+                    }),
+                },
+            },
+            [work],
+            true,
+            uploadsOneFile,
+            false,
+            noTelemetry,
+            { ...takesNothing, take: () => Promise.resolve({ outcome: 'refused', refusal: 'unavailable' }) },
+        );
+
+        expect(
+            await screen.findByText(
+                `${new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(['invoice.pdf', 'receipt.pdf'])} could not be brought over from the draft, so this message does not carry them. Attach them again to send them.`,
+            ),
+        ).toBeDefined();
+    });
 });
 
 describe('Composer, an answer', () => {
