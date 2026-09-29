@@ -430,7 +430,9 @@ describe('deleteMail', () => {
             session,
             answering({
                 status: 200,
-                body: JSON.stringify({ results: [{ storedEmailId, outcome: 'recorded', change: [{ recordId }] }] }),
+                body: JSON.stringify({
+                    results: [{ storedEmailId, outcome: 'recorded', change: [{ recordId, state: 'pending' }] }],
+                }),
             }),
             [storedEmailId],
         );
