@@ -34,12 +34,15 @@ describe('reportingRefusedCredential', () => {
         expect(refused).not.toHaveBeenCalled();
     });
 
-    it.each([200, 403, 404, 503])('reports nothing for an answer that is not a refused credential: %i', async (status) => {
-        const refused = vi.fn();
-        const transport = reportingRefusedCredential(answering(status), () => held, refused);
+    it.each([200, 403, 404, 503])(
+        'reports nothing for an answer that is not a refused credential: %i',
+        async (status) => {
+            const refused = vi.fn();
+            const transport = reportingRefusedCredential(answering(status), () => held, refused);
 
-        await transport(request(held));
+            await transport(request(held));
 
-        expect(refused).not.toHaveBeenCalled();
-    });
+            expect(refused).not.toHaveBeenCalled();
+        },
+    );
 });

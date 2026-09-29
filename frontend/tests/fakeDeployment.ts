@@ -360,7 +360,9 @@ export class FakeDeployment {
             // typed, or the session a client is holding, which a deployment destroys as it answers with the next.
             case 'POST /session/token':
                 return answering(
-                    authorization?.startsWith('Bearer ') === true ? deployment.renewedSession : deployment.mintedSession,
+                    authorization?.startsWith('Bearer ') === true
+                        ? deployment.renewedSession
+                        : deployment.mintedSession,
                 );
             case 'POST /session/token/revocation':
                 return nothing;

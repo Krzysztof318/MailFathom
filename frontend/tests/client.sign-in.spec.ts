@@ -422,9 +422,7 @@ test('renews a provider grant with its refresh token before the access token end
     const since = await presentedSinceRenewing(page, presented, deployment.expectedRenewedGrantAuthorization);
 
     expect(redemptions.at(-1)).toContain(`refresh_token=${deployment.issuedToken.refresh_token}`);
-    expect(since.filter((credential) => credential !== deployment.expectedRenewedGrantAuthorization)).toStrictEqual(
-        [],
-    );
+    expect(since.filter((credential) => credential !== deployment.expectedRenewedGrantAuthorization)).toStrictEqual([]);
     await expect(page.getByRole('textbox', { name: 'Login' })).toHaveCount(0);
 });
 

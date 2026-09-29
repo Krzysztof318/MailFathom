@@ -287,7 +287,12 @@ test('files a draft with its staged file in the drafts folder, reads it back who
 
 test('puts a send taken back into the drafts folder as it was sent, and knows nothing of one it never queued', () => {
     const deployment = new FakeDeployment('0.0.0');
-    const composition = { account: 'work', subject: 'The yard', plainTextBody: 'Tuesday?', to: ['yard@example.invalid'] };
+    const composition = {
+        account: 'work',
+        subject: 'The yard',
+        plainTextBody: 'Tuesday?',
+        to: ['yard@example.invalid'],
+    };
 
     const written = ask(deployment, 'POST', '/drafts', composition) as { draft: { draftId: string } };
     const [filed = ''] = listed(deployment, 'folder=DRAFTS');
