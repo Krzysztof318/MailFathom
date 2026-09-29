@@ -431,6 +431,15 @@ export function MailboxActsProvider({
             return;
         }
 
+        // Where the act filed each message, read now rather than when the way back is taken: that is the folder the
+        // message stands in until then, and the folders may be read again in between.
+        const filedIn = new Map(
+            filingFor(act, recorded, held.directory, destination?.alias ?? null).map((filing) => [
+                filing.storedEmailId,
+                filing.destinationFolder,
+            ]),
+        );
+
         toasts.raise(
             // A delete that destroys the mail offers nothing to take back, which is the design project's own: the
             // question in front of it has already said it cannot be undone.
@@ -447,7 +456,7 @@ export function MailboxActsProvider({
                       action: {
                           label: translate('act.undo'),
                           take: () => {
-                              takeBack(recorded);
+                              takeBack(act, recorded, filedIn);
                           },
                       },
                   },
@@ -545,13 +554,40 @@ export function MailboxActsProvider({
      * The reverse mutation rather than a withdrawal of the first: what was asked for may already be on its way to a
      * mail server, and a screen that merely stopped saying so would leave the mailbox somewhere the reader was told it
      * was not.
+     *
+     * It is claimed from the press exactly as the act was, against the folder the act filed each message in: that is
+     * the list a reader who opened the destination is looking at, and a row the deployment last listed there would
+     * otherwise stay drawn in it while the message is drawn back where it came from — one message in two places.
+     *
+     * @param act The act being taken back, whose claim stands again for every message the way back was not written for.
+     * @param filedIn The folder the act filed each message in, by the message.
      */
-    function takeBack(messages: readonly ActedMessage[]): void {
+    function takeBack(act: MailboxAct, messages: readonly ActedMessage[], filedIn: ReadonlyMap<string, string>): void {
         if (session === null || !moves) {
             return;
         }
 
         const asking = session;
+
+        /** The act's own claim, standing again over messages that are still where it put them. */
+        function stillFiled(storedEmailIds: readonly string[]): void {
+            const named = new Set(storedEmailIds);
+
+            remember(
+                act,
+                messages.filter((message) => named.has(message.storedEmailId)),
+                true,
+                false,
+            );
+        }
+
+        remember(
+            'move',
+            messages.map((message) => ({ ...message, folder: filedIn.get(message.storedEmailId) ?? message.folder })),
+            true,
+            false,
+        );
+
         const batches: Promise<Submitted>[] = [];
 
         for (let from = 0; from < messages.length; from += mostMessagesPerMutation) {
@@ -576,22 +612,31 @@ export function MailboxActsProvider({
 
             // Each message's own answer, exactly as the act itself is read: a mailbox that moved on between the act
             // and the press has messages the reverse move cannot write down either, and a row whose way back was not
-            // recorded is still on its way to where the act put it — so it goes on saying so rather than being
-            // forgotten on the strength of a batch that answered for something else.
+            // recorded is still on its way to where the act put it — so it goes on saying so rather than being drawn
+            // back on the strength of a batch that answered for something else.
             const written = writtenDown(answered);
             const returned = messages.filter((message) => written.has(message.storedEmailId));
 
-            forget(returned.map((message) => message.storedEmailId));
+            stillFiled(
+                messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId),
+            );
 
             if (returned.length > 0) {
                 toasts.raise({ kind: 'neutral', title: translate('act.undone'), body: counted(returned.length) });
             }
 
             // Followed like any act, because it is one: a way back the account stopped retrying is mail somebody was
-            // told is back where it was. Letting one go claims nothing, because there is nothing left to stop
-            // claiming — the act it reversed still stands for every message it did not return, and the ones it did
-            // return are already drawn wherever the deployment lists them.
-            handOver(asking, 'putBack', answered, takeBack, () => undefined);
+            // told is back where it was. Letting one go hands the message back to the act it reversed, which still
+            // stands for it.
+            handOver(
+                asking,
+                'putBack',
+                answered,
+                (again) => {
+                    takeBack(act, again, filedIn);
+                },
+                stillFiled,
+            );
         });
     }
 
