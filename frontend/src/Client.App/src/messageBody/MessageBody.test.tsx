@@ -184,13 +184,13 @@ describe('MessageBody', () => {
 
         expect(
             screen.getByText(
-                'This message asked to load content from another server. It was removed, so opening it reported nothing to the sender.',
+                'This message asked to fetch content from another server. That was removed, so opening it told the sender nothing.',
             ),
         ).toBeDefined();
-        expect(screen.getByText('References removed: 3')).toBeDefined();
+        expect(screen.getByText('Removed references: 3')).toBeDefined();
         expect(
             screen.getByText(
-                'Loading them tells the sender that you opened this message. It is asked for this message alone and remembered nowhere.',
+                'Loading them tells the sender that this message was opened. This choice applies to this message only and is not remembered anywhere.',
             ),
         ).toBeDefined();
     });
@@ -201,7 +201,7 @@ describe('MessageBody', () => {
             asked += 1;
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
 
         expect(asked).toBe(1);
     });
@@ -209,7 +209,7 @@ describe('MessageBody', () => {
     it('keeps the button somebody pressed on the screen while the read it started is in flight', () => {
         drawing({ ...readable, document: { ...drawnDocument, removedRemoteReferenceCount: 1 } }, () => undefined, true);
 
-        const asking = screen.getByRole('button', { name: 'Load pictures from the sender' });
+        const asking = screen.getByRole('button', { name: 'Load images from the sender' });
 
         expect(asking.getAttribute('aria-disabled')).toBe('true');
         expect(screen.getByText('Loading them…')).toBeDefined();
@@ -218,49 +218,66 @@ describe('MessageBody', () => {
     it('offers nothing to load and says nothing was removed when the message asked for nothing', () => {
         drawing(readable);
 
-        expect(screen.queryByRole('button', { name: 'Load pictures from the sender' })).toBeNull();
-        expect(screen.queryByText(/asked to load content from another server/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load images from the sender' })).toBeNull();
+        expect(screen.queryByText(/asked to fetch content from another server/)).toBeNull();
     });
 
-    it('says pictures are being loaded on the read the reader asked for them', () => {
+    // Once the reader asked, the card has done its work: what is left is one quiet line, as the design draws it, rather
+    // than a second card competing with the message it is about.
+    it('says in one line that the sender\u2019s images are loaded on the read the reader asked for them', () => {
         drawing({
             ...readable,
             remoteImagesRequested: true,
             document: { ...drawnDocument, retainedRemoteImageCount: 2 },
         });
 
-        expect(screen.getByText('Pictures are being loaded from the sender for this message.')).toBeDefined();
-        expect(screen.getByText('Pictures loaded from the sender: 2')).toBeDefined();
-        expect(screen.queryByRole('button', { name: 'Load pictures from the sender' })).toBeNull();
+        const loaded = screen.getByText('Images from the sender are loaded for this message.');
+
+        expect(loaded.tagName).toBe('P');
+        expect(screen.queryByText(/Removed references/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load images from the sender' })).toBeNull();
     });
 
-    it('takes the focus of whoever pressed the button the answered notice replaces', () => {
+    const messageRegion = 'The racking quote';
+
+    // The line is a statement rather than a notice to act on, so it takes no focus itself and is announced instead. The
+    // focus of whoever pressed the button it replaces goes to the message the line stands in, drawn here the way the
+    // reading pane and a conversation draw one: a region that takes focus without being a stop.
+    it('announces the line that replaces the card, and hands the keyboard to the message rather than to it', async () => {
         const asking = { ...readable, document: { ...drawnDocument, removedRemoteReferenceCount: 1 } };
         const answered = {
             ...readable,
             remoteImagesRequested: true,
             document: { ...drawnDocument, retainedRemoteImageCount: 1 },
         };
-        const drawn = drawing(asking);
-        screen.getByRole('button', { name: 'Load pictures from the sender' }).focus();
-
-        drawn.rerender(inThePane(answered));
-
-        expect(document.activeElement).toBe(
-            screen.getByText('Pictures are being loaded from the sender for this message.').parentElement,
+        const inTheMessage = (body: MailBody) => (
+            <article aria-label={messageRegion} tabIndex={-1}>
+                {inThePane(body)}
+            </article>
         );
+        const drawn = render(inTheMessage(asking));
+        screen.getByRole('button', { name: 'Load images from the sender' }).focus();
+
+        drawn.rerender(inTheMessage(answered));
+
+        const loaded = screen.getByRole('status');
+
+        expect(loaded.textContent).toBe('Images from the sender are loaded for this message.');
+        expect(loaded.hasAttribute('tabindex')).toBe(false);
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('article', { name: messageRegion }));
+        });
     });
 
-    it('takes the focus of nobody where the notice is on the screen from the first paint', () => {
-        const before = document.activeElement;
+    it('moves nobody’s focus where the message opens with the pictures already asked for', () => {
+        render(
+            <article aria-label={messageRegion} tabIndex={-1}>
+                {inThePane({ ...readable, remoteImagesRequested: true, document: drawnDocument })}
+            </article>,
+        );
 
-        drawing({
-            ...readable,
-            remoteImagesRequested: true,
-            document: { ...drawnDocument, retainedRemoteImageCount: 1 },
-        });
-
-        expect(document.activeElement).toBe(before);
+        expect(screen.getByRole('status')).toBeDefined();
+        expect(document.activeElement).toBe(document.body);
     });
 
     it('says how many of the message own pictures a bound left undrawn', () => {
@@ -356,7 +373,7 @@ describe('MessageBody', () => {
             );
 
             expect(screen.getByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
-            fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Load images from the sender' }));
 
             expect(asked).toBe(1);
         });

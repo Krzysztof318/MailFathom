@@ -35,8 +35,8 @@ test('opens in Discover, on the questions it offers', async ({ page }) => {
     // The note every unbuilt space carries is what this screen replaced, so its absence is part of the claim.
     await expect(discover.getByText('This space is not built yet.', { exact: false })).toHaveCount(0);
 
-    // The question and the scope it is asked under are the frame's, composed for whichever space is in front — and the
-    // design draws them under this screen's own head rather than at its foot.
+    // The question and the scope it is asked under are this space's own field, which the design draws under its head
+    // rather than at its foot — and no other space draws a copy of it.
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toBeVisible();
 });
@@ -55,8 +55,8 @@ test('reaches Discover again from another space, and keeps the question that was
 
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 
-    // The question outlives the space it was typed into, because it belongs to the frame. Typing it asked nothing, so
-    // the screen is still the one that offers questions.
+    // The question outlives a visit elsewhere, because the workspace holds it rather than the field. Typing it asked
+    // nothing, so the screen is still the one that offers questions.
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toHaveValue(question);
     await expect(page.getByRole('main', { name: 'Discover' }).getByRole('heading', { name: 'Try this' })).toBeVisible();
 });

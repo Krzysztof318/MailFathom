@@ -17,8 +17,7 @@ import {
     type MessageOpened,
     type ReadMarking,
 } from '../readMarking/useReadMarking';
-import { ComposingContext, type Composing } from '../composer/useComposing';
-import { IntentField } from '../shell/IntentField';
+import { ThreadAgentField } from '../threadAgent/ThreadAgentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { emptyWorkspace, useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -33,16 +32,6 @@ import { ReadingPane } from './ReadingPane';
 
 // The network boundary is the transport and it is the whole of what these tests fake, so the routes the pane asks for,
 // the parsing that reads the answers, and the failure mapping are all under test rather than replaced.
-
-// The field asks whether the deployment writes a draft, which decides whether its press drafts one or asks a question.
-// Nothing here is about drafting, so it answers the deployment that writes none and the press stays the question.
-const writesNoDraft: Composing = {
-    offered: false,
-    drafts: false,
-    opening: null,
-    compose: () => undefined,
-    close: () => undefined,
-};
 
 const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
@@ -1023,9 +1012,7 @@ describe('ReadingPane selection', () => {
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentExchangeContext value={deliversNothing}>
                                 <OpenAttachmentContext value={() => undefined}>
-                                    <ComposingContext value={writesNoDraft}>
-                                        <IntentField accounts={[]} />
-                                    </ComposingContext>
+                                    <ThreadAgentField />
                                     <ReadingPane
                                         session={session}
                                         transport={deploymentDescribing()}
@@ -1051,7 +1038,7 @@ describe('ReadingPane selection', () => {
         ).toHaveLength(0);
     });
 
-    it('carries the words somebody selected into the scope the next question is asked under', async () => {
+    it('carries the words somebody selected into what the reply under the thread is written about', async () => {
         readingBeside();
         const words = await screen.findByText('The invoice is attached.');
 
@@ -1059,27 +1046,8 @@ describe('ReadingPane selection', () => {
         fireEvent.mouseUp(words);
 
         expect(
-            await screen.findAllByText(
-                'Asking about the part of this message you selected: “The invoice is attached.”',
-            ),
-        ).toHaveLength(2);
-    });
-
-    it('gives back the whole message as the scope when that is asked for', async () => {
-        readingBeside();
-        const words = await screen.findByText('The invoice is attached.');
-
-        select(words);
-        fireEvent.mouseUp(words);
-        await screen.findAllByText('Asking about the part of this message you selected: “The invoice is attached.”');
-
-        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
-            target: { value: `message:${messageId}` },
-        });
-
-        expect(
-            screen.queryAllByText('Asking about the part of this message you selected: “The invoice is attached.”'),
-        ).toHaveLength(0);
+            await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+        ).toBeDefined();
     });
 
     // Opening a message is its words having reached the pane, and where it stands travels with it, because the folder

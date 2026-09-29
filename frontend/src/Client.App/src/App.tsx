@@ -78,7 +78,6 @@ import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
 import { ConnectionSummary } from './shell/ConnectionSummary';
 import { GrantNotice } from './shell/GrantNotice';
 import { AccountMenu } from './shell/AccountMenu';
-import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { Refresh } from './shell/Refresh';
@@ -101,6 +100,9 @@ import { useSignals } from './signals/useSignals';
 import { useTelemetry } from './telemetry/clientTelemetry';
 import { useNavigationTelemetry } from './telemetry/navigationTelemetry';
 import { Thread } from './thread/Thread';
+import { ReplyDraftingContext } from './threadAgent/replyDrafting';
+import { ThreadAgentField } from './threadAgent/ThreadAgentField';
+import { useReplyDraftingState } from './threadAgent/useReplyDraftingState';
 import { ToastLifetimeContext } from './toasts/useToasts';
 import { attachmentKey, OpenAttachmentContext, type OpenedAttachment } from './workspace/openAttachment';
 import { conversationKey, type OpenConversation } from './workspace/openConversation';
@@ -376,15 +378,17 @@ export function App({
     // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
     // several components below this, and what it replaces is a region this frame composes. It is the opening alone —
     // the message itself is the composer's, so nothing here can read half a message off the frame.
+    //
+    // `asksMail` is read again rather than left to the answer below it. This frame is mounted once for the life of the
+    // tab, so what a previous credential's deployment answered outlives that credential: signing out of one that drafts
+    // and into one holding no asking grant at all would otherwise leave the block drawn over a permission nobody has.
+    // Every other capability here is derived from the session each render, and this is what puts the one that is read
+    // over the wire on the same footing.
+    const drafts = asksMail && writesMail && draftsReplies;
     const composing = useMemo(
         () => ({
             offered: writesMail,
-            // `asksMail` is read again rather than left to the answer below it. This frame is mounted once for the
-            // life of the tab, so what a previous credential's deployment answered outlives that credential: signing
-            // out of one that drafts and into one holding no asking grant at all would otherwise leave the block
-            // drawn over a permission nobody has. Every other capability here is derived from the session each
-            // render, and this is what puts the one that is read over the wire on the same footing.
-            drafts: asksMail && writesMail && draftsReplies,
+            drafts,
             opening: written,
             compose: (asked: ComposerOpening) => {
                 // What asked for it, so that closing hands the keyboard back to it. The three controls that ask are in
@@ -400,8 +404,13 @@ export function App({
                 askedFrom.current = null;
             },
         }),
-        [asksMail, writesMail, draftsReplies, written],
+        [writesMail, drafts, written],
     );
+
+    // The reply the field under a correspondence asked for. Held here because the two things that read it are a
+    // scroller apart — the field at the foot of the reading column and the card at the end of the thread — and this is
+    // the nearest place both are composed from.
+    const replyDrafting = useReplyDraftingState(signedInAs, session, readMail);
 
     // What the whole client is blocked on, held here for the reason above and one more: the surface covers everything
     // this frame draws, so nothing below it could own the state without owning what is drawn over it as well. The
@@ -824,20 +833,22 @@ export function App({
         // other three uncontained.
         return (
             <Containment drawing={whatTheColumnDraws(workspace)} region="reading_pane">
-                <OpenMail
-                    session={session}
-                    transport={readMail}
-                    conversation={workspace.conversation}
-                    fullHtml={workspace.fullHtml}
-                    attachment={workspace.attachment}
-                    storedEmailId={workspace.selection}
-                    online={connection.online}
-                    inTabs={inTabs}
-                    expandWholeThread={preferences.expandWholeThread}
-                    onShowFullHtml={openTabs.openFullHtml}
-                    onCloseFullHtml={openTabs.closeFullHtml}
-                    onCloseAttachment={openTabs.closeAttachment}
-                />
+                <ReplyDraftingContext value={replyDrafting}>
+                    <OpenMail
+                        session={session}
+                        transport={readMail}
+                        conversation={workspace.conversation}
+                        fullHtml={workspace.fullHtml}
+                        attachment={workspace.attachment}
+                        storedEmailId={workspace.selection}
+                        online={connection.online}
+                        inTabs={inTabs}
+                        expandWholeThread={preferences.expandWholeThread}
+                        onShowFullHtml={openTabs.openFullHtml}
+                        onCloseFullHtml={openTabs.closeFullHtml}
+                        onCloseAttachment={openTabs.closeAttachment}
+                    />
+                </ReplyDraftingContext>
             </Containment>
         );
     }
@@ -866,18 +877,17 @@ export function App({
         );
     }
 
-    // The two regions the frame composes for whichever space is in front. They are named here rather than written into
-    // the frame's own props because Discover is handed them as well — the design project draws the question field under
-    // that screen's own head rather than at its foot — and one element described twice is how the field's two copies
-    // would come to disagree about whether the composer has the foot of the column.
-    //
-    // Asking is what the field is for, so a credential that may not ask is not shown one. It is absent rather than
-    // disabled: a control nobody can use says less about why than the sentence above it does. Not while a message is
-    // being written either — what stands at the foot of that column then is the composer's own footer, and two rows of
-    // controls under one column are two answers to what the primary act is.
-    const intentField =
-        written === null && deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
-            <IntentField accounts={mailAccounts} />
+    // The field at the foot of a correspondence, which the design draws in the Mail space under an open message and
+    // nowhere else. What it does is draft a reply, so a deployment that writes none is not shown one: absent rather than
+    // disabled, and never a press that sends somebody to another space instead. Not while a message is being written
+    // either — what stands at the foot of that column then is the composer's own footer, and two rows of controls under
+    // one column are two answers to what the primary act is. A fresh one per message opened, so what was typed under
+    // one message does not stand under the next.
+    const threadField =
+        written === null && drafts && readingACorrespondence(workspace, inTabs) ? (
+            <ReplyDraftingContext value={replyDrafting}>
+                <ThreadAgentField key={workspace.selection} />
+            </ReplyDraftingContext>
         ) : null;
 
     const connectionSummary = <ConnectionSummary connection={connection} />;
@@ -1029,7 +1039,7 @@ export function App({
                                                                                     person={person}
                                                                                     // Where the field stands is the space's decision, which is why it is handed in rather than
                                                                                     // drawn here.
-                                                                                    intent={intentField}
+                                                                                    threadField={threadField}
                                                                                     status={connectionSummary}
                                                                                     agent={
                                                                                         session === null ||
@@ -1054,21 +1064,15 @@ export function App({
                                                                                                 session={session}
                                                                                                 transport={readMail}
                                                                                                 accounts={mailAccounts}
-                                                                                                // Handed the frame's two
-                                                                                                // regions only while this
-                                                                                                // is the space in front,
-                                                                                                // which is the rule every
-                                                                                                // space is handed them
-                                                                                                // under: two fields
-                                                                                                // somebody's question
-                                                                                                // could be typed into are
-                                                                                                // two fields, and one of
-                                                                                                // them would be inside a
-                                                                                                // region nobody can see.
-                                                                                                intent={
+                                                                                                // Its field and the
+                                                                                                // connection only while
+                                                                                                // this is the space in
+                                                                                                // front: a field inside a
+                                                                                                // region nobody can see is
+                                                                                                // a second place a
+                                                                                                // question could land.
+                                                                                                asking={
                                                                                                     space === 'discover'
-                                                                                                        ? intentField
-                                                                                                        : null
                                                                                                 }
                                                                                                 status={
                                                                                                     space === 'discover'
@@ -1493,6 +1497,14 @@ function whatTheColumnDraws(workspace: Workspace): string {
     const conversation = workspace.conversation === null ? '' : conversationKey(workspace.conversation);
 
     return [workspace.selection ?? '', workspace.fullHtml ?? '', conversation, attachment].join('\n');
+}
+
+// Whether the reading column is drawing a message or the correspondence it belongs to, which is the one place the design
+// draws the field that asks about one. A file or a sender's own markup opened as a tab of its own stands in that position
+// instead, and neither of them is a correspondence; opened as a window, either stands over the message and leaves it
+// where it was.
+function readingACorrespondence(workspace: Workspace, inTabs: boolean): boolean {
+    return workspace.selection !== null && !(inTabs && (workspace.fullHtml !== null || workspace.attachment !== null));
 }
 
 function OpenMail({

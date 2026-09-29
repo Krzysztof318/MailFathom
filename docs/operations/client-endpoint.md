@@ -2527,8 +2527,8 @@ Content-Type: application/json
 ```
 
 **What comes back is a proposal rather than a message.** Nothing on this route sends, queues, or writes to a mail
-server, and nothing is stored: the reply arrives as text in the composer, which its author edits, discards, or saves
-through [the drafts routes](#the-drafts-routes) above. Every irreversible act stays behind a person confirming it.
+server, and nothing is stored: the reply arrives as text in the composer or in the card under a correspondence, which
+its author edits, discards, or saves through [the drafts routes](#the-drafts-routes) above. Every irreversible act stays behind a person confirming it.
 
 **The read says whether this deployment drafts at all**, which is what decides whether a composer may offer the
 affordance before anybody presses it. It resolves a registration and calls no provider, so a client asks it once and
@@ -2551,12 +2551,16 @@ it answers is written in, and a message answering none is written in the languag
 user, which [the user record](configuration-sources.md) holds. An `instruction` asking for a particular language
 outranks both, being the one thing the person said about the message themselves.
 
-**The client asks for a draft from the composer and nowhere else.** The block the design draws over the body is what
-sends this request — the field says what the message should be about, the act beside it says what shape it should take,
-and the two travel as one `instruction`. What comes back replaces the words in the composer with the way back beside
-them, and a draft nobody has accepted is named in the send confirmation before the message goes out. The bar under a
-correspondence offers the same thing by opening the composer on the message being read, so asking for a reply reaches
-no other screen.
+**The client asks for a draft in two places, and neither reaches another screen.** The block the design draws over the
+composer's body is one — the field says what the message should be about, the act beside it says what shape it should
+take, and the two travel as one `instruction`. What comes back replaces the words in the composer with the way back
+beside them, and a draft nobody has accepted is named in the send confirmation before the message goes out. The field
+under a correspondence is the other: *Draft a reply* asks for a reply to the message being read, with the fixed
+sentence *Write a reply to this message.* and whatever was typed there joined as one `instruction`, and the passage
+selected in the message as the `selection`, and draws the answer as a card under that message, even with the rest of
+the correspondence shown, that says nothing has been sent. The card is held in memory and nowhere else; *Open in composer* carries its words into the composer on that
+message without asking the deployment again, over whatever that tab was already writing for the same answer, which stays
+the way back — and *Discard draft* lets it go.
 
 **`supported` is published beside the sources rather than left to a client to derive.** A claim carrying none is one
 the correspondence does not back, and it is kept and marked rather than dropped, because the sentence is already in the

@@ -19,7 +19,6 @@ import { DiscoverSpace } from './DiscoverSpace';
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
 // Not catalogue entries: each stands for whatever the frame composed and handed this space.
-const theQuestionField = 'The question field the frame handed this space.';
 const theConnection = 'The connection the frame handed this space.';
 
 // Nothing is read again on the follower's own interval, so what each case drives is the read on mount and whatever a
@@ -55,6 +54,7 @@ function screenOf(
     transport: MailFathomTransport,
     onOpenMessage: (storedEmailId: string) => void = () => undefined,
     handToAgent: ((handOver: AgentHandOver) => void) | null = null,
+    asking = false,
 ) {
     return render(
         <LocalizationProvider>
@@ -64,7 +64,7 @@ function screenOf(
                         session={session}
                         transport={transport}
                         accounts={[]}
-                        intent={<p>{theQuestionField}</p>}
+                        asking={asking}
                         status={<p>{theConnection}</p>}
                         schedule={neverPolls}
                         onOpenMessage={onOpenMessage}
@@ -104,13 +104,44 @@ describe('DiscoverSpace', () => {
         expect(asked).toHaveLength(0);
     });
 
-    it('carries the field and the connection the frame handed it', () => {
+    it('carries the connection the frame handed it', () => {
         const { transport } = deploymentAnswering();
 
         screenOf(transport);
 
-        expect(screen.getByText(theQuestionField)).toBeDefined();
         expect(screen.getByText(theConnection)).toBeDefined();
+    });
+
+    it('draws its own question field only while it is the space in front', () => {
+        const { transport } = deploymentAnswering();
+
+        const { unmount } = screenOf(transport);
+
+        expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
+
+        unmount();
+        screenOf(transport, undefined, null, true);
+
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toBeDefined();
+    });
+
+    // The design draws the row of earlier questions only while the field is idle: once a run is answering, it stands
+    // where that answer's own context is read, and it comes back once somebody puts the answer away.
+    it('offers what was asked before only while no run is answering', async () => {
+        const { transport } = deploymentAnswering();
+
+        screenOf(transport, undefined, null, true);
+        askASuggestion();
+
+        await waitFor(() => {
+            expect(screen.getByText(theAnswer)).toBeDefined();
+        });
+
+        expect(screen.queryByRole('list', { name: 'Asked before' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'New question' }));
+
+        expect(screen.getByRole('list', { name: 'Asked before' })).toBeDefined();
     });
 
     it('asks the question a suggestion states and draws the answer the run composed', async () => {

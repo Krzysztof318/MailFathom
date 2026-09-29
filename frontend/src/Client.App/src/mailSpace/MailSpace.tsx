@@ -76,7 +76,7 @@ export function MailSpace({
     list,
     mail,
     tabs,
-    intent,
+    threadField,
     status,
     person,
 }: {
@@ -98,10 +98,12 @@ export function MailSpace({
     readonly tabs: ReactNode;
 
     /**
-     * The question the reader is composing, which stands at the foot of the reading column — and, in the narrow shape,
-     * at the foot of whichever column is on the screen, so that it is never behind a message somebody has to open.
+     * The field that asks about what is open, which stands at the foot of the reading column.
+     *
+     * `null` wherever the column is not reading a correspondence — nothing open, a file or a sender's markup in its
+     * place, a message being written — because the design draws it under an open message and nowhere else.
      */
-    readonly intent: ReactNode;
+    readonly threadField: ReactNode;
 
     /** What the deployment says about the connection, which stands at the foot of the mailbox column. */
     readonly status: ReactNode;
@@ -467,7 +469,7 @@ export function MailSpace({
                             standing around the message — the head above it and the conversation's own state — and the
                             field asking about it is the last of those: a column cleared of every panel with one row of
                             controls still under it is not the screen that control promises. */}
-                        {workspace.panelsHidden ? null : intent}
+                        {workspace.panelsHidden ? null : threadField}
                     </section>
                 ) : null}
             </div>

@@ -14,7 +14,7 @@ import { implementedSpaces, spaceLabels, type Space as SpaceName } from '../rout
 export function Space({
     offered,
     space,
-    intent,
+    threadField,
     status,
     folders,
     list,
@@ -32,8 +32,11 @@ export function Space({
 
     readonly space: SpaceName;
 
-    /** The question the reader is composing, which every space carries somewhere. */
-    readonly intent: ReactNode;
+    /**
+     * The field at the foot of a correspondence, which the Mail space draws under an open message and no other space
+     * draws at all — the design gives Discover a field of its own and the rest none.
+     */
+    readonly threadField: ReactNode;
 
     /** What the deployment says about the connection, which every space shows somewhere. */
     readonly status: ReactNode;
@@ -48,20 +51,18 @@ export function Space({
     /**
      * The question being answered and the answer, which is the Discover space and nothing else.
      *
-     * It is the one built space the frame's two regions are handed *into* rather than stood beneath, because the design
-     * project draws the field under this screen's own head: a space that took them at its foot would draw the field
-     * below the answer it composed. Which means the composition root decides whether this space was handed them, since
-     * it is the only place that knows both the address and what the space is built from — and the rule they are handed
-     * under is this file's own: the space in front gets them and no other does.
+     * It draws its own field under its own head, and is handed the connection *into* it rather than stood beneath it —
+     * which means the composition root decides whether this space was handed it, since it is the only place that knows
+     * both the address and what the space is built from. The rule it is handed under is this file's own: the space in
+     * front gets it and no other does.
      */
     readonly discover: ReactNode;
 
     /**
      * The conversations with the agent and the one in front, which is the Agent space and nothing else.
      *
-     * It is handed the connection and not the question field, because the design project draws a field of its own at
-     * its foot — the one the agent is told what to do in — and a second field under it would be two places to type a
-     * question into, one of which would send it somewhere else.
+     * It is handed the connection and draws the one field it has at its own foot — the one the agent is told what to do
+     * in.
      */
     readonly agent: ReactNode;
 
@@ -129,8 +130,8 @@ export function Space({
                 const isTasks = name === 'tasks';
                 const isPeople = name === 'people';
 
-                // The three spaces that compose one shape: their own columns with the frame's two regions at the
-                // foot. Picking the node here rather than branching on the name three times in the markup is what
+                // The three spaces that compose one shape: their own columns with the connection at the foot. Picking
+                // the node here rather than branching on the name three times in the markup is what
                 // keeps the choice below readable as three cases instead of five.
                 const ownColumns = isTasks ? tasks : isPeople ? people : name === 'calendar' ? calendar : null;
 
@@ -166,17 +167,15 @@ export function Space({
                         ) : isAgent ? (
                             agent
                         ) : isMail ? (
-                            /* The question and the connection are the two the frame composes for every space, so they
-                               are handed to the one in front and to nothing else: two of either would be two live
-                               copies of one control — a second field somebody's question could be typed into, and a
-                               second region saying what the deployment is doing. Neither holds anything a space would
-                               lose, the question being the workspace's. */
+                            /* The field and the connection are handed to the space in front and to nothing else: two of
+                               either would be two live copies of one control — a second field a reply could be asked
+                               for in, and a second region saying what the deployment is doing. */
                             <MailSpace
                                 folders={folders}
                                 list={list}
                                 mail={mail}
                                 tabs={tabs}
-                                intent={inFront ? intent : null}
+                                threadField={inFront ? threadField : null}
                                 status={inFront ? status : null}
                                 person={person}
                             />
@@ -193,17 +192,14 @@ export function Space({
                                 {implementedSpaces.includes(name) ? null : (
                                     <p className="text-base text-muted">{translate('space.pending')}</p>
                                 )}
-
-                                {inFront ? intent : null}
                             </div>
                         ) : (
-                            /* A space that composes its own columns, which is Tasks, People and Calendar. The two
-                               regions the frame composes for every space stand at its foot and are handed to the one
-                               in front alone, exactly as they are to Mail. */
+                            /* A space that composes its own columns, which is Tasks, People and Calendar. The
+                               connection stands at its foot and is handed to the one in front alone, exactly as it is
+                               to Mail; none of the three draws a field, because the design draws none there. */
                             <div className="flex min-h-0 flex-1 flex-col">
                                 {ownColumns}
                                 {inFront ? status : null}
-                                {inFront ? intent : null}
                             </div>
                         )}
                     </main>

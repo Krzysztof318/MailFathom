@@ -14,6 +14,7 @@ import type {
     MailDocumentBlock,
     MailDocumentRefusal,
 } from '@mailfathom/client-backend';
+import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { Locale } from '../localization/locale';
@@ -284,6 +285,11 @@ function ReadAsWords({ body }: { readonly body: MailBody }) {
 // What the message asked to load from somebody else's server, and the reader's own answer to it. Asking is a request
 // this read carries and nothing on either side writes down: the addresses were removed while the tree was built, so
 // there is nothing here to decline, and opening the message again asks again.
+//
+// The design draws the two states unequally on purpose. What was removed is a card, because it asks something of the
+// reader and says what answering costs; what was loaded is one quiet line, because it is a fact about the message and
+// nothing more is owed on it. The line takes no focus: it is not a control, and a reader who pressed the button has
+// finished with the card rather than landed somewhere new — so it is announced rather than focused.
 function RemoteContent({
     document,
     requested,
@@ -297,36 +303,30 @@ function RemoteContent({
 }) {
     const { locale, translate } = useLocalization();
 
-    // Where the answered notice replaces the button somebody pressed, their focus would fall to the document body and
-    // keyboard reading would restart at the top of the message. So the notice takes the focus the button had, and only
-    // where the button was actually on the screen first: a message read with the pictures already asked for shows the
-    // notice from its first paint and takes focus from nobody.
-    const answered = useRef<HTMLElement>(null);
+    // The line is no place to land, but the button it replaces is where somebody's focus was, and letting that fall to
+    // the document would restart keyboard reading at the top of the page. So it goes to the message the line stands
+    // in — the region the reading pane and a conversation each draw a message as — and only where the button was on the
+    // screen first: a message read with the pictures already asked for takes focus from nobody.
+    const line = useRef<HTMLParagraphElement>(null);
     const asked = useRef(false);
 
     useEffect(() => {
         if (!requested) {
             asked.current = true;
         } else if (asked.current) {
-            answered.current?.focus();
+            line.current?.closest<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
         }
     }, [requested]);
 
     if (requested) {
         return (
-            <aside
-                className="flex flex-col gap-1 rounded-md border border-line-soft bg-sunken px-4 py-3 text-sm"
-                ref={answered}
-                tabIndex={-1}
-            >
-                <p>{translate('body.remotePicturesShown')}</p>
-                <p className="text-muted">
-                    {translate('body.remotePicturesShownCount', {
-                        count: count(locale, document.retainedRemoteImageCount),
-                    })}
+            <>
+                <p className="flex items-center gap-2 text-sm text-muted" ref={line} role="status">
+                    <Icon name="image" className="size-4 shrink-0" />
+                    {translate('body.remotePicturesShown')}
                 </p>
                 <UndrawnPictures undrawn={document.undrawnInlineImageCount} />
-            </aside>
+            </>
         );
     }
 
@@ -335,14 +335,14 @@ function RemoteContent({
     }
 
     return (
-        <aside className="flex flex-col items-start gap-2 rounded-md border border-line-soft bg-sunken px-4 py-3 text-sm">
-            <p>{translate('body.remoteContentRemoved')}</p>
-            <p className="text-muted">
+        <aside className="flex flex-col items-start gap-2.25 rounded-xl border border-line bg-sunken px-4 py-3.25">
+            <p className="text-md text-pretty text-text">{translate('body.remoteContentRemoved')}</p>
+            <p className="text-base text-muted">
                 {translate('body.remoteContentRemovedCount', {
                     count: count(locale, document.removedRemoteReferenceCount),
                 })}
             </p>
-            <p className="text-muted">{translate('body.showRemotePicturesReveals')}</p>
+            <p className="text-base text-pretty text-muted">{translate('body.showRemotePicturesReveals')}</p>
 
             {/* The button stays where it is while the read it started is in flight: what a reader clicked is what
                 their focus is on, and a message swapped for a one-line notice would drop that focus to the top of the
@@ -351,7 +351,7 @@ function RemoteContent({
                 pressed is itself what drops their focus to the body. The handler is what refuses the second press. */}
             <button
                 aria-disabled={asking}
-                className="rounded-md bg-accent px-3 py-1 font-medium text-on-accent aria-disabled:opacity-60"
+                className="rounded-md bg-accent px-3.5 py-1.75 text-base font-semibold text-on-accent transition hover:bg-accent-strong aria-disabled:opacity-60"
                 type="button"
                 onClick={() => {
                     if (!asking) {
@@ -362,7 +362,11 @@ function RemoteContent({
                 {translate('body.showRemotePictures')}
             </button>
 
-            {asking ? <p className="text-muted">{translate('body.remotePicturesLoading')}</p> : null}
+            {asking ? (
+                <p className="text-base text-muted" role="status">
+                    {translate('body.remotePicturesLoading')}
+                </p>
+            ) : null}
             <UndrawnPictures undrawn={document.undrawnInlineImageCount} />
         </aside>
     );

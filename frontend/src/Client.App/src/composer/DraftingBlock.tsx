@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { longestDraftInstruction } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -67,7 +67,6 @@ type Tone = (typeof tones)[number]['key'];
 export function DraftingBlock({
     context,
     busy,
-    asked,
     onDraft,
 }: {
     /** What the draft is written against, as the line under the acts names it: the subject, or nothing yet. */
@@ -76,34 +75,12 @@ export function DraftingBlock({
     /** Whether a draft is being written now, which is what keeps one press from asking twice. */
     readonly busy: boolean;
 
-    /**
-     * What the composer was opened asking for, which the field opens holding.
-     *
-     * The bar under a correspondence submits a question, and asking for a draft there opens the composer rather than
-     * answering in place — so the words travel here and are still editable, which is what makes the block the one
-     * place a drafting is asked for.
-     */
-    readonly asked: string;
-
     /** Asks the deployment for a draft, with the act's own sentence and whatever was typed beside it. */
     readonly onDraft: (instruction: string) => void;
 }) {
     const { translate } = useLocalization();
-    const [written, setWritten] = useState(asked);
+    const [written, setWritten] = useState('');
     const [tone, setTone] = useState<Tone>('neutral');
-    const ranOnce = useRef(false);
-
-    // The drafting the composer was opened asking for. A request going out is what an effect is for, and this one goes
-    // out once however often the composer re-renders — the words stay in the field afterwards, so asking again is a
-    // press rather than something a render does on somebody's behalf.
-    useEffect(() => {
-        if (ranOnce.current || asked.trim() === '') {
-            return;
-        }
-
-        ranOnce.current = true;
-        onDraft([writeADraft.asks, asked.trim()].join(' ').slice(0, longestDraftInstruction));
-    }, [asked, onDraft]);
 
     function askFor(act: DraftingAct): void {
         const chosen = tones.find((one) => one.key === tone)?.asks ?? null;

@@ -206,7 +206,7 @@ function narrowerThanMail(workspace: Workspace): readonly AskScope[] {
 // own, or any of the ones a correspondence draws, which the workspace names collectively rather than one at a time.
 // Reading it this way rather than clearing the value from each screen that closes is what keeps a scope from outliving
 // its words — a question scoped to a paragraph nobody can see any more is the disclosure this field exists to prevent.
-function fragmentBeingRead(workspace: Workspace): SelectedFragment | null {
+export function fragmentBeingRead(workspace: Workspace): SelectedFragment | null {
     if (workspace.fragment === null) {
         return null;
     }

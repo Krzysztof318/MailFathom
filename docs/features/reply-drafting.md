@@ -9,8 +9,9 @@ text, what it asserts and what backs each assertion, and the people it proposes 
 instead of reconstructing an exchange.
 
 **It produces a local artifact and takes no act.** Nothing here sends, queues, appends to a mail server, or stores
-anything at all: the reply arrives as text in the composer, and saving it as a draft or sending it stays where those
-acts already are — [Mail delivery § A message that is written and not sent](mail-delivery.md#a-message-that-is-written-and-not-sent)
+anything at all: the reply arrives as text in the composer or in a card under the correspondence it answers, and saving
+it as a draft or sending it stays where those acts already are —
+[Mail delivery § A message that is written and not sent](mail-delivery.md#a-message-that-is-written-and-not-sent)
 is the half that writes to a mailbox. That is what makes a wrong draft cost an edit rather than a retraction.
 
 ## What a draft carries

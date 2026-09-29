@@ -23,6 +23,7 @@ import { useMessageBody } from '../messageBody/useMessageBody';
 import { BackToList } from '../mailSpace/BackToList';
 import { NothingOpen } from '../mailSpace/NothingOpen';
 import { useTwoPanes } from '../shell/useWideWorkspace';
+import { ReplyDraftCard } from '../threadAgent/ReplyDraftCard';
 import { MessageHeaders } from './MessageHeaders';
 import { OpenedMessage } from './OpenedMessage';
 
@@ -459,6 +460,8 @@ function OpenMessage({
                         onShowFullHtml(storedEmailId, message.headers.subject);
                     }}
                 />
+
+                <ReplyDraftCard under={storedEmailId} />
             </div>
         </article>
     );

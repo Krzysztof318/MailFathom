@@ -40,6 +40,28 @@ import {
 
 resetsBetweenTests();
 
+/**
+ * A deployment drawing one message to a credential that may write mail, and answering what it says about drafting.
+ *
+ * @param draftsReplies What the deployment answers when asked whether it writes a reply.
+ * @param drafting Set once that question was asked, so an absence is asserted only after the answer that decides it.
+ */
+function deploymentAnsweringDrafting(draftsReplies: boolean, drafting: { read: boolean }): DeploymentTransport {
+    const otherwise = deploymentDrawingAMessage(
+        sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.drafts.write']),
+    );
+
+    return (signal) => (request) => {
+        if (!request.path.endsWith('/replies/drafting')) {
+            return otherwise(signal)(request);
+        }
+
+        drafting.read = true;
+
+        return Promise.resolve(complete({ status: 200, body: JSON.stringify({ draftsReplies }) }));
+    };
+}
+
 describe('App', () => {
     it('says it is reaching the deployment while nothing has answered', () => {
         renderApp(servedFrom, heldSession, () => () => new Promise<ClientResponse>(() => undefined));
@@ -390,6 +412,8 @@ describe('App', () => {
         expect(screen.getByRole('link', { current: 'page' }).textContent).toBe('Cases');
     });
 
+    // Discover's question is the one field that asks one, so the space moved to draws no copy of it — and coming back
+    // finds the sentence and its scope where they were left.
     it('keeps the question and the mailbox in scope while the person moves between spaces', async () => {
         renderApp();
         await framed();
@@ -403,6 +427,10 @@ describe('App', () => {
 
         await goTo('Mail');
 
+        expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
+
+        await goTo('Discover');
+
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
             'value',
             'the renewal Nordwind sent',
@@ -412,6 +440,38 @@ describe('App', () => {
             'account:work',
         );
     });
+
+    // The field under a correspondence drafts a reply and does nothing else, so a deployment that writes none is shown
+    // no field at all rather than one whose press would have to go somewhere else. Both halves hold the grant to write,
+    // so what decides between them is the deployment's own answer about drafting and nothing else.
+    it.each([true, false])(
+        'draws the field under an open message only where the deployment answers that it drafts: %s',
+        async (draftsReplies) => {
+            const drafting = { read: false };
+
+            renderApp(servedFrom, heldSession, deploymentAnsweringDrafting(draftsReplies, drafting));
+            await framed();
+
+            await goTo('Mail');
+
+            const list = await screen.findByRole('listbox', { name: 'Messages' });
+            fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+            fireEvent.pointerUp(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+            expect(await screen.findByText('A drawn message.')).toBeDefined();
+
+            if (draftsReplies) {
+                expect(await screen.findByRole('form', { name: 'Ask about this correspondence' })).toBeDefined();
+            } else {
+                await waitFor(() => {
+                    expect(drafting.read).toBe(true);
+                });
+                expect(screen.queryByRole('form', { name: 'Ask about this correspondence' })).toBeNull();
+            }
+
+            expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
+        },
+    );
 
     it('offers every mailbox the user holds as a scope, beside all of them at once', async () => {
         const twoMailboxes = directory(true, [workAccount, { ...workAccount, id: 'archive', displayName: 'Archive' }]);

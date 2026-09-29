@@ -92,23 +92,23 @@ test('fetches nothing from the sender until the reader asks, and asks again next
 
     await openTheFirstMessage(page);
 
-    const askForPictures = page.getByRole('button', { name: 'Load pictures from the sender' });
+    const askForPictures = page.getByRole('button', { name: 'Load images from the sender' });
     await expect(askForPictures).toBeVisible();
-    await expect(page.getByText('References removed: 3')).toBeVisible();
+    await expect(page.getByText('Removed references: 3')).toBeVisible();
     expect([...hosts]).not.toContain(messages.senderPictureHost);
 
     await askForPictures.click();
 
     // Asking is what makes the request, and it is the only thing that does. The address never reached the document
     // before this click, so there was nothing for a rendering defect to fetch.
-    await expect(page.getByText('Pictures are being loaded from the sender for this message.')).toBeVisible();
+    await expect(page.getByText('Images from the sender are loaded for this message.')).toBeVisible();
     await expect.poll(() => [...hosts]).toContain(messages.senderPictureHost);
 
     await page.reload();
 
     // Nothing on either side wrote the ask down, so the message opens asking again. Only a real document reloaded
     // proves that: browser storage is what a durable answer would have been kept in.
-    await expect(page.getByRole('button', { name: 'Load pictures from the sender' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Load images from the sender' })).toBeVisible();
 });
 
 // What only a browser can say about the second surface ADR 0024 takes: what the built bundle put in the document, and
@@ -199,7 +199,7 @@ test('carries nothing that runs, and reaches no host but its own until the reade
     expect([...hosts]).not.toContain(messages.senderScriptHost);
     expect([...hosts]).not.toContain(messages.senderPictureHost);
 
-    await surface.getByRole('button', { name: 'Load pictures from the sender' }).click();
+    await surface.getByRole('button', { name: 'Load images from the sender' }).click();
 
     // Asking is what makes the request, on this surface exactly as in the pane. What it restores is addresses and
     // nothing else: the consent widens what may be fetched and never widens what may run.
@@ -240,7 +240,7 @@ test('reads mail, the sender own markup, its pictures, and its links under a pol
 
     const surface = page.getByRole('region', { name: 'The original message, as its sender wrote it' });
 
-    await surface.getByRole('button', { name: 'Load pictures from the sender' }).click();
+    await surface.getByRole('button', { name: 'Load images from the sender' }).click();
     await expect(surface.getByText(/their servers can tell it was opened/)).toBeVisible();
 
     const opened = page.context().waitForEvent('page');

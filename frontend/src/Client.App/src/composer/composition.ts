@@ -44,14 +44,13 @@ export type ComposerOpening =
           readonly storedEmailId: string;
 
           /**
-           * What the person asked the answer to say, where they asked for one before the composer existed.
+           * A draft the deployment already wrote for this answer, where it was written before the composer opened.
            *
-           * The bar under a correspondence offers drafting a reply, and what that offer means is a draft *in the
-           * composer* rather than a screen somewhere else — so the words travel with the opening and the composer asks
-           * the deployment for the draft as it opens. Absent for every other way of answering, which opens on an empty
-           * message as it always has.
+           * The field under a correspondence drafts a reply in the thread, and *Open in composer* carries that draft
+           * here rather than asking for a second one: the composer opens holding its words, as a draft nobody has
+           * accepted yet. Absent for every other way of answering, which opens on an empty message as it always has.
            */
-          readonly asked?: string;
+          readonly drafted?: string;
       }
     | { readonly kind: 'draft'; readonly storedEmailId: string };
 

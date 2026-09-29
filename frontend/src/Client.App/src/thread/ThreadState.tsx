@@ -132,17 +132,21 @@ export function ThreadState({
     // The two wide compositions draw the same statements and differ in what a card has room for, which is why the
     // source link is the one thing that goes: at the tablet's width a chip holds a label and a line, and the block
     // stops being a glance the moment it holds three lines each.
+    //
+    // Four statements or more stand as two columns rather than a row that wraps, which is how the design draws them:
+    // a wrapped row leaves the fourth alone across the whole width, and a chip in a column half as wide has to say its
+    // statement in full rather than end it in an ellipsis.
+    const paired = entries.length >= 4;
+
     return (
         <section
             aria-label={translate('threadState.label')}
             className={desktop ? 'flex flex-col gap-1.5 border-b border-line bg-sunken px-5.5 py-2.25' : 'px-5.5 pt-3'}
         >
             <ul
-                className={
-                    desktop
-                        ? 'flex flex-wrap gap-2'
-                        : 'flex flex-wrap gap-1.75 rounded-lg border border-line bg-sunken p-2'
-                }
+                className={`${paired ? 'grid grid-cols-2' : 'flex flex-wrap'} ${
+                    desktop ? 'gap-2' : 'gap-1.75 rounded-lg border border-line bg-sunken p-2'
+                }`}
             >
                 {entries.map((entry, place) => (
                     <li
@@ -160,7 +164,13 @@ export function ThreadState({
                             {translate(aspectLabels[entry.aspect])}
                         </span>
 
-                        <span className={desktop ? 'text-base' : 'truncate text-sm'}>{entry.text}</span>
+                        <span
+                            className={
+                                desktop ? 'text-base' : paired ? 'text-sm leading-snug text-pretty' : 'truncate text-sm'
+                            }
+                        >
+                            {entry.text}
+                        </span>
 
                         {desktop ? (
                             <>

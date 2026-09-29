@@ -4,10 +4,8 @@
 
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
-import type { ComposerOpening } from '../composer/composition';
-import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -23,41 +21,17 @@ const workAccount: MailAccount = {
 
 const homeAccount: MailAccount = { ...workAccount, id: 'home', displayName: 'Home' };
 
-// What a deployment that writes no draft looks like to this field, which is the default every case below runs under:
-// the bar is the Discover question there, and the drafting cases say so by turning it on.
-function composingWith(compose: (opening: ComposerOpening) => void, drafts: boolean): Composing {
-    return { offered: true, drafts, opening: null, compose, close: () => undefined };
-}
-
 function renderField(accounts: readonly MailAccount[] = [workAccount]): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <ComposingContext value={composingWith(() => undefined, false)}>
-                    <IntentField accounts={accounts} />
-                </ComposingContext>
+                <IntentField accounts={accounts} recall />
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
 }
 
-afterEach(() => {
-    window.history.replaceState(null, '', '/');
-});
-
 describe('IntentField', () => {
-    it('asks nothing itself, and goes to the space that will answer', () => {
-        window.history.replaceState(null, '', '#/cases');
-
-        renderField();
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
-            target: { value: 'what did Nordwind send' },
-        });
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(window.location.hash).toBe('#/discover');
-    });
-
     it('keeps the question it was given rather than clearing it on the way', () => {
         renderField();
 
@@ -124,29 +98,25 @@ function Reporting({ onWorkspace }: { readonly onWorkspace: (workspace: Workspac
 function fieldStanding(
     as: Partial<Workspace>,
     accounts: readonly MailAccount[] = [workAccount],
-    drafts = false,
-): { workspace: () => Workspace; composed: ReturnType<typeof vi.fn> } {
+    recall = true,
+): { workspace: () => Workspace } {
     let last: Workspace | null = null;
-    const composed = vi.fn();
 
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <ComposingContext value={composingWith(composed, drafts)}>
-                    <Standing as={as} />
-                    <IntentField accounts={accounts} />
-                    <Reporting
-                        onWorkspace={(workspace) => {
-                            last = workspace;
-                        }}
-                    />
-                </ComposingContext>
+                <Standing as={as} />
+                <IntentField accounts={accounts} recall={recall} />
+                <Reporting
+                    onWorkspace={(workspace) => {
+                        last = workspace;
+                    }}
+                />
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
 
     return {
-        composed,
         workspace: () => {
             if (last === null) {
                 throw new Error('The workspace was never reported.');
@@ -373,7 +343,6 @@ describe('IntentField history', () => {
         fireEvent.click(screen.getByRole('button', { name: /what did they promise/ }));
 
         expect(screen.getByRole('button', { name: 'what did they promise, asking about Home' })).toBeDefined();
-        expect(window.location.hash).toBe('#/discover');
     });
 
     it('lets go of what was asked when that is asked for', () => {
@@ -384,6 +353,22 @@ describe('IntentField history', () => {
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Forget these' }));
+
+        expect(screen.queryByRole('list', { name: 'Asked before' })).toBeNull();
+    });
+
+    // The design draws the row only while the field is idle: once a run is answering, it stands where that answer's own
+    // context is read, so the row leaves rather than competing with it.
+    it('offers nothing back while a run is answering', () => {
+        fieldStanding(
+            {
+                askedBefore: [
+                    { question: 'what did they promise', scope: { kind: 'mail', scope: { kind: 'everything' } } },
+                ],
+            },
+            [workAccount],
+            false,
+        );
 
         expect(screen.queryByRole('list', { name: 'Asked before' })).toBeNull();
     });
@@ -404,35 +389,11 @@ describe('IntentField history', () => {
     });
 });
 
-// The width this bar has is the one thing jsdom cannot answer, and the setup answers every query `false` — so a test
-// about the wide composition states it, and every other test inherits the single-pane reading.
-const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
-
-function theWindowHasRoomForTwoPanes(): void {
-    Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: (query: string) => ({
-            media: query,
-            matches: query.includes('min-width'),
-            addEventListener: () => undefined,
-            removeEventListener: () => undefined,
-        }),
-    });
-}
-
-afterEach(() => {
-    if (declaredMatchMedia !== undefined) {
-        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
-    }
-});
-
-// The design project draws two bars rather than one: the Discover screen's question, and the one under a
-// correspondence, where the act somebody wants is a reply. It is the same field either way, so what these assert is
-// the wording and what an empty press then asks for.
+// The field under a correspondence is a different one with state of its own, so opening a correspondence changes
+// nothing this field says or does: it stays Discover's question.
 describe('IntentField wording', () => {
-    it('asks the Discover screen\u2019s own question wherever no correspondence is in scope', () => {
-        theWindowHasRoomForTwoPanes();
-        fieldStanding({});
+    it('asks the Discover screen\u2019s own question even while a correspondence is being read', () => {
+        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' });
 
         expect(screen.getByRole('button', { name: 'Ask' })).toBeDefined();
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
@@ -441,167 +402,12 @@ describe('IntentField wording', () => {
         );
     });
 
-    it('names drafting a reply, and offers both, while a correspondence is being read', () => {
-        theWindowHasRoomForTwoPanes();
-        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
-
-        expect(screen.getByRole('button', { name: 'Draft a reply' })).toBeDefined();
-        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
-            'placeholder',
-            'Ask about the thread or draft a reply\u2026',
-        );
-    });
-
-    it('names it the same way over one message and over a passage of one', () => {
-        theWindowHasRoomForTwoPanes();
-        fieldStanding({
-            selection: 'AAMkAD-42',
-            fragment: { messageId: 'AAMkAD-42', text: 'the part somebody pointed at' },
-        });
-
-        expect(screen.getByRole('button', { name: 'Draft a reply' })).toBeDefined();
-    });
-
-    // The list is what is in front of somebody who ticked rows, rather than the exchange, so the bar stays the
-    // Discover screen's.
-    it('keeps the question wherever the rows picked out are the scope', () => {
-        theWindowHasRoomForTwoPanes();
-        fieldStanding({ conversation: null, selected: ['one', 'two'] });
-
-        expect(screen.getByRole('button', { name: 'Ask' })).toBeDefined();
-    });
-
-    // The design shortens the label where the window draws one pane, because there is no room for the sentence beside
-    // the field.
-    it('shortens the label where the window draws a single pane', () => {
-        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
-
-        expect(screen.getByRole('button', { name: 'Draft' })).toBeDefined();
-        expect(screen.queryByRole('button', { name: 'Draft a reply' })).toBeNull();
-    });
-
-    // The control must not name an act the press does not make, so an empty press over a correspondence asks for the
-    // thing the control is called — and the whole sentence rather than the shortened label, because what was asked
-    // cannot depend on how wide the window was.
-    it('asks for the reply the control names when nothing has been typed', () => {
+    it('records nothing for an empty press, whatever is in scope', () => {
         const { workspace: reported } = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
 
         fireEvent.submit(screen.getByRole('search'));
 
-        expect(reported().question).toBe('Draft a reply');
-        expect(reported().askedBefore).toEqual([
-            { question: 'Draft a reply', scope: { kind: 'thread', threadId: 'thread-1' } },
-        ]);
-    });
-
-    it('records nothing for an empty press where no correspondence is in scope', () => {
-        const { workspace: reported } = fieldStanding({});
-
-        fireEvent.submit(screen.getByRole('search'));
-
+        expect(reported().question).toBe('');
         expect(reported().askedBefore).toEqual([]);
-    });
-});
-
-// Asking for a reply means a reply, in the composer, rather than a trip to the space that answers questions. Every
-// case here turns drafting on, because that is the one thing that decides which of the two a press does.
-describe('IntentField drafting', () => {
-    it('opens the composer on the message being read rather than going anywhere', () => {
-        const { composed } = fieldStanding(
-            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
-            [workAccount],
-            true,
-        );
-
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
-            target: { value: 'accept the SLA and ask for a cap' },
-        });
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(composed).toHaveBeenCalledWith({
-            kind: 'answer',
-            answers: 'senderOnly',
-            storedEmailId: 'AAMkAD-42',
-            asked: 'accept the SLA and ask for a cap',
-        });
-        expect(window.location.hash).not.toBe('#/discover');
-    });
-
-    it('quotes the passage in scope where nothing was typed, which is the whole of what was asked', () => {
-        const { composed } = fieldStanding(
-            {
-                selection: 'AAMkAD-42',
-                fragment: { messageId: 'AAMkAD-42', text: 'the response time is two hours' },
-            },
-            [workAccount],
-            true,
-        );
-
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(composed).toHaveBeenCalledWith({
-            kind: 'answer',
-            answers: 'senderOnly',
-            storedEmailId: 'AAMkAD-42',
-            asked: 'the response time is two hours',
-        });
-    });
-
-    // The other half of the case above: a conversation with no passage in scope has nothing to quote, so what the
-    // composer is opened asking for is nothing at all and the block it draws sits waiting rather than firing on its
-    // own. What this guards is the composer being opened with a sentence nobody typed about a message nobody picked.
-    it('opens the composer asking for nothing where nothing was typed and no passage is in scope', () => {
-        const { composed } = fieldStanding(
-            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
-            [workAccount],
-            true,
-        );
-
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(composed).toHaveBeenCalledWith({
-            kind: 'answer',
-            answers: 'senderOnly',
-            storedEmailId: 'AAMkAD-42',
-            asked: '',
-        });
-    });
-
-    it('asks the space that answers questions where the deployment writes no draft', () => {
-        const { composed } = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
-
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(composed).not.toHaveBeenCalled();
-        expect(window.location.hash).toBe('#/discover');
-    });
-
-    it('asks the space that answers questions where the rows picked out are the scope', () => {
-        const { composed } = fieldStanding({ selected: ['one', 'two'] }, [workAccount], true);
-
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
-            target: { value: 'what do these two have in common' },
-        });
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(composed).not.toHaveBeenCalled();
-        expect(window.location.hash).toBe('#/discover');
-    });
-
-    it('keeps what was asked beside the scope it was asked under, drafting or not', () => {
-        const { workspace: reported } = fieldStanding(
-            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
-            [workAccount],
-            true,
-        );
-
-        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
-            target: { value: 'accept the SLA' },
-        });
-        fireEvent.submit(screen.getByRole('search'));
-
-        expect(reported().askedBefore).toEqual([
-            { question: 'accept the SLA', scope: { kind: 'thread', threadId: 'thread-1' } },
-        ]);
     });
 });

@@ -1576,9 +1576,51 @@ describe('Composer drafting', () => {
         ).toBeDefined();
     });
 
-    it('asks for the draft as it opens where the bar under a correspondence asked for one', async () => {
+    // The card under a correspondence has already drafted the reply, so the composer is opened holding it: asking the
+    // deployment again would spend an allowance on words the reader has already read and chosen to keep.
+    it('opens holding the reply drafted under a correspondence, and asks for no draft of its own', async () => {
         const { asked } = drawComposer(
-            { kind: 'answer', answers: 'senderOnly', storedEmailId: messageId, asked: 'accept the SLA' },
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
+        expect(asked.filter((request) => request.path.endsWith('/replies/drafting'))).toHaveLength(0);
+    });
+
+    // Opening the composer is not accepting the words in it: they are still a draft nobody has read in place, so the
+    // composer says so exactly as it does for one it asked for itself, and the way back is to the empty reply the
+    // author had not written anything into yet.
+    // What this tab kept for the same answer is somebody's own words, so a draft carried in from the thread takes their
+    // place the way a draft asked for here would: over them, with them as the way back, rather than instead of them.
+    it('keeps the words this tab was writing for the same answer as the way back from a draft carried in', async () => {
+        rememberComposition({
+            answering: { storedEmailId: messageId, answers: 'senderOnly' },
+            continuing: null,
+            account: 'work',
+            subject: 'Re: Invoice',
+            to: ['ada@example.invalid'],
+            cc: [],
+            bcc: [],
+            words: [{ text: 'What I had written' }],
+        });
+
+        drawComposer(
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
             {},
             [work],
             true,
@@ -1588,12 +1630,35 @@ describe('Composer drafting', () => {
 
         expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
 
-        const drafting = asked.filter((request) => request.path.endsWith('/replies/drafting'));
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
 
-        expect(drafting).toHaveLength(1);
-        expect(JSON.parse(drafting[0]?.body ?? '')).toMatchObject({
-            answeredEmailId: messageId,
-            instruction: 'Write this message. accept the SLA',
+        expect(await screen.findByText('What I had written')).toBeDefined();
+        expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
+    });
+
+    it('holds a reply drafted under a correspondence as a draft to accept or take back', async () => {
+        drawComposer(
+            {
+                kind: 'answer',
+                answers: 'senderOnly',
+                storedEmailId: messageId,
+                drafted: 'We accept the two-hour response time.',
+            },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        expect(await screen.findByText('AI draft — check the facts and tone before sending')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Accept' })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
+
+        await waitFor(() => {
+            expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
         });
+        expect(screen.queryByText('AI draft — check the facts and tone before sending')).toBeNull();
     });
 });
