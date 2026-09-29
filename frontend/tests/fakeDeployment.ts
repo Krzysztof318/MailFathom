@@ -906,7 +906,8 @@ export class FakeDeployment {
      * the two readings meet where a check can look, before the send and after the withdrawal.
      */
     private sendWithdrawn(body: unknown): Held {
-        const outgoingEmail = String(recordIn(body)?.['outgoingEmail'] ?? '');
+        const named = recordIn(body)?.['outgoingEmail'];
+        const outgoingEmail = typeof named === 'string' ? named : '';
         const queued = this.sendsQueued.get(outgoingEmail);
 
         if (queued === undefined) {

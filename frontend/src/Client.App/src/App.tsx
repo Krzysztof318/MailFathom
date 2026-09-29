@@ -305,9 +305,11 @@ export function App({
 
     // Every read of mail, heard for a credential the deployment has stopped accepting: whichever screen met the
     // refusal, what it means is that the sign-in is over, and that is the frame's to act on rather than the screen's to
-    // report as a folder or a message that could not be read. Heard once, because every read in flight meets it.
-    const readMail = useMemo(
-        () =>
+    // report as a folder or a message that could not be read. Heard once, because every read in flight meets it. The
+    // credential held is read as each answer arrives rather than while the frame renders, which is why the transport is
+    // composed per request inside a callback.
+    const readMail = useCallback<MailFathomTransport>(
+        (request) =>
             reportingRefusedCredential(
                 onTheWire,
                 () => holding.current,
@@ -315,7 +317,7 @@ export function App({
                     holding.current = null;
                     credentialRefused();
                 },
-            ),
+            )(request),
         [onTheWire, credentialRefused],
     );
 
