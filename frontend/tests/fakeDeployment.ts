@@ -1742,13 +1742,13 @@ export class FakeDeployment {
                 ...(typeof flags?.['seen'] === 'boolean' ? { seen: flags['seen'] } : {}),
                 ...(typeof flags?.['flagged'] === 'boolean' ? { flagged: flags['flagged'] } : {}),
             };
-            const taken = !this.refusalTaken();
+            const applied = !this.refusesThisChange();
 
-            if (taken) {
+            if (applied) {
                 this.flagsWritten(storedEmailId, asked);
             }
 
-            const state = taken ? 'completed' : 'dead-lettered';
+            const state = applied ? 'completed' : 'dead-lettered';
             const written = [
                 ...(asked.seen === undefined ? [] : [this.recorded(storedEmailId, 'set-seen', state)]),
                 ...(asked.flagged === undefined ? [] : [this.recorded(storedEmailId, 'set-flagged', state)]),
@@ -1783,7 +1783,7 @@ export class FakeDeployment {
     }
 
     /** Whether the change being written is the one a check asked to be refused, which spends that ask. */
-    private refusalTaken(): boolean {
+    private refusesThisChange(): boolean {
         const refused = this.refusingNextChange;
 
         this.refusingNextChange = false;
@@ -1811,7 +1811,7 @@ export class FakeDeployment {
                 return { storedEmailId, outcome: 'already-in-destination', destinationFolder, change: null };
             }
 
-            if (this.refusalTaken()) {
+            if (this.refusesThisChange()) {
                 const change = submitted(this.recorded(storedEmailId, 'relocate', 'dead-lettered'));
 
                 return { storedEmailId, outcome: 'recorded', destinationFolder, change };

@@ -72,6 +72,10 @@ test('asks for a read mark the mailbox would not take again, and the row, the co
 
     deployment.refuseNextChange();
     await fromTheMenu(page, 'Message 12', 'Mark as read');
+
+    // The change is followed only once the deployment has answered it, so the clock is advanced after that and no
+    // sooner: advanced before, it would pass a timer that did not exist yet.
+    await expect(page.getByText('One change has not reached your mailbox yet.')).toBeVisible();
     await followTheChanges(page);
 
     const asked = question(page, 'Marked read');
@@ -111,6 +115,8 @@ test('lists a filing the mailbox would not take, and once it is let go the messa
 
     await expect(row(page, 'Message 4')).toHaveCount(0);
 
+    // The row leaves before the move is answered, so what says the change is being followed is the waiting line.
+    await expect(page.getByText('One change has not reached your mailbox yet.')).toBeVisible();
     await followTheChanges(page);
 
     const asked = question(page, 'Filed in another folder');
