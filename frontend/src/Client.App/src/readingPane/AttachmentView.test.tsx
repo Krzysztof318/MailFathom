@@ -263,8 +263,10 @@ describe('AttachmentView', () => {
 
         held.finish('delivered');
 
-        expect(await screen.findByText('File downloaded')).toBeDefined();
-        expect(screen.getAllByText('harbour.png').length).toBeGreaterThan(0);
+        const notices = screen.getByRole('list', { name: 'Notices' });
+
+        expect(await within(notices).findByText('File downloaded')).toBeDefined();
+        expect(within(notices).getByText('harbour.png')).toBeDefined();
     });
 
     it.each([

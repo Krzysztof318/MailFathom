@@ -66,6 +66,9 @@ export function downloadAttachment(
     );
 }
 
+/** Why a download was abandoned where the reader stopped it from its notice, rather than by leaving the message. */
+const stoppedByTheReader = 'stopped by the reader';
+
 /** The downloads one message's files are having, as the surface offering them holds them. */
 export interface AttachmentDownloads {
     /** Whether the file at that position is on its way, which is what refuses a second press. */
@@ -147,7 +150,7 @@ export function useAttachmentDownloads(session: ClientSession, storedEmailId: st
                 stoppingLeavesBehind: translate('attachment.stoppingLeavesBehind', { name: named }),
                 stoppedLeftBehind: translate('attachment.abandoned'),
                 stop: () => {
-                    abandoning.abort();
+                    abandoning.abort(stoppedByTheReader);
                 },
             });
 
@@ -155,6 +158,13 @@ export function useAttachmentDownloads(session: ClientSession, storedEmailId: st
 
             running.current.delete(attachment.position);
             record(attachment.position, false);
+
+            // The stopped notice has already said a stopped download saved nothing, so the abandonment the stop caused
+            // is not said a second time. A file that arrived before the stop took hold is still reported, and so is one
+            // abandoned because the viewer closed, which no notice has spoken for.
+            if (outcome === 'abandoned' && abandoning.signal.reason === stoppedByTheReader) {
+                return;
+            }
 
             settled(
                 outcome === 'delivered'

@@ -49,9 +49,12 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
     const goings = useRef(new Map<number, () => void>());
     const raised = useRef(0);
 
-    // The operations whose cards are still following them. A stopped operation still settles once it has wound down,
-    // and by then its card has become the stopped notice and is leaving: drawing that outcome would say what stopping
-    // left behind a second time, as an error over the notice, and arm a lifetime on a card already on its way out.
+    // The operations whose cards are still following them. An operation that settles after its card went — stopped,
+    // closed, or pushed off the end — still says how it went, as a card of its own: rewriting the card that went would
+    // draw over the stopped notice already taking its place and arm a lifetime on a card on its way out, and dropping
+    // the outcome would leave a folder act that failed after its card was closed saying nothing at all. What an
+    // operation's own stop caused is the stopped notice already, so an operation that stops for real does not settle
+    // with it; `readingPane/downloadingAttachment.ts` is the case.
     const following = useRef(new Set<number>());
 
     // Which cards were standing when that was last read. It is what makes a going one thing rather than three: a card
@@ -180,6 +183,8 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
 
             return (outcome) => {
                 if (!following.current.delete(id)) {
+                    raise(outcome, standFor);
+
                     return;
                 }
 

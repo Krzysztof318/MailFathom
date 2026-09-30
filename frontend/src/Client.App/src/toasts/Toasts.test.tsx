@@ -378,21 +378,27 @@ describe('ToastsProvider', () => {
         expect(standing()[0]).toContain('The half-written archive was thrown away.');
     });
 
-    // An operation told to stop still answers the one who raised it once it has wound down, and that answer arrives
-    // after the card has already become the stopped notice. Drawing it would say what stopping left behind a second
-    // time, as an error announced over the notice the reader asked for.
-    it('stays the stopped notice when the operation settles after it was stopped, and raises no alert', () => {
+    // An act whose stop takes nothing back is still on its way once its card is closed, and it may still fail: that
+    // answer arrives after the card has become the stopped notice, and is said as a card of its own rather than drawn
+    // over the notice or dropped.
+    it('says how an operation went as a card of its own where it settles after its card was stopped', () => {
         drawSurface();
 
         const settle = raiseOperation(packing);
 
         fireEvent.click(closeControl('Stop the operation'));
         answer('Stop the operation');
-        settle({ kind: 'error', title: 'Archive not written', body: 'The half-written archive was thrown away.' });
+        settle({ kind: 'error', title: 'Folder not deleted', body: 'This mailbox no longer has that folder.' });
         pass(toastLeaving);
 
-        expect(standing()).toEqual([expect.stringContaining('Warning Stopped')]);
-        expect(screen.queryByRole('alert')).toBeNull();
+        expect(standing()).toEqual([
+            expect.stringContaining('Error Folder not deleted'),
+            expect.stringContaining('Warning Stopped'),
+        ]);
+
+        pass(toastLifetime + toastLeaving);
+
+        expect(standing()).toHaveLength(0);
     });
 
     it('asks the same question of a swipe, so no gesture aborts an operation more quietly than the button', () => {
