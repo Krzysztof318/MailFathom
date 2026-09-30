@@ -361,6 +361,27 @@ describe('ReadingPane', () => {
         expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
     });
 
+    it('reads the message again when the way out is taken, and draws it once the deployment answers', async () => {
+        let describedStatus = 503;
+        const answering = deploymentDescribing();
+        const recovers: MailFathomTransport = (request) =>
+            request.path.includes('/body')
+                ? answering(request)
+                : Promise.resolve({
+                      status: describedStatus,
+                      body: describedStatus === 200 ? description() : '',
+                      headers: {},
+                  });
+
+        drawing(recovers);
+        await screen.findByText('This message could not be opened: unavailable.');
+
+        describedStatus = 200;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 })).toBeDefined();
+    });
+
     it('offers no way out of a refusal that would repeat identically on a second attempt', async () => {
         drawing(deploymentDescribing(description(), 403));
 
@@ -437,6 +458,16 @@ describe('ReadingPane', () => {
         expect(await screen.findByRole('article', { name: 'Quarterly invoice' })).not.toBe(document.activeElement);
     });
 
+    // Closing a conversation that stood in front of this message mounts the pane afresh, and that mount is a
+    // navigation rather than a landing — which only the caller can say, and `arriving` is how it says it.
+    it('places focus on the message a reader arrives back at, once it is drawn', async () => {
+        render(paneFor(messageId, true));
+
+        await waitFor(() => {
+            expect(screen.getByRole('article', { name: 'Quarterly invoice' })).toBe(document.activeElement);
+        });
+    });
+
     it('places focus on the message opened next, rather than leaving it on whatever opened it', async () => {
         const { rerender } = render(paneFor(messageId));
         await screen.findByRole('article', { name: 'Quarterly invoice' });
@@ -491,7 +522,7 @@ function paneReading(transport: MailFathomTransport, online: boolean) {
 }
 // A second message opening is a view change, which is a thing only a rerender with another identifier produces — the
 // first render is a landing rather than a navigation and deliberately moves focus nowhere.
-function paneFor(storedEmailId: string) {
+function paneFor(storedEmailId: string, arriving = false) {
     return (
         <LocalizationProvider>
             <ToastsProvider>
@@ -505,6 +536,7 @@ function paneFor(storedEmailId: string) {
                                     storedEmailId={storedEmailId}
                                     online
                                     onShowFullHtml={() => undefined}
+                                    arriving={arriving}
                                 />
                             </OpenAttachmentContext>
                         </AttachmentExchangeContext>
@@ -575,6 +607,69 @@ describe('ReadingPane and the sender own markup', () => {
 
         expect(screen.queryByRole('button', { name: 'Show the original message' })).toBeNull();
     });
+});
+
+// The width the pane has is the one thing jsdom cannot answer, and the setup answers every query `false` — so the
+// single-pane composition is what every test inherits, and the one stating two panes puts the setup's answer back.
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+
+function theListStandsBeside(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: query.includes('min-width'),
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
+// Before the message's head is drawn there is nothing to carry the way back to the list, so each state that stands in
+// for the message carries it itself — the wait, the network gap, and the failure alike.
+const statesBeforeAHead = [
+    { state: 'while it waits', transport: answersNothing, online: true, said: 'Opening this message…' },
+    {
+        state: 'while the machine is offline',
+        transport: answersNothing,
+        online: false,
+        said: 'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
+    },
+    {
+        state: 'once the message could not be read',
+        transport: deploymentDescribing(description(), 503),
+        online: true,
+        said: 'This message could not be opened: unavailable.',
+    },
+];
+
+describe('ReadingPane before the message has a head', () => {
+    afterEach(() => {
+        if (declaredMatchMedia !== undefined) {
+            Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+        }
+    });
+
+    it.each(statesBeforeAHead)(
+        'carries the way back to the list $state where the message is the whole screen',
+        async ({ transport, online, said }) => {
+            drawing(transport, messageId, online);
+            await screen.findByText(said);
+
+            expect(screen.getByRole('button', { name: 'Back to the list' })).toBeDefined();
+        },
+    );
+
+    it.each(statesBeforeAHead)(
+        'carries no way back $state where the list stands beside the message',
+        async ({ transport, online, said }) => {
+            theListStandsBeside();
+            drawing(transport, messageId, online);
+            await screen.findByText(said);
+
+            expect(screen.queryByRole('button', { name: 'Back to the list' })).toBeNull();
+        },
+    );
 });
 
 describe('ReadingPane against a deployment that says what changed', () => {
@@ -1050,6 +1145,56 @@ describe('ReadingPane selection', () => {
         expect(
             await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”'),
         ).toBeDefined();
+    });
+
+    // A selection made with the keyboard settles on the key coming back up rather than on a pointer being released, and
+    // that is the only event such a reader produces over the words.
+    it('carries a passage selected with the keyboard into what the reply is written about', async () => {
+        readingBeside();
+        const words = await screen.findByText('The invoice is attached.');
+
+        select(words);
+        fireEvent.keyUp(words, { key: 'ArrowRight', shiftKey: true });
+
+        expect(
+            await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+        ).toBeDefined();
+    });
+
+    it('keeps the passage it had where a selection reaches outside the message words', async () => {
+        readingBeside();
+        const words = await screen.findByText('The invoice is attached.');
+        select(words);
+        fireEvent.keyUp(words, { key: 'ArrowRight', shiftKey: true });
+        await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”');
+
+        const reachingOutside = document.createRange();
+        reachingOutside.setStart(screen.getByRole('heading', { name: 'Quarterly invoice', level: 2 }), 0);
+        reachingOutside.setEnd(words, words.childNodes.length);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(reachingOutside);
+        fireEvent.keyUp(words, { key: 'ArrowRight', shiftKey: true });
+
+        expect(
+            screen.getByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+        ).toBeDefined();
+    });
+
+    it('lets go of the passage once the selection is emptied', async () => {
+        readingBeside();
+        const words = await screen.findByText('The invoice is attached.');
+        select(words);
+        fireEvent.keyUp(words, { key: 'ArrowRight', shiftKey: true });
+        await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”');
+
+        window.getSelection()?.collapseToEnd();
+        fireEvent.keyUp(words, { key: 'ArrowRight' });
+
+        await waitFor(() => {
+            expect(
+                screen.queryByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+            ).toBeNull();
+        });
     });
 
     // Opening a message is its words having reached the pane, and where it stands travels with it, because the folder

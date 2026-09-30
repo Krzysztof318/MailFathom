@@ -54,8 +54,24 @@ export const senderScriptHost = 'ranscript.invalid';
 /** Where the link inside the sender's markup goes, which is what a reader following one has to arrive at. */
 export const senderLink = 'https://offers.invalid/spring';
 
+/**
+ * A reference with nowhere a line may break, which is what makes the block carrying it wider than any pane: a courier's
+ * tracking number is written as one run of characters, and a reader has to be able to reach the end of it.
+ */
+export const trackingReference = 'KX0831ORDER7F3A9C2E5B1D4F6A8C0E2B4D6F8A1C3E5B7D9F2A4C6E8B0D1F3A5C7E9B2D4F6A8C0E';
+
 function run(text: string, overrides: Readonly<Record<string, unknown>> = {}) {
     return { text, emphasis: 'None', foreground: null, link: null, ...overrides };
+}
+
+function cell(text: string) {
+    return {
+        columnSpan: 1,
+        rowSpan: 1,
+        alignment: 'Start',
+        background: null,
+        blocks: [{ type: 'paragraph', version: 1, content: [run(text)], alignment: 'Inherited' }],
+    };
 }
 
 /**
@@ -113,7 +129,16 @@ export function newsletterBlocks(pictureSource: string) {
             ],
         },
         { type: 'separator', version: 1 },
-        { type: 'preformatted', version: 1, text: '  order  quantity\n  kettle 1' },
+        {
+            type: 'table',
+            version: 1,
+            columns: [{ widthShare: null }, { widthShare: null }, { widthShare: null }],
+            rows: [
+                { isHeader: true, cells: [cell('Item'), cell('Quantity'), cell('Tracking')] },
+                { isHeader: false, cells: [cell('Kettle'), cell('1'), cell(trackingReference)] },
+            ],
+        },
+        { type: 'preformatted', version: 1, text: `  order  quantity\n  kettle 1  ${trackingReference}` },
     ];
 }
 
