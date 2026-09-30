@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import {
@@ -79,11 +79,14 @@ function delivering(): {
     exchange: AttachmentExchange;
     arrived: (octets: number) => void;
     finish: (outcome: AttachmentDeliveryOutcome) => void;
+    deliveries: () => number;
 } {
     let reporting: (octets: number) => void = () => undefined;
     let settling: (outcome: AttachmentDeliveryOutcome) => void = () => undefined;
+    let asked = 0;
 
     return {
+        deliveries: () => asked,
         arrived: (octets) => {
             act(() => {
                 reporting(octets);
@@ -96,6 +99,7 @@ function delivering(): {
         },
         exchange: {
             deliver: (_request, _fileName, arrived) => {
+                asked += 1;
                 reporting = arrived;
 
                 return new Promise<AttachmentDeliveryOutcome>((resolve) => {
@@ -113,14 +117,18 @@ function drawing(
     exchange: AttachmentExchange,
     online = true,
     onClose: () => void = () => undefined,
-): { show: (withNetwork: boolean) => void } {
+): { show: (withNetwork: boolean) => void; close: () => void } {
     const opened: OpenedAttachment = { storedEmailId: messageId, attachment };
 
-    const surface = (withNetwork: boolean) => (
+    // The corner the toasts stand in outlives the viewer, as it does in the client, so closing the viewer takes it
+    // away from under a surface that is still there to say what became of a download it started.
+    const surface = (withNetwork: boolean | null) => (
         <LocalizationProvider>
             <ToastsProvider>
                 <AttachmentExchangeContext value={exchange}>
-                    <AttachmentView session={session} opened={opened} online={withNetwork} onClose={onClose} />
+                    {withNetwork === null ? null : (
+                        <AttachmentView session={session} opened={opened} online={withNetwork} onClose={onClose} />
+                    )}
                 </AttachmentExchangeContext>
             </ToastsProvider>
         </LocalizationProvider>
@@ -131,6 +139,9 @@ function drawing(
     return {
         show: (withNetwork) => {
             rerender(surface(withNetwork));
+        },
+        close: () => {
+            rerender(surface(null));
         },
     };
 }
@@ -254,6 +265,100 @@ describe('AttachmentView', () => {
 
         expect(await screen.findByText('File downloaded')).toBeDefined();
         expect(screen.getAllByText('harbour.png').length).toBeGreaterThan(0);
+    });
+
+    it.each([
+        [
+            'unauthenticated',
+            'This deployment no longer accepts the credential, so the file was not downloaded. Sign in again.',
+        ],
+        ['unauthorized', 'This credential may not read mail on this deployment, so the file was not downloaded.'],
+        [
+            'screened',
+            'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Try again in case the read ran out of time or the screen was momentarily not answering.',
+        ],
+        [
+            'largerThanDescribed',
+            'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
+        ],
+    ] as const)('says what a download refused with %s did not do, and what to do about it', async (refusal, said) => {
+        const held = delivering();
+        drawing(photograph, held.exchange);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+        await screen.findByText('Downloading file…');
+
+        held.finish(refusal);
+
+        const refused = await screen.findByRole('alert');
+
+        expect(within(refused).getByText('File not downloaded')).toBeDefined();
+        expect(within(refused).getByText(said)).toBeDefined();
+    });
+
+    // Stopping a download is asked in the download's own words rather than in the surface's generic ones, because
+    // what a reader weighs before answering is what stopping this particular file leaves behind.
+    it('asks before stopping a download, saying what stopping that file leaves behind', async () => {
+        drawing(photograph, delivering().exchange);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Stop the operation' }));
+
+        const asked = screen.getByRole('dialog', { name: 'Stop the operation?' });
+
+        expect(
+            within(asked).getByText(
+                'Downloading “harbour.png” is in progress. Stopping it leaves nothing of the file on this machine.',
+            ),
+        ).toBeDefined();
+    });
+
+    // The delivery settles as abandoned once it has wound down, which reaches the corner after the stopped notice has
+    // taken the card's place: that answer must not say the same thing a second time, as an error, over the notice.
+    it('says nothing was saved once the download has been stopped, and says it once', async () => {
+        const held = delivering();
+        drawing(photograph, held.exchange);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Stop the operation' }));
+        fireEvent.click(
+            within(screen.getByRole('dialog', { name: 'Stop the operation?' })).getByRole('button', {
+                name: 'Stop the operation',
+            }),
+        );
+
+        expect(await screen.findByText('Stopped')).toBeDefined();
+
+        held.finish('abandoned');
+
+        // A second press is refused for as long as the stopped download is still winding down, and is taken in the
+        // same turn its answer reaches the corner — so the press being taken is what says that answer has arrived.
+        await waitFor(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+            expect(held.deliveries()).toBe(2);
+        });
+
+        expect(screen.getAllByText('The download was stopped, so nothing was saved.')).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // Closing the viewer abandons what it started, for the reason `downloadingAttachment.ts` gives: a file written after
+    // somebody left the message it belongs to is a file nobody was waiting for. The corner outlives the viewer, so it
+    // is still there to say the file never arrived.
+    it('says nothing was saved when the viewer is closed while a download is still arriving', async () => {
+        const held = delivering();
+        const surface = drawing(photograph, held.exchange);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+        await screen.findByText('Downloading file…');
+
+        surface.close();
+        held.finish('abandoned');
+
+        const refused = await screen.findByRole('alert');
+
+        expect(within(refused).getByText('File not downloaded')).toBeDefined();
+        expect(within(refused).getByText('The download was stopped, so nothing was saved.')).toBeDefined();
     });
 
     it('says so and reads nothing while the machine has no network', () => {

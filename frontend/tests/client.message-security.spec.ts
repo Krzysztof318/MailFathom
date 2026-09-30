@@ -4,7 +4,14 @@
 
 import { expect, type Page } from '@playwright/test';
 
-import { messageHeading, messageRegion, openTheFirstMessage, test } from './client.harness';
+import {
+    messageHeading,
+    messageRegion,
+    openApplicationSettings,
+    openSignedIn,
+    openTheFirstMessage,
+    test,
+} from './client.harness';
 import * as messages from './fixtures/messages';
 
 // What ADR 0024 asks of the two surfaces a message is read on that only a browser can answer: the origins a page
@@ -278,4 +285,62 @@ test('leaves the markup surface for the message it was opened from, and asks aga
     await page.getByRole('button', { name: 'Show the original message' }).click();
 
     await expect(page.getByRole('heading', { name: 'Show the original message?' })).toBeVisible();
+});
+
+// The embedded view is the one place a message's own markup is drawn inline, and a frame has no height of its own: the
+// script the client put in it measures the document and reports, and the pane sizes the frame to the report. A frame
+// is a document jsdom does not lay out or run, so both halves — the report arriving and the pane acting on it — are
+// asked here, together with the one thing a sandbox without popups would otherwise swallow, a followed link.
+test('fits the embedded original to the height its document reports, and opens its links outside the application', async ({
+    page,
+}) => {
+    // Recorded from the first document on, because the report is posted as soon as the frame has parsed.
+    await page.addInitScript(
+        'window.reportedHeights = []; window.addEventListener("message", (event) => {' +
+            ' if (typeof event.data?.height === "number") window.reportedHeights.push(event.data.height); });',
+    );
+
+    await openSignedIn(page, '/#/mail');
+    await openApplicationSettings(page);
+    await page.getByRole('group', { name: 'Message view' }).getByText('Original', { exact: true }).click();
+    await expect(page.getByRole('radio', { name: 'Original' })).toBeChecked();
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first().click();
+
+    const message = page.getByRole('article', messageRegion);
+    const frame = message.locator(`iframe[title="${markupFrame}"]`);
+
+    await expect(
+        message.getByText("The sender's HTML in isolation — scripts and remote resources blocked"),
+    ).toBeVisible();
+
+    // Read together on every attempt, because the script reports again as the document settles and each report moves
+    // the frame: what is asserted is that the frame stands at the last one, plus the two pixels the pane adds.
+    await expect
+        .poll(async () => {
+            const last = (await page.evaluate<number[]>('window.reportedHeights')).at(-1);
+            const drawn = await frame.boundingBox();
+
+            return last === undefined || drawn === null ? null : drawn.height - Math.round(last);
+        })
+        .toBe(2);
+
+    const asked: string[] = [];
+
+    page.context().on('request', (request) => {
+        asked.push(request.url());
+    });
+
+    const opened = page.context().waitForEvent('page');
+
+    await page.frameLocator(`iframe[title="${markupFrame}"]`).getByText('Read the offers').click();
+
+    const context = await opened;
+
+    await expect.poll(() => asked).toContain(messages.senderLink);
+    await expect(frame).toBeVisible();
+    expect(page.url()).toMatch(/#\/mail$/u);
+
+    await context.close();
 });

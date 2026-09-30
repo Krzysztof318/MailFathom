@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MailMessageHeaders } from '@mailfathom/client-backend';
+import type { MailMessageHeaders, MailParticipant } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { storeLocale } from '../localization/locale';
+import { pl } from '../localization/pl';
 import { AgentHandOverContext, type AgentHandOver } from '../routing/agentHandOver';
 
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -62,6 +64,8 @@ function HidesThePanels({ hidden }: { readonly hidden: boolean }) {
     return null;
 }
 
+const author: MailParticipant = { role: 'From', address: 'billing@example.invalid', displayName: 'Billing' };
+
 const conversation = '0198f4a1-0000-7000-8000-00000000b001';
 
 function drawing(
@@ -69,13 +73,19 @@ function drawing(
     panelsHidden = false,
     handToAgent: (handOver: AgentHandOver) => void = vi.fn(),
     thread: string | null = conversation,
+    messagesInThread: number | null = null,
 ): void {
     render(
         <LocalizationProvider>
             <AgentHandOverContext value={handToAgent}>
                 <WorkspaceProvider>
                     <HidesThePanels hidden={panelsHidden} />
-                    <MessageHeaders headers={{ ...headers, ...written }} message={message} thread={thread} />
+                    <MessageHeaders
+                        headers={{ ...headers, ...written }}
+                        message={message}
+                        thread={thread}
+                        messagesInThread={messagesInThread}
+                    />
                 </WorkspaceProvider>
             </AgentHandOverContext>
         </LocalizationProvider>,
@@ -103,7 +113,12 @@ function atWorkspaceWidth(wideEnough: boolean): void {
 const machineZone = process.env['TZ'];
 
 afterEach(() => {
-    process.env['TZ'] = machineZone;
+    // Assigning `undefined` to an environment variable writes the string "undefined", which is a zone of its own.
+    if (machineZone === undefined) {
+        Reflect.deleteProperty(process.env, 'TZ');
+    } else {
+        process.env['TZ'] = machineZone;
+    }
 
     if (declaredMatchMedia === undefined) {
         Reflect.deleteProperty(window, 'matchMedia');
@@ -198,6 +213,89 @@ describe('MessageHeaders', () => {
         expect(screen.getByText('To')).toBeDefined();
         expect(screen.getByText('reader@example.invalid')).toBeDefined();
         expect(screen.getByText('Archive <archive@example.invalid>')).toBeDefined();
+    });
+
+    it('folds everybody else away again on a second press, and names what the next press does each time', async () => {
+        drawing();
+
+        const line = screen.getByText('everybody else (2)');
+
+        fireEvent.click(line);
+        await waitFor(() => {
+            expect(line.closest('summary')?.title).toBe('Collapse the address details');
+        });
+
+        fireEvent.click(line);
+        await waitFor(() => {
+            expect(line.closest('summary')?.title).toBe('Everybody else this message names');
+        });
+        expect(disclosure().open).toBe(false);
+    });
+
+    it.each([
+        ['Sender', 'Submitted by'],
+        ['ReplyTo', 'Reply to'],
+        ['To', 'To'],
+        ['Cc', 'Copy to'],
+        ['Bcc', 'Blind copy to'],
+    ] as const)('names somebody the message lists as %s under the header "%s"', (role, header) => {
+        drawing({ participants: [author, { role, address: 'named@example.invalid', displayName: null }] });
+
+        fireEvent.click(screen.getByText('everybody else (1)'));
+
+        expect(screen.getByRole('term').textContent).toBe(header);
+        expect(screen.getByRole('definition').textContent).toBe('named@example.invalid');
+    });
+
+    it('lists the headers in the order a reader reads them rather than the order the message wrote them', () => {
+        drawing({
+            participants: [
+                author,
+                { role: 'Bcc', address: 'hidden@example.invalid', displayName: null },
+                { role: 'Cc', address: 'archive@example.invalid', displayName: null },
+                { role: 'To', address: 'reader@example.invalid', displayName: null },
+                { role: 'ReplyTo', address: 'answers@example.invalid', displayName: null },
+                { role: 'Sender', address: 'relay@example.invalid', displayName: null },
+            ],
+        });
+
+        fireEvent.click(screen.getByText('everybody else (5)'));
+
+        expect(screen.getAllByRole('term').map((header) => header.textContent)).toStrictEqual([
+            'Submitted by',
+            'Reply to',
+            'To',
+            'Copy to',
+            'Blind copy to',
+        ]);
+    });
+
+    it('counts the messages the conversation holds at the end of the author line', () => {
+        drawing({}, false, vi.fn(), conversation, 3);
+
+        expect(screen.getByText('thread: 3 messages')).toBeDefined();
+    });
+
+    it('counts nothing where the conversation holds the message alone', () => {
+        drawing({}, false, vi.fn(), conversation, 1);
+
+        expect(screen.getByText('Billing <billing@example.invalid>')).toBeDefined();
+        expect(screen.queryByText(/^thread: /u)).toBeNull();
+    });
+
+    // Polish is where a count has to be read: two through four take one form and five upwards another, and twenty-two
+    // is back in the first. The catalogue entry is read out of `pl.ts` because what is proven is that the other
+    // language reached the line, and the number is asked of `Intl` the way the screen asked it.
+    it.each([
+        [2, 'thread.held.few'],
+        [5, 'thread.held.many'],
+        [22, 'thread.held.few'],
+    ] as const)('counts a conversation of %i messages in the form Polish takes at that number', (held, form) => {
+        storeLocale('pl');
+
+        drawing({}, false, vi.fn(), conversation, held);
+
+        expect(screen.getByText(pl[form].replace('{count}', new Intl.NumberFormat('pl').format(held)))).toBeDefined();
     });
 
     it('draws a display name written to look like markup as the characters the sender wrote', () => {

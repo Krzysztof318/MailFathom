@@ -49,6 +49,11 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
     const goings = useRef(new Map<number, () => void>());
     const raised = useRef(0);
 
+    // The operations whose cards are still following them. A stopped operation still settles once it has wound down,
+    // and by then its card has become the stopped notice and is leaving: drawing that outcome would say what stopping
+    // left behind a second time, as an error over the notice, and arm a lifetime on a card already on its way out.
+    const following = useRef(new Set<number>());
+
     // Which cards were standing when that was last read. It is what makes a going one thing rather than three: a card
     // leaves because its lifetime ran out, because somebody closed it, or because the bound pushed it off the end of
     // the list, and only the last of those has no code path of its own to report from. A card pushed out with its
@@ -72,6 +77,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             // card that is no longer there. A card that is merely leaving is still in the list and keeps its own.
             clearTimeout(timers.current.get(id));
             timers.current.delete(id);
+            following.current.delete(id);
 
             const going = goings.current.get(id);
 
@@ -113,6 +119,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
         }
 
         function dismiss(id: number): void {
+            following.current.delete(id);
             setStanding((current) => current.map((toast) => (toast.id === id ? { ...toast, leaving: true } : toast)));
 
             // The card is taken out once its leaving animation is over, and nothing is reported from here: what the
@@ -157,6 +164,8 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
 
             const id = raised.current;
 
+            following.current.add(id);
+
             // No lifetime is armed: an operation still running is the one toast that does not take itself away, because
             // its disappearing would say it had finished.
             show({
@@ -170,6 +179,10 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             });
 
             return (outcome) => {
+                if (!following.current.delete(id)) {
+                    return;
+                }
+
                 if (outcome.whenGone !== undefined) {
                     goings.current.set(id, outcome.whenGone);
                 }

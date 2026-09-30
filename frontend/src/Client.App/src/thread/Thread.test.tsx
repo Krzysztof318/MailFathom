@@ -756,6 +756,31 @@ describe('Thread', () => {
         expect(screen.getByText('That is the whole of this conversation.')).toBeDefined();
     });
 
+    it('says it is reading more of the conversation while the next page is on the wire', async () => {
+        let served = 0;
+        const holdingTheSecondPage: MailFathomTransport = (request) => {
+            if (request.path.endsWith('/state')) {
+                return Promise.resolve({ status: 404, body: '', headers: {} });
+            }
+
+            served += 1;
+
+            return served === 1
+                ? Promise.resolve({
+                      status: 200,
+                      body: pageOf(['one', 'two'], { nextCursor: 'onwards', messageCount: 4 }),
+                      headers: {},
+                  })
+                : new Promise<ClientResponse>(() => undefined);
+        };
+
+        drawing(holdingTheSecondPage);
+        fireEvent.click(await screen.findByRole('button', { name: 'Read more of this conversation' }));
+
+        expect(await screen.findByText('Reading more of this conversation…')).toBeDefined();
+        expect(screen.getByText('The whole of what two says.')).toBeDefined();
+    });
+
     it('says a conversation it has read the whole of is whole', async () => {
         drawing(deploymentAnswering(pageOf(['one'])));
 
@@ -959,6 +984,40 @@ describe('Thread', () => {
         await waitFor(() => {
             expect(document.activeElement?.textContent).toContain('The whole of what one says.');
         });
+    });
+
+    // A read of the block that failed is drawn as nothing rather than as a second failure line, and the conversation it
+    // stands beside is drawn as ever.
+    it('draws no state beside a conversation whose state could not be read', async () => {
+        const stateUnavailable: MailFathomTransport = (request) =>
+            request.path.endsWith('/state')
+                ? Promise.resolve({ status: 503, body: '', headers: {} })
+                : deploymentAnswering(pageOf(['one']))(request);
+
+        drawing(stateUnavailable);
+
+        // The block stands while its read is in flight, so its going away is what says the failure was answered.
+        await waitFor(() => {
+            expect(screen.queryByRole('region', { name: 'Where this conversation stands' })).toBeNull();
+        });
+        expect(screen.getByText('The whole of what one says.')).toBeDefined();
+    });
+
+    // The *fullscreen* control takes the panels away with the list, and the state is one of them. On a single pane the
+    // conversation is already the whole screen and the control takes nothing away from it.
+    it('draws no state where the panels are hidden and the column stands beside the list', async () => {
+        theColumnStandsBesideTheList();
+        drawing(deploymentAnswering(pageOf(['one'])), { threadId, openAt: null }, true, nothingMarkedRead, false, true);
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.queryByRole('region', { name: 'Where this conversation stands' })).toBeNull();
+    });
+
+    it('keeps the state where the panels are hidden and the conversation is the whole screen', async () => {
+        drawing(deploymentAnswering(pageOf(['one'])), { threadId, openAt: null }, true, nothingMarkedRead, false, true);
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getByRole('region', { name: 'Where this conversation stands' })).toBeDefined();
     });
 });
 

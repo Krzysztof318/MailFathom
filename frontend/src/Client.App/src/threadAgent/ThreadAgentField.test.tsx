@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import type { ComposerOpening } from '../composer/composition';
@@ -104,13 +104,15 @@ function Reporting({ onWorkspace }: { readonly onWorkspace: (workspace: Workspac
 const signedInAs = 'https://mail.example.invalid\nagata';
 
 function Frame({
+    person,
     presented,
     transport,
 }: {
+    readonly person: string;
     readonly presented: ClientSession;
     readonly transport: MailFathomTransport;
 }) {
-    const drafting = useReplyDraftingState(signedInAs, presented, transport);
+    const drafting = useReplyDraftingState(person, presented, transport);
 
     return (
         <ReplyDraftingContext value={drafting}>
@@ -129,11 +131,12 @@ function drawing(
     workspace: () => Workspace;
     opening: (selection: string) => void;
     renewing: () => void;
+    signingIn: (person: string) => void;
 } {
     const composed = vi.fn<(opening: ComposerOpening) => void>();
     let last: Workspace | null = null;
 
-    const tree = (standing: Partial<Workspace>, presented: ClientSession = session) => (
+    const tree = (standing: Partial<Workspace>, presented: ClientSession = session, person = signedInAs) => (
         <LocalizationProvider>
             <ToastsProvider>
                 <WorkspaceProvider>
@@ -141,7 +144,7 @@ function drawing(
                         value={{ offered, drafts: true, opening: null, compose: composed, close: () => undefined }}
                     >
                         <Standing as={standing} />
-                        <Frame presented={presented} transport={transport} />
+                        <Frame person={person} presented={presented} transport={transport} />
                         <Reporting
                             onWorkspace={(workspace) => {
                                 last = workspace;
@@ -164,6 +167,9 @@ function drawing(
         // for it, with nobody having signed out or in.
         renewing: () => {
             rerender(tree({ selection: answering, ...as }, { ...session, authorization: 'Bearer renewed' }));
+        },
+        signingIn: (person) => {
+            rerender(tree({ selection: answering, ...as }, { ...session, authorization: 'Basic b3RoZXI=' }, person));
         },
         workspace: () => {
             if (last === null) {
@@ -365,6 +371,62 @@ describe('ReplyDraftCard', () => {
         renewing();
 
         expect(screen.getByRole('region', { name: 'Draft · local' }).textContent).toContain(draftedWords);
+    });
+
+    it('drops the draft when another person signs in', async () => {
+        const { signingIn } = drawing(answeringDrafts().transport);
+
+        draftingAReply();
+        const card = await screen.findByRole('region', { name: 'Draft · local' });
+        await waitFor(() => {
+            expect(card.textContent).toContain(draftedWords);
+        });
+
+        signingIn('https://mail.example.invalid\nbelinda');
+
+        expect(screen.queryByRole('region', { name: 'Draft · local' })).toBeNull();
+    });
+
+    it('says nothing has been sent on the card where the workspace is wide', async () => {
+        theTabletComposition();
+
+        drawing(answeringDrafts().transport);
+        draftingAReply();
+
+        const card = await screen.findByRole('region', { name: 'Draft · local' });
+
+        expect(within(card).getByText('nothing has been sent')).toBeDefined();
+    });
+
+    it.each([
+        {
+            case: 'a deployment that drafted nothing',
+            answer: { status: 200, body: JSON.stringify({ drafted: false }) },
+            said: 'Your deployment wrote no draft this time.',
+        },
+        {
+            case: 'a message the deployment no longer holds',
+            answer: { status: 404, body: '' },
+            said: 'Your deployment wrote no draft this time.',
+        },
+        {
+            case: 'a deployment that did not answer',
+            answer: { status: 503, body: '' },
+            said: 'Your deployment did not answer.',
+        },
+        {
+            case: 'a refused credential',
+            answer: { status: 401, body: '' },
+            said: 'This client is no longer signed in.',
+        },
+    ])('says why nothing was drafted for $case, and draws no card', async ({ answer, said }) => {
+        drawing(answeringDrafts(answer).transport);
+
+        draftingAReply();
+
+        expect(await screen.findByText('Nothing was drafted')).toBeDefined();
+        expect(screen.getByText(said, { exact: false })).toBeDefined();
+        expect(screen.queryByRole('region', { name: 'Draft · local' })).toBeNull();
     });
 
     it('says why nothing was drafted where the allowance is spent, and draws no card', async () => {

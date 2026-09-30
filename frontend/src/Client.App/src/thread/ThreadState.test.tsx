@@ -15,7 +15,17 @@ import { ThreadState } from './ThreadState';
 
 const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
+// The zone a due date is placed against, which is the reader's own and never one this block names. Assigning
+// `undefined` to an environment variable writes the string "undefined", which is a zone of its own.
+const machineZone = process.env['TZ'];
+
 afterEach(() => {
+    if (machineZone === undefined) {
+        Reflect.deleteProperty(process.env, 'TZ');
+    } else {
+        process.env['TZ'] = machineZone;
+    }
+
     if (declaredMatchMedia !== undefined) {
         Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
     }
@@ -133,6 +143,35 @@ describe('ThreadState', () => {
 
         expect(screen.getByText('Agreed')).toBeDefined();
         expect(screen.getByText('The response time stays at two hours.')).toBeDefined();
+    });
+
+    it.each([
+        ['OpenQuestion', 'Open question'],
+        ['Commitment', 'Commitment'],
+        ['VersionDifference', 'Version difference'],
+    ] as const)('says a statement of the %s aspect under the label %s', (aspect, label) => {
+        theDesktopComposition();
+
+        render(drawing(stateOf([entry({ aspect })])));
+
+        expect(screen.getByText(label)).toBeDefined();
+        expect(screen.getByText('The response time stays at two hours.')).toBeDefined();
+    });
+
+    // Written out rather than compared against a formatter built here, because that comparison passes just as happily
+    // for a block that pinned a zone of its own. Warsaw is two hours ahead in September, which carries the instant into
+    // the next day, and Los Angeles reads it on the day it was written.
+    it.each([
+        ['Europe/Warsaw', 'Due 9/13/26, 1:12 AM'],
+        ['America/Los_Angeles', 'Due 9/12/26, 4:12 PM'],
+    ])('says when a commitment nobody was named for falls due, against the reader’s day in %s', (zone, said) => {
+        process.env['TZ'] = zone;
+        theDesktopComposition();
+
+        render(drawing(stateOf([entry({ aspect: 'Commitment', dueAt: '2026-09-12T23:12:00+00:00' })])));
+
+        expect(screen.getByText(said)).toBeDefined();
+        expect(screen.queryByText(/Owed by/u)).toBeNull();
     });
 
     it('says who owes a commitment and when it falls due, which is what makes it one', () => {

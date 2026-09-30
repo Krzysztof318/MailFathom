@@ -21,6 +21,7 @@ import {
     test,
     wideWindow,
 } from './client.harness';
+import * as messages from './fixtures/messages';
 
 // What a width and a pointer decide: where the navigation stands, the order a keyboard walks the frame in, what the
 // narrowest head still holds, and how the mail screens are composed from the phone to the widest window.
@@ -471,4 +472,71 @@ test('stops a message’s own content at the reading ceiling and leaves everythi
     // binding: a head laid out to a measure meant for paragraphs is the defect this asserts against.
     const region = await boxOf(page.getByRole('article', messageRegion));
     expect(region.width).toBeGreaterThan(content.width);
+});
+
+/** The two measurements a region scrolling sideways is read by, named so no DOM declaration has to be. */
+interface ScrollRegion {
+    readonly scrollWidth: number;
+    readonly clientWidth: number;
+    readonly scrollLeft: number;
+}
+
+// A table and a preformatted line are the two blocks a sender can make wider than any pane, and each is its own scroll
+// region for that reason. jsdom lays nothing out, so whether the width stays inside the region rather than pushing the
+// pane and then the page sideways is a question only a browser answers.
+test('scrolls a table and a line wider than the pane inside themselves rather than the page sideways', async ({
+    page,
+}) => {
+    await openTheFirstMessage(page);
+
+    const message = page.getByRole('article', messageRegion);
+    const regions = [
+        message.getByRole('group', { name: 'A table in this message, scrollable sideways' }),
+        message.getByRole('group', { name: 'Preformatted text in this message, scrollable sideways' }),
+    ];
+
+    for (const region of regions) {
+        await expect(region).toContainText(messages.trackingReference);
+
+        const drawn = await boxOf(region);
+        const pane = await boxOf(message);
+
+        expect(drawn.x + drawn.width).toBeLessThanOrEqual(pane.x + pane.width);
+        expect(await region.evaluate((scrolled: ScrollRegion) => scrolled.scrollWidth > scrolled.clientWidth)).toBe(
+            true,
+        );
+
+        await region.hover();
+        await page.mouse.wheel(400, 0);
+
+        await expect.poll(() => region.evaluate((scrolled: ScrollRegion) => scrolled.scrollLeft)).toBeGreaterThan(0);
+        // Sideways only: pointing at a region further down scrolls the pane to it, which moves it up and nowhere else.
+        const scrolled = await boxOf(region);
+
+        expect([scrolled.x, scrolled.width]).toStrictEqual([drawn.x, drawn.width]);
+    }
+
+    expect(
+        await page.evaluate<boolean>('document.documentElement.scrollWidth > document.documentElement.clientWidth'),
+    ).toBe(false);
+});
+
+// The one composition where a message that failed to open is the whole screen: without the way back it carries itself,
+// the reader would be standing in a column with no list beside it and nothing to press.
+test('takes a reader on a phone back to the list from a message that could not be opened', async ({ page }) => {
+    await page.route(/\/api\/client\/messages\/[^/?]+$/u, (route) => route.fulfill({ status: 503, body: '' }));
+    await page.setViewportSize(phoneWindow);
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+
+    await list.getByRole('option').first().click();
+
+    await expect(page.getByRole('alert')).toHaveText('This message could not be opened: unavailable.');
+    await expect(list).toBeHidden();
+
+    await page.getByRole('button', { name: 'Back to the list' }).click();
+
+    await expect(list.getByRole('option').first()).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
 });

@@ -3,13 +3,23 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import type { ClientMessageView, ClientSession, MailBody, MailMessage } from '@mailfathom/client-backend';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type {
+    ClientMessageView,
+    ClientSession,
+    MailAttachment,
+    MailBody,
+    MailCarried,
+    MailMessage,
+} from '@mailfathom/client-backend';
+import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageViewContext } from '../preferences/messageView';
 import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
+import { ToastsProvider } from '../toasts/Toasts';
 import { WorkspaceProvider } from '../workspace/Workspace';
+import { OpenAttachmentContext } from '../workspace/openAttachment';
 import type { MessageBodyRead } from '../messageBody/useMessageBody';
 import { OpenedMessage } from './OpenedMessage';
 
@@ -71,6 +81,42 @@ const read: MessageBodyRead = {
     showWithoutRemotePictures: () => undefined,
 };
 
+/** What a message carries once its parts were read and nothing about them is worth a sentence. */
+const nothingCarried: MailCarried = {
+    attachmentCount: 0,
+    totalSizeOctets: 0,
+    inlineResourceCount: 0,
+    encrypted: false,
+    unverifiedSignature: false,
+    unexpandedTnefPart: false,
+};
+
+// The strip under the words is drawn wherever a message carries a file, and what it does when one is asked for is
+// `Attachments.test.tsx`'s: this file only needs it drawable.
+const deliversNothing: AttachmentExchange = {
+    deliver: () => Promise.resolve('delivered'),
+    read: () => Promise.resolve({ outcome: 'shown', content: '' }),
+    take: () => Promise.resolve({ outcome: 'taken', octets: new Blob() }),
+};
+
+function attached(position: number, fileName: string): MailAttachment {
+    return { position, fileName, wasFileNameNormalized: false, mediaType: 'application/pdf', sizeOctets: 20_480 };
+}
+
+// A zone pinned for one test is put back for the reason a fake clock is released: it is the worker's, not the file's.
+// Assigning `undefined` to an environment variable writes the string "undefined", which is a zone of its own.
+const machineZone = process.env['TZ'];
+
+afterEach(() => {
+    vi.useRealTimers();
+
+    if (machineZone === undefined) {
+        Reflect.deleteProperty(process.env, 'TZ');
+    } else {
+        process.env['TZ'] = machineZone;
+    }
+});
+
 function drawing(
     message: MailMessage = described,
     body: MessageBodyRead = read,
@@ -80,20 +126,26 @@ function drawing(
 ): void {
     render(
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <LinkOpenerContext value={() => Promise.resolve()}>
-                    <MessageViewContext value={view}>
-                        <ReadMarkingContext value={marking}>
-                            <OpenedMessage
-                                session={session}
-                                message={message}
-                                body={body}
-                                onShowFullHtml={onShowFullHtml}
-                            />
-                        </ReadMarkingContext>
-                    </MessageViewContext>
-                </LinkOpenerContext>
-            </WorkspaceProvider>
+            <ToastsProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <MessageViewContext value={view}>
+                            <ReadMarkingContext value={marking}>
+                                <AttachmentExchangeContext value={deliversNothing}>
+                                    <OpenAttachmentContext value={() => undefined}>
+                                        <OpenedMessage
+                                            session={session}
+                                            message={message}
+                                            body={body}
+                                            onShowFullHtml={onShowFullHtml}
+                                        />
+                                    </OpenAttachmentContext>
+                                </AttachmentExchangeContext>
+                            </ReadMarkingContext>
+                        </MessageViewContext>
+                    </LinkOpenerContext>
+                </WorkspaceProvider>
+            </ToastsProvider>
         </LocalizationProvider>,
     );
 }
@@ -151,6 +203,67 @@ describe('OpenedMessage', () => {
         drawing(described, read, nothingMarkedRead, 'cleaned');
 
         expect(screen.getByRole('button', { name: 'Show the original message' })).toBeDefined();
+    });
+
+    it('counts the files the message carries on the line naming its author', () => {
+        drawing({ ...described, attachments: [attached(1, 'invoice.pdf'), attached(2, 'terms.pdf')] });
+
+        expect(screen.getByText(new Intl.NumberFormat('en').format(2))).toBeDefined();
+    });
+
+    it('counts no files on a message that carries none', () => {
+        drawing();
+
+        expect(screen.getByText('Billing')).toBeDefined();
+        expect(screen.queryByText(new Intl.NumberFormat('en').format(0))).toBeNull();
+    });
+
+    // The same instant read against two readers' days, so a card that stopped honouring the reader's own zone fails
+    // rather than agreeing with itself. It is five in the morning in Los Angeles and two in the afternoon in Warsaw.
+    it.each([
+        ['Europe/Warsaw', '1:12 AM'],
+        ['America/Los_Angeles', 'yesterday'],
+    ])('words when this deployment recorded the message against the day a reader in %s is on', (zone, said) => {
+        process.env['TZ'] = zone;
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-01T12:00:00Z'));
+
+        drawing({ ...described, headers: { ...described.headers, receivedAt: '2026-08-31T23:12:10+00:00' } });
+
+        expect(screen.getByText(said).getAttribute('datetime')).toBe('2026-08-31T23:12:10+00:00');
+    });
+
+    it('says what everything the message has attached comes to', () => {
+        drawing({ ...described, carried: { ...nothingCarried, attachmentCount: 2, totalSizeOctets: 40_960 } });
+
+        const size = new Intl.NumberFormat('en', { style: 'unit', unit: 'kilobyte', unitDisplay: 'short' }).format(41);
+
+        expect(screen.getByText(`Everything attached comes to ${size}.`)).toBeDefined();
+    });
+
+    it.each([
+        ['encrypted', 'This message carries encrypted content somewhere.'],
+        ['unverifiedSignature', 'This message carries a signature, and nothing here has verified it.'],
+        [
+            'unexpandedTnefPart',
+            'This message carries a winmail.dat part, which was recorded without being opened, so whatever it holds is not listed above.',
+        ],
+    ] as const)('says the message is %s, and nothing about a total where nothing is attached', (fact, said) => {
+        drawing({ ...described, carried: { ...nothingCarried, [fact]: true } });
+
+        expect(screen.getByText(said)).toBeDefined();
+        expect(screen.queryByText(/^Everything attached comes to /u)).toBeNull();
+    });
+
+    it.each([
+        ['nothing has read its parts', null],
+        ['nothing it carries is worth a sentence', nothingCarried],
+    ])('says nothing about what the message carries where %s', (_, carried) => {
+        drawing({ ...described, carried });
+
+        expect(screen.getByText('The invoice is attached.')).toBeDefined();
+        expect(screen.queryByText(/^Everything attached comes to /u)).toBeNull();
+        expect(screen.queryByText(/^This message carries /u)).toBeNull();
     });
 
     // The screen's own head is the caller's: a conversation says its subject once above every message in it, and a

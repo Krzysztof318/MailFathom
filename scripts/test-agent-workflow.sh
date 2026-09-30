@@ -9849,6 +9849,7 @@ mail.ts conversationEmail GET /api/client/threads/{threadId}
 mail.ts conversationContent GET /api/client/threads/{threadId}
 mail.ts conversationState GET /api/client/threads/{threadId}/state
 messages.ts run GET /api/client/messages/{storedEmailId}/body
+messages.ts cell GET /api/client/messages/{storedEmailId}/body
 messages.ts newsletterBlocks GET /api/client/messages/{storedEmailId}/body
 messages.ts newsletterBody GET /api/client/messages/{storedEmailId}/body
 messages.ts markupOnlyBody GET /api/client/messages/{storedEmailId}/body

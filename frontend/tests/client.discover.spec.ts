@@ -4,7 +4,14 @@
 
 import { expect } from '@playwright/test';
 
-import { holdTheClock, openSignedIn, silentAnswerInterval, test } from './client.harness';
+import {
+    holdTheClock,
+    messageRegion,
+    openSignedIn,
+    openTheFirstMessage,
+    silentAnswerInterval,
+    test,
+} from './client.harness';
 import * as discovery from './fixtures/discovery';
 
 // Asking a question in Discover and following the run that answers it: the field that records the question, the run
@@ -48,6 +55,47 @@ test('follows a question asked in Discover from its first block to the finished 
     expect(
         deployment.requests('GET', `/discovery/runs/${discovery.runId}`).map(({ query }) => query.get('since')),
     ).toStrictEqual([null, '6']);
+});
+
+// A passage is taken from the document's own selection when the gesture that made it ends, in the reading pane, and
+// is read by the field in another space. jsdom has a Selection API that answers whatever a test put in it; a browser
+// is the one place the selection is what a triple-click actually selected, and the run it starts is what was sent.
+test('asks Discover about the passage a reader selected in the message they were reading', async ({
+    page,
+    deployment,
+}) => {
+    await openTheFirstMessage(page);
+
+    const passage = 'You wrote: send me the list.';
+
+    await page.getByRole('article', messageRegion).getByText(passage).click({ clickCount: 3 });
+    await page.getByRole('link', { name: 'Discover' }).click();
+
+    await expect(
+        page
+            .getByRole('status')
+            .filter({ hasText: `Asking about the part of this message you selected: “${passage}”` }),
+    ).toHaveCount(1);
+
+    const question = page.getByRole('searchbox', { name: 'Ask your mail' });
+    await question.fill('Which list did they mean?');
+    await question.press('Enter');
+
+    await expect(page.getByText(theAnswer)).toBeVisible();
+
+    const opened = deployment.issued.find(
+        ({ method, route }) => method === 'GET' && /^\/messages\/[^/]+$/u.test(route),
+    );
+
+    expect(deployment.requests('POST', '/discovery/runs').map(({ body }) => body)).toStrictEqual([
+        {
+            question: 'Which list did they mean?',
+            accounts: [],
+            folders: [],
+            thread: null,
+            emails: [opened?.route.replace('/messages/', '')],
+        },
+    ]);
 });
 
 test('carries a question and its mailbox from Discover into the agent', async ({ page, deployment }) => {
