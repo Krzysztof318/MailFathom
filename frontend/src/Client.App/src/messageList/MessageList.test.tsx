@@ -545,6 +545,117 @@ describe('MessageList', () => {
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 
+    it('says which part of the folder could not be read above the rows it already drew', async () => {
+        let reads = 0;
+
+        renderList(() => {
+            reads += 1;
+
+            return Promise.resolve(
+                reads === 1
+                    ? {
+                          status: 200,
+                          body: pageOf([message(0), message(1)], { nextCursor: 'the-page-after' }),
+                          headers: {},
+                      }
+                    : { status: 503, body: '', headers: {} },
+            );
+        });
+
+        expect(await screen.findByText('Part of this folder could not be read: unavailable.')).toBeDefined();
+        expect(row(1)).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
+    });
+
+    it('reads the part it could not read again when the reader tries again', async () => {
+        let reads = 0;
+
+        renderList(() => {
+            reads += 1;
+
+            return Promise.resolve(
+                reads === 1
+                    ? {
+                          status: 200,
+                          body: pageOf([message(0), message(1)], { nextCursor: 'the-page-after' }),
+                          headers: {},
+                      }
+                    : reads === 2
+                      ? { status: 503, body: '', headers: {} }
+                      : { status: 200, body: pageOf([message(2)]), headers: {} },
+            );
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByRole('option', { name: /Message 2$/ })).toBeDefined();
+        expect(screen.queryByText('Part of this folder could not be read: unavailable.')).toBeNull();
+    });
+
+    it('says it is reading more below the rows it drew while the next page is read', async () => {
+        let reads = 0;
+
+        renderList(() => {
+            reads += 1;
+
+            return reads === 1
+                ? Promise.resolve({
+                      status: 200,
+                      body: pageOf([message(0), message(1)], { nextCursor: 'the-page-after' }),
+                      headers: {},
+                  })
+                : new Promise(() => undefined);
+        });
+
+        expect(await screen.findByText('Reading more…')).toBeDefined();
+        expect(row(1)).toBeDefined();
+    });
+
+    // A page the reader scrolled far enough from is let go of and keeps only its place, so scrolling back into it
+    // finds the space its rows stood in, each saying it is on its way, until the page has been read again.
+    it('draws the rows of a page it let go of as being read again once the reader scrolls back to them', async () => {
+        let leadingReads = 0;
+
+        renderList((request) => {
+            const cursor = new URL(request.path, session.baseAddress).searchParams.get('cursor');
+            const page = cursor === null ? 0 : Number(cursor.replace('page-', ''));
+
+            if (cursor === null) {
+                leadingReads += 1;
+
+                if (leadingReads > 1) {
+                    return new Promise(() => undefined);
+                }
+            }
+
+            return Promise.resolve({
+                status: 200,
+                headers: {},
+                body: pageOf(
+                    Array.from({ length: 5 }, (_, at) => message(page * 5 + at)),
+                    { nextCursor: `page-${String(page + 1)}` },
+                ),
+            });
+        });
+
+        await screen.findByRole('option', { name: /Message 11$/ });
+
+        const scroller = screen.getByRole('listbox', { name: 'Messages' }).parentElement;
+
+        if (scroller === null) {
+            throw new Error('The list draws no scroller around its rows.');
+        }
+
+        fireEvent.scroll(scroller, { target: { scrollTop: 14 * estimatedRowHeight } });
+        await screen.findByRole('option', { name: /Message 19$/ });
+
+        fireEvent.scroll(scroller, { target: { scrollTop: 24 * estimatedRowHeight } });
+        fireEvent.scroll(scroller, { target: { scrollTop: 0 } });
+
+        expect(await screen.findAllByRole('option', { name: 'Reading this message again…' })).toHaveLength(5);
+        expect(row(5)).toBeDefined();
+    });
+
     it('says an empty folder is empty', async () => {
         renderList(answering(pageOf([])));
 
@@ -1024,6 +1135,66 @@ describe('MessageList', () => {
         fireEvent.keyDown(list, { key: 'ArrowDown', shiftKey: true });
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-2']);
+    });
+
+    it('moves focus back up the list without picking out what it moves onto', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'ArrowUp' });
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(row(1));
+        });
+        expect(carried().selected).toStrictEqual([]);
+        expect(carried().selection).toBeNull();
+    });
+
+    it('moves focus to the first row on Home', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'Home' });
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(row(0));
+        });
+    });
+
+    it('opens the row’s menu on Shift+F10, the chord for a keyboard with no menu key', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'F10', shiftKey: true });
+
+        expect(await screen.findByRole('menu', { name: 'Message 1' })).toBeTruthy();
+    });
+
+    // Moving with the modifier held is how a keyboard walks to the next message to pick out without losing the run it
+    // started, so shift afterwards extends from where the run began rather than from where the walk ended.
+    it('leaves the anchor where it was when the keyboard moves with the modifier held', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'ArrowDown', ctrlKey: true });
+        fireEvent.keyDown(list, { key: 'ArrowDown', ctrlKey: true });
+        fireEvent.keyDown(list, { key: 'ArrowDown', shiftKey: true });
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-2', 'message-3', 'message-4']);
     });
 
     it('reports the list as one whose length no page answers, rather than as one the length of what is held', async () => {

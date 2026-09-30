@@ -54,7 +54,11 @@ function recording(outcomes: Readonly<Record<string, string>> = {}): {
 
 function marking(
     transport: MailFathomTransport,
-    { marking = true, asked }: { marking?: boolean; asked?: ClientSession | null } = {},
+    {
+        writesFlags = true,
+        marksOnOpening = true,
+        asked,
+    }: { writesFlags?: boolean; marksOnOpening?: boolean; asked?: ClientSession | null } = {},
 ) {
     const signedIn = asked === undefined ? session : asked;
 
@@ -70,7 +74,8 @@ function marking(
                             session={signedIn}
                             signedInAs={signedIn === null ? null : signedInAs}
                             transport={transport}
-                            marking={marking}
+                            writesFlags={writesFlags}
+                            marksOnOpening={marksOnOpening}
                         >
                             {children}
                         </ReadMarkingProvider>
@@ -181,9 +186,9 @@ describe('ReadMarkingProvider', () => {
         });
     });
 
-    it('marks nothing where the reader turned it off or the credential may not write a flag', () => {
+    it('marks nothing on opening where the reader turned it off', () => {
         const { transport, requests } = recording();
-        const { result } = marking(transport, { marking: false });
+        const { result } = marking(transport, { marksOnOpening: false });
 
         act(() => {
             result.current.markRead(opened('first'));
@@ -192,6 +197,37 @@ describe('ReadMarkingProvider', () => {
         expect(requests).toStrictEqual([]);
         expect(drawnUnread(result.current, 'first', true)).toBe(true);
     });
+
+    it('marks and records nothing where the credential may not write a flag', () => {
+        const { transport, requests } = recording();
+        const { result } = marking(transport, { writesFlags: false });
+
+        act(() => {
+            result.current.markRead(opened('first'));
+            result.current.recordMarked([opened('second')]);
+        });
+
+        expect(requests).toStrictEqual([]);
+        expect(result.current.marked.size).toBe(0);
+    });
+
+    // Marking a whole folder read is an act somebody asked for by name, so whether opening a message marks it is no
+    // part of it: the rows and the count that act changed are drawn read either way.
+    it.each([true, false])(
+        'draws read what an act already marked, submitting nothing, when marking on opening is %s',
+        (marksOnOpening) => {
+            const { transport, requests } = recording();
+            const { result } = marking(transport, { marksOnOpening });
+
+            act(() => {
+                result.current.recordMarked([opened('first', { account: 'personal', folder: 'ARCHIVE' })]);
+            });
+
+            expect(drawnUnread(result.current, 'first', true)).toBe(false);
+            expect(result.current.marked.get('first')).toStrictEqual({ account: 'personal', folder: 'ARCHIVE' });
+            expect(requests).toStrictEqual([]);
+        },
+    );
 
     it('marks nothing where there is nobody to submit for', () => {
         const { transport, requests } = recording();
@@ -273,7 +309,13 @@ describe('ReadMarkingProvider', () => {
                 <LocalizationProvider>
                     <ToastsProvider>
                         <PendingChangesProvider session={session} transport={refused}>
-                            <ReadMarkingProvider session={session} signedInAs={signedIn} transport={refused} marking>
+                            <ReadMarkingProvider
+                                session={session}
+                                signedInAs={signedIn}
+                                transport={refused}
+                                writesFlags
+                                marksOnOpening
+                            >
                                 {children}
                             </ReadMarkingProvider>
                         </PendingChangesProvider>
@@ -321,7 +363,13 @@ describe('ReadMarkingProvider', () => {
 
         const { result, rerender } = renderHook(() => useReadMarking(), {
             wrapper: ({ children }) => (
-                <ReadMarkingProvider session={session} signedInAs={signedIn} transport={transport} marking>
+                <ReadMarkingProvider
+                    session={session}
+                    signedInAs={signedIn}
+                    transport={transport}
+                    writesFlags
+                    marksOnOpening
+                >
                     {children}
                 </ReadMarkingProvider>
             ),
@@ -350,7 +398,13 @@ describe('ReadMarkingProvider', () => {
 
         const { result, rerender } = renderHook(() => useReadMarking(), {
             wrapper: ({ children }) => (
-                <ReadMarkingProvider session={presented} signedInAs={signedInAs} transport={transport} marking>
+                <ReadMarkingProvider
+                    session={presented}
+                    signedInAs={signedInAs}
+                    transport={transport}
+                    writesFlags
+                    marksOnOpening
+                >
                     {children}
                 </ReadMarkingProvider>
             ),

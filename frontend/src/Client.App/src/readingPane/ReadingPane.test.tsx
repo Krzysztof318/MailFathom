@@ -220,6 +220,7 @@ function recordingMarkings(): { marking: ReadMarking; opened: MessageOpened[] } 
             markRead: (message) => {
                 opened.push(message);
             },
+            recordMarked: () => undefined,
             forget: () => undefined,
         },
     };

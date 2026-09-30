@@ -195,6 +195,19 @@ test('answers a later read with the flags a change left, and filters on them', (
     expect(listed(deployment, 'folder=INBOX&flagged=true')).toStrictEqual(['message-0']);
 });
 
+test('answers an inbox marked read past the count it states with nothing unread rather than fewer than nothing', () => {
+    const deployment = new FakeDeployment('0.0.0');
+    const unread = (ask(deployment, 'GET', '/emails?folder=INBOX&unread=true') as { emails: { id: string }[] }).emails;
+
+    expect(unread.length).toBeGreaterThan(counts(deployment, 'INBOX').unread);
+
+    ask(deployment, 'POST', '/mutations/flags', {
+        changes: unread.map(({ id }) => ({ storedEmailId: id, flags: { seen: true } })),
+    });
+
+    expect(counts(deployment, 'INBOX').unread).toBe(0);
+});
+
 test('pages the folder on from where the last page ended, and back from where it began', () => {
     const deployment = new FakeDeployment('0.0.0');
 

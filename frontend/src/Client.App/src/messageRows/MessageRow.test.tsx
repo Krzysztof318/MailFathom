@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -194,7 +194,12 @@ function asking(
 
 /** What a client that has marked exactly this message read carries, which is what a row reads its state through. */
 function marked(storedEmailId: string, place: MarkedIn = { account: 'work', folder: 'INBOX' }): ReadMarking {
-    return { marked: new Map([[storedEmailId, place]]), markRead: () => undefined, forget: () => undefined };
+    return {
+        marked: new Map([[storedEmailId, place]]),
+        markRead: () => undefined,
+        recordMarked: () => undefined,
+        forget: () => undefined,
+    };
 }
 
 // The line the row's height reserves whether or not anything is in it, which is what lets the search's row and the
@@ -330,6 +335,31 @@ describe('MessageRow', () => {
         drawRow(undefined, true, nothingMarkedRead, asking('markRead'));
 
         expect(screen.queryByText('Unread')).toBeNull();
+    });
+
+    // The circle is what a reader scanning the column recognises a sender by, and it is decoration to somebody who is
+    // not looking at it: the row is announced by the sender's name rather than by their letters first.
+    it('draws the sender’s initials in the row, and announces the row by the name rather than by them', () => {
+        render(
+            <LocalizationProvider>
+                <ul>
+                    <MessageRow
+                        email={{ ...email, senderDisplayName: 'Anna Kowalska' }}
+                        position={1}
+                        open={false}
+                        selected={false}
+                        focusable
+                        onOpen={() => undefined}
+                        onPoint={() => undefined}
+                        onElement={() => undefined}
+                    />
+                </ul>
+            </LocalizationProvider>,
+        );
+
+        const row = screen.getByRole('option', { name: /^Anna Kowalska/ });
+
+        expect(within(row).getByText('AK')).toBeDefined();
     });
 
     it('says nothing of another message’s act, the pending line belonging to the row it is about', () => {

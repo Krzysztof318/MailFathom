@@ -505,6 +505,20 @@ export function FolderTree({
                 }
 
                 break;
+            // The two the platform itself offers for a row's menu, so nothing a row holds is reachable only by gesture:
+            // the dedicated key where a keyboard has one, and the chord where it does not.
+            case 'ContextMenu':
+            case 'F10': {
+                if ((event.key === 'F10' && !event.shiftKey) || actsFor(visibleRow.row).length === 0) {
+                    return;
+                }
+
+                const box = event.currentTarget.getBoundingClientRect();
+
+                setFocused(visibleRow.row.key);
+                setMenu({ key: visibleRow.row.key, at: { x: box.left, y: box.top } });
+                break;
+            }
             default:
                 return;
         }

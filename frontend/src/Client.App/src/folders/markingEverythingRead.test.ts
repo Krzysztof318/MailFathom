@@ -77,6 +77,10 @@ const nothingUnread = page([], null);
 
 // Every mutation this walk makes answers the same way, which is what lets one body stand for the whole of the
 // writing half: what these tests are about is which messages were named and when the walk stopped.
+function inTheInbox(ids: readonly string[]) {
+    return ids.map((storedEmailId) => ({ storedEmailId, account: 'work', folder: 'INBOX' }));
+}
+
 const recorded = JSON.stringify({ results: [{ storedEmailId: 'one', outcome: 'recorded', changes: [] }] });
 
 describe('markEverythingRead', () => {
@@ -84,7 +88,7 @@ describe('markEverythingRead', () => {
         const { asked, transport } = answering([nothingUnread]);
         const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
 
-        expect(outcome).toEqual({ marked: 0, leftBehind: false, failure: null });
+        expect(outcome).toEqual({ markedRead: [], leftBehind: false, failure: null });
         expect(asked).toHaveLength(1);
     });
 
@@ -110,7 +114,11 @@ describe('markEverythingRead', () => {
         const { asked, transport } = answering([page(['one', 'two'], 'next'), page(['three'], null), recorded]);
         const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
 
-        expect(outcome).toEqual({ marked: 3, leftBehind: false, failure: null });
+        expect(outcome).toEqual({
+            markedRead: inTheInbox(['one', 'two', 'three']),
+            leftBehind: false,
+            failure: null,
+        });
 
         const written = JSON.parse(asked[2]?.body ?? '{}') as { changes: readonly { storedEmailId: string }[] };
 
@@ -132,13 +140,20 @@ describe('markEverythingRead', () => {
         );
 
         expect(outcome.leftBehind).toBe(true);
-        expect(outcome.marked).toBe(mostPagesMarkedRead);
+        expect(outcome.markedRead).toHaveLength(mostPagesMarkedRead);
     });
 
     it('marks what it had already found when a later page does not answer, and says why it stopped', async () => {
         const { transport } = answering([page(['one'], 'next'), null, recorded]);
         const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
 
-        expect(outcome).toEqual({ marked: 1, leftBehind: false, failure: 'unavailable' });
+        expect(outcome).toEqual({ markedRead: inTheInbox(['one']), leftBehind: false, failure: 'unavailable' });
+    });
+
+    it('counts nothing as marked read where the deployment could not be reached to mark it', async () => {
+        const { transport } = answering([page(['one'], null), null]);
+        const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
+
+        expect(outcome).toEqual({ markedRead: [], leftBehind: false, failure: 'unavailable' });
     });
 });

@@ -1499,7 +1499,11 @@ export class FakeDeployment {
                             ...folder,
                             path: this.lineOf(folder.alias).map(({ name }) => name),
                             storedEmailCount: folder.storedEmailCount + moved.stored,
-                            unreadEmailCount: folder.unreadEmailCount + moved.unread,
+
+                            // Floored because the inbox's stated count is a dozen and its generated rows hold tens of
+                            // thousands unread, so marking a page of them read would otherwise answer a count no
+                            // deployment answers.
+                            unreadEmailCount: Math.max(folder.unreadEmailCount + moved.unread, 0),
                         };
                     }),
             })),

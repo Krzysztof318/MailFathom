@@ -5,7 +5,7 @@
 import { expect, type Page } from '@playwright/test';
 
 import { markupOnlySubject, newsletterSubject } from './fixtures/messages';
-import { openSignedIn, test } from './client.harness';
+import { bodiesOf, folder, holdTheClock, notice, openSignedIn, row, tabletWindow, test } from './client.harness';
 
 // The folder acts driven from the tree, each held against what reads the mailbox's folders afterwards: the tree, the
 // folders a message can be filed into, a reload, and — for a deletion — a search that used to find the mail filed
@@ -190,4 +190,119 @@ test('makes a folder inside another, renames it, and moves it under a third, and
     await agreesItSitsAt([/^Inbox/u], 'Vendors', 'INBOX / Vendors');
     await opened('Archive');
     await expect(tree.getByRole('treeitem', { name: '2024', exact: true })).not.toHaveAttribute('aria-expanded');
+});
+
+// Marking a folder read is composed of reads and flag writes, and what it changes is drawn by three things that never
+// see it happen: the rows of the list, the count on the inbox's row, and whatever the next load of the page reads. The
+// generated inbox holds far more unread mail than one press walks, so the press marks as far as its own ceiling and
+// says so — and the count, which the corpus states as a dozen, has nothing left to count.
+test('marks the inbox read from its menu, and the rows, its count, and a reload agree with what it said', async ({
+    page,
+    deployment,
+}) => {
+    deployment.grant('mailfathom.mail.flags.write');
+    await openSignedIn(page, '/#/mail');
+
+    await expect(folder(page, 'Inbox 12 unread')).toBeVisible();
+    await expect(row(page, 'Message 0')).toHaveAccessibleName(/\bUnread\b/u);
+    await expect(row(page, 'Message 6')).toHaveAccessibleName(/\bUnread\b/u);
+
+    await folder(page, 'Inbox 12 unread').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Mark all as read' }).click();
+
+    await expect(notice(page, 'The first 2,000 unread messages in Inbox were marked read.')).toBeVisible();
+    await expect(folder(page, 'Inbox')).toBeVisible();
+    await expect(row(page, 'Message 0')).not.toHaveAccessibleName(/\bUnread\b/u);
+    await expect(row(page, 'Message 6')).not.toHaveAccessibleName(/\bUnread\b/u);
+
+    const marked = bodiesOf(deployment, '/mutations/flags').flatMap(
+        (body) => (body as { changes: readonly { storedEmailId: string; flags: object }[] }).changes,
+    );
+
+    expect(marked).toHaveLength(2_000);
+    expect(marked[0]).toStrictEqual({ storedEmailId: 'message-0', flags: { seen: true } });
+
+    await page.reload();
+
+    await expect(folder(page, 'Inbox')).toBeVisible();
+    await expect(row(page, 'Message 0')).not.toHaveAccessibleName(/\bUnread\b/u);
+    await expect(row(page, 'Message 6')).not.toHaveAccessibleName(/\bUnread\b/u);
+});
+
+// A refusal is the deployment's own answer rather than a failure to reach it, so it is put in front of the one request
+// it answers: the move is refused by the mail server behind the deployment, which is a refusal only a mailbox can give.
+test('keeps a folder where it was when its move is refused, and names the refusal', async ({ page, deployment }) => {
+    deployment.grant('mailfathom.mail.folders.write', 'mailfathom.mail.move');
+    await page.route('**/api/client/managed-folders/moves', (route) =>
+        route.fulfill({
+            status: 502,
+            contentType: 'application/problem+json',
+            body: JSON.stringify({ refusal: 'ServerRefused' }),
+        }),
+    );
+    await openSignedIn(page, '/#/mail');
+
+    const tree = page.getByRole('tree', { name: 'Mailboxes and folders' });
+
+    await tree.getByRole('treeitem', { name: 'Archive', expanded: false }).focus();
+    await page.keyboard.press('ArrowRight');
+    await tree.getByRole('treeitem', { name: '2024', exact: true }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Edit folder' }).click();
+
+    const moving = page.getByRole('dialog', { name: 'Edit folder' });
+
+    await moving.getByRole('combobox', { name: 'Inside' }).selectOption({ label: 'INBOX' });
+    await moving.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect(page.getByRole('list', { name: 'Notices' })).toContainText(
+        'The change was refused. Your mail server refused the change.',
+    );
+    await expect(tree.getByRole('treeitem', { name: 'Archive', expanded: true })).toBeVisible();
+    await expect(tree.getByRole('treeitem', { name: '2024', exact: true })).toHaveAttribute('aria-level', '3');
+
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first().click();
+    await page.getByRole('button', { name: 'Move', exact: true }).click();
+
+    const filing = page.getByRole('dialog', { name: 'File in another folder' });
+
+    await expect(filing.getByRole('button', { name: 'Archive / 2024', exact: true })).toBeVisible();
+    await expect(filing.getByRole('button', { name: 'INBOX / 2024', exact: true })).toHaveCount(0);
+});
+
+test.describe('driven by a finger', () => {
+    test.use({ viewport: tabletWindow, hasTouch: true, isMobile: true });
+
+    // A finger has no second button, so a row's menu is reached by holding it, and only a browser delivers a pointer
+    // that says it is one. The clock is held so the press lasts exactly as long as the client waits for it.
+    test('opens a folder row’s menu under a finger held on the row', async ({ page, deployment }) => {
+        deployment.grant('mailfathom.mail.flags.write');
+        await page.clock.install();
+        await openSignedIn(page, '/#/mail');
+        await page.getByRole('button', { name: 'Folders and filters' }).click();
+
+        const drafts = folder(page, 'Drafts');
+        const box = await drafts.boundingBox();
+
+        if (box === null) {
+            throw new Error('The drafts row is not drawn.');
+        }
+
+        const at = {
+            pointerId: 5,
+            pointerType: 'touch',
+            isPrimary: true,
+            clientX: box.x + box.width / 2,
+            clientY: box.y + box.height / 2,
+        };
+
+        await holdTheClock(page);
+        await drafts.dispatchEvent('pointerdown', at);
+        await page.clock.runFor(400);
+        await expect(page.getByRole('menu')).toHaveCount(0);
+
+        await page.clock.runFor(100);
+        await expect(page.getByRole('menuitem', { name: 'Mark all as read' })).toBeVisible();
+
+        await drafts.dispatchEvent('pointerup', at);
+    });
 });

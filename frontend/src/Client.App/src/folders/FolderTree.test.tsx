@@ -363,6 +363,7 @@ function marked(...places: readonly MarkedIn[]): ReadMarking {
     return {
         marked: new Map(places.map((place, at) => [`message-${String(at)}`, place])),
         markRead: () => undefined,
+        recordMarked: () => undefined,
         forget: () => undefined,
     };
 }
@@ -635,17 +636,20 @@ describe('FolderTree', () => {
         expect(row(/^Work/).getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('chooses the row the keyboard is on, so a tree is usable without a pointer at all', async () => {
-        renderTree(answering(JSON.stringify(tree)));
+    it.each(['Enter', ' '])(
+        'chooses the row the keyboard is on with %j, so a tree is usable without a pointer',
+        async (key) => {
+            renderTree(answering(JSON.stringify(tree)));
 
-        await drawn();
-        const inbox = row(/^Inbox12 unread/);
+            await drawn();
+            const inbox = row(/^Inbox12 unread/);
 
-        inbox.focus();
-        fireEvent.keyDown(inbox, { key: 'Enter' });
+            inbox.focus();
+            fireEvent.keyDown(inbox, { key });
 
-        expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
-    });
+            expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
+        },
+    );
 
     it('steps into what a row holds where it is already open, rather than opening it twice', async () => {
         renderTree(answering(JSON.stringify(tree)));
@@ -788,6 +792,31 @@ describe('FolderTree', () => {
         fireEvent.keyDown(screen.getByRole('menuitem', { name: 'New folder inside' }), { key: 'Escape' });
 
         expect(pressed(row(/^Inbox12 unread/))).toEqual(['New folder inside', 'Mark all as read']);
+    });
+
+    it.each([
+        ['ContextMenu', {}],
+        ['F10', { shiftKey: true }],
+    ])('opens a folder row’s menu from the keyboard with %s', async (key, held) => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        await reported();
+
+        const archiwum = row(/^Archiwum/);
+
+        archiwum.focus();
+        fireEvent.keyDown(archiwum, { key, ...held });
+
+        await waitFor(() => {
+            expect(screen.queryAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+                'New folder inside',
+                'Mark all as read',
+                'Edit folder',
+                'Delete folder',
+            ]);
+        });
     });
 
     it('closes a menu whose row has been folded away, rather than reopening it when the row comes back', async () => {

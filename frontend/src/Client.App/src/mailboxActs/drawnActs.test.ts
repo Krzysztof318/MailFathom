@@ -20,6 +20,7 @@ function marked(...storedEmailIds: readonly string[]): ReadMarking {
     return {
         marked: new Map(storedEmailIds.map((id) => [id, place])),
         markRead: () => undefined,
+        recordMarked: () => undefined,
         forget: () => undefined,
     };
 }

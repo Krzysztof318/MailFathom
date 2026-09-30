@@ -173,6 +173,7 @@ describe('OpenedMessage', () => {
             markRead: (message) => {
                 opened.push(message);
             },
+            recordMarked: () => undefined,
             forget: () => undefined,
         });
 

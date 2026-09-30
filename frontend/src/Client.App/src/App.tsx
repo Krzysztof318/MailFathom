@@ -549,13 +549,6 @@ export function App({
         });
     }, [deploymentSession, telemetry]);
 
-    // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
-    // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want
-    // of every account they read, and the grant says whether this credential may write a flag at all. Either missing is
-    // the same client — one that draws what the mail server last reported and marks nothing.
-    const markingRead =
-        preferences.markReadOnOpen && deploymentSession !== null && offers(deploymentSession, 'writeMailFlags');
-
     // Whether the person is working in tabs, which is the two halves of that question and nothing else: what they set,
     // and a window with room for a row of tabs above the columns. Below that width the mode is inert rather than off —
     // the switch stays in the menu and says so — so narrowing returns the pane layout and widening returns the strip.
@@ -972,12 +965,15 @@ export function App({
                         <PendingChangesProvider session={session} transport={readMail}>
                             {/* Above the frame rather than inside a space, because three unrelated places below read what has been
             marked: the row that draws a message, the folder tree that counts unread mail, and the body that marks one
-            on being drawn. What it holds goes with the credential, exactly as the workspace does. */}
+            on being drawn. What it holds goes with the credential, exactly as the workspace does. Whether opening a
+            message marks it read is the two halves ADR 0026 gives: the reader's own setting says what they want of
+            every account they read, and the grant says whether this credential may write a flag at all. */}
                             <ReadMarkingProvider
                                 session={session}
                                 signedInAs={signedInAs}
                                 transport={readMail}
-                                marking={markingRead}
+                                writesFlags={writesFlags}
+                                marksOnOpening={preferences.markReadOnOpen}
                             >
                                 {/* Above the frame for the same reason: which of the two reading surfaces a message opens on decides
                 how every message anywhere below is drawn, and the two components that read it — the body and the

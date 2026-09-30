@@ -64,10 +64,20 @@ describe('NothingOpen', () => {
         expect(reopen).toHaveBeenCalledTimes(1);
     });
 
+    it('takes the reader to Discover to ask about the whole correspondence', () => {
+        window.history.replaceState(null, '', '#/mail');
+
+        renderEmpty(false, null);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask about the history' }));
+
+        expect(window.location.hash).toBe('#/discover');
+    });
+
     it('takes focus where closing the last tab is what put it on the screen', () => {
         renderEmpty(true, null);
 
-        expect(document.activeElement).toBe(screen.getByText('Nothing is open').closest('div[tabindex="-1"]'));
+        expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Nothing is open' }));
     });
 
     it('moves nothing where it is what the space opened with, a landing being no navigation', () => {

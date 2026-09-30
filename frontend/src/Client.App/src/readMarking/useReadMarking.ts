@@ -17,12 +17,15 @@ import { createContext, useContext } from 'react';
 // The context and its hook sit apart from the provider that fills them for the reason `workspace/useWorkspace.ts`
 // gives: a module Vite hot-reloads may export components alone.
 
-/** The message a marking is about: what names it, where it was counted as unread, and whether it still is. */
-export interface MessageOpened {
+/** A message marked read, by what names it and where it was counted as unread. */
+export interface MessageMarkedRead {
     readonly storedEmailId: string;
     readonly account: string;
     readonly folder: string;
+}
 
+/** The message a marking is about: what names it, where it was counted as unread, and whether it still is. */
+export interface MessageOpened extends MessageMarkedRead {
     /** Whether the deployment last reported the message without `\Seen`, which is the only case there is anything to mark. */
     readonly unread: boolean;
 }
@@ -53,6 +56,14 @@ export interface ReadMarking {
     readonly markRead: (message: MessageOpened) => void;
 
     /**
+     * Counts messages as marked read here that an act of the reader's own already had the deployment mark, so the rows
+     * and the counts drawing them agree with the act before the mailbox does. Nothing is submitted: the act that marked
+     * them submitted it. Unlike {@link markRead} it does not wait on the reader's wish to mark on opening, because the
+     * act was asked for by name — only a credential that may not write a flag is handed one that records nothing.
+     */
+    readonly recordMarked: (messages: readonly MessageMarkedRead[]) => void;
+
+    /**
      * Stops counting messages as marked read here, because somebody has since had them marked unread.
      *
      * Without it a message opened and then marked unread is drawn read, and counted read, for as long as the tab lives:
@@ -66,13 +77,13 @@ export interface ReadMarking {
  * What a tree with no provider above it reads, which is a client that marks nothing.
  *
  * A default rather than the refusal `useWorkspace` raises, because marking nothing is a state this application really
- * has — the reader turned it off, the grant is absent, or there is no session — and a screen drawn under any of those
- * is drawn from the remote flag alone. Nothing below the provider distinguishes them, which is the point: the three
- * are one behaviour and this is it.
+ * has — the grant is absent, or there is no session — and a screen drawn under either is drawn from the remote flag
+ * alone. Nothing below the provider distinguishes them, which is the point: the two are one behaviour and this is it.
  */
 export const nothingMarkedRead: ReadMarking = {
     marked: new Map(),
     markRead: () => undefined,
+    recordMarked: () => undefined,
     forget: () => undefined,
 };
 

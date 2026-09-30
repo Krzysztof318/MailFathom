@@ -19,6 +19,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Confirmation } from '../confirmation/Confirmation';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadMarking } from '../readMarking/useReadMarking';
 import { useToasts, type OperationSettled } from '../toasts/useToasts';
 import { folderRoleLabels } from '../workspace/mailScope';
 import { FolderDialog } from './FolderDialog';
@@ -140,6 +141,7 @@ export function FolderMaintenanceProvider({
 }) {
     const { locale, translate } = useLocalization();
     const toasts = useToasts();
+    const { recordMarked } = useReadMarking();
     const dialog = useRef<HTMLDialogElement>(null);
     const question = useRef<HTMLDialogElement>(null);
     const [composing, setComposing] = useState<Composing | null>(null);
@@ -325,6 +327,15 @@ export function FolderMaintenanceProvider({
         });
 
         void markEverythingRead(session, transport, { account: accountId, folder }).then((outcome) => {
+            // Recorded before anything is said, whatever the rest came to: a batch the deployment took is mail marked
+            // read, and the rows and the counts in the folder column have to draw it that way from here rather than
+            // when the account's pass has reported the flag back, which is minutes later.
+            //
+            // ponytail: held for the life of the tab, as a marking made by opening is, so once the deployment's own
+            // count has caught up the tree still subtracts these and undercounts mail that arrives unread afterwards.
+            // Following the records through `pendingChanges/` and forgetting each as it converges is the upgrade.
+            recordMarked(outcome.markedRead);
+
             if (outcome.failure !== null) {
                 settle({
                     kind: 'error',
@@ -337,23 +348,23 @@ export function FolderMaintenanceProvider({
                 return;
             }
 
-            if (outcome.marked === 0) {
+            if (outcome.markedRead.length === 0) {
                 settle({ kind: 'neutral', title: translate('folders.nothingUnread', { folder: said }) });
 
                 return;
             }
 
-            // ponytail: the tree's own counts correct when the deployment's convergence pass reports the flag, which
-            // is minutes rather than milliseconds. Routing this through `readMarking/` is the upgrade, and it needs
-            // the reader's mark-on-open preference separated from the grant that gate reads today.
             settle(
                 outcome.leftBehind
                     ? {
                           kind: 'warning',
-                          title: translate(markedCounted[new Intl.PluralRules(locale).select(outcome.marked)], {
-                              folder: said,
-                              count: new Intl.NumberFormat(locale).format(outcome.marked),
-                          }),
+                          title: translate(
+                              markedCounted[new Intl.PluralRules(locale).select(outcome.markedRead.length)],
+                              {
+                                  folder: said,
+                                  count: new Intl.NumberFormat(locale).format(outcome.markedRead.length),
+                              },
+                          ),
                       }
                     : { kind: 'success', title: translate('folders.allRead', { folder: said }) },
             );

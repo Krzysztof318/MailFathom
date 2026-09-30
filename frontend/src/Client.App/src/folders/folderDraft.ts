@@ -249,14 +249,17 @@ export function depthOf(folderId: string | null, folders: readonly ManagedMailFo
 
 // How many levels hang below a folder, nought for one with nothing beneath it. It is what a move has to count: the
 // folder travels with everything under it, so a branch two deep cannot go anywhere that leaves it past the ceiling.
-function heightOf(folderId: string | null, folders: readonly ManagedMailFolder[]): number {
-    if (folderId === null) {
+// Bounded by the list for the reason `depthOf` is: a report whose parents formed a cycle has no bottom to reach.
+function heightOf(folderId: string | null, folders: readonly ManagedMailFolder[], levelsLeft = folders.length): number {
+    if (folderId === null || levelsLeft === 0) {
         return 0;
     }
 
     const children = folders.filter((folder) => folder.parentId === folderId);
 
-    return children.length === 0 ? 0 : 1 + Math.max(...children.map((child) => heightOf(child.id, folders)));
+    return children.length === 0
+        ? 0
+        : 1 + Math.max(...children.map((child) => heightOf(child.id, folders, levelsLeft - 1)));
 }
 
 // Whether one folder sits under another, itself included, which is the move a hierarchy cannot take.
