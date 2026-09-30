@@ -401,6 +401,23 @@ describe('ToastsProvider', () => {
         expect(standing()).toHaveLength(0);
     });
 
+    it('says how an operation went as a card of its own where the bound pushed its card off before it settled', () => {
+        drawSurface();
+
+        const settle = raiseOperation(packing);
+
+        for (let raised = 1; raised <= mostToastsShown; raised += 1) {
+            raise({ kind: 'neutral', title: `Toast ${String(raised)}` });
+        }
+
+        expect(standing().join(' ')).not.toContain('Packing attachments');
+
+        settle({ kind: 'error', title: 'Folder not deleted', body: 'This mailbox no longer has that folder.' });
+
+        expect(standing()[0]).toContain('Error Folder not deleted');
+        expect(standing()).toHaveLength(mostToastsShown);
+    });
+
     it('asks the same question of a swipe, so no gesture aborts an operation more quietly than the button', () => {
         drawSurface();
 
