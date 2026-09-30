@@ -516,7 +516,10 @@ export function FolderTree({
                 const box = event.currentTarget.getBoundingClientRect();
 
                 setFocused(visibleRow.row.key);
-                setMenu({ key: visibleRow.row.key, at: { x: box.left, y: box.top } });
+                setMenu({
+                    key: visibleRow.row.key,
+                    at: { x: box.left + box.width / 2, y: box.top + box.height / 2 },
+                });
                 break;
             }
             default:

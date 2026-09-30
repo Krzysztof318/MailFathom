@@ -100,9 +100,18 @@ function mailAnswering(pages: (cursor: string | null) => unknown): MailFathomTra
             status: 200,
             headers: {},
             body: JSON.stringify(
-                request.method === 'GET' ? pages(new URL(request.path).searchParams.get('cursor')) : flagsRecorded,
+                request.method === 'GET' ? pages(new URL(request.path).searchParams.get('cursor')) : recording(request),
             ),
         });
+}
+
+// The corpus's recorded flag change, answered for each message the request named, as the route answers one per message.
+function recording(request: ClientRequest): unknown {
+    const written = JSON.parse(request.body ?? '{}') as { changes: readonly { storedEmailId: string }[] };
+
+    return {
+        results: written.changes.map(({ storedEmailId }) => ({ ...flagsRecorded.results[0], storedEmailId })),
+    };
 }
 
 function maintaining(

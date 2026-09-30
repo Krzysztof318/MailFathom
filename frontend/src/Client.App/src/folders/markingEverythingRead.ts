@@ -30,8 +30,9 @@ export const mostPagesMarkedRead = 20;
 /** What one press came to, which is three different sentences rather than a success or a failure. */
 export interface MarkedEverythingRead {
     /**
-     * The messages the deployment took the marking for, which is none where nothing was unread. A batch it refused is
-     * not among them, because a row drawn read on the strength of one would be a message nobody's mailbox marked.
+     * The messages the deployment took the marking for, which is none where nothing was unread. A batch it refused, or
+     * a message it refused inside one, is not among them, because a row drawn read on the strength of one would be a
+     * message nobody's mailbox marked.
      */
     readonly markedRead: readonly MessageMarkedRead[];
 
@@ -109,7 +110,7 @@ async function submit(
     messages: readonly MessageMarkedRead[],
 ): Promise<MarkedEverythingRead> {
     const batches: Promise<{
-        readonly batch: readonly MessageMarkedRead[];
+        readonly markedRead: readonly MessageMarkedRead[];
         readonly failure: ClientFailureReason | null;
     }>[] = [];
 
@@ -121,14 +122,28 @@ async function submit(
                 session,
                 transport,
                 batch.map(({ storedEmailId }) => storedEmailId),
-            ).then((answer) => ({ batch, failure: answer.outcome === 'failed' ? answer.failure.reason : null })),
+            ).then((answer) => {
+                if (answer.outcome === 'failed') {
+                    return { markedRead: [], failure: answer.failure.reason };
+                }
+
+                // The route answers each message on its own, so one moved or deleted since the list was read is refused
+                // while the rest of its batch applies.
+                const taken = new Set(
+                    answer.value
+                        .filter(({ outcome }) => outcome === 'recorded' || outcome === 'applied')
+                        .map(({ storedEmailId }) => storedEmailId),
+                );
+
+                return { markedRead: batch.filter(({ storedEmailId }) => taken.has(storedEmailId)), failure: null };
+            }),
         );
     }
 
     const answered = await Promise.all(batches);
 
     return {
-        markedRead: answered.flatMap(({ batch, failure }) => (failure === null ? batch : [])),
+        markedRead: answered.flatMap(({ markedRead }) => markedRead),
         leftBehind: false,
         failure: answered.find(({ failure }) => failure !== null)?.failure ?? null,
     };

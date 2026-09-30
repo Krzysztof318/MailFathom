@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import { mostMessagesPerMutation } from '@mailfathom/client-backend';
 import { markEverythingRead, mostPagesMarkedRead } from './markingEverythingRead';
 
 const session: ClientSession = {
@@ -50,7 +51,7 @@ function page(ids: readonly string[], nextCursor: string | null): string {
  * A `null` among the bodies is a deployment that could not be reached at all, which a transport reports by throwing —
  * `send` is what turns that into no answer.
  */
-function answering(bodies: readonly (string | null)[]): {
+function answering(bodies: readonly (string | ((request: ClientRequest) => string) | null)[]): {
     asked: ClientRequest[];
     transport: MailFathomTransport;
 } {
@@ -68,20 +69,37 @@ function answering(bodies: readonly (string | null)[]): {
 
             return body === undefined || body === null
                 ? Promise.reject(new Error('no route'))
-                : Promise.resolve({ status: 200, headers: {}, body });
+                : Promise.resolve({ status: 200, headers: {}, body: typeof body === 'string' ? body : body(request) });
         },
     };
 }
 
 const nothingUnread = page([], null);
 
-// Every mutation this walk makes answers the same way, which is what lets one body stand for the whole of the
-// writing half: what these tests are about is which messages were named and when the walk stopped.
 function inTheInbox(ids: readonly string[]) {
     return ids.map((storedEmailId) => ({ storedEmailId, account: 'work', folder: 'INBOX' }));
 }
 
-const recorded = JSON.stringify({ results: [{ storedEmailId: 'one', outcome: 'recorded', changes: [] }] });
+// A mutation answered per message, as the route answers one: each message the request named, with what became of it.
+function answeredWith(outcomeOf: (storedEmailId: string) => string): (request: ClientRequest) => string {
+    return (request) => {
+        const written = JSON.parse(request.body ?? '{}') as { changes: readonly { storedEmailId: string }[] };
+
+        return JSON.stringify({
+            results: written.changes.map(({ storedEmailId }) => ({
+                storedEmailId,
+                outcome: outcomeOf(storedEmailId),
+                changes: [],
+            })),
+        });
+    };
+}
+
+const recorded = answeredWith(() => 'recorded');
+
+function numbered(count: number, from = 0): string[] {
+    return Array.from({ length: count }, (_, at) => `message-${String(from + at)}`);
+}
 
 describe('markEverythingRead', () => {
     it('marks nothing and reports nothing where the folder holds no unread mail', async () => {
@@ -132,7 +150,7 @@ describe('markEverythingRead', () => {
         const outcome = await markEverythingRead(
             session,
             (request) => {
-                const body = request.method === 'GET' ? page([`message-${String(read++)}`], 'next') : recorded;
+                const body = request.method === 'GET' ? page([`message-${String(read++)}`], 'next') : recorded(request);
 
                 return Promise.resolve({ status: 200, headers: {}, body });
             },
@@ -155,5 +173,33 @@ describe('markEverythingRead', () => {
         const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
 
         expect(outcome).toEqual({ markedRead: [], leftBehind: false, failure: 'unavailable' });
+    });
+
+    it('draws read only the batches the deployment took where one of several could not be written', async () => {
+        const ids = numbered(mostMessagesPerMutation + 1);
+        const { transport } = answering([
+            page(ids.slice(0, 100), 'next'),
+            page(ids.slice(100, 200), 'next'),
+            page(ids.slice(200), null),
+            recorded,
+            null,
+        ]);
+        const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
+
+        expect(outcome).toEqual({
+            markedRead: inTheInbox(ids.slice(0, mostMessagesPerMutation)),
+            leftBehind: false,
+            failure: 'unavailable',
+        });
+    });
+
+    it('leaves out a message the deployment refused while the rest of its batch was taken', async () => {
+        const { transport } = answering([
+            page(['one', 'moved', 'three'], null),
+            answeredWith((storedEmailId) => (storedEmailId === 'moved' ? 'message-not-found' : 'applied')),
+        ]);
+        const outcome = await markEverythingRead(session, transport, { account: 'work', folder: 'INBOX' });
+
+        expect(outcome).toEqual({ markedRead: inTheInbox(['one', 'three']), leftBehind: false, failure: null });
     });
 });
