@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useId, useRef } from 'react';
 import { ComposingContext } from '../composer/useComposing';
 import { BrandMark } from '../controls/BrandMark';
 import { useLocalization } from '../localization/useLocalization';
@@ -28,7 +28,8 @@ export function NothingOpen({
     readonly onReopenLastRead: (() => void) | null;
 }) {
     const { translate } = useLocalization();
-    const region = useRef<HTMLDivElement>(null);
+    const region = useRef<HTMLElement>(null);
+    const heading = useId();
 
     // Read rather than required: the three things the design offers from here are the three ways something opens,
     // and writing a message is offered only where the frame composes at all.
@@ -41,15 +42,20 @@ export function NothingOpen({
     }, [arriving]);
 
     return (
-        <div
+        // A region named by what it says, so the place focus lands on is announced as that sentence rather than as an
+        // unnamed group somebody has to explore to find out where they are.
+        <section
             ref={region}
             tabIndex={-1}
+            aria-labelledby={heading}
             className="flex min-h-full flex-1 flex-col items-center justify-center gap-4 bg-sunken px-8 py-8 text-center"
         >
             <BrandMark className="size-11.5" />
 
             <div className="flex max-w-md flex-col gap-1.75">
-                <p className="text-3xl font-semibold tracking-tight">{translate('tabs.nothingOpen')}</p>
+                <p id={heading} className="text-3xl font-semibold tracking-tight">
+                    {translate('tabs.nothingOpen')}
+                </p>
                 <p className="text-md text-pretty text-muted">{translate('tabs.nothingOpenExplanation')}</p>
             </div>
 
@@ -86,6 +92,6 @@ export function NothingOpen({
                     {translate('tabs.askHistory')}
                 </button>
             </div>
-        </div>
+        </section>
     );
 }

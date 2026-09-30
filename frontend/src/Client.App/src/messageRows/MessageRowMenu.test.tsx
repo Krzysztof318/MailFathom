@@ -242,4 +242,17 @@ describe('MessageRowMenu', () => {
             storedEmailId: 'message-1',
         });
     });
+
+    it('starts forwarding the message the menu was opened on', () => {
+        const composing: Composing = { ...writing, compose: vi.fn() };
+
+        menuUnder({ composing });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Forward' }));
+
+        expect(composing.compose).toHaveBeenCalledWith({
+            kind: 'answer',
+            answers: 'forward',
+            storedEmailId: 'message-1',
+        });
+    });
 });

@@ -11,6 +11,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import type { MessageMarkedRead } from '../readMarking/useReadMarking';
 
 // *Mark all as read*, which the client surface serves no route for and which is therefore composed here out of the two
 // it does serve: the list, narrowed to what is unread, and the flag mutation every other reading writes.
@@ -28,8 +29,12 @@ export const mostPagesMarkedRead = 20;
 
 /** What one press came to, which is three different sentences rather than a success or a failure. */
 export interface MarkedEverythingRead {
-    /** How many messages the deployment was asked to mark, which is zero where nothing was unread. */
-    readonly marked: number;
+    /**
+     * The messages the deployment took the marking for, which is none where nothing was unread. A batch it refused, or
+     * a message it refused inside one, is not among them, because a row drawn read on the strength of one would be a
+     * message nobody's mailbox marked.
+     */
+    readonly markedRead: readonly MessageMarkedRead[];
 
     /** Whether unread mail was left behind because the ceiling was reached, which is what says to ask again. */
     readonly leftBehind: boolean;
@@ -51,7 +56,7 @@ export async function markEverythingRead(
     transport: MailFathomTransport,
     scope: { readonly account: string; readonly folder: string | null },
 ): Promise<MarkedEverythingRead> {
-    const unread: string[] = [];
+    const unread: MessageMarkedRead[] = [];
     let cursor: string | null = null;
 
     for (let page = 0; page < mostPagesMarkedRead; page += 1) {
@@ -83,7 +88,7 @@ export async function markEverythingRead(
         }
 
         for (const entry of answer.value.emails) {
-            unread.push(entry.id);
+            unread.push({ storedEmailId: entry.id, account: entry.account, folder: entry.folder });
         }
 
         cursor = answer.value.nextCursor;
@@ -102,19 +107,44 @@ export async function markEverythingRead(
 async function submit(
     session: ClientSession,
     transport: MailFathomTransport,
-    storedEmailIds: readonly string[],
+    messages: readonly MessageMarkedRead[],
 ): Promise<MarkedEverythingRead> {
-    const batches: Promise<ClientFailureReason | null>[] = [];
+    const batches: Promise<{
+        readonly markedRead: readonly MessageMarkedRead[];
+        readonly failure: ClientFailureReason | null;
+    }>[] = [];
 
-    for (let from = 0; from < storedEmailIds.length; from += mostMessagesPerMutation) {
+    for (let from = 0; from < messages.length; from += mostMessagesPerMutation) {
+        const batch = messages.slice(from, from + mostMessagesPerMutation);
+
         batches.push(
-            markMailRead(session, transport, storedEmailIds.slice(from, from + mostMessagesPerMutation)).then(
-                (answer) => (answer.outcome === 'failed' ? answer.failure.reason : null),
-            ),
+            markMailRead(
+                session,
+                transport,
+                batch.map(({ storedEmailId }) => storedEmailId),
+            ).then((answer) => {
+                if (answer.outcome === 'failed') {
+                    return { markedRead: [], failure: answer.failure.reason };
+                }
+
+                // The route answers each message on its own, so one moved or deleted since the list was read is refused
+                // while the rest of its batch applies.
+                const taken = new Set(
+                    answer.value
+                        .filter(({ outcome }) => outcome === 'recorded' || outcome === 'applied')
+                        .map(({ storedEmailId }) => storedEmailId),
+                );
+
+                return { markedRead: batch.filter(({ storedEmailId }) => taken.has(storedEmailId)), failure: null };
+            }),
         );
     }
 
     const answered = await Promise.all(batches);
 
-    return { marked: storedEmailIds.length, leftBehind: false, failure: answered.find((one) => one !== null) ?? null };
+    return {
+        markedRead: answered.flatMap(({ markedRead }) => markedRead),
+        leftBehind: false,
+        failure: answered.find(({ failure }) => failure !== null)?.failure ?? null,
+    };
 }

@@ -197,4 +197,11 @@ describe('admissibleParents', () => {
 
         expect(admissibleParents(deep, folders).map((entry) => entry.id)).toEqual(['p', 'p26', 'in', 'a', 'o']);
     });
+
+    it('stops rather than walking forever where a report’s parents form a cycle', () => {
+        const left = folder({ id: 'l', name: 'Left', parentId: 'r' });
+        const right = folder({ id: 'r', name: 'Right', parentId: 'l' });
+
+        expect(admissibleParents(draftForEditedFolder('work', 'Work', left), [left, right])).toEqual([]);
+    });
 });

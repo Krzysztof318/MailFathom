@@ -151,6 +151,7 @@ function recordingMarkings(): { readonly marking: ReadMarking; readonly opened: 
             markRead: (message) => {
                 opened.push(message.storedEmailId);
             },
+            recordMarked: () => undefined,
             forget: () => undefined,
         },
         opened,

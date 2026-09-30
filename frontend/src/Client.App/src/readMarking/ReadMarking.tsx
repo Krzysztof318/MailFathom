@@ -14,6 +14,7 @@ import {
     ReadMarkingContext,
     nothingMarkedRead,
     type MarkedIn,
+    type MessageMarkedRead,
     type MessageOpened,
     type ReadMarking,
 } from './useReadMarking';
@@ -24,8 +25,10 @@ import {
 // the reading pending instead of failing the open.
 //
 // Three things decide whether it happens at all, and all three are the frame's rather than a screen's: the reader's own
-// setting, the grant the credential signed in under, and there being a session to submit over. Where any is missing
-// every component below reads `nothingMarkedRead`, so no screen asks the question twice.
+// setting, the grant the credential signed in under, and there being a session to submit over. Where the grant or the
+// session is missing every component below reads `nothingMarkedRead`, so no screen asks the question twice. The setting
+// decides opening alone: an act the reader asked for by name — marking a whole folder read — is recorded here whatever
+// they chose about opening, because the rows and the counts it changed have to say so either way.
 //
 // It marks nothing twice and marks nothing already read. What has been submitted is held in a ref rather than in the
 // state below it, because two bodies drawn in one commit both read it before either render happens — and because React
@@ -44,7 +47,8 @@ export function ReadMarkingProvider({
     session,
     signedInAs,
     transport,
-    marking,
+    writesFlags,
+    marksOnOpening,
     children,
 }: {
     /** Who is asking and where, or `null` where there is nobody to submit for. */
@@ -58,8 +62,11 @@ export function ReadMarkingProvider({
     readonly signedInAs: string | null;
     readonly transport: MailFathomTransport;
 
-    /** Whether this reader asked for opening a message to mark it read, and holds the grant that writes a flag. */
-    readonly marking: boolean;
+    /** Whether the credential holds the grant that writes a flag, without which nothing here marks or records anything. */
+    readonly writesFlags: boolean;
+
+    /** Whether this reader asked for opening a message to mark it read. */
+    readonly marksOnOpening: boolean;
 
     readonly children: ReactNode;
 }) {
@@ -175,15 +182,37 @@ export function ReadMarkingProvider({
         });
     }
 
+    // What is held belongs to whoever is signed in now, so the first marking after somebody else signed in starts from
+    // nothing rather than on top of the person before them.
+    function holdFor(asking: string): void {
+        if (submitted.current.signedInAs !== asking) {
+            submitted.current = { signedInAs: asking, marked: new Map() };
+            waiting.current = [];
+        }
+    }
+
+    function recordMarked(messages: readonly MessageMarkedRead[]): void {
+        // Read from the ref rather than from this render: the act answers after the render that asked for it, and a
+        // marking recorded for somebody who has since signed out would be drawn over nobody's mail or wiped somebody's.
+        if (signedInAs === null || signedIn.current.signedInAs !== signedInAs) {
+            return;
+        }
+
+        holdFor(signedInAs);
+
+        for (const message of messages) {
+            submitted.current.marked.set(message.storedEmailId, { account: message.account, folder: message.folder });
+        }
+
+        keep();
+    }
+
     function markRead(message: MessageOpened): void {
         if (session === null || signedInAs === null || !message.unread) {
             return;
         }
 
-        if (submitted.current.signedInAs !== signedInAs) {
-            submitted.current = { signedInAs, marked: new Map() };
-            waiting.current = [];
-        }
+        holdFor(signedInAs);
 
         if (submitted.current.marked.has(message.storedEmailId)) {
             return;
@@ -203,7 +232,9 @@ export function ReadMarkingProvider({
         }
     }
 
-    const value: ReadMarking = marking ? { marked: inForce, markRead, forget } : nothingMarkedRead;
+    const value: ReadMarking = writesFlags
+        ? { marked: inForce, markRead: marksOnOpening ? markRead : () => undefined, recordMarked, forget }
+        : nothingMarkedRead;
 
     return <ReadMarkingContext value={value}>{children}</ReadMarkingContext>;
 }
