@@ -13,9 +13,9 @@ set -euo pipefail
 # The output is one version of the published site: the pages under `docs/`, the API reference generated from the XML
 # comments in `backend/src/`, the search index over it, and the artifacts an AI agent reads instead of the rendered pages —
 # `scripts/write-docs-agent-artifacts.sh` writes those last and states what they are. It is self-contained apart from
-# the version selector, which reads a manifest the site root carries — `scripts/compose-docs-site.sh` writes that, and
-# this script knows nothing about the other versions. docs/operations/documentation-site.md describes how the two fit
-# together and what the workflow adds around them.
+# the version selector, which reads a manifest the directory above the versions carries —
+# `scripts/compose-docs-site.sh` writes that, and this script knows nothing about the other versions.
+# docs/operations/documentation-site.md describes how the two fit together and what the workflow adds around them.
 #
 # Serving the result locally is `dotnet docfx serve <output-directory>`; `dotnet docfx docfx/docfx.json --serve` rebuilds
 # and serves in one step while a page is being written.

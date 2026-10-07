@@ -15,7 +15,7 @@ set -euo pipefail
 #
 #   versions.json   what the selector in the header offers, and which version the site opens on
 #   index.html      the landing page, which sends a reader to that version
-#   <page>.html     one redirect per page of that version, mirrored at the site root, so that a page has an address
+#   <page>.html     one redirect per page of that version, mirrored at the root, so that a page has an address
 #                   naming no version — which is what the repository-root README links to
 #   llms.txt        that version's map of the documentation, at the address an agent looks for it, with every link in
 #                   it resolved into the version directory it came from
@@ -112,10 +112,10 @@ done
   printf '}\n'
 } > "$site_directory/versions.json"
 
-# The addresses that outlive a release. Every page of the default version is mirrored at the site root as a redirect,
+# The addresses that outlive a release. Every page of the default version is mirrored at the root as a redirect,
 # so `…/MailFathom/docs/operations/mcp-endpoint.html` names a page without naming a version and lands on whichever
-# version the site currently opens on. The root `README.md` links that way: a link carrying a version would be wrong the day
-# the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site opens on.
+# version the site currently opens on. The root `README.md` links that way: a link carrying a version would be wrong
+# the day the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site opens on.
 #
 # The API reference is left out. It is a thousand generated pages whose names are type names, nothing links into it by
 # hand, and mirroring it would treble the file count of the site to no end.
@@ -175,7 +175,7 @@ done < <(
 # destination, stated as the address a reader would type.
 write_redirect 'index.html' "$default_version/" "$default_version"
 
-# The map an agent looks for, which it looks for at the site root. Each version carries its own — the default version's
+# The map an agent looks for, which it looks for at the root. Each version carries its own — the default version's
 # is the one a reader arriving without a version gets, exactly as the redirects above hand them that version's pages.
 #
 # It is copied rather than redirected to, because a redirect stub is an HTML page and what this address has to return
@@ -200,8 +200,8 @@ printf 'Composed %d version(s) in %s, opening on %s, with %d version-agnostic ad
 printf '  %s\n' "${ordered_versions[@]}"
 
 if [[ "$map_at_root" == 'yes' ]]; then
-  printf '%s at the site root reads %s.\n' "$map_file" "$default_version"
+  printf '%s at the root of %s reads %s.\n' "$map_file" "$site_directory" "$default_version"
 else
-  printf '%s carries no %s, so the site root has none: that release predates the artifact.\n' \
-    "$default_version" "$map_file"
+  printf '%s carries no %s, so the root of %s has none: that release predates the artifact.\n' \
+    "$default_version" "$map_file" "$site_directory"
 fi

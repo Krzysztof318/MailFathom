@@ -86,13 +86,13 @@ bundle sits at the version's root rather than in `users/`, so `scripts/rebase-ma
 relative link for that move — `../operations/mcp-endpoint.md` in a page of the user guide becomes
 `operations/mcp-endpoint.md` — and leaves every absolute URL alone.
 
-`scripts/compose-docs-site.sh` copies the default version's map to the site root, rebased into that version's
+`scripts/compose-docs-site.sh` copies the default version's map to the root of `docs/`, rebased into that version's
 directory, so an agent that asks for `llms.txt` without naming a version gets the release the site opens on. That copy
 names a version inside itself, unlike the [stable addresses](#the-addresses-that-outlive-a-release) beside it, and it
 can: it is rewritten by every publish rather than written once into somebody else's page. A release built before these
-artifacts existed carries no map, and the site opens on the newest release — so the root map arrives with the first
-release that carries one, and the composition says so instead of failing a publish over a commit that could not have
-written it.
+artifacts existed carries no map, and the site opens on the newest release — so the map at `docs/llms.txt` arrives
+with the first release that carries one, and the composition says so instead of failing a publish over a commit that
+could not have written it.
 
 The version's own landing page links the map, which is what makes the artifacts reachable from the address every
 surface prints. docfx cannot resolve that link — the map is written into the build's output after docfx has finished —
@@ -206,8 +206,8 @@ file behind it.
 ### The addresses that outlive a release
 
 A page has two addresses. `…/MailFathom/docs/v<version>/operations/mcp-endpoint.html` is where it is served, and
-`…/MailFathom/docs/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the site root
-that lands on whichever version the site opens on, carrying the heading anchor with it.
+`…/MailFathom/docs/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the root of
+`docs/` that lands on whichever version the site opens on, carrying the heading anchor with it.
 
 The second is what anything outside the site links to, the root `README.md` above all. A link carrying a version would
 be wrong the day the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site
@@ -275,8 +275,8 @@ again — was invisible to a green build.
 What the template adds beyond that:
 
 - **The version selector** in the header, and the banner a page outside the default version carries. Both read
-  `versions.json` from the site root at run time, so a version built months ago joins the selector correctly without
-  being rebuilt.
+  `versions.json` from the root of `docs/` at run time, so a version built months ago joins the selector correctly
+  without being rebuilt.
 - **A viewer for diagrams and images.** Clicking a Mermaid diagram or an image opens it over the page, where the wheel
   and the buttons zoom about the pointer, a drag pans, a double click resets, and <kbd>Esc</kbd> closes. Pinch-zoom
   works the same way on a touch screen. A diagram is drawn at the width of the article, which has nothing to do with

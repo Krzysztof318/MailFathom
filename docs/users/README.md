@@ -78,8 +78,8 @@ published site carries three artifacts written for exactly that, under whichever
 - **`llms-mailbox-user.txt`** is the other path in one file: connecting the chat client you already use, and what each
   tool returns and bounds.
 
-The version-agnostic address `https://krzysztof318.github.io/MailFathom/docs/llms.txt` is the map of the release the site
-opens on; the same file sits under each version's own directory. [The documentation
+The version-agnostic address `https://krzysztof318.github.io/MailFathom/docs/llms.txt` is the map of the release the
+site opens on; the same file sits under each version's own directory. [The documentation
 site](../operations/documentation-site.md#what-an-agent-reads) records how they are produced and what they
 deliberately leave out.
 
