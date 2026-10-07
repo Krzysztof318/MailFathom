@@ -1,0 +1,306 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../files/support.js"></script>
+<script src="design.js"></script>
+<script src="data/sign-in.js"></script>
+<script src="logic/sign-in.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  ICONS — Material Symbols (Rounded), Google.  LICENCE: Apache License 2.0.
+  Web font: https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded
+  Catalogue / SVG download: https://fonts.google.com/icons
+  Repository: https://github.com/google/material-design-icons  (licence: .../blob/master/LICENSE)
+  MIT alternatives: Tabler https://github.com/tabler/tabler-icons · Feather https://github.com/feathericons/feather · Phosphor https://github.com/phosphor-icons/core
+  OAuth PROVIDER LOGOS — Simple Icons (CC0), served from https://cdn.simpleicons.org
+  Trademarks belong to their owners; in the product swap these for files supplied by the brand team.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/sign-in.css" />
+</helmet>
+<div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" data-screen-label="Sign in" style="{{ rootStyle }}">
+
+  <div style="{{ brandStyle }}">
+    <div style="{{ brandRowStyle }}">
+      <img src="./mailfathom-logo.png" alt="MailFathom" style="{{ logoStyle }}" />
+      <div style="{{ wordmarkStyle }}">MailFathom</div>
+    </div>
+    <sc-if value="{{ showPitch }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;justify-content:center;flex:1;gap:18px;max-width:400px;padding-bottom:40px">
+        <div style="font-size:34px;font-weight:600;line-height:1.15;letter-spacing:-0.02em;text-wrap:pretty">Your mail stays on your server.</div>
+        <div style="font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">You connect to your organisation's MailFathom server. Indexing and analysis happen on its side — nothing goes to the cloud without your consent.</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="{{ formPaneStyle }}">
+    <div style="{{ formStyle }}">
+
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)">contrast</span>
+          <div style="display:flex;gap:3px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sub)">
+            <sc-for list="{{ themePicks }}" as="tp" hint-placeholder-count="3">
+              <div onClick="{{ tp.pick }}" title="{{ tp.label }}" style="{{ tp.style }}" style-hover="cursor:pointer">{{ tp.short }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)">language</span>
+          <div style="display:flex;gap:3px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sub)">
+            <sc-for list="{{ langPicks }}" as="lp" hint-placeholder-count="2">
+              <div onClick="{{ lp.pick }}" title="{{ lp.label }}" style="{{ lp.style }}" style-hover="cursor:pointer">{{ lp.short }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="{{ titleStyle }}">Connect your mailbox</div>
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:{{ lockColor }}">{{ lockIcon }}</span>
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;color:var(--text2)">{{ serverLabel }}</span>
+              <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:10.5px;font-weight:500;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">no TLS</span>
+              </sc-if>
+            </div>
+          </div>
+
+          <sc-if value="{{ showSso }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div onClick="{{ goSso }}" style="{{ ssoBtnStyle }}" style-hover="cursor:pointer;filter:brightness(1.07)">
+                <sc-if value="{{ ssoBusy }}" hint-placeholder-val="{{ false }}">
+                  <span style="width:15px;height:15px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:mfspin 0.7s linear infinite"></span>
+                </sc-if>
+                <sc-if value="{{ ssoIdle }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">shield_person</span>
+                </sc-if>
+                <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ssoLabel }}</span>
+                <sc-if value="{{ ssoIdle }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;opacity:0.75">open_in_new</span>
+                </sc-if>
+              </div>
+              <div style="font-size:11.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ ssoNote }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showSsoDivider }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+              <div style="font-size:11px;color:var(--faint)">or another method</div>
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showOauth }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="font-size:11.5px;font-weight:500;letter-spacing:0.02em;color:var(--faint)">Sign in with a provider</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                  <sc-for list="{{ oauthBtns }}" as="ob" hint-placeholder-count="3">
+                    <div onClick="{{ ob.click }}" title="{{ ob.title }}" style="{{ ob.style }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover)">
+                      <span style="{{ ob.iconStyle }}"></span>
+                      <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ob.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showDivider }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+              <div style="font-size:11px;color:var(--faint)">or with a password</div>
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showBasic }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;font-weight:500;color:var(--text2)">Username</label>
+                <div style="{{ userBoxStyle }}">
+                  <input value="{{ user }}" onChange="{{ onUser }}" onFocus="{{ focusUser }}" onBlur="{{ blurAny }}" onKeyDown="{{ onKey }}" placeholder="{{ userPlaceholder }}" style="{{ fieldStyle }}" />
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;font-weight:500;color:var(--text2)">Password</label>
+                <div style="{{ passBoxStyle }}">
+                  <input value="{{ pass }}" onChange="{{ onPass }}" onFocus="{{ focusPass }}" onBlur="{{ blurAny }}" onKeyDown="{{ onKey }}" type="{{ passType }}" placeholder="••••••••••" style="{{ fieldStyle }}" />
+                  <span onClick="{{ toggleReveal }}" style="{{ revealStyle }}" style-hover="cursor:pointer;color:var(--text);background:var(--hover)">{{ revealLabel }}</span>
+                </div>
+              </div>
+
+              <div onClick="{{ toggleRemember }}" style="{{ rememberRowStyle }}" style-hover="cursor:pointer">
+                <span style="{{ rememberBoxStyle }}"><span style="{{ rememberTickStyle }}">check</span></span>
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:12.5px;color:var(--text2)">Keep me signed in</span>
+                  <span style="font-size:11px;line-height:1.45;color:var(--faint);text-wrap:pretty">{{ rememberHint }}</span>
+                </span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:9px 12px">{{ errorText }}</div>
+          </sc-if>
+
+          <sc-if value="{{ showBasic }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ submit }}" style="{{ submitStyle }}" style-hover="{{ submitHover }}">
+              <sc-if value="{{ connecting }}" hint-placeholder-val="{{ false }}">
+                <span style="width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:mfspin 0.7s linear infinite"></span>
+              </sc-if>
+              {{ submitLabel }}
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ noMethods }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:11px 13px">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">block</span>
+              <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">This server offers no sign-in method. Check the address or contact your administrator.</div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div onClick="{{ toggleAdvanced }}" style="{{ advancedBtnStyle }}" style-hover="cursor:pointer;color:var(--accent-2);background:var(--hover)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;{{ chevronRotate }}">chevron_right</span>Advanced<sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}"><span style="margin-left:2px;font-size:11px;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">no TLS</span></sc-if>
+            </div>
+
+            <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Protocol</span>
+                    <span style="font-weight:500">{{ protoLabel }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Host</span>
+                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Port</span>
+                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
+                    <span style="color:var(--muted)">Certificate verification</span>
+                    <span style="font-weight:500;color:{{ certColor }}">{{ certLabel }}</span>
+                  </div>
+                </div>
+
+                <sc-if value="{{ canChangeServer }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ openServer }}" style="{{ ghostBtnStyle }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-2);background:var(--hover)">
+                    <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">dns</span>Change server
+                  </div>
+                </sc-if>
+
+              </div>
+            </sc-if>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isServer }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div onClick="{{ closeServer }}" style="{{ backBtnStyle }}" style-hover="cursor:pointer;color:var(--accent-2);background:var(--hover)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">arrow_back</span>Back to sign-in
+            </div>
+            <div style="{{ titleStyle }}">Server address</div>
+            <div style="font-size:13px;color:var(--muted);text-wrap:pretty">We store it on this device. The server decides which sign-in methods you see.</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:500;color:var(--text2)">Server</label>
+            <div style="{{ hostBoxStyle }}">
+              <input value="{{ host }}" onChange="{{ onHost }}" onFocus="{{ focusHost }}" onBlur="{{ blurAny }}" onKeyDown="{{ onServerKey }}" placeholder="{{ serverPlaceholder }}" style="{{ fieldStyle }}" />
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap">{{ portHint }}</span>
+            </div>
+            <div style="font-size:11px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ hostNote }}</div>
+          </div>
+
+          <div onClick="{{ toggleInsecure }}" style="{{ insecureRowStyle }}" style-hover="cursor:pointer;border-color:var(--border2)">
+            <div style="{{ checkboxStyle }}">{{ checkMark }}</div>
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <div style="font-size:13px;font-weight:500">Allow insecure connections</div>
+              <div style="font-size:11px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ insecureNote }}</div>
+            </div>
+          </div>
+
+          <sc-if value="{{ customized }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ restoreDefaults }}" style="{{ restoreBtnStyle }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover);color:var(--text)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">restart_alt</span>Restore defaults<span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ defaultServerLabel }}</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:10px 12px">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">warning</span>
+              <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">The server certificate will not be verified. Use only on an internal network or over VPN.</div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Protocol</span>
+              <span style="font-weight:500">{{ protoLabel }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Host</span>
+              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Port</span>
+              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
+              <span style="color:var(--muted)">Certificate verification</span>
+              <span style="font-weight:500;color:{{ certColor }}">{{ certLabel }}</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:9px 12px">{{ errorText }}</div>
+          </sc-if>
+
+          <div onClick="{{ connectServer }}" style="{{ submitStyle }}" style-hover="{{ submitHover }}">
+            <sc-if value="{{ probing }}" hint-placeholder-val="{{ false }}">
+              <span style="width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:mfspin 0.7s linear infinite"></span>
+            </sc-if>
+            {{ serverBtnLabel }}
+          </div>
+
+        </div>
+      </sc-if>
+
+      <div style="{{ footRowStyle }}">
+        <span style="{{ helpRowStyle }}">Forgot your password?&nbsp;<a href="#">IT help</a></span>
+        <span style="font-size:10.5px;color:var(--faint);white-space:nowrap">MailFathom v<span style="font-family:'Instrument Sans',system-ui,sans-serif">{{ appVersion }}</span></span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;defaultServer&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;mail.nordwind.example:7443&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Default server (from the installer)&quot;},&quot;forcedServer&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Server forced by env config&quot;},&quot;ssoAvailable&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Server offers SSO&quot;},&quot;ssoName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;MailFathom SSO&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;SSO provider name&quot;},&quot;basicAvailable&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Server offers basic auth&quot;},&quot;oauthAvailable&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Server offers OAuth&quot;},&quot;oauthCount&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:3,&quot;min&quot;:1,&quot;max&quot;:12,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Server&quot;,&quot;label&quot;:&quot;Number of OAuth methods (demo)&quot;}}">
+const Component = MailFathomDesign.artboards.signIn(DCLogic, React);
+</script>
+</body>
+</html>

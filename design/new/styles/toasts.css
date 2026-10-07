@@ -1,0 +1,16 @@
+/*
+ * Copyright © 2026 Krzysztof Kasprowicz
+ * Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+ * Project repository: https://github.com/Krzysztof318/MailFathom
+ */
+html, body { margin: 0; padding: 0; background: oklch(0.980 0.004 88); }
+body:has([data-theme="dark"]) { background: oklch(0.183 0.016 262); }
+a { color: var(--accent); }
+a:hover { color: var(--accent-2); }
+[data-theme="light"] { color-scheme:light;--bg:oklch(0.980 0.004 88);--panel:#ffffff;--rail:oklch(0.951 0.006 88);--hover:oklch(0.906 0.010 88);--sub:oklch(0.969 0.005 88);--line:oklch(0.906 0.008 88);--line2:oklch(0.949 0.005 88);--border2:oklch(0.856 0.010 88);--text:oklch(0.240 0.014 262);--text2:oklch(0.420 0.012 240);--muted:oklch(0.565 0.010 200);--faint:oklch(0.690 0.009 160);--accent:oklch(0.555 0.185 262);--accent-2:oklch(0.465 0.175 262);--accent-d:oklch(0.385 0.150 262);--accent-soft:oklch(0.945 0.038 258);--accent-line:oklch(0.870 0.062 258);--onaccent:#ffffff;--ok:oklch(0.56 0.14 155);--ok-text:oklch(0.44 0.11 155);--ok-soft:oklch(0.945 0.038 155);--warn:oklch(0.62 0.155 62);--warn-soft:oklch(0.955 0.045 75);--warn-text:oklch(0.46 0.135 55);--err:oklch(0.545 0.195 25);--err-soft:oklch(0.958 0.028 25);--err-text:oklch(0.470 0.180 25);--hl:oklch(0.945 0.070 88);--hl-line:oklch(0.775 0.145 85);--inset:rgba(255,255,255,0.65);--sh-1:oklch(0.30 0.02 262 / 0.07);--sh-2:oklch(0.30 0.025 262 / 0.14);--sh-3:oklch(0.28 0.03 262 / 0.28);--scrim:oklch(0.26 0.03 262 / 0.36); }
+[data-theme="dark"] { color-scheme:dark;--bg:oklch(0.183 0.016 262);--panel:oklch(0.246 0.016 262);--rail:oklch(0.212 0.017 262);--hover:oklch(0.325 0.021 262);--sub:oklch(0.277 0.016 262);--line:oklch(0.336 0.018 262);--line2:oklch(0.283 0.015 262);--border2:oklch(0.416 0.022 262);--text:oklch(0.945 0.007 262);--text2:oklch(0.835 0.011 262);--muted:oklch(0.705 0.013 262);--faint:oklch(0.585 0.015 262);--accent:oklch(0.615 0.175 262);--accent-2:oklch(0.735 0.150 262);--accent-d:oklch(0.865 0.085 262);--accent-soft:oklch(0.320 0.070 262);--accent-line:oklch(0.430 0.095 262);--onaccent:#ffffff;--ok:oklch(0.72 0.14 155);--ok-text:oklch(0.82 0.12 155);--ok-soft:oklch(0.30 0.045 155);--warn:oklch(0.74 0.13 55);--warn-soft:oklch(0.315 0.05 50);--warn-text:oklch(0.87 0.10 62);--err:oklch(0.660 0.190 25);--err-soft:oklch(0.325 0.078 22);--err-text:oklch(0.845 0.105 25);--hl:oklch(0.345 0.055 85);--hl-line:oklch(0.72 0.13 85);--inset:rgba(255,255,255,0.045);--sh-1:oklch(0.10 0.03 262 / 0.38);--sh-2:oklch(0.10 0.03 262 / 0.50);--sh-3:oklch(0.09 0.035 262 / 0.64);--scrim:oklch(0.12 0.045 262 / 0.66); }
+@keyframes mftin { from { opacity: 0; transform: translateX(22px) scale(0.97) } }
+@keyframes mftout { to { opacity: 0; transform: translateX(22px) scale(0.97) } }
+@keyframes mfspin { to { transform: rotate(360deg) } }
+@keyframes mftbar { from { transform: scaleX(1) } to { transform: scaleX(0) } }
+@keyframes mfslide { 0% { margin-left: 0 } 50% { margin-left: 62% } 100% { margin-left: 0 } }
