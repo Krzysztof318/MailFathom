@@ -4,7 +4,9 @@
 
 name: Publish the documentation
 
-# The published documentation site, rebuilt in full on every merge to the default branch and served from GitHub Pages.
+# The published documentation site, rebuilt in full on every merge to the default branch and served from GitHub Pages
+# under `docs/`, beside the design under `design/`. Pages serves one tree per repository, so both are published by the
+# one deployment this workflow makes: a merge that changes `design/` republishes it because every merge publishes.
 #
 # The whole site is a function of the repository rather than of the deployments that preceded it. Each run builds
 # `latest` from the default branch and one version from each release tag that carries the site definition, composes
@@ -53,6 +55,7 @@ on:
       - 'docfx/**'
       - 'scripts/build-docs-site.sh'
       - 'scripts/compose-docs-site.sh'
+      - 'scripts/compose-pages-site.sh'
       - 'scripts/list-documented-versions.sh'
       - 'scripts/write-docs-agent-artifacts.sh'
       - 'scripts/rebase-markdown-links.sh'
@@ -129,7 +132,7 @@ jobs:
           global-json-file: global.json
 
       - name: Build the site
-        run: bash scripts/build-docs-site.sh "site/${{ matrix.version }}"
+        run: bash scripts/build-docs-site.sh "site/docs/${{ matrix.version }}"
 
       - name: Upload ${{ matrix.version }}
         uses: actions/upload-artifact@v7
@@ -163,13 +166,17 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: docs-site-*
-          # Each artifact holds one directory named after its version, so merging them is what produces the tree the
-          # site is composed from.
+          # Each artifact holds `docs/` with one directory named after its version, so merging them is what produces
+          # the tree the documentation is composed from.
           merge-multiple: true
           path: site
 
-      - name: Compose the site
-        run: bash scripts/compose-docs-site.sh site
+      - name: Compose the documentation
+        run: bash scripts/compose-docs-site.sh site/docs
+
+      # The design and the site root come from this run's commit, the same one `latest` is built from.
+      - name: Compose the Pages site
+        run: bash scripts/compose-pages-site.sh site
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

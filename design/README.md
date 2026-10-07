@@ -25,7 +25,8 @@ loop that judges a client screen runs in any clone.
 ## How a page is put together
 
 A page opens in a browser as it is, from the file system or from any static server rooted at `design/`. It loads the
-runtime from `runtime/support.js`, and React from the CDN that runtime names.
+runtime from `runtime/support.js`, and React from the CDN that runtime names. Every merge to `main` publishes the
+directory at <https://krzysztof318.github.io/MailFathom/design/>, where an index lists the pages.
 
 Inside a page, `<x-dc>` holds the template exactly as the runtime reads it, with `{{ … }}` bindings and the `sc-if` and
 `sc-for` directives, and the `data-dc-script` element under it does one thing: it asks the component registered in

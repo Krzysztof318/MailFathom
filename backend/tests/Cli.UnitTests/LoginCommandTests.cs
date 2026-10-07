@@ -427,7 +427,7 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(
             this.console.Lines,
             line => line.Contains(
-                "https://krzysztof318.github.io/MailFathom/latest/",
+                "https://krzysztof318.github.io/MailFathom/docs/latest/",
                 StringComparison.Ordinal));
     }
 

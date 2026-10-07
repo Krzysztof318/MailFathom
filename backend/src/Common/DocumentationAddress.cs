@@ -29,7 +29,7 @@ namespace MailFathom.Common;
 public static class DocumentationAddress
 {
     /// <summary>Where the site is served, with the version directories directly beneath it.</summary>
-    private const string Site = "https://krzysztof318.github.io/MailFathom/";
+    private const string Site = "https://krzysztof318.github.io/MailFathom/docs/";
 
     /// <summary>The directory the site publishes the default branch's documentation under.</summary>
     private const string DefaultBranchDirectory = "latest";

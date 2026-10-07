@@ -546,7 +546,7 @@ jobs:
           # Asserted off the manifest like the rest, because this is the label somebody reads instead of asking anyone:
           # a published image whose documentation address is composed wrong sends every reader of it to a page that
           # does not exist, and nothing downstream of a publication would ever report that.
-          assert_label 'org.opencontainers.image.documentation' "https://krzysztof318.github.io/MailFathom/${EXPECTED_DOCUMENTATION_VERSION}/"
+          assert_label 'org.opencontainers.image.documentation' "https://krzysztof318.github.io/MailFathom/docs/${EXPECTED_DOCUMENTATION_VERSION}/"
 
           echo "${DIGEST} is in both registries, carries both platforms, and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
 

@@ -44,7 +44,7 @@ export default {
 }
 
 // The directory the current documentation build was published into — `.../latest/` or `.../v<version>/`
-// — and the site root above it, which is where `versions.json` and the redirecting landing page
+// — and the documentation root above it, which is where `versions.json` and the redirecting landing page
 // live. `docfx:rel` is the relative path from the current page back to its own build root, so the
 // depth of the page this runs on never has to be guessed.
 function resolveSiteLayout() {
@@ -59,7 +59,7 @@ function resolveSiteLayout() {
   }
 
   // GitHub Pages serves a version's landing page at `.../v<version>` as readily as at `.../v<version>/`,
-  // and the two resolve `./` differently: the address without the trailing slash names the site root
+  // and the two resolve `./` differently: the address without the trailing slash names the documentation root
   // rather than the version's own directory, which leaves everything below looking for a version named
   // after the repository and finding none. Every page docfx writes is a `.html` file, so a path ending in
   // neither a slash nor `.html` is a directory served without its slash, and gets one here.

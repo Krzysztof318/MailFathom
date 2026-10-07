@@ -188,7 +188,7 @@ it, so a lost laptop is a reason to rotate the key on the server rather than to 
 $ mfctl status
 'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
-Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
+Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
 ```
 
 A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is

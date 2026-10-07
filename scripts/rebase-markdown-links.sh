@@ -13,9 +13,9 @@
 #
 # Two callers move a document that way, and they are why this is a script of its own rather than the same twenty lines
 # of awk written twice. `scripts/write-docs-agent-artifacts.sh` concatenates pages of `users/` into a bundle that sits
-# at a version's root, and `scripts/compose-docs-site.sh` copies the default version's map to the site root, where
-# every link has to reach back into that version's directory. The second case looks like prefixing and is the same
-# operation: a document moving out of `v0.5.0/` is a document whose links resolve against `v0.5.0/`.
+# at a version's root, and `scripts/compose-docs-site.sh` copies the default version's map to the root above the
+# versions, where every link has to reach back into that version's directory. The second case looks like prefixing
+# and is the same operation: a document moving out of `v0.5.0/` is a document whose links resolve against `v0.5.0/`.
 #
 # Only a relative link is touched. An absolute URL, a scheme of any kind, a root-relative path, and a bare fragment
 # are left exactly as written, which is what keeps the rule the site already applies to a page's links — an absolute

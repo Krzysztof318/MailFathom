@@ -2,7 +2,7 @@
 
 This documentation set explains the durable design and operating model for MailFathom.
 
-**These pages are also published as a site**, at <https://krzysztof318.github.io/MailFathom/>, with search, an API
+**These pages are also published as a site**, at <https://krzysztof318.github.io/MailFathom/docs/>, with search, an API
 reference generated from the source, and one version per release. This file is the index for reading them here in the
 repository; [the documentation site](operations/documentation-site.md) records what the site carries, which versions
 it publishes, and what a new page owes it.
