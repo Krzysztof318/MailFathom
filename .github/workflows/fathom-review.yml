@@ -1079,6 +1079,29 @@ jobs:
               "$design_runtime" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
+          # Vendored files are dropped for the same reason: somebody else wrote them, a change to one
+          # is a refresh from its upstream rather than an edit made here, and their licence is
+          # reviewed in `THIRD_PARTY_LICENSES.md` rather than by a reader. What marks a file vendored
+          # is the `linguist-vendored` attribute in `.gitattributes`, read through `git check-attr`
+          # from the base commit this job checked out — never from the head, where the change under
+          # review could mark its own files vendored and so exempt them from the review.
+          vendored="$(jq -j '.[].filename + "\u0000"' "$REVIEW_DIRECTORY/files.json" \
+            | git -C "$GITHUB_WORKSPACE" check-attr -z --stdin linguist-vendored \
+            | jq -Rs 'split("\u0000") as $f
+                      | [range(0; ($f | length) - 2; 3) | select($f[. + 2] == "set" or $f[. + 2] == "true") | $f[.]]')"
+          vendored_count="$(jq 'length' <<< "$vendored")"
+
+          if (( vendored_count > 0 )); then
+            jq --argjson vendored "$vendored" 'map(select(.filename as $name | $vendored | index($name) | not))' \
+              "$REVIEW_DIRECTORY/files.json" > "$REVIEW_DIRECTORY/files.reviewable.json"
+            mv "$REVIEW_DIRECTORY/files.reviewable.json" "$REVIEW_DIRECTORY/files.json"
+
+            # Named rather than counted: nothing compares a vendored file with its upstream, so the
+            # list is what lets an edit that was not a refresh be noticed in the review body.
+            printf '%s vendored files marked linguist-vendored in .gitattributes are not reviewed: they are copied from an upstream repository, and their licence is reviewed in THIRD_PARTY_LICENSES.md. They are %s.\n' \
+              "$vendored_count" "$(jq -r 'join(", ")' <<< "$vendored")" >> "$REVIEW_DIRECTORY/truncation.txt"
+          fi
+
           # The second class, dropped for a reason of its own rather than by widening the one above.
           # EF Core writes every file under `backend/src/Infrastructure/Persistence/Migrations/` —
           # the migration, its `.Designer.cs` twin, and the model snapshot the whole solution shares

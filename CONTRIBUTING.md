@@ -253,7 +253,7 @@ Every file in this repository carries the same three lines, and a new file is no
 | `.yml` and `.yaml` | Three `#` comment lines, first in the file, then a blank line |
 | `.sh` | The same three `#` lines, directly under the shebang, which has to stay first |
 | `deploy/helm/mailfathom/templates/` | A `{{- /* ... */ -}}` comment, so the header stays in the template instead of being rendered into every Kubernetes object the chart applies |
-| A skill's `SKILL.md` | `license: AGPL-3.0-only` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them |
+| A skill's `SKILL.md` | `license: AGPL-3.0-only` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them. A skill vendored from another repository keeps its upstream's `license`, names the upstream author and repository in `metadata` instead, carries the upstream licence beside it as `LICENSE.txt`, and is accepted only while `THIRD_PARTY_LICENSES.md` names that repository; `.agents/skills/README.md` lists which skills those are |
 | `.ts`, `.tsx`, `.js`, `.mjs`, and `.cjs` under `frontend/` | Three `// ` lines, first in the file, then a blank line before the imports |
 | `.css` | One `/* ... */` block holding all three lines, because CSS has no line comment to use instead |
 | `.html` | One `<!-- ... -->` comment, first in the document |
