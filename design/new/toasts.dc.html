@@ -1,0 +1,206 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../files/support.js"></script>
+<script src="design.js"></script>
+<script src="data/toasts.js"></script>
+<script src="logic/toasts.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/toasts.css" />
+</helmet>
+<div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" style="{{ outerStyle }}">
+  <div style="{{ frameStyle }}">
+  <div style="{{ frameScrollStyle }}">
+
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:var(--muted)">MailFathom — system</div>
+        <div style="font-size:27px;font-weight:600;letter-spacing:-0.02em">Toasts</div>
+        <div style="font-size:13.5px;color:var(--muted);max-width:62ch;text-wrap:pretty">The system's fleeting response to what the user just did. Top right corner, gone after {{ secLabel }}, stacked newest first, each with a close button. A toast for a running operation does not vanish on its own — closing it aborts the operation.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">{{ themeIcon }}</span>{{ themeAttr }}</div>
+        <div onClick="{{ clearAll }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">layers_clear</span>Clear the stack</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;background:var(--sub);border:1px solid var(--line);border-radius:16px;padding:18px">
+      <div style="font-size:15px;font-weight:600">A toast is not a notification</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px">
+        <sc-for list="{{ compare }}" as="c" hint-placeholder-count="2">
+          <div style="{{ c.cardStyle }}">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="{{ c.iconWrapStyle }}"><span style="{{ c.iconStyle }}">{{ c.icon }}</span></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+                <div style="font-size:14px;font-weight:600">{{ c.name }}</div>
+                <div style="font-size:11.5px;color:var(--muted)">{{ c.where }}</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px;padding-top:2px">
+              <sc-for list="{{ c.points }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex;gap:8px;font-size:13px;line-height:1.45;color:var(--text2);text-wrap:pretty">
+                  <span style="{{ p.dotStyle }}"></span>{{ p.text }}
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:12px 14px">
+        <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1;color:var(--accent-2);padding-top:1px">swap_horiz</span>
+        <div style="flex:1;min-width:0;font-size:13px;line-height:1.5;color:var(--text2);text-wrap:pretty">Where they meet: <strong style="font-weight:600;color:var(--text)">a new notification also raises a toast</strong> with a “Show” button. The toast disappears after a moment; the notification stays in the list as unread. This page describes toasts only.</div>
+      </div>
+    </div>
+
+    <div style="{{ gridStyle }}">
+      <sc-for list="{{ samples }}" as="s" hint-placeholder-count="6">
+        <div style="display:flex;flex-direction:column;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 16px 15px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="flex:1;font-size:14px;font-weight:600">{{ s.name }}</div>
+            <div style="{{ s.chipStyle }}">{{ s.kind }}</div>
+          </div>
+          <div style="font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty;min-height:38px">{{ s.desc }}</div>
+          <div style="{{ s.demo.style }}">
+            <div style="{{ s.demo.iconWrapStyle }}"><span style="{{ s.demo.iconStyle }}">{{ s.demo.icon }}</span></div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px">
+              <div style="font-size:14.5px;font-weight:600;line-height:1.35;color:var(--text);text-wrap:pretty">{{ s.title }}</div>
+              <sc-if value="{{ s.hasBody }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ s.body }}</div>
+              </sc-if>
+              <sc-if value="{{ s.hasAction }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;color:var(--text)">{{ s.actionLabel }}</div>
+              </sc-if>
+            </div>
+            <div style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">close</div>
+            <sc-if value="{{ s.demo.hasBar }}" hint-placeholder-val="{{ true }}">
+              <div style="{{ s.demo.barStyle }}"></div>
+            </sc-if>
+          </div>
+          <div onClick="{{ s.spawn }}" style="display:flex;align-items:center;justify-content:center;gap:8px;height:36px;border:1px solid var(--accent-line);border-radius:10px;background:var(--accent-soft);font-size:13px;font-weight:600;color:var(--accent-d)" style-hover="cursor:pointer;background:var(--accent);color:var(--onaccent);border-color:var(--accent)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">north_east</span>Show on screen</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 18px 20px">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:15px;font-weight:600">Stack and behaviour</div>
+        <div style="font-size:13px;color:var(--muted);text-wrap:pretty">The newest enters at the top and older ones move down. Above {{ maxLabel }} visible, the oldest is dropped. Hovering a card removes the transparency so the content underneath stays readable.</div>
+      </div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <div onClick="{{ burst }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">stacks</span>Show five at once</div>
+        <div onClick="{{ runTask }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">progress_activity</span>Running operation → success</div>
+        <div onClick="{{ runFail }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">cloud_off</span>Running operation → error</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:2px">
+        <sc-for list="{{ specs }}" as="sp" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;gap:3px;background:var(--sub);border:1px solid var(--line2);border-radius:12px;padding:12px 13px">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">{{ sp.k }}</div>
+            <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ sp.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 18px 20px">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:15px;font-weight:600">Blocking overlay</div>
+        <div style="font-size:13px;color:var(--muted);text-wrap:pretty">For operations that must not be interrupted halfway by a stray click in the background: mailbox migration, bulk change, export. It covers the whole app and does not close on an outside click — only via Cancel, which asks for confirmation.</div>
+      </div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <div onClick="{{ startBlocking }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">hourglass_top</span>Overlay with progress</div>
+        <div onClick="{{ startBlockingIndet }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">autorenew</span>Without known progress</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:2px">
+        <sc-for list="{{ blockSpecs }}" as="bs" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;gap:3px;background:var(--sub);border:1px solid var(--line2);border-radius:12px;padding:12px 13px">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">{{ bs.k }}</div>
+            <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ bs.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="{{ toastWrapStyle }}">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div style="{{ t.style }}" style-hover="opacity:1">
+        <div style="{{ t.iconWrapStyle }}"><span style="{{ t.iconStyle }}">{{ t.icon }}</span></div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px">
+          <div style="font-size:14.5px;font-weight:600;line-height:1.35;color:var(--text);text-wrap:pretty">{{ t.title }}</div>
+          <sc-if value="{{ t.hasBody }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ t.body }}</div>
+          </sc-if>
+          <sc-if value="{{ t.hasAction }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ t.action }}" style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;color:var(--text)" style-hover="cursor:pointer;background:var(--hover)">{{ t.actionLabel }}</div>
+          </sc-if>
+        </div>
+        <div onClick="{{ t.close }}" title="{{ t.closeTitle }}" style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">close</div>
+        <sc-if value="{{ t.hasBar }}" hint-placeholder-val="{{ false }}">
+          <div style="{{ t.barStyle }}"></div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{ blockOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ ovBlockStyle }}">
+      <div style="box-sizing:border-box;width:min(420px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px 22px 22px;box-shadow:0 28px 70px var(--sh-3)">
+        <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:42px;line-height:1;color:var(--accent-2);animation:mfspin 1.2s linear infinite">progress_activity</span>
+        <div style="font-size:17px;font-weight:600;text-align:center;text-wrap:pretty">{{ blockTitle }}</div>
+        <div style="font-size:13.5px;line-height:1.5;color:var(--text2);text-align:center;text-wrap:pretty">{{ blockBody }}</div>
+        <div style="width:100%;height:6px;border-radius:3px;background:var(--hover);overflow:hidden;margin-top:2px">
+          <div style="{{ blockFillStyle }}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">{{ blockPctLabel }}</div>
+        <div onClick="{{ askBlockCancel }}" style="margin-top:5px;display:flex;align-items:center;justify-content:center;height:38px;padding:0 20px;border:1px solid var(--border2);border-radius:10px;font-size:13px;font-weight:600;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">Cancel</div>
+        <div style="font-size:11.5px;color:var(--faint);text-align:center;text-wrap:pretty">Do not close the app — the operation is running.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ blockAskOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ ovAskStyle }}">
+      <div style="box-sizing:border-box;width:min(380px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 20px;box-shadow:0 24px 56px var(--sh-3)">
+        <div style="font-size:16px;font-weight:600">Really abort?</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ blockAskText }}</div>
+        <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:2px">
+          <div onClick="{{ keepBlocking }}" style="font-size:13px;color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:8px 15px" style-hover="cursor:pointer;background:var(--hover)">Continue the operation</div>
+          <div onClick="{{ abortBlocking }}" style="font-size:13px;font-weight:600;color:var(--onaccent);background:var(--err);border-radius:8px;padding:8px 16px" style-hover="cursor:pointer;opacity:0.9">Yes, abort</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ cancelAskOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ ovCancelStyle }}">
+      <div style="box-sizing:border-box;width:min(370px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 20px;box-shadow:0 20px 48px var(--sh-3)">
+        <div style="font-size:16px;font-weight:600">Abort the operation?</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ cancelAskText }}</div>
+        <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:2px">
+          <div onClick="{{ keepTask }}" style="font-size:13px;color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:8px 15px" style-hover="cursor:pointer;background:var(--hover)">Continue</div>
+          <div onClick="{{ abortTaskNow }}" style="font-size:13px;font-weight:600;color:var(--onaccent);background:var(--err);border-radius:8px;padding:8px 16px" style-hover="cursor:pointer;opacity:0.9">Abort operation</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;autoHideMs&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:5000,&quot;min&quot;:2000,&quot;max&quot;:12000,&quot;step&quot;:500,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;maxStack&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:4,&quot;min&quot;:1,&quot;max&quot;:8,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;showProgressBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+const Component = MailFathomDesign.artboards.toasts(DCLogic, React);
+</script>
+</body>
+</html>

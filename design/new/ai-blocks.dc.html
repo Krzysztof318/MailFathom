@@ -1,0 +1,409 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../files/support.js"></script>
+<script src="design.js"></script>
+<script src="data/ai-blocks.js"></script>
+<script src="logic/ai-blocks.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/ai-blocks.css" />
+</helmet>
+<div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" style="{{ outerStyle }}">
+  <div style="{{ frameStyle }}">
+
+    <div style="{{ headerRowStyle }}">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="{{ pageTitleStyle }}">AI blocks</div>
+        <div style="font-size:13px;color:var(--muted)">One catalogue for both surfaces — Discover renders these read-only, the Agent renders the same blocks with controls</div>
+      </div>
+      <div style="{{ badgeRowStyle }}">
+        <div style="{{ chipStyle }}">theme: {{ themeAttr }}</div>
+        <div style="{{ chipStyle }}">layout: {{ layoutLabel }}</div>
+        <div style="{{ stanChipStyle }}">state: {{ stanLabel }}</div>
+      </div>
+    </div>
+
+    <div style="{{ mainGridStyle }}">
+      <div style="{{ resultColStyle }}">
+
+        <div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ schemaBannerText }}</div>
+
+        <div style="{{ crossHeadingStyle }}">Shared — Discover and the Agent draw these identically</div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">ANSWER</div><div style="{{ metaStyle }}">{{ answerMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <div style="font-size:11px;background:var(--ok-soft);color:var(--ok-text);border-radius:11px;padding:3px 9px">high confidence</div>
+            </div>
+            <div style="font-size:16px;line-height:1.55;text-wrap:pretty">
+              <sc-for list="{{ answerParts }}" as="p" hint-placeholder-count="2">
+                <span>{{ p.text }}<span role="button" tabIndex="0" aria-label="{{ p.ariaLabel }}" style="font-size:11px;color:var(--accent-d);background:var(--accent-soft);border-radius:4px;padding:2px 7px;margin-left:3px;display:inline-flex;cursor:pointer" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ p.cite }}</span></span>
+              </sc-for>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ answerPartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">forum</span><div style="{{ emptyTextStyle }}">{{ answerEmptyText }}</div></div>
+          </sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ answerErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ answerErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div>
+          </sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div>
+          </sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">EVIDENCE</div><div style="{{ metaStyle }}">{{ evidenceMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ evidenceItems }}" as="e" hint-placeholder-count="3">
+              <div role="button" tabIndex="0" aria-label="{{ e.ariaLabel }}" style="display:flex;flex-direction:column;gap:5px;border-bottom:1px solid var(--line2);padding:10px 0;cursor:pointer" style-hover="background:var(--hover)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:13.5px;font-weight:600">{{ e.source }}</div><span title="{{ e.badgeTitle }}" style="{{ e.badgeStyle }}"><span style="{{ e.badgeIconStyle }}">{{ e.badgeIcon }}</span>{{ e.badgeLabel }}</span><div style="{{ e.verdictChipStyle }}"><span style="{{ e.verdictIconStyle }}">{{ e.verdictIcon }}</span>{{ e.verdictLabel }}</div></div>
+                <div style="font-size:13px;color:var(--text2);text-wrap:pretty">{{ e.snippet }}</div>
+                <div style="display:flex;gap:10px;font-size:11.5px;color:var(--faint)"><span>relevance {{ e.relevance }}</span><span>{{ e.freshness }}</span></div>
+              </div>
+            </sc-for>
+            <div role="button" tabIndex="0" aria-label="{{ evidencePrivate.ariaLabel }}" style="display:flex;flex-direction:column;gap:5px;padding:10px 0;cursor:pointer" style-hover="background:var(--hover)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:13.5px;font-weight:600">{{ evidencePrivate.source }}</div><span title="{{ evidencePrivate.badgeTitle }}" style="{{ evidencePrivate.badgeStyle }}"><span style="{{ evidencePrivate.badgeIconStyle }}">{{ evidencePrivate.badgeIcon }}</span>{{ evidencePrivate.badgeLabel }}</span><div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:11px;padding:3px 9px;display:flex;align-items:center;gap:4px"><span style="{{ noteIconStyle }}">lock</span>private source</div></div>
+              <div style="font-size:13px;color:var(--faint);font-style:italic">Content not available for review — the conclusion drawn from this source is kept in the result.</div>
+              <div style="display:flex;gap:10px;font-size:11.5px;color:var(--faint)"><span>relevance {{ evidencePrivate.relevance }}</span><span>{{ evidencePrivate.freshness }}</span></div>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ evidencePartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">find_in_page</span><div style="{{ emptyTextStyle }}">{{ evidenceEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ evidenceErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ evidenceErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">TIMELINE</div><div style="{{ metaStyle }}">{{ timelineMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ timelineRowStyle }}">
+              <sc-for list="{{ timelineItems }}" as="t" hint-placeholder-count="4">
+                <div role="button" tabIndex="0" aria-label="{{ t.ariaLabel }}" style="{{ tlItemStyle }}" style-hover="border-top-color:var(--accent);cursor:pointer" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                  <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:12px;color:var(--muted)">{{ t.date }}</div>
+                  <div style="font-size:14px;font-weight:600">{{ t.title }}</div>
+                  <div style="font-size:12px;color:var(--muted)">{{ t.detail }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ timelinePartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">timeline</span><div style="{{ emptyTextStyle }}">{{ timelineEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ timelineErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ timelineErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">FACT TABLE</div><div style="{{ metaStyle }}">{{ tableMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="overflow-x:auto">
+              <div style="{{ tableGridStyle }}">
+                <div style="font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 10px 8px 0">Version</div>
+                <div style="font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 10px 8px 0">Price</div>
+                <div style="font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 10px 8px 0">SLA</div>
+                <div style="font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 0 8px 0">Indexation</div>
+                <sc-for list="{{ tableRows }}" as="r" hint-placeholder-count="4">
+                  <div style="{{ r.version.cellStyle }}"><span>{{ r.version.value }}</span><sc-if value="{{ r.version.hasCite }}" hint-placeholder-val="{{ false }}"><span role="button" tabIndex="0" aria-label="{{ r.version.ariaLabel }}" style="{{ citeChipStyle }}" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ r.version.cite }}</span></sc-if></div>
+                  <div style="{{ r.price.cellStyle }}"><span>{{ r.price.value }}</span><sc-if value="{{ r.price.hasCite }}" hint-placeholder-val="{{ false }}"><span role="button" tabIndex="0" aria-label="{{ r.price.ariaLabel }}" style="{{ citeChipStyle }}" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ r.price.cite }}</span></sc-if><sc-if value="{{ r.price.hasVerdict }}" hint-placeholder-val="{{ false }}"><span style="{{ r.price.verdictChipStyle }}"><span style="{{ r.price.verdictIconStyle }}">{{ r.price.verdictIcon }}</span>{{ r.price.verdictLabel }}</span></sc-if></div>
+                  <div style="{{ r.sla.cellStyle }}"><span>{{ r.sla.value }}</span><sc-if value="{{ r.sla.hasCite }}" hint-placeholder-val="{{ false }}"><span role="button" tabIndex="0" aria-label="{{ r.sla.ariaLabel }}" style="{{ citeChipStyle }}" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ r.sla.cite }}</span></sc-if><sc-if value="{{ r.sla.hasVerdict }}" hint-placeholder-val="{{ false }}"><span style="{{ r.sla.verdictChipStyle }}"><span style="{{ r.sla.verdictIconStyle }}">{{ r.sla.verdictIcon }}</span>{{ r.sla.verdictLabel }}</span></sc-if></div>
+                  <div style="{{ r.index.cellStyle }}"><span>{{ r.index.value }}</span><sc-if value="{{ r.index.hasCite }}" hint-placeholder-val="{{ false }}"><span role="button" tabIndex="0" aria-label="{{ r.index.ariaLabel }}" style="{{ citeChipStyle }}" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ r.index.cite }}</span></sc-if><sc-if value="{{ r.index.hasVerdict }}" hint-placeholder-val="{{ false }}"><span style="{{ r.index.verdictChipStyle }}"><span style="{{ r.index.verdictIconStyle }}">{{ r.index.verdictIcon }}</span>{{ r.index.verdictLabel }}</span></sc-if></div>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ tablePartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">table_chart</span><div style="{{ emptyTextStyle }}">{{ tableEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ tableErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ tableErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">PEOPLE</div><div style="{{ metaStyle }}">{{ peopleMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ peopleItems }}" as="p" hint-placeholder-count="3">
+              <div role="button" tabIndex="0" aria-label="{{ p.ariaLabel }}" style="display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line2);padding:10px 0;cursor:pointer" style-hover="background:var(--hover)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                <div style="width:32px;height:32px;flex:0 0 32px;border-radius:50%;background:var(--accent-soft);color:var(--accent-d);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ p.initials }}</div>
+                <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><div style="font-size:14px;font-weight:600">{{ p.name }}</div><div style="font-size:12px;color:var(--muted)">{{ p.role }}</div></div>
+                <div style="margin-left:auto;font-family:'Instrument Sans',system-ui,sans-serif;font-size:12px;color:var(--faint);white-space:nowrap">{{ p.last }}</div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ peoplePartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">group_off</span><div style="{{ emptyTextStyle }}">{{ peopleEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ peopleErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ peopleErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">THREAD STATE</div><div style="{{ metaStyle }}">{{ threadMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:-6px;flex-wrap:wrap;margin-bottom:-2px">
+              <sc-for list="{{ threadParticipants }}" as="pt" hint-placeholder-count="2">
+                <div title="{{ pt.name }}" style="width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:var(--accent-soft);color:var(--accent-d);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;border:2px solid var(--panel);margin-right:-7px">{{ pt.initials }}</div>
+              </sc-for>
+              <div style="margin-left:14px;font-size:12px;color:var(--muted)">{{ threadParticipantsLabel }}</div>
+            </div>
+            <div style="{{ threadColsStyle }}">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">AGREED</div>
+                <sc-for list="{{ threadAgreed }}" as="a" hint-placeholder-count="2"><div style="font-size:13px;color:var(--text2)">{{ a.text }}</div></sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">OPEN QUESTIONS</div>
+                <sc-for list="{{ threadOpenQuestions }}" as="q" hint-placeholder-count="1"><div style="font-size:13px;color:var(--text2)">{{ q.text }}</div></sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">COMMITMENTS</div>
+                <sc-for list="{{ threadCommitments }}" as="c" hint-placeholder-count="2"><div style="font-size:13px;color:var(--text2)"><strong>{{ c.who }}</strong> — {{ c.what }} <span style="color:var(--faint)">· {{ c.when }}</span></div></sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ threadPartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">forum</span><div style="{{ emptyTextStyle }}">{{ threadEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ threadErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ threadErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">ATTACHMENTS</div><div style="{{ metaStyle }}">{{ galleryMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ galleryGridStyle }}">
+              <sc-for list="{{ galleryItems }}" as="g" hint-placeholder-count="3">
+                <div role="button" tabIndex="0" aria-label="{{ g.ariaLabel }}" style="display:flex;flex-direction:column;gap:7px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:13px 14px;cursor:pointer" style-hover="border-color:var(--accent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--muted)">{{ g.type }}</div><div style="{{ g.availStyle }}">{{ g.avail }}</div></div>
+                  <div style="font-size:14px;font-weight:600;line-height:1.3">{{ g.name }}</div>
+                  <div style="font-size:12px;color:var(--muted)">{{ g.meta }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ galleryPartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">attach_file_off</span><div style="{{ emptyTextStyle }}">{{ galleryEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ galleryErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ galleryErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">DRAFT</div><div style="{{ metaStyle }}">{{ draftMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:11px;padding:3px 9px;align-self:flex-start">{{ draftStatusLabel }}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:13px 15px">
+              <div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--muted);flex:0 0 56px">To:</span><span>{{ draftTo }}</span></div>
+              <div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--muted);flex:0 0 56px">Subject:</span><span style="font-weight:600">{{ draftSubject }}</span></div>
+              <div style="font-size:13.5px;line-height:1.55;color:var(--text2);text-wrap:pretty;padding-top:2px">{{ draftBody }}</div>
+              <div style="display:flex;gap:6px;padding-top:2px">
+                <sc-for list="{{ draftSources }}" as="d" hint-placeholder-count="2"><span role="button" tabIndex="0" aria-label="{{ d.ariaLabel }}" style="font-size:11px;color:var(--accent-d);background:var(--accent-soft);border-radius:4px;padding:2px 7px;cursor:pointer" style-hover="background:var(--accent-2);color:var(--onaccent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ d.n }}</span></sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ draftPartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">edit_note</span><div style="{{ emptyTextStyle }}">{{ draftEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ draftErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ draftErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ cardStyle }}">
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">SUGGESTED ACTION</div><div style="{{ metaStyle }}">{{ actionMeta }}</div></div>
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+          </sc-if>
+          <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ actionRowStyle }}">
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.06em;color:var(--onaccent);background:var(--accent);border-radius:4px;padding:3px 7px">AI</span>
+              <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                <div style="font-size:14px;font-weight:600">{{ actionTitle }}</div>
+                <div style="font-size:13px;color:var(--text2)">{{ actionReason }}</div>
+                <div style="font-size:12.5px;color:var(--muted)">Effect: {{ actionEffect }}</div>
+              </div>
+              <div style="{{ actionConfirmStyle }}">{{ actionConfirmLabel }}</div>
+            </div>
+            <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ actionPartialNote }}</div></sc-if>
+          </sc-if>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">task_alt</span><div style="{{ emptyTextStyle }}">{{ actionEmptyText }}</div></div></sc-if>
+          <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ actionErrorText }}</div><div style="{{ emptyReasonStyle }}">{{ actionErrorReason }}</div><div style="{{ retryBtnStyle }}">Try again</div></div></sc-if>
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}"><div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div></sc-if>
+        </div>
+
+        <div style="{{ crossHeadingStyle }}">Cross-cutting states</div>
+        <div style="{{ crossRowStyle }}">
+          <div style="{{ cardStyle }};flex:1">
+            <div style="{{ headStyle }}"><div style="{{ labelStyle }}">UNKNOWN BLOCK</div><div style="{{ metaStyle }}">type: {{ unknownBlockName }}</div></div>
+            <div style="display:flex;gap:11px;align-items:flex-start">
+              <span style="{{ emptyIconStyle }};flex:0 0 auto">extension_off</span>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-size:13.5px;color:var(--text2);text-wrap:pretty">This client does not recognise the block type “{{ unknownBlockName }}”. The block was skipped — the rest of the result rendered normally.</div>
+                <div style="{{ emptyReasonStyle }}">Updating the app may unlock this block type.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="{{ evidenceColStyle }}">
+        <div style="{{ legendCardStyle }}">
+          <div style="font-size:13px;font-weight:600">Citations and source honesty</div>
+          <div style="font-size:12px;color:var(--muted);text-wrap:pretty">A citation is always an activatable element with its own name (aria-label) — never a bare superscript.</div>
+          <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px;border-top:1px solid var(--line2)">
+            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">CITATION CHIP STATE</div>
+            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+              <sc-for list="{{ citationSamples }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                  <span style="{{ c.style }}">1</span>
+                  <div style="font-size:11px;color:var(--faint)">{{ c.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px;border-top:1px solid var(--line2)">
+            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">VERDICT ON A FACT</div>
+            <sc-for list="{{ verdictLegend }}" as="v" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:9px">
+                <div style="{{ v.chipStyle }}"><span style="{{ v.iconStyle }}">{{ v.icon }}</span>{{ v.label }}</div>
+                <div style="font-size:12px;color:var(--muted)">{{ v.desc }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--line2)">
+            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">PRIVATE SOURCE</div>
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <span style="{{ noteIconStyle }};font-size:16px">lock</span>
+              <div style="font-size:12.5px;color:var(--text2);text-wrap:pretty">The source content is not visible, but the conclusion drawn from it stays in the result. This is not an error.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="{{ propSectionStyle }}">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="{{ crossHeadingStyle }}">Proposal blocks — the Agent's three phases</div>
+        <div style="font-size:12.5px;color:var(--muted);text-wrap:pretty;max-width:760px">In Discover these read as a static “needs confirmation” badge. In a conversation the same blocks carry real controls, so approving, sending and scheduling happen where the person is reading. EVENT PROPOSAL and TASK PROPOSAL exist only where something has to be seen and corrected before it is approved — everything else stays a one-line SUGGESTED ACTION.</div>
+      </div>
+      <div style="{{ propGridStyle }}">
+        <sc-for list="{{ propCards }}" as="pc" hint-placeholder-count="4">
+          <div style="{{ pc.cardStyle }}">
+            <div style="{{ headStyle }}">
+              <div style="{{ labelStyle }}">{{ pc.label }}</div>
+              <div style="{{ pc.phaseChipStyle }}"><span style="{{ pc.phaseIconStyle }}">{{ pc.phaseIcon }}</span>{{ pc.phaseLabel }}</div>
+              <div style="{{ metaStyle }}">{{ pc.meta }}</div>
+            </div>
+
+            <sc-if value="{{ pc.isDeclined }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ pc.declinedStyle }}">
+                <span style="{{ pc.declinedIconStyle }}">block</span>
+                <span style="{{ pc.strikeStyle }}">{{ pc.title }}</span>
+                <span>Declined — nothing was done</span>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ pc.showBody }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+              </sc-if>
+              <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
+                <div style="{{ pc.titleStyle }}">{{ pc.title }}</div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <sc-for list="{{ pc.fields }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex;gap:10px;align-items:baseline"><div style="{{ pc.kStyle }}">{{ f.k }}</div><div style="{{ pc.vStyle }}">{{ f.v }}</div></div>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ pc.hasBody }}" hint-placeholder-val="{{ false }}">
+                  <sc-for list="{{ pc.paras }}" as="p" hint-placeholder-count="3"><div style="{{ pc.paraStyle }}">{{ p.t }}</div></sc-for>
+                </sc-if>
+                <sc-if value="{{ pc.hasConflict }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.conflictStyle }}"><span style="{{ pc.conflictIconStyle }}">warning</span>{{ pc.conflict }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasNoConflictNote }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.okStyle }}"><span style="{{ pc.okIconStyle }}">event_available</span>{{ pc.noConflictNote }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasReason }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.reasonStyle }}">{{ pc.reason }}</div>
+                </sc-if>
+                <sc-if value="{{ pc.hasEffect }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ pc.effectStyle }}"><span style="{{ pc.effectIconStyle }}">bolt</span>Effect: {{ pc.effect }}</div>
+                </sc-if>
+                <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ pc.partialNote }}</div>
+                </sc-if>
+              </sc-if>
+              <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ pc.emptyIcon }}</span><div style="{{ emptyTextStyle }}">{{ pc.emptyText }}</div></div>
+              </sc-if>
+              <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ errorIconStyle }}">error</span><div style="{{ emptyTextStyle }}">{{ pc.errorText }}</div><div style="{{ emptyReasonStyle }}">{{ pc.errorReason }}</div><div role="button" tabIndex="0" aria-label="{{ pc.retryAria }}" style="{{ retryBtnStyle }}" style-hover="cursor:pointer;opacity:0.9" style-focus="outline:2px solid var(--accent);outline-offset:2px">Try again</div></div>
+              </sc-if>
+              <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ emptyBodyStyle }}"><span style="{{ emptyIconStyle }}">{{ offlineIcon }}</span><div style="{{ emptyTextStyle }}">{{ offlineText }}</div><div style="{{ retryBtnStyle }}">{{ offlineActionLabel }}</div></div>
+              </sc-if>
+
+              <sc-if value="{{ pc.hasResult }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.resultStyle }}"><span style="{{ pc.resultIconStyle }}">{{ pc.resultIcon }}</span>{{ pc.result }}</div>
+              </sc-if>
+              <sc-if value="{{ pc.hasControls }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.controlsStyle }}">
+                  <sc-for list="{{ pc.controls }}" as="cn" hint-placeholder-count="2">
+                    <div role="button" tabIndex="0" aria-label="{{ cn.aria }}" style="{{ cn.style }}" style-hover="cursor:pointer;opacity:0.9" style-focus="outline:2px solid var(--accent);outline-offset:2px">{{ cn.label }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ pc.hasNav }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ pc.navStyle }}">
+                  <sc-for list="{{ pc.nav }}" as="nv" hint-placeholder-count="1">
+                    <div role="button" tabIndex="0" aria-label="{{ nv.aria }}" style="{{ nv.style }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-d)" style-focus="outline:2px solid var(--accent);outline-offset:2px"><span style="{{ nv.iconStyle }}">{{ nv.icon }}</span>{{ nv.label }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ready&quot;,&quot;loading&quot;,&quot;partial&quot;,&quot;empty&quot;,&quot;error&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;ready&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Block state&quot;}}">
+const Component = MailFathomDesign.artboards.aiBlocks(DCLogic, React);
+</script>
+</body>
+</html>

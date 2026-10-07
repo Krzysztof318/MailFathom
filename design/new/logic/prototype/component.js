@@ -1,0 +1,4950 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+MailFathomDesign.artboards.prototype = (DCLogic, React) => {
+  const {
+    me: { name: ME, address: MY_MAIL },
+    app: { version: APP_VERSION, build: APP_BUILD },
+    avatars: AVATARS, contacts: CONTACTS, contactInsights: CONTACT_AI,
+    threads: THREADS, earlierMessages, threadMailBodies, threadStateSources: STATE_SRC, replyTo: HDR_REPLY_TO, cc: HDR_CC,
+    mailBodies, documentPreviews, composeDrafts: COMPOSE_DRAFTS, newMessageTo: NEW_MESSAGE_TO,
+    accounts: ACCOUNTS, unifiedAccounts: UNIFIED_ACCOUNTS, mailboxes: MAILBOXES, defaultReplyTo: DEFAULT_REPLY_TO, mailAccounts: MAIL_ACCOUNTS,
+    home: HOME, savedAnswers: SAVED_ANSWERS, suggestedQuestions: SUGGESTED_QUESTIONS, sampleText: SAMPLE_TEXT,
+    calendarBriefing: CALENDAR_BRIEFING, eventFromThread: EVENT_FROM_THREAD, taskCapacity: TASK_CAPACITY, newCase: NEW_CASE,
+    starterChips: STARTER_CHIPS, anotherTimeReply: ANOTHER_TIME, agentScheduledEvents: AGENT_SCHEDULED,
+    plans: PLANS, cases: CASES,
+    calendarDays: CAL_DAYS, proposedEvents: CAL_PROPOSED, focusBlocks: CAL_FOCUS, weekdayDates: DOW_DAY, tasks: TASKS,
+    timelineToday: BK_TIMELINE_TODAY, draftContoso: BK_DRAFT_CONTOSO, demoConversationId: DEMO_CONV_ID, demoScript: DEMO_SCRIPT,
+    nextDefault: NEXT_DEFAULT, seedConversations: SEED_CONVS, agentReplies: AGENT_REPLIES, agentFallback: AGENT_FALLBACK,
+    agentDraftHtml: AGENT_DRAFT_HTML,
+    notifications: NOTIFS, incomingNotifications: INCOMING, demoBatches: DEMO_BATCHES,
+  } = MailFathomDesign.data;
+  const { mdPlain, mdView, MDTXT } = MailFathomDesign.markdown;
+  const { HTML_SHELL, embedHtml, htmlFallback } = MailFathomDesign.mailHtml;
+
+  /* CLIENT STATES — INVENTORY (drawn in “client-states.dc.html”).
+     Every state below is revealed there by the property state="<id>", at layout = telefon | fold | tablet | desktop | all
+     and theme = light | dark | both; clicking a ledger row at the top of that file opens the same artboards.
+     Tokens, notices, chips, buttons, skeleton shimmer and toast are this file's; the only new component is the
+     radio list in “Kind of folder” (2.4a).
+     DISCOVER
+       d_refusal   1.1  question refused before a run — one line under the field: signed out, not permitted (neutral);
+                        unavailable, unreadable answer (warning + Try again). The question stays in the field.
+       d_cancel    1.2a cancelling (spinner, disabled “Cancelling…”) and cancel failed (warning, “Try stopping again”).
+       d_ended     1.2b run ended — card takes the running bar's slot above arrived blocks; answer gains “cut short”.
+                        Tones: finished (no card) · stopped by you · limit reached (period allowance with when-line,
+                        run allowance) · try again (timed out, temporarily unavailable) · could not finish (failed,
+                        gone, stopped) · not possible here (unavailable, retrieval refused).
+       d_finished  1.2c completed — no card; “Answered by {endpoint} ({model})” and spend go in the run line.
+       d_coming    1.3a “still coming” dashed card trailing blocks: loading (shimmer), error, offline (+ Retry only here).
+       d_empty     1.3b nothing composed (no action) · answer from a newer version · unknown block (dashed neutral).
+       ev_opening  1.4a inspector opening — header from the citation, shimmer body, “Opening the source…”.
+       ev_failed   1.4b read failures: unavailable, unreadable (warning); signed out, missing (neutral).
+       ev_private  1.4c private source — lock badge + administrator remedy. A “not permitted” read failure renders this.
+       ev_outdated 1.4d outdated stored copy — warning, then the quoted passage in a plain box; Open in mail stays.
+       ev_kinds    1.4e whole-message citation · attachment file row · not openable from the client · text in an image.
+       d_asked     1.5  “Asked before” chips (question + scope) under the scope chips, idle only; “Forget these”.
+                        savedAnswers.a and .fresh are not drawn — recall re-asks instead of replaying.
+     MAIL
+       m_verdict   2.1  sender verdict under the sender line: warning box (authenticated by another domain / nothing
+                        authenticated), healthy as one quiet line.
+       m_more      2.2a thread paging at its end: Read more · reading more · “That is the whole of this conversation.”
+       m_partial   2.2b partial failure in place of the missing messages; head notes (more people, more messages).
+       m_pane      2.2c whole pane: failed, offline, nothing you are allowed to see — “Nothing open” layout.
+       m_folders   2.3a folder column: skeleton (text kept for screen readers), failed, offline (dimmed last tree),
+                        no account.
+       m_list      2.3b list: empty folder, nothing matches (+ Clear filters), partial failure strip, empty while failing.
+       m_kind      2.4a New folder with “Kind of folder” first; a role hides name + inside and shows the hint.
+       m_roles     2.4b tree roles Flagged (flag), Important (label_important), All mail (all_inbox), Outbox (outbox).
+       m_search    2.5  described search: filter chips, “What this search is ranked by” chips, unused-phrase note,
+                        “Reading what you wrote…”, words-only placeholder.
+       m_pending   2.6  pending changes in the connection summary: indicator states, panel (sheet on phone) with
+                        needs-decision, failed, did not reach deployment, pending count; tracking stopped; late toast.
+     TASKS · CALENDAR · PEOPLE
+       c_edit      3.1  event edited in place: All day, Starts / Ends, Save disabled with reason.
+       t_layout    3.2  Lay out today: waiting, offer (Add to calendar / Leave it), nothing left, allowance spent,
+                        unavailable (button hidden).
+       t_proposed  3.3a proposed task (AI tag, Accept, Dismiss task), “No day” group, status line, partly refused.
+       t_states    3.3b empty list, everything done, reading, reading more, failed.
+       p_none      3.4a “Open somebody to read their page.” (fold and wider); status line on a person's page.
+       p_states    3.4b empty address books, reading, failed, conversations reading / failed / none.
+     AGENT
+       a_steer     4.1  steering note during a run: Send reads “Steer”, tag “Joins at the next turn” → “Taken in”.
+       a_failed    4.2a failed answer (error notice + Try again); not-sent line under the field, five reasons.
+       a_read      4.2b conversation read failure (five reasons), history reading / failed / empty, refusal toast,
+                        “Delete 3 conversations?”. */
+
+  /* Shared shimmer for every loading skeleton. */
+  const SHIM = "border-radius:5px;background:linear-gradient(90deg,var(--line) 0%,var(--line2) 42%,var(--line) 78%);background-size:260% 100%;animation:mfshim 1.05s linear infinite;";
+
+  function srcTypeInfo(type) {
+    const M = {
+      mail: { icon: "mail", label: "message" },
+      attachment: { icon: "attach_file", label: "attachment" },
+      calendar: { icon: "calendar_month", label: "event" },
+      contact: { icon: "person", label: "contact" },
+      multi: { icon: "layers", label: "multiple sources" },
+    };
+    return M[type] || M.mail;
+  }
+  const SRC_BADGE_STYLE = "display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);background:var(--rail);border-radius:9px;padding:2px 8px;white-space:nowrap;margin-left:auto;cursor:default";
+  const SRC_BADGE_ICON_STYLE = "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:13px;line-height:1";
+  function srcBadge(item) {
+    const types = item.srcTypes && item.srcTypes.length > 1 ? item.srcTypes : [item.srcType || "mail"];
+    if (types.length > 1) {
+      return { icon: "layers", label: "multiple sources", title: types.map(t => srcTypeInfo(t).label).join(", ") };
+    }
+    const si = srcTypeInfo(types[0]);
+    return { icon: si.icon, label: si.label, title: si.label };
+  }
+
+  const DEFAULT_UNREAD = {};
+  THREADS.slice(0, 5).forEach(t => { DEFAULT_UNREAD[t.id] = true; });
+
+  const FRAMES = { tablet: { w: 1024, h: 768 }, fold: { w: 884, h: 832 }, phone: { w: 390, h: 844 } };
+
+  /* NOTIFICATION CENTRE GESTURES (phone) — one place for the numbers the implementation reads.
+     commitFrac  0.32  distance as a fraction of panel height above which the gesture commits
+     commitVel   0.5   px/ms — velocity at which a short flick commits regardless of distance
+     springMs    260   spring-back when neither distance nor velocity was met
+     springEase        the curve of that spring-back
+     barSlop     12    px upward after which the nav bar hands the gesture to the panel (losing its own touch)
+     rowSlop     10    px after which a row hands over the gesture and cancels its long-press */
+  const NG = { commitFrac: 0.32, commitVel: 0.5, springMs: 260, springEase: "cubic-bezier(.32,.72,0,1)", barSlop: 12, rowSlop: 10 };
+
+  const FONT = "display:flex;height:100vh;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;font-size:15px";
+
+  const avatarOf = (name) => AVATARS[name] || "";
+
+  const initialsOf = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  const lowerFirst = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+  const segStyle = (on) => "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;white-space:nowrap;" + (on ? "background:var(--accent);color:var(--onaccent)" : "color:var(--muted)");
+
+  const M = (from, when, paras, atts, html) => ({ from, when, initials: initialsOf(from), mine: from === ME, paras, atts: atts || [], html: html || "" });
+
+  /* The originals wrapped in the document shell they arrive in, and the earlier messages built as the newest one is. */
+  const MAIL_HTML = {};
+  Object.keys(mailBodies).forEach(k => { MAIL_HTML[k] = HTML_SHELL(mailBodies[k].title, mailBodies[k].html); });
+  const THREAD_HTML = {};
+  Object.keys(threadMailBodies).forEach(t => { THREAD_HTML[t] = MAIL_HTML[threadMailBodies[t]]; });
+  const HERO_MSGS = {};
+  Object.keys(earlierMessages).forEach(t => {
+    HERO_MSGS[t] = earlierMessages[t].map(m => M(m.from, m.when, m.paras, m.attachments, m.html && MAIL_HTML[m.html]));
+  });
+
+  const msgsFor = (t) => {
+    const when = (t.meta || "").split(" · ")[1] || "";
+    const last = M(t.from || "Sender", when, t.body || [], t.attachments || [], THREAD_HTML[t.id]);
+    const hero = HERO_MSGS[t.id];
+    if (hero) return hero.concat([last]);
+    const count = parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10);
+    if (count < 2) return [last];
+    const s1 = ((t.state || [])[0] || {}).value;
+    const s2 = ((t.state || [])[1] || {}).value;
+    const prior = [M(t.from || "Sender", "earlier", [{ text: "Following up on what we agreed earlier: " + lowerFirst(s1 || "the thread topic") + "." }])];
+    if (s2 && s2 !== "None") prior.push(M(ME, "earlier", [{ text: "Thank you. Still open: " + lowerFirst(s2) + "." }]));
+    return prior.concat([last]);
+  };
+
+  const docContent = (d) => {
+    if (!d) return [];
+    const n = d.name || "";
+    if (n.toLowerCase().indexOf("addendum") >= 0) return documentPreviews.addendum;
+    if (d.type === "XLSX") return [{ s: true, text: (n || "SPREADSHEET").toUpperCase() }].concat(documentPreviews.spreadsheet);
+    return [
+      { s: true, text: (d.type || "DOCUMENT") + " · " + (d.size || "") },
+      { h: true, text: n.replace(/\.[a-z]+$/i, "") },
+    ].concat(documentPreviews.other);
+  };
+
+  const REM_TIMED = [0, 5, 15, 30, 60, 1440];
+  const REM_DATED = [0, 60, 240, 1440, 2880];
+  const REM_DEFAULT = [15];
+  const remLabel = (m, zero) => {
+    if (m === 0) return zero || "at the time";
+    if (m < 60) return m + " min before";
+    if (m < 1440) { const h = m / 60; return h + (h === 1 ? " hour before" : " hours before"); }
+    const d = m / 1440;
+    return d + (d === 1 ? " day before" : " days before");
+  };
+
+  /* COLLECTED CONTACTS — built automatically from the headers of received mail (senders not in the address book).
+     In the real app this list is produced while indexing the mailbox and is not synced to the server
+     until the user moves a contact into their own. */
+  const collectFromMail = (known) => {
+    const map = {};
+    THREADS.forEach(t => {
+      if (known.indexOf(t.from) >= 0) return;
+      const meta = t.meta || "";
+      const mail = (meta.match(/[\w.+-]+@[\w.-]+/) || [""])[0];
+      const when = meta.split(" · ")[1] || t.time;
+      if (!map[t.from]) map[t.from] = {
+        id: "auto-" + t.id, name: t.from, role: "Collected from mail", org: t.org || (mail ? mail.split("@")[1] : "—"),
+        mail: mail || "—", last: when, owed: "—", cases: "—", collected: true, msgs: 0,
+        threads: [], docs: [],
+      };
+      const c = map[t.from];
+      c.msgs += parseInt((meta.match(/thread: (\d+)/) || [])[1] || "1", 10);
+      c.threads.push({ id: t.id, label: t.subject, meta: (meta.split("thread: ")[1] || "") });
+      (t.attachments || []).forEach(a => c.docs.push(a));
+    });
+    return Object.keys(map).map(k => {
+      const c = map[k];
+      c.note = "Contact created automatically from received mail — " + c.msgs + (c.msgs === 1 ? " message" : " messages") +
+        " across " + c.threads.length + (c.threads.length === 1 ? " thread" : " threads") + ". Not in the address book; add to your own to fill in role and notes.";
+      return c;
+    });
+  };
+
+  const parseEventPrompt = (raw) => {
+    const txt = (raw || "").trim();
+    const low = txt.toLowerCase();
+    let day = "";
+    Object.keys(DOW_DAY).forEach(k => { if (!day && low.indexOf(k) >= 0) day = DOW_DAY[k]; });
+    const dm = low.match(/\b(\d{1,2})[.\s]?(?:aug|august|08)\b/);
+    if (dm) day = dm[1];
+    const tm = low.match(/\b(\d{1,2})[:.](\d{2})\b/) || low.match(/\b(?:at|after|by)\s+(\d{1,2})\b/);
+    const time = tm ? (tm[1].length < 2 ? "0" + tm[1] : tm[1]) + ":" + (tm[2] || "00") : "";
+    const dur = low.match(/\b(\d{2,3})\s*(?:min|minutes?)/) || low.match(/\b(\d)\s*(?:h|hrs?|hours?)/);
+    const who = txt.match(/with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+    let title = txt
+      .replace(/\bon\s+\w+day\b/gi, " ")
+      .replace(/\b(at|after|by)\s+\d{1,2}([:.]\d{2})?(am|pm)?\b/gi, " ")
+      .replace(/\b\d{1,3}\s*(min|minutes?|h|hrs?|hours?)\b/gi, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/[,;]\s*$/, "")
+      .trim();
+    if (!title) title = "New event";
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    const chips = [];
+    chips.push(day ? day + ".08" : "28.08 (default)");
+    chips.push(time || "12:00 (default)");
+    if (dur) chips.push(dur[0].replace(/\s+/g, " "));
+    if (who) chips.push("attendee: " + who[1]);
+    if (low.indexOf("addendum") >= 0 || low.indexOf("contoso") >= 0) chips.push("thread: Contract addendum");
+    return { title, day: day || "28", time: time || "12:00", chips };
+  };
+
+  /* MESSAGE ADDRESS HEADERS — in a real mailbox these come from the server (From / Reply-To / To / Cc).
+     Here addresses are derived from the contact book, while Reply-To and CC are thread data, because only
+     some correspondence carries them — which is exactly why expanding has to be optional. */
+  const slugMail = (name) => {
+    const p = (name || "").toLowerCase().replace(/ł/g, "l").replace(/ą/g, "a").replace(/ć/g, "c").replace(/ę/g, "e")
+      .replace(/ń/g, "n").replace(/ó/g, "o").replace(/ś/g, "s").replace(/[żź]/g, "z").split(/\s+/).filter(Boolean);
+    if (!p.length) return "";
+    return (p.length > 1 ? p[0][0] + "." + p[p.length - 1] : p[0]) + "@company.example";
+  };
+  const addrOf = (name) => {
+    if (name === ME) return MY_MAIL;
+    const c = CONTACTS.filter(x => x.name === name)[0];
+    if (c && c.mail && c.mail !== "—") return c.mail;
+    const t = THREADS.filter(x => x.from === name)[0];
+    const fromMeta = t && ((t.meta || "").match(/[\w.+-]+@[\w.-]+/) || [])[0];
+    return fromMeta || slugMail(name);
+  };
+  const fullAddr = (name) => name === addrOf(name) ? name : name + " <" + addrOf(name) + ">";
+
+  const msgAddrRows = (thread, m, msgs) => {
+    const parts = msgs.map(x => x.from).filter((n, i, a) => a.indexOf(n) === i);
+    const to = (m.mine ? parts.filter(n => n !== ME) : [ME].concat(parts.filter(n => n !== ME && n !== m.from)));
+    const cc = (HDR_CC[thread.id] || []).filter(n => n !== m.from && to.indexOf(n) < 0);
+    const replyTo = !m.mine && HDR_REPLY_TO[thread.id] ? HDR_REPLY_TO[thread.id] : "";
+    const rows = [];
+    if (replyTo) rows.push({ label: "Reply-to", value: replyTo });
+    if (to.length) rows.push({ label: "To", value: to.map(fullAddr).join(", ") });
+    if (cc.length) rows.push({ label: "Cc", value: cc.map(fullAddr).join(", ") });
+    return { rows, count: (replyTo ? 1 : 0) + to.length + cc.length };
+  };
+
+  function formatMsgTime(ts) {
+    if (!ts) return "";
+    const diff = Date.now() - ts;
+    if (diff < 45000) return "now";
+    const min = Math.floor(diff / 60000);
+    if (min < 60) return min + " " + (min === 1 ? "minute" : "minutes") + " ago";
+    const hrs = Math.floor(diff / 3600000);
+    if (hrs < 24) return hrs + " " + (hrs === 1 ? "hour" : "hours") + " ago";
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2, "0");
+    return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  const NKIND = {
+    mail: { icon: "mail", c: "var(--accent-2)", soft: "var(--accent-soft)", toast: "info" },
+    cal: { icon: "event", c: "var(--ok-text)", soft: "var(--ok-soft)", toast: "info" },
+    case: { icon: "topic", c: "var(--warn-text)", soft: "var(--warn-soft)", toast: "warning" },
+    task: { icon: "task_alt", c: "var(--text2)", soft: "var(--hover)", toast: "neutral" },
+    system: { icon: "sync", c: "var(--muted)", soft: "var(--hover)", toast: "neutral" },
+  };
+
+  const isNotifUnread = (n, read) => (read && read[n.id] !== undefined ? !read[n.id] : !!n.unread);
+
+  const notifTime = (mins) => {
+    const m = Number(mins) || 0;
+    if (m < 1) return "now";
+    if (m < 60) return m + " min";
+    if (m < 1440) return Math.round(m / 60) + " h";
+    if (m < 2880) return "yesterday";
+    return Math.round(m / 1440) + " days ago";
+  };
+
+  class Component extends DCLogic {
+    state = { workMode: "classic", tabs: [{ key: "thread:contoso", kind: "thread", id: "contoso" }], activeTab: "thread:contoso", screen: "discover", phase: "idle", query: "", planKey: null, ready: {}, ev: null, threadId: "contoso", fromCite: null, cameFrom: false, mailAnswer: false, mailPane: "list", themeOverride: null, stateOpen: false, vw: typeof window !== "undefined" ? window.innerWidth : 1440, listW: 340, remMap: { t1: [15], t3: [1440, 60] }, remUnit: "min", convs: SEED_CONVS(), bkPhase: {}, bkState: {}, bkResult: {}, bkEdit: {} };
+    timers = [];
+    rootRef = React.createRef();
+    agentScrollRef = React.createRef();
+
+    /* List scroll memory — for the session only, held in memory (gone when the app closes).
+       Every list has its own key; the ref and handler are memoised so React does not detach them
+       on every render. */
+    scrollY = {};
+    scrollEls = {};
+    scrollRefs = {};
+    scrollHandlers = {};
+
+    keepScroll = (key) => {
+      if (!this.scrollRefs[key]) this.scrollRefs[key] = (el) => {
+        this.scrollEls[key] = el;
+        if (el && this.scrollY[key]) el.scrollTop = this.scrollY[key];
+      };
+      return this.scrollRefs[key];
+    };
+
+    keepScrollOn = (key) => {
+      if (!this.scrollHandlers[key]) this.scrollHandlers[key] = (e) => { this.scrollY[key] = e.target.scrollTop; };
+      return this.scrollHandlers[key];
+    };
+
+    resetScroll = (key) => {
+      this.scrollY[key] = 0;
+      if (this.scrollEls[key]) this.scrollEls[key].scrollTop = 0;
+    };
+
+    restoreScrolls = () => {
+      Object.keys(this.scrollY).forEach(k => {
+        const el = this.scrollEls[k], y = this.scrollY[k];
+        /* We restore only when the container is back at the top (remount or end of loading). */
+        if (el && y && el.scrollTop === 0 && el.scrollHeight > el.clientHeight + y) el.scrollTop = y;
+      });
+    };
+    railRef = React.createRef();
+    agentInputRef = React.createRef();
+    photoRef = React.createRef();
+    historySearchRef = React.createRef();
+    listSearchRef = React.createRef();
+
+    componentDidMount() {
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(this.tbReset);
+      document.addEventListener("mousedown", this.onDocDown, true);
+      window.addEventListener("message", this.onHtmlFrameMessage);
+      this.measure = () => {
+        const el = this.rootRef.current;
+        const w = (el && el.clientWidth) || (typeof window !== "undefined" ? window.innerWidth : 1440);
+        const rail = this.railRef.current;
+        const rh = rail && rail.offsetHeight ? rail.offsetHeight : 0;
+        const h = (el && el.clientHeight) || 0;
+        const patch = {};
+        if (w && w !== this.state.vw) patch.vw = w;
+        if (h && h !== this.state.vh) patch.vh = h;
+        if (rh && rh !== this.state.railH) patch.railH = rh;
+        if (Object.keys(patch).length) this.setState(patch);
+      };
+      if (typeof ResizeObserver !== "undefined" && this.rootRef.current) {
+        this.ro = new ResizeObserver(this.measure);
+        this.ro.observe(this.rootRef.current);
+      }
+      window.addEventListener("resize", this.measure);
+      this.measure();
+      this.timers.push(setTimeout(() => this.simulateNotif(), 14000));
+    }
+
+    toggleSelect = (id) => {
+      const sel = Array.isArray(this.state.sel) ? this.state.sel : [];
+      this.setState({ sel: sel.indexOf(id) >= 0 ? sel.filter(x => x !== id) : sel.concat([id]) });
+    };
+
+    /* Loading from the server: a short skeleton instead of content. The duration comes from the
+       streamDelay tweak but is kept within realistic bounds — a few hundred ms, not seconds. */
+    loadDelay = (f) => Math.round(Math.max(160, Math.min(900, (this.props.streamDelay ?? 550) * f)));
+
+    loadList = (patch) => {
+      this.setState(Object.assign({ listLoading: true }, patch || {}));
+      clearTimeout(this._listLoadT);
+      this._listLoadT = setTimeout(() => this.setState({ listLoading: false }), this.loadDelay(0.7));
+      this.timers.push(this._listLoadT);
+    };
+
+    /* HTML preview and attachment preview also fetch content from the server — same skeleton as a message. */
+    loadHtml = () => {
+      clearTimeout(this._htmlLoadT);
+      this._htmlLoadT = setTimeout(() => this.setState({ htmlLoading: false }), this.loadDelay(0.75));
+      this.timers.push(this._htmlLoadT);
+    };
+
+    openDocLoad = (patch) => {
+      this.setState(Object.assign({ docLoading: true }, patch));
+      clearTimeout(this._docLoadT);
+      this._docLoadT = setTimeout(() => this.setState({ docLoading: false }), this.loadDelay(0.8));
+      this.timers.push(this._docLoadT);
+    };
+
+    loadMsg = () => {
+      clearTimeout(this._msgLoadT);
+      this._msgLoadT = setTimeout(() => this.setState({ msgLoading: false }), this.loadDelay(0.55));
+      this.timers.push(this._msgLoadT);
+    };
+
+    pickFolder = (key, label) => {
+      if ((this.state.folderKey || "acc1·Inbox") === key) return;
+      this.resetScroll("mail");
+      this.loadList({ folderKey: key, folderLabel: label, sel: [], sideDrawer: false });
+    };
+
+    pickThread = (id, e) => {
+      if (this.suppressClick) { this.suppressClick = false; return; }
+      const sel = Array.isArray(this.state.sel) ? this.state.sel : [];
+      if ((e && (e.ctrlKey || e.metaKey || e.shiftKey)) || sel.length) { this.toggleSelect(id); return; }
+      const unread = Object.assign({}, this.state.unread || DEFAULT_UNREAD);
+      delete unread[id];
+      /* Some threads have an unread message from the middle of the history —
+         we open exactly that one, not the newest. */
+      const entry = { piotr: 2 };
+      const patch = { threadId: id, mailAnswer: false, cameFrom: this.state.cameFrom && id === "contoso", mailPane: "thread", threadOpen: true, unread: unread,
+        activeMsg: Object.assign({}, this.state.activeMsg, { [id]: typeof entry[id] === "number" ? entry[id] : null }),
+        histOpen: Object.assign({}, this.state.histOpen, { [id]: !!this.state.autoExpand }) };
+      patch.msgLoading = true;
+      if (this.tabsMode()) this.openTab("thread:" + id, patch);
+      else this.setState(patch);
+      this.loadMsg();
+    };
+
+    swipeStart = (id, e) => {
+      const t = e.touches && e.touches[0];
+      this._swx = t ? t.clientX : 0;
+      this._swy = t ? t.clientY : 0;
+      this._swid = id;
+      this.startLongPress(id);
+    };
+
+    swipeMove = (id, e) => {
+      const t = e.touches && e.touches[0];
+      if (!t || this._swid !== id) return;
+      const dx = t.clientX - this._swx, dy = t.clientY - this._swy;
+      if (Math.abs(dy) > 26 && Math.abs(dy) > Math.abs(dx)) { this.swipeCancel(); return; }
+      if (Math.abs(dx) < 14) return;
+      this.cancelLongPress();
+      const cl = Math.max(-148, Math.min(148, dx));
+      if (Math.round(cl / 4) !== Math.round((this.state.swipeDx || 0) / 4) || this.state.swipeId !== id) {
+        this.setState({ swipeId: id, swipeDx: cl });
+      }
+    };
+
+    swipeCancel = () => {
+      this.cancelLongPress();
+      this._swid = null;
+      if (this.state.swipeId) this.setState({ swipeId: null, swipeDx: 0 });
+    };
+
+    swipeEnd = (id) => {
+      this.cancelLongPress();
+      const dx = this.state.swipeDx || 0;
+      this._swid = null;
+      if (this.state.swipeId !== id || Math.abs(dx) < 96) {
+        if (this.state.swipeId) this.setState({ swipeId: null, swipeDx: 0 });
+        return;
+      }
+      this.suppressClick = true;
+      setTimeout(() => { this.suppressClick = false; }, 400);
+      if (dx < 0) {
+        this.setState({ swipeId: null, swipeDx: 0, threadId: id, mailPane: "thread", threadOpen: true, compose: true, composeMin: false });
+      } else {
+        this.setState({ swipeId: null, swipeDx: 0 });
+        this.animateRowsOut([id], () => this.setState(s2 => ({
+          archived: (s2.archived || []).concat([id]),
+          lastArchived: id,
+        })), "arc");
+      }
+    };
+
+    undoArchive = () => this.setState(s2 => ({
+      archived: (s2.archived || []).filter(x => x !== s2.lastArchived),
+      lastArchived: null,
+    }));
+
+    /* MAIL TOOLBAR ACTIONS — prototype: they change local state and show a confirmation,
+       they do not perform server operations. Target: the selection, or the open thread when empty. */
+    opTargets = (ids) => {
+      if (ids && ids.length) return ids;
+      const sel = Array.isArray(this.state.sel) ? this.state.sel : [];
+      return sel.length ? sel.slice() : [this.state.threadId];
+    };
+
+    countWord = (n) => (n === 1 ? "1 thread" : n + " threads");
+
+    notify = (text, opt) => {
+      const o = (opt === true || opt === false || opt == null) ? { undo: opt === true } : opt;
+      const id = "t" + (this._tSeq = (this._tSeq || 0) + 1);
+      const t = {
+        id: id,
+        kind: o.kind || "neutral",
+        title: o.title || text,
+        body: o.title ? text : (o.body || ""),
+        undo: !!o.undo,
+        actionLabel: o.actionLabel || (o.undo ? "Undo" : ""),
+        onAction: o.onAction || null,
+        ms: o.ms || 5000,
+        sticky: o.kind === "loading" || !!o.sticky,
+        cancelText: o.cancelText || "",
+      };
+      this.setState(s => ({ toasts: [t].concat(s.toasts || []).slice(0, 4) }));
+      if (!t.sticky) this.armToast(id, t.ms);
+      return id;
+    };
+
+    armToast = (id, ms) => {
+      this._tT = this._tT || {};
+      clearTimeout(this._tT[id]);
+      this._tT[id] = setTimeout(() => this.dismissToast(id), ms);
+    };
+
+    dismissToast = (id) => {
+      this._tT = this._tT || {};
+      clearTimeout(this._tT[id]);
+      this.setState(s => ({ toasts: (s.toasts || []).map(x => (x.id === id ? Object.assign({}, x, { out: true }) : x)) }));
+      setTimeout(() => this.setState(s => ({ toasts: (s.toasts || []).filter(x => x.id !== id) })), 200);
+    };
+
+    hideToast = () => { (this.state.toasts || []).forEach(t => this.dismissToast(t.id)); };
+
+    notifyTask = (o) => {
+      const id = this.notify(o.body || "", { kind: "loading", title: o.title, cancelText: o.cancelText });
+      this._tasks = this._tasks || {};
+      this._tasks[id] = setTimeout(() => {
+        delete this._tasks[id];
+        this.setState(s => ({ toasts: (s.toasts || []).map(x => (x.id === id ? Object.assign({}, x, { kind: "success", title: o.doneTitle, body: o.doneBody || "", sticky: false }) : x)) }));
+        this.armToast(id, 5000);
+      }, o.ms || 2200);
+      return id;
+    };
+
+    askCancelToast = (id) => {
+      const t = (this.state.toasts || []).filter(x => x.id === id)[0];
+      this.setState({ cancelAsk: { id: id, title: "Abort the operation?", text: (t && t.cancelText) || "The operation is running. Closing the notification aborts it — partial results will not be saved." } });
+    };
+
+    abortTask = () => {
+      const ask = this.state.cancelAsk;
+      this.setState({ cancelAsk: null });
+      if (!ask) return;
+      if (this._tasks && this._tasks[ask.id]) { clearTimeout(this._tasks[ask.id]); delete this._tasks[ask.id]; }
+      this.dismissToast(ask.id);
+      this.notify("The operation was aborted. Nothing was saved.", { kind: "warning", title: "Cancelled" });
+    };
+
+    startReply = (mode, ids) => {
+      const id = this.opTargets(ids)[0];
+      const patch = { compose: true, composeMin: false, replyMode: mode, threadId: id, mailPane: "thread", threadOpen: true, sel: [] };
+      if (this.state.workMode === "tabs") this.openTab("compose", patch);
+      else this.setState(patch);
+    };
+
+    archiveThreads = (ids) => {
+      const t = this.opTargets(ids);
+      const op = { kind: "archive", ids: t };
+      this.setState({ lastOp: op, sel: [], mailPane: "list" });
+      this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ archived: (s.archived || []).concat(t) })); }, "arc");
+      this.notify("Archived " + this.countWord(t.length), true);
+    };
+
+    ovStyle = (z, mobile) => "position:fixed;z-index:" + z + ";display:flex;background:var(--scrim);" +
+      (mobile ? "top:0;left:0;right:0;bottom:" + this.barH() + "px;align-items:stretch;justify-content:stretch" : "inset:0;align-items:center;justify-content:center;padding:22px");
+
+    /* Short confirmations (text + up to 3 buttons) always as a centred popup,
+       on phones too — full screen is reserved for windows with forms. */
+    ovAskStyle = (z, mobile) => "position:fixed;z-index:" + z + ";display:flex;align-items:center;justify-content:center;background:var(--scrim);" +
+      (mobile ? "top:0;left:0;right:0;bottom:" + this.barH() + "px;padding:20px" : "inset:0;padding:22px");
+
+    barH = () => Math.max(70, (this.state.railH || 84)) + 2;
+
+    goAgentWith = (label) => {
+      this.setState({ screen: "agent", convId: null, agentCtx: label, agentInput: "", threadSheet: false, agentThinking: false, more: false, agentFocusPending: true });
+    };
+
+    localPt = (cx, cy) => {
+      const el = this.rootRef.current;
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      return r ? { x: cx - r.left, y: cy - r.top } : { x: cx, y: cy };
+    };
+
+    pressFor = (kind, id, title, items, ms) => {
+      const open = (cx, cy, fromTouch) => {
+        const p = this.localPt(cx, cy);
+        this.armCtx(fromTouch);
+        this.setState({ ctxMenu: { x: p.x, y: p.y, title: title, kind: kind, id: id, items: items } });
+      };
+      return {
+        ctx: (e) => { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); } open(e.clientX, e.clientY, false); },
+        down: (e) => {
+          const t = e && e.touches && e.touches[0];
+          const x = t ? t.clientX : 0, y = t ? t.clientY : 0;
+          clearTimeout(this._lpT);
+          this._lpT = setTimeout(() => { this._lpFired = Date.now(); open(x, y, true); }, ms || 460);
+        },
+        up: () => { clearTimeout(this._lpT); },
+      };
+    };
+
+    /* After a long press the browser still sends a "ghost" click where the finger was —
+       it landed on the freshly opened menu and closed it instantly. So the menu is briefly unclickable. */
+    armCtx = (fromTouch) => {
+      clearTimeout(this._ctxArmT);
+      this._ctxArmed = !fromTouch;
+      if (fromTouch) this._ctxArmT = setTimeout(() => { this._ctxArmed = true; }, 450);
+    };
+
+    ctxArmed = () => this._ctxArmed !== false;
+
+    lpJustFired = () => this._lpFired && Date.now() - this._lpFired < 700;
+
+    selOf = (kind) => (this.state.selBy || {})[kind] || [];
+
+    selActive = (kind) => this.selOf(kind).length > 0;
+
+    selSet = (kind, ids) => this.setState(s2 => ({ selBy: Object.assign({}, s2.selBy || {}, { [kind]: ids }), ctxMenu: null }));
+
+    selStart = (kind, id) => this.selSet(kind, [id]);
+
+    selToggle = (kind, id) => {
+      const ids = this.selOf(kind).slice();
+      const i = ids.indexOf(id);
+      if (i >= 0) ids.splice(i, 1); else ids.push(id);
+      this.selSet(kind, ids);
+    };
+
+    selClearKind = (kind) => this.selSet(kind, []);
+
+    rowTap = (kind, id, run) => (e) => {
+      if (this.lpJustFired()) return;
+      if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+        if (e.preventDefault) e.preventDefault();
+        this.selToggle(kind, id);
+        return;
+      }
+      if (this.selActive(kind)) { this.selToggle(kind, id); return; }
+      run();
+    };
+
+    askHide = (kind, ids, title, text) => this.setState({
+      ctxMenu: null,
+      confirmDel: {
+        title: title,
+        text: text,
+        label: "Delete",
+        run: () => this.setState(s2 => {
+          const map = Object.assign({}, s2.hidden || {});
+          map[kind] = (map[kind] || []).concat(ids);
+          return { hidden: map, selBy: Object.assign({}, s2.selBy || {}, { [kind]: [] }) };
+        }),
+      },
+    });
+
+    setNotifsRead = (ids, read) => this.setState(s2 => {
+      const map = Object.assign({}, s2.notifRead || {});
+      ids.forEach(id => { map[id] = read; });
+      return { notifRead: map, selBy: Object.assign({}, s2.selBy || {}, { notifs: [] }) };
+    });
+
+    askDel = (o) => this.setState({ confirmDel: o });
+
+    inTrash = () => /·Trash$/.test(this.state.folderKey || "acc1·Inbox");
+
+    deleteThreads = (ids) => {
+      const t = this.opTargets(ids);
+      if (!t.length) return;
+      if (this.inTrash()) {
+        this.askDel({
+          title: t.length === 1 ? "Delete this thread permanently?" : "Delete " + this.countWord(t.length) + " permanently?",
+          text: "Already in Trash — deleting now removes " + this.countWord(t.length) + " together with attachments. This cannot be undone.",
+          label: "Delete permanently",
+          run: () => this.purgeThreads(t),
+        });
+        return;
+      }
+      this.askDel({
+        title: t.length === 1 ? "Delete this thread?" : "Delete " + this.countWord(t.length) + "?",
+        text: "Moving to trash — " + this.countWord(t.length) + ". They disappear from trash after 30 days.",
+        label: "Move to trash",
+        run: () => this.doDeleteThreads(t),
+      });
+    };
+
+    purgeThreads = (t) => {
+      this.setState({ lastOp: null, sel: [], mailPane: "list" });
+      this.animateRowsOut(t, () => this.setState(s => ({ deleted: (s.deleted || []).concat(t) })), "del");
+      this.notify("Permanently deleted — " + this.countWord(t.length), false);
+    };
+
+    doDeleteThreads = (t) => {
+      const op = { kind: "delete", ids: t };
+      this.setState({ lastOp: op, sel: [], mailPane: "list" });
+      this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ deleted: (s.deleted || []).concat(t) })); }, "del");
+      this.notify("Moved to trash — " + this.countWord(t.length), true);
+    };
+
+    toggleFlagThreads = (ids) => {
+      const t = this.opTargets(ids);
+      const flags = Object.assign({}, this.state.flags || {});
+      const turnOn = t.some(id => !flags[id]);
+      t.forEach(id => { if (turnOn) flags[id] = true; else delete flags[id]; });
+      this.setState({ flags: flags, sel: [] });
+      this.notify((turnOn ? "Flagged " : "Flag removed — ") + this.countWord(t.length), false);
+    };
+
+    markUnread = (ids) => {
+      const t = this.opTargets(ids);
+      const unread = Object.assign({}, this.state.unread || DEFAULT_UNREAD);
+      t.forEach(id => { unread[id] = true; });
+      this.setState({ unread: unread, sel: [] });
+      this.notify("Marked as unread — " + this.countWord(t.length), false);
+    };
+
+    accountMenu = (key, label) => [
+      { icon: "create_new_folder", label: "New folder", run: () => this.openNewFolder(key, label) },
+      { icon: "mark_email_read", label: "Mark all as read", run: () => this.notify("All read in " + label, false) },
+    ];
+
+    folderMenu = (key, accLabel, path, canNest, custom) => {
+      const label = path.split("/").pop();
+      const items = [];
+      if (canNest) items.push({ icon: "create_new_folder", label: "New folder inside", run: () => this.openNewFolder(key, accLabel, path) });
+      items.push({ icon: "mark_email_read", label: "Mark all as read", run: () => this.notify("All read in " + label, false) });
+      if (custom) items.push({ icon: "edit", label: "Edit folder", run: () => this.openEditFolder(key, accLabel, path) });
+      if (custom) items.push({ icon: "delete", label: "Delete folder", danger: true, run: () => this.askDeleteFolder(key, accLabel, path) });
+      return items;
+    };
+
+    /* Creating a folder asks for a name and a place in the account's own folder tree. MailFathom
+       puts it on the mail server itself and never shows or takes a server path — accounts are
+       administrator-managed and the path is not the user's business. Three levels deep at most. */
+    MAX_DEPTH = 3;
+
+    STD_LABELS = ["Inbox", "Sent", "Drafts", "Archive", "Spam", "Trash"];
+
+    /* Places a folder may sit in. In edit mode the folder itself, everything under it, and any
+       parent too shallow to hold its subtree drop out of the list. */
+    folderLocations = (key, movePath) => {
+      const extra = ((this.state.extraFolders || {})[key] || []).slice().sort();
+      const all = this.STD_LABELS.concat(extra.filter(p => this.STD_LABELS.indexOf(p) < 0));
+      const own = movePath ? movePath.split("/").length : 0;
+      const subtree = movePath
+        ? [movePath].concat(extra.filter(p => p.indexOf(movePath + "/") === 0))
+            .reduce((mx, p) => Math.max(mx, p.split("/").length - own + 1), 1)
+        : 1;
+      return [{ v: "", label: "Top level of the account" }].concat(all
+        .filter(p => !(movePath && (p === movePath || p.indexOf(movePath + "/") === 0)))
+        .filter(p => p.split("/").length + subtree <= this.MAX_DEPTH)
+        .map(p => ({ v: p, label: p.split("/").join(" / ") })));
+    };
+
+    locLabel = (parent) => (parent ? "inside " + parent.split("/").join(" / ") : "top level");
+
+    openNewFolder = (key, label, parent) => this.setState({
+      newFolder: { key: key, label: label, mode: "create" },
+      nfName: "", nfParent: parent || "", moveFor: null,
+    });
+
+    openEditFolder = (key, label, path) => this.setState({
+      newFolder: { key: key, label: label, mode: "edit", path: path },
+      nfName: path.split("/").pop(), nfParent: path.split("/").slice(0, -1).join("/"), moveFor: null,
+    });
+
+    saveFolder = () => (this.state.newFolder && this.state.newFolder.mode === "edit" ? this.applyFolderEdit() : this.createFolder());
+
+    applyFolderEdit = () => {
+      const nf = this.state.newFolder;
+      const name = (this.state.nfName || "").trim().replace(/\//g, " ");
+      if (!nf || !name) return;
+      const parent = this.state.nfParent || "";
+      const oldPath = nf.path;
+      const newPath = (parent ? parent + "/" : "") + name;
+      if (newPath !== oldPath && ((this.state.extraFolders || {})[nf.key] || []).indexOf(newPath) >= 0) {
+        this.notify("There is already a folder called “" + name + "” " + this.locLabel(parent) + ".", { kind: "warning", title: "Pick another name" });
+        return;
+      }
+      this.setState(s => {
+        const ex = Object.assign({}, s.extraFolders || {});
+        ex[nf.key] = (ex[nf.key] || []).map(p => (p === oldPath ? newPath : p.indexOf(oldPath + "/") === 0 ? newPath + p.slice(oldPath.length) : p));
+        const pref = nf.key + "·" + oldPath;
+        const remap = (src) => {
+          const out = {};
+          Object.keys(src).forEach(k => {
+            if (k === pref) out[nf.key + "·" + newPath] = src[k];
+            else if (k.indexOf(pref + "/") === 0) out[nf.key + "·" + newPath + k.slice(pref.length)] = src[k];
+            else out[k] = src[k];
+          });
+          return out;
+        };
+        const active = s.folderKey === pref;
+        return { extraFolders: ex, folderOpen: remap(s.folderOpen || {}), newFolder: null,
+          folderKey: active ? nf.key + "·" + newPath : s.folderKey, folderLabel: active ? name : s.folderLabel };
+      });
+      this.notify(nf.label + " · " + this.locLabel(parent), { kind: "success", title: "Folder “" + name + "” updated" });
+    };
+
+    closeNewFolder = () => this.setState({ newFolder: null });
+
+    onNfName = (e) => this.setState({ nfName: e.target.value });
+
+    onNfParent = (e) => this.setState({ nfParent: e.target.value });
+
+    createFolder = () => {
+      const nf = this.state.newFolder;
+      const name = (this.state.nfName || "").trim().replace(/\//g, " ");
+      if (!nf || !name) return;
+      const parent = this.state.nfParent || "";
+      this.setState(s => {
+        const ex = Object.assign({}, s.extraFolders || {});
+        const list = (ex[nf.key] || []).slice();
+        const under = parent ? parent + "/" : "";
+        let label = name, n = 1;
+        while (list.indexOf(under + label) >= 0) { n++; label = name + " " + n; }
+        list.push(under + label);
+        ex[nf.key] = list;
+        /* Reveal the new folder: open every ancestor on the way down to it. */
+        const fo = Object.assign({}, s.folderOpen || {});
+        if (parent) parent.split("/").forEach((seg, i, arr) => { fo[nf.key + "·" + arr.slice(0, i + 1).join("/")] = true; });
+        return { extraFolders: ex, folderOpen: fo, newFolder: null, accOpen: Object.assign({}, s.accOpen, { [nf.key]: true }) };
+      });
+      this.notify(nf.label + " · " + this.locLabel(parent), { kind: "success", title: "Folder “" + name + "” created" });
+    };
+
+    askDeleteFolder = (key, accLabel, path) => this.setState({ delFolder: { key: key, label: accLabel, path: path } });
+
+    closeDeleteFolder = () => this.setState({ delFolder: null });
+
+    confirmDeleteFolder = () => {
+      const df = this.state.delFolder;
+      if (!df) return;
+      const name = df.path.split("/").pop();
+      this.setState(s => {
+        const ex = Object.assign({}, s.extraFolders || {});
+        const gone = (ex[df.key] || []).filter(p => p === df.path || p.indexOf(df.path + "/") === 0);
+        ex[df.key] = (ex[df.key] || []).filter(p => gone.indexOf(p) < 0);
+        const fo = Object.assign({}, s.folderOpen || {});
+        gone.forEach(p => { delete fo[df.key + "·" + p]; });
+        /* Mail stored in the folders that go away goes with them. */
+        const names = gone.map(p => p.split("/").pop());
+        const moved = Object.assign({}, s.moved || {});
+        const hit = Object.keys(moved).filter(id => names.indexOf(moved[id]) >= 0);
+        hit.forEach(id => { delete moved[id]; });
+        const wasOpen = gone.indexOf((s.folderKey || "").split("·")[1]) >= 0;
+        return { extraFolders: ex, folderOpen: fo, delFolder: null, moved: moved,
+          deleted: (s.deleted || []).concat(hit),
+          folderKey: wasOpen ? "acc1·Inbox" : s.folderKey, folderLabel: wasOpen ? "Inbox" : s.folderLabel };
+      });
+      this.notify("Removed from " + df.label, { kind: "success", title: "Folder “" + name + "” deleted" });
+    };
+
+    addFolder = (key, label) => {
+      this.setState(s => {
+        const ex = Object.assign({}, s.extraFolders || {});
+        const list = (ex[key] || []).slice();
+        let name = "New folder", n = 1;
+        while (list.indexOf(name) >= 0) { n++; name = "New folder " + n; }
+        list.push(name);
+        ex[key] = list;
+        return { extraFolders: ex, accOpen: Object.assign({}, s.accOpen, { [key]: true }), moveFor: null, sideDrawer: s.sideDrawer };
+      });
+      this.notify("Folder created in " + label, false);
+    };
+
+    openMove = (ids) => this.setState({ moveFor: this.opTargets(ids) });
+    closeMove = () => this.setState({ moveFor: null });
+
+    moveThreads = (folder, account, ids) => {
+      const t = ids || this.state.moveFor || [];
+      this.setState(s => {
+        const moved = Object.assign({}, s.moved || {});
+        t.forEach(id => { moved[id] = folder; });
+        return { moved: moved, moveFor: null, sel: [], lastOp: { kind: "move", ids: t } };
+      });
+      t.forEach(id => this.setRowAnim(id, "move", 900));
+      this.notify("Moved to “" + folder + "”" + (account ? " in " + account : "") + " — " + this.countWord(t.length), true);
+    };
+
+    /* Drag a thread (or the whole selection) from the list onto a folder in the sidebar. */
+    dragThreadsStart = (id, e) => {
+      const sel = this.state.sel || [];
+      const ids = sel.indexOf(id) >= 0 && sel.length > 1 ? sel.slice() : [id];
+      this.cancelLongPress();
+      this.setState({ dragIds: ids, dragOverKey: "" });
+      if (e && e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", ids.join(",")); } catch (err) {}
+      }
+    };
+    dragThreadsEnd = () => { if (this.state.dragIds) this.setState({ dragIds: null, dragOverKey: "" }); };
+    dragOverFolder = (fk, e) => {
+      if (!(this.state.dragIds || []).length) return;
+      if (e) { if (e.preventDefault) e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; }
+      if (this.state.dragOverKey !== fk) this.setState({ dragOverKey: fk });
+    };
+    dragLeaveFolder = (fk) => { if (this.state.dragOverKey === fk) this.setState({ dragOverKey: "" }); };
+    dropOnFolder = (folder, account, e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      const ids = this.state.dragIds || [];
+      this.setState({ dragIds: null, dragOverKey: "" });
+      if (ids.length) this.moveThreads(folder, account, ids);
+    };
+
+    undoOp = () => {
+      const op = this.state.lastOp;
+      this.hideToast();
+      if (!op) return;
+      op.undone = true; /* an undo fired inside the leave animation must cancel the pending removal */
+      const gone = (list) => (list || []).filter(x => op.ids.indexOf(x) < 0);
+      if (op.kind === "archive") this.setState(s => ({ archived: gone(s.archived), lastOp: null }));
+      else if (op.kind === "delete") this.setState(s => ({ deleted: gone(s.deleted), lastOp: null }));
+      else if (op.kind === "move") this.setState(s => {
+        const moved = Object.assign({}, s.moved || {});
+        op.ids.forEach(id => { delete moved[id]; });
+        return { moved: moved, lastOp: null };
+      });
+    };
+
+    startLongPress = (id, x, y) => {
+      this.cancelLongPress();
+      this.lpTimer = setTimeout(() => {
+        this.suppressClick = true;
+        if (navigator.vibrate) navigator.vibrate(12);
+        this.armCtx(true);
+        this.openMailMenu(id, x || 0, y || 0);
+        setTimeout(() => { this.suppressClick = false; }, 700);
+      }, 420);
+    };
+
+    /* AI summary — the per-message reading, always shown next to the fragment it rests on. */
+    openAiSum = (id) => this.setState({ aiSum: id, ctxMenu: null });
+    closeAiSum = () => this.setState({ aiSum: null });
+
+    mdPlain = (s) => String(s || "")
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/^\s*\|.*$/gm, " ")
+      .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+      .replace(/^\s{0,3}>\s*/gm, "")
+      .replace(/^\s*[-*+]\s+/gm, "")
+      .replace(/^\s*\d+\.\s+/gm, "")
+      .replace(/[*_`~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    aiSumCards = (th) => {
+      const HEAD = { AGREED: "WHAT IS SETTLED", "OPEN QUESTION": "WHAT IS STILL OPEN", COMMITMENT: "WHAT IS THE COMMITMENT", DEADLINE: "WHAT THE DEADLINE IS", "VERSION DIFFERENCE": "WHAT CHANGED BETWEEN VERSIONS" };
+      const WHY = {
+        AGREED: "The message puts this forward as settled, and nothing later in it walks the point back.",
+        "OPEN QUESTION": "The message raises this and never answers it, so it stays open on our side.",
+        COMMITMENT: "The message names both the action and the side that owes it.",
+        DEADLINE: "The message gives the date outright rather than leaving it to be worked out.",
+        "VERSION DIFFERENCE": "A later message corrects an earlier one, and the newer wording is the one that holds.",
+      };
+      const msgs = (th.body || []).map(b => this.mdPlain(b.md || b.text));
+      const last = Math.max(0, msgs.length - 1);
+      const cards = [];
+      (th.state || []).forEach((s, i) => {
+        if (!s.value || s.value === "None") return;
+        const src = (STATE_SRC[th.id] || [])[i];
+        cards.push({
+          heading: HEAD[s.label] || s.label, claim: s.value, why: WHY[s.label] || "",
+          idx: typeof src === "number" ? Math.min(src, last) : last,
+        });
+      });
+      /* Three readings at most — the modal is a summary, not a second copy of the thread. */
+      if (th.ai && cards.length < 3) cards.push({ heading: "WHAT THIS IS ABOUT", claim: th.ai, why: "This is the reading the message list shows — it comes from the subject and the opening of the message.", idx: 0 });
+      return cards.slice(0, 3).map(c => ({
+        heading: c.heading, claim: c.claim, why: "Why: " + c.why,
+        model: "Model — mailfathom-email-enrichment",
+        quote: msgs[c.idx] || msgs.join(" ") || th.subject,
+        showSrc: msgs.length > 1,
+        srcLabel: "Open message " + (c.idx + 1) + " in the thread",
+        openSrc: () => {
+          this.setState({ aiSum: null, threadId: th.id, mailPane: "thread", threadOpen: true });
+          this.revealMessage(th.id, c.idx);
+        },
+      }));
+    };
+
+    openMailMenu = (id, cx, cy) => {
+      const th = THREADS.find(t => t.id === id) || {};
+      const flagged = !!(this.state.flags || {})[id];
+      const p = this.localPt(cx || 0, cy || 0);
+      this.setState({
+        ctxMenu: {
+          x: p.x, y: p.y, kind: "mail", id: id, title: th.subject || "Message",
+          items: [
+            { icon: "auto_awesome", label: "AI summary", run: () => this.openAiSum(id) },
+            { icon: "check_box", label: "Select messages", run: () => this.toggleSelect(id) },
+            { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("thread “" + (th.subject || "mail") + "”") },
+            { icon: "reply", label: "Reply", run: () => { this.setState({ threadId: id, mailPane: "thread", threadOpen: true }); this.startReply("reply"); } },
+            { icon: "forward", label: "Forward", run: () => { this.setState({ threadId: id, mailPane: "thread", threadOpen: true }); this.startReply("fwd"); } },
+            { icon: "archive", label: "Archive", run: () => this.archiveThreads([id]) },
+            { icon: "flag", label: flagged ? "Remove flag" : "Flag", run: () => this.toggleFlagThreads([id]) },
+            { icon: "mark_email_unread", label: "Mark as unread", run: () => this.markUnread([id]) },
+            { icon: "drive_file_move", label: "Move\u2026", run: () => this.setState({ moveFor: [id] }) },
+            { icon: "delete", label: "Delete", danger: true, run: () => this.deleteThreads([id]) },
+          ],
+        },
+      });
+    };
+
+    cancelLongPress = () => { if (this.lpTimer) { clearTimeout(this.lpTimer); this.lpTimer = null; } };
+
+    bodyRef = React.createRef();
+    userMenuRef = React.createRef();
+    evTitleRef = React.createRef();
+    evPromptRef = React.createRef();
+    evDayRef = React.createRef();
+    evTimeRef = React.createRef();
+    ctNameRef = React.createRef();
+    ctMailRef = React.createRef();
+    ctOrgRef = React.createRef();
+    ctRoleRef = React.createRef();
+    tkPromptRef = React.createRef();
+    remNumTaskRef = React.createRef();
+    remNumEventRef = React.createRef();
+    remNumModalRef = React.createRef();
+    tkTitleRef = React.createRef();
+    tkDueRef = React.createRef();
+    tkEstRef = React.createRef();
+    csPromptRef = React.createRef();
+    csTitleRef = React.createRef();
+    csPartiesRef = React.createRef();
+    csDueRef = React.createRef();
+
+    onDocDown = (e) => {
+      const el = this.userMenuRef.current;
+      if (this.state.userMenu && el && !el.contains(e.target)) this.setState({ userMenu: false });
+    };
+
+    tabsMode = () => {
+      const mode = this.props.layout ?? "auto";
+      const F = FRAMES[mode];
+      const w = F ? F.w : (this.state.vw || 1440);
+      return w >= 1180 && (this.state.workMode || "tabs") === "tabs";
+    };
+
+    tabKind = (key) => key === "compose" ? "compose"
+      : key.indexOf("doc:") === 0 ? "doc"
+      : key.indexOf("html:") === 0 ? "html" : "thread";
+
+    /* Embedded message content: the frame has an opaque origin (sandbox="allow-scripts" and nothing else),
+       so it cannot see the app's DOM, storage or cookies. Height arrives solely
+       via postMessage from the measuring script injected before the message markup.
+
+       Acceptance criteria #1507 — named heights:
+       • initial (before the first report): 320px, no animation on the first fit,
+         so attaching a message does not jump the conversation;
+       • fallback (no report within 2.5 s): a 1600px frame in a 620px container with overflow:auto
+         — the only case where the embedded view scrolls internally;
+       • very long message: no maximum (clamped at 40000px), frame at full height,
+         the conversation scrolls, no nested scrollbar. */
+    htmlFrames = new Map();
+
+    htmlFrameRef = (f) => {
+      if (!f) return;
+      const id = f.getAttribute("data-frame-id");
+      if (!id) return;
+      const prev = this.htmlFrames.get(id);
+      if (prev && prev.frame === f) return;
+      if (prev && prev.timer) clearTimeout(prev.timer);
+      const rec = { frame: f, timer: null };
+      this.htmlFrames.set(id, rec);
+      rec.timer = setTimeout(() => this.htmlFrameFallback(id), 2500);
+    };
+
+    htmlFrameStatus = (id, text) => {
+      const el = document.querySelector('[data-fit-status="' + id + '"]');
+      if (el) el.textContent = text;
+    };
+
+    htmlFrameFallback = (id) => {
+      const rec = this.htmlFrames.get(id);
+      if (!rec || rec.measured) return;
+      rec.fallback = true;
+      const wrap = rec.frame.parentElement;
+      /* The only case with its own scrolling: no measurement arrived, so we do not know
+         the content height. The frame gets 1600px in a 620px container with overflow:auto. */
+      rec.frame.style.height = "1600px";
+      if (wrap) { wrap.style.height = "620px"; wrap.style.overflow = "auto"; }
+      this.htmlFrameStatus(id, "Could not measure the content height — this one frame scrolls separately");
+    };
+
+    onHtmlFrameMessage = (e) => {
+      const d = e && e.data;
+      if (!d || typeof d !== "object") return;
+      const id = d.frameId, h = d.height;
+      if (typeof id !== "string" || typeof h !== "number" || !isFinite(h)) return;
+      const rec = this.htmlFrames.get(id);
+      if (!rec || rec.fallback) return;
+      if (e.source !== rec.frame.contentWindow) return;
+      if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
+      const next = Math.max(80, Math.min(Math.round(h) + 2, 40000));
+      rec.applied = (rec.applied || 0) + 1;
+      /* Safety net: after a dozen or so corrections, or on micro-jitter, we stop listening
+         so no content can grow the frame indefinitely. */
+      if (rec.measured && (rec.applied > 16 || Math.abs(next - rec.height) <= 3)) return;
+      rec.measured = true;
+      rec.height = next;
+      /* No maximum height — the frame grows to the full content, the conversation scrolls. */
+      rec.frame.style.height = next + "px";
+      this.htmlFrameStatus(id, "HTML content in isolation — scripts and remote resources blocked");
+    };
+
+    tabPatch = (tb) => {
+      if (!tb) return {};
+      if (tb.kind === "doc") return { screen: "mail", doc: tb.att, docZoom: 1, htmlDoc: null };
+      if (tb.kind === "html") return { screen: "mail", doc: null, htmlDoc: tb.htmlDoc, htmlSrcMode: false };
+      if (tb.kind === "compose") return { screen: "mail", doc: null, htmlDoc: null, compose: true };
+      return { screen: "mail", threadId: tb.id, mailPane: "thread", threadOpen: true, doc: null, htmlDoc: null };
+    };
+
+    openTab = (key, patch, extra) => {
+      this.setState(s => {
+        const tabs = s.tabs || [];
+        const kind = this.tabKind(key);
+        const id = key.indexOf(":") > 0 ? key.slice(key.indexOf(":") + 1) : key;
+        const next = tabs.some(t => t.key === key) ? tabs : tabs.concat([Object.assign({ key, kind, id }, extra || {})]);
+        return Object.assign({ tabs: next, activeTab: key }, patch || {});
+      });
+    };
+
+    closeTab = (key) => {
+      this.setState(s => {
+        const tabs = (s.tabs || []).filter(t => t.key !== key);
+        const wasActive = s.activeTab === key;
+        const nextTab = wasActive ? (tabs.length ? tabs[tabs.length - 1] : null) : null;
+        const patch = { tabs, activeTab: wasActive ? (nextTab ? nextTab.key : null) : s.activeTab };
+        if (key === "compose") patch.compose = false;
+        if (key.indexOf("doc:") === 0) patch.doc = null;
+        if (key.indexOf("html:") === 0) patch.htmlDoc = null;
+        if (wasActive && nextTab) Object.assign(patch, this.tabPatch(nextTab));
+        return patch;
+      });
+    };
+
+    remList = (key) => {
+      const map = this.state.remMap || {};
+      return map[key] || [];
+    };
+
+    remToggle = (key, m) => this.setState(s => {
+      const map = Object.assign({}, s.remMap || {});
+      const cur = map[key] || [];
+      map[key] = cur.indexOf(m) >= 0 ? cur.filter(x => x !== m) : cur.concat(m).sort((a, b) => a - b);
+      return { remMap: map };
+    });
+
+    remSet = (key, list) => this.setState(s => {
+      const map = Object.assign({}, s.remMap || {});
+      map[key] = list.slice();
+      return { remMap: map };
+    });
+
+    remAddCustom = (key, ref) => {
+      const el = ref && ref.current;
+      const n = parseInt((el && el.value) || "", 10);
+      if (!n || n < 1) return;
+      const unit = this.state.remUnit || "min";
+      const m = unit === "days" ? n * 1440 : unit === "hrs" ? n * 60 : n;
+      if (el) el.value = "";
+      if (this.remList(key).indexOf(m) < 0) this.remToggle(key, m);
+    };
+
+    remBlock = (key, o) => {
+      const list = this.remList(key).slice().sort((a, b) => b - a);
+      const unit = this.state.remUnit || "min";
+      const timed = !!o.timed;
+      const zero = o.zero || (timed ? "at the time" : "on the day");
+      const chip = (on) => "display:flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:9px;font-size:12.5px;white-space:nowrap;border:1px solid " +
+        (on ? "var(--accent);background:var(--accent-soft);color:var(--accent-d);font-weight:600" : "var(--line);background:var(--panel);color:var(--text2)");
+      return {
+        any: list.length > 0,
+        hint: o.hint || "",
+        countLabel: list.length === 0 ? "off" : list.length === 1 ? "1 reminder" : list.length + " reminders",
+        countStyle: "font-size:11px;padding:2px 8px;border-radius:10px;" + (list.length ? "background:var(--accent-soft);color:var(--accent-d)" : "background:var(--hover);color:var(--muted)"),
+        presets: (timed ? REM_TIMED : REM_DATED).map(m => {
+          const on = list.indexOf(m) >= 0;
+          return { label: remLabel(m, zero), icon: on ? "check" : "add", style: chip(on), toggle: () => this.remToggle(key, m) };
+        }),
+        list: list.map(m => ({ label: remLabel(m, zero), remove: () => this.remToggle(key, m) })),
+        numRef: o.numRef,
+        units: ["min", "hrs", "days"].map(u => ({
+          label: u,
+          pick: () => this.setState({ remUnit: u }),
+          style: "display:flex;align-items:center;height:26px;padding:0 10px;font-size:12px;border-radius:7px;" +
+            (unit === u ? "background:var(--accent);color:var(--onaccent);font-weight:600" : "color:var(--text2)"),
+        })),
+        add: () => this.remAddCustom(key, o.numRef),
+      };
+    };
+
+    remAnchor = (o) => (o.time && o.time !== "all day"
+      ? "before " + o.time + (o.day ? " · " + o.day + ".08" : "")
+      : "09:00 on the day of the " + (o.taskLike ? "deadline" : "event"));
+
+    remFire = (title, list, kind, src, go) => {
+      if (!list || !list.length) return;
+      this._fired = this._fired || {};
+      if (this._fired[title]) return;
+      this._fired[title] = true;
+      const m = Math.min.apply(null, list);
+      this.remTimers = this.remTimers || [];
+      this.remTimers.push(setTimeout(() => this.pushNotif({
+        kind: kind,
+        title: "Reminder: " + title,
+        body: m === 0 ? "Starting now." : remLabel(m, "").replace(" before", "") + " left.",
+        src: src,
+        go: go,
+      }), 18000));
+    };
+
+    goScreen = (id, patch) => {
+      /* The first entry into mail starts with an empty panel; after that the open message
+         is remembered for the session (in-memory state — gone when the app closes). */
+      const p = Object.assign({ screen: id }, patch || {});
+      /* Entering mail from another screen = fetching the list from the server. */
+      if (id === "mail" && this.state.screen !== "mail") {
+        if (p.mailPane === "thread") { p.msgLoading = true; this.loadMsg(); }
+        this.loadList(p);
+        return;
+      }
+      this.setState(p);
+    };
+
+    notifAll = () => this.state.notifs || NOTIFS;
+    notifUnread = () => this.notifAll().filter(n => isNotifUnread(n, this.state.notifRead || {}));
+
+    toggleNotifRead = (n, e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      const read = Object.assign({}, this.state.notifRead || {});
+      read[n.id] = isNotifUnread(n, read);
+      this.setState({ notifRead: read });
+    };
+
+    openNotifCenter = () => {
+      clearTimeout(this._notifT);
+      this.setState({ notifCenter: true, notifShown: false, notifDrag: 0, userMenu: false });
+      this._notifT = setTimeout(() => this.setState({ notifShown: true }), 20);
+    };
+
+    closeNotifCenter = () => {
+      if (!this.state.notifCenter) return;
+      clearTimeout(this._notifT);
+      this._notifG = null;
+      this.notifGestDetach();
+      this.setState({ notifShown: false });
+      this._notifT = setTimeout(() => this.setState({ notifCenter: false, notifDrag: 0 }), 280);
+    };
+
+    toggleNotifCenter = () => {
+      if (this.state.notifCenter) this.closeNotifCenter(); else this.openNotifCenter();
+    };
+
+    /* TWO GESTURES ACROSS THE WHOLE SURFACE (phone, coarse pointer).
+       "open"  — an upward move started anywhere on the nav bar pulls the panel out.
+       "close" — a downward move started anywhere on the open panel (header, filters,
+                 row, empty state) pushes it away. The panel follows the finger 1:1 and the
+                 scrim opacity is tied directly to the distance travelled. Tapping the bell is unchanged. */
+    notifPanelRef = React.createRef();
+    notifListRef = React.createRef();
+
+    notifPanelH = () => {
+      const el = this.notifPanelRef.current;
+      return (el && el.offsetHeight) || Math.max(320, (this.state.vh || 844) - this.barH());
+    };
+
+    notifSetDrag = (px) => { if ((this.state.notifDrag || 0) !== px) this.setState({ notifDrag: px }); };
+
+    notifGestDetach = () => {
+      document.removeEventListener("pointermove", this._notifMove);
+      document.removeEventListener("pointerup", this._notifUp);
+      document.removeEventListener("pointercancel", this._notifUp);
+      document.removeEventListener("touchmove", this._notifMove);
+      document.removeEventListener("touchend", this._notifUp);
+    };
+
+    notifGest = (mode) => (e) => {
+      if (mode === "close" && (this.state.ctxMenu || this.lpJustFired())) return;
+      if (mode === "open" && this.state.notifCenter) return;
+      this.notifGestDetach();
+      const t = (e.touches && e.touches[0]) || e;
+      const g = { mode: mode, y0: t.clientY, yPrev: t.clientY, tPrev: Date.now(), v: 0, live: false, anchor: 0 };
+      this._notifG = g;
+      if (mode === "open") this._notifBarTap = false;
+
+      this._notifMove = (ev) => {
+        if (!this._notifG) return;
+        const p = (ev.touches && ev.touches[0]) || ev;
+        const now = Date.now();
+        g.v = (p.clientY - g.yPrev) / Math.max(1, now - g.tPrev);
+        g.yPrev = p.clientY; g.tPrev = now;
+        const dy = p.clientY - g.y0;
+
+        if (mode === "open") {
+          if (!g.live) {
+            if (dy > NG.barSlop) { this.notifGestDetach(); this._notifG = null; return; }
+            if (-dy < NG.barSlop) return;
+            /* The bar hands over the gesture: only now does its own touch get cancelled. */
+            g.live = true; g.anchor = p.clientY; this._notifBarTap = true;
+            const H = this.notifPanelH();
+            this.setState({ notifCenter: true, notifShown: true, notifDrag: H, notifH: H, userMenu: false, more: false });
+            return;
+          }
+          const H = this.state.notifH || this.notifPanelH();
+          if (ev.cancelable) ev.preventDefault();
+          this.notifSetDrag(Math.max(0, H - Math.max(0, Math.min(H, g.anchor - p.clientY))));
+          return;
+        }
+
+        if (!g.live) {
+          /* Movement beyond the row slop cancels the long press — one or the other, never both. */
+          if (Math.abs(dy) > NG.rowSlop) clearTimeout(this._lpT);
+          if (dy < NG.rowSlop) return;
+          const list = this.notifListRef.current;
+          if (list && list.scrollTop > 0.5) { g.y0 = p.clientY; return; }
+          /* The list is at the top — the same uninterrupted move becomes a panel dismissal. */
+          g.live = true; g.anchor = p.clientY;
+          this.setState({ notifH: this.notifPanelH() });
+          return;
+        }
+        if (ev.cancelable) ev.preventDefault();
+        this.notifSetDrag(Math.max(0, p.clientY - g.anchor));
+      };
+
+      this._notifUp = () => {
+        this.notifGestDetach();
+        const gg = this._notifG;
+        this._notifG = null;
+        if (!gg) return;
+        if (!gg.live) { this.forceUpdate(); return; }
+        const H = this.state.notifH || this.notifPanelH();
+        const drag = this.state.notifDrag || 0;
+        const travelFrac = mode === "close" ? drag / H : 1 - drag / H;
+        const flick = mode === "close" ? g.v > NG.commitVel : g.v < -NG.commitVel;
+        const back = mode === "close" ? g.v < -NG.commitVel : g.v > NG.commitVel;
+        const commit = !back && (travelFrac > NG.commitFrac || flick);
+        if (mode === "close") { if (commit) this.closeNotifCenter(); else this.notifSpringBack(); }
+        else if (commit) this.notifSpringBack(); else this.closeNotifCenter();
+      };
+
+      document.addEventListener("pointermove", this._notifMove);
+      document.addEventListener("pointerup", this._notifUp);
+      document.addEventListener("pointercancel", this._notifUp);
+      document.addEventListener("touchmove", this._notifMove, { passive: false });
+      document.addEventListener("touchend", this._notifUp);
+    };
+
+    /* Spring back when neither distance nor velocity was met. */
+    notifSpringBack = () => this.setState({ notifDrag: 0, notifSpring: true }, () => {
+      clearTimeout(this._notifSpringT);
+      this._notifSpringT = setTimeout(() => this.setState({ notifSpring: false }), NG.springMs);
+    });
+
+    /* An upward move on the bar takes the touch away from the element it started on. */
+    railTapGuard = (e) => {
+      if (!this._notifBarTap) return;
+      this._notifBarTap = false;
+      if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); }
+    };
+
+    markAllNotifsRead = () => {
+      const read = Object.assign({}, this.state.notifRead || {});
+      this.notifAll().forEach(n => { read[n.id] = true; });
+      this.setState({ notifRead: read });
+    };
+
+    openNotif = (n) => {
+      const read = Object.assign({}, this.state.notifRead || {});
+      read[n.id] = true;
+      this.setState({ notifRead: read });
+      this.closeNotifCenter();
+      if (!n.go) return;
+      if (n.go.thread) this.goScreen("mail", { mailPane: "thread", threadOpen: true, threadId: n.go.thread, cameFrom: false, sel: [] });
+      else this.goScreen(n.go.screen, n.go.screen === "mail" ? { mailPane: "list" } : n.go.screen === "cases" ? { casePane: "list" } : {});
+    };
+
+    pushNotif = (it) => {
+      const id = "in" + (this._nSeq = (this._nSeq || 0) + 1);
+      const n = Object.assign({}, it, { id: id, unread: true, mins: 0 });
+      this.setState(s => ({ notifs: [n].concat(s.notifs || NOTIFS), notifAnim: Object.assign({}, s.notifAnim, { [id]: "in" }) }));
+      const clr = setTimeout(() => this.setState(s => {
+        const m = Object.assign({}, s.notifAnim); delete m[id]; return { notifAnim: m };
+      }), 700);
+      this.timers.push(clr);
+      const kind = (NKIND[it.kind] || NKIND.system).toast;
+      let tid;
+      tid = this.notify(it.body, {
+        kind: kind, title: it.title, actionLabel: "Show",
+        onAction: () => { this.dismissToast(tid); this.openNotif(n); },
+      });
+      return n;
+    };
+
+    /* Row-level animation flags. Only the touched tile animates — the list is never re-rendered
+       as a whole, so scroll position and every other row stay exactly where they were. */
+    setRowAnim = (id, kind, ms) => {
+      this.setState(s => ({ rowAnim: Object.assign({}, s.rowAnim, { [id]: kind }) }));
+      const t = setTimeout(() => this.setState(s => {
+        const m = Object.assign({}, s.rowAnim); delete m[id]; return { rowAnim: m };
+      }), ms);
+      this.timers.push(t);
+    };
+
+    /* "out" is the feedback for a removal the person performed — archive, delete, purge. The row
+       collapses under the gesture that removed it, then the state change lands. A row that goes
+       because the mailbox was re-read never plays it: that arrives as a new list, not as an act. */
+    animateRowsOut = (ids, commit, tone) => {
+      const list = (ids || []).filter(Boolean);
+      if (!list.length) { commit(); return; }
+      const kind = tone === "del" ? "outdel" : tone === "arc" ? "outarc" : "out";
+      list.forEach(id => this.setRowAnim(id, kind, 460));
+      this.timers.push(setTimeout(commit, 380));
+    };
+
+    markUnread = (id) => this.setState(s => ({ unread: Object.assign({}, s.unread || DEFAULT_UNREAD, { [id]: true }) }));
+
+    /* The global refresh — re-reads the mail in front of the reader and the notification centre.
+       Waiting is a pulse, never a spinner. What a re-read turns up in the prototype is the staged
+       batch: a message that arrived, one that changed, one that is no longer where it was. */
+    refreshAll = () => {
+      if (this.state.refreshBusy) return;
+      const step = (this._demoStep = (this._demoStep || 0));
+      this._demoStep = step + 1;
+      const b = DEMO_BATCHES[step % DEMO_BATCHES.length];
+      const prev = this._demoLastId;
+      this.setState({ refreshBusy: true });
+
+      /* 1 · a new message lands at the top of the list and in the notification centre */
+      const id = "demo" + (step + 1);
+      THREADS.unshift(Object.assign({ id: id }, b.mail));
+      this._demoLastId = id;
+      this.markUnread(id);
+      this.setRowAnim(id, "in", 720);
+      this.pushNotif({ kind: "mail", title: b.mail.from + " — new message", body: b.notif,
+        src: "Mail · " + (b.mail.org || "Inbox"), go: { screen: "mail", thread: id } });
+
+      /* 2 · a thread already on the list gets a reply — the same tile updates in place */
+      const t2 = setTimeout(() => {
+        const th = THREADS.find(x => x.id === b.edit.id);
+        if (th && (this.state.deleted || []).indexOf(th.id) < 0) {
+          /* the reply joins the conversation after its state was derived — the reading is now behind */
+          Object.assign(th, b.edit.patch, { stateStale: true });
+          this.markUnread(th.id);
+          this.setRowAnim(th.id, "edit", 1700);
+          this.pushNotif({ kind: "mail", title: b.editNotif.title, body: b.editNotif.body,
+            src: "Mail · " + (th.org || "Inbox"), go: { screen: "mail", thread: b.editNotif.thread } });
+        }
+      }, 1000);
+
+      /* 3 · one message is no longer where it was — the re-read simply returns a list without it,
+         so no leaving animation plays: "out" belongs to removals the person performed. */
+      const t3 = setTimeout(() => {
+        const done = (this.state.deleted || []);
+        const gone = prev && done.indexOf(prev) < 0 ? prev : (done.indexOf(b.fallbackRemove) < 0 ? b.fallbackRemove : null);
+        if (!gone) { this.setState({ refreshBusy: false, lastSync: Date.now() }); return; }
+        this.notify(b.removeNote, false);
+        this.setState(s => ({ deleted: (s.deleted || []).concat([gone]), refreshBusy: false, lastSync: Date.now() }));
+      }, 2050);
+      this.timers.push(t2, t3);
+    };
+
+    simulateNotif = () => {
+      const i = (this._inSeq = (this._inSeq || 0)) % INCOMING.length;
+      this._inSeq = i + 1;
+      this.pushNotif(INCOMING[i]);
+    };
+
+    exec = (cmd, arg) => {
+      const el = this.bodyRef.current;
+      if (el) el.focus();
+      try { document.execCommand(cmd, false, arg || null); } catch (e) {}
+    };
+
+    setBodyHtml = (html) => {
+      const el = this.bodyRef.current;
+      if (el) el.innerHTML = html;
+    };
+
+    aiWrite = (kind) => {
+      const el = this.bodyRef.current;
+      if (!el) return;
+      this.aiUndo = el.innerHTML;
+      const full = COMPOSE_DRAFTS.full;
+      const shortV = COMPOSE_DRAFTS.short;
+      const paras = kind === "short" ? shortV : full;
+      el.innerHTML = "";
+      const block = document.createElement("div");
+      block.id = "ai-draft-block";
+      block.style.borderLeft = "3px solid var(--accent)";
+      block.style.paddingLeft = "14px";
+      block.style.marginLeft = "-14px";
+      el.appendChild(block);
+      this.setState({ aiBusy: true, aiDraft: false });
+      const step = Math.max(120, (this.props.streamDelay ?? 550) * 0.55);
+      paras.forEach((p, i) => {
+        this.timers.push(setTimeout(() => {
+          const isLast = i === paras.length - 1;
+          const node = document.createElement("p");
+          node.style.margin = isLast ? "12px 0 0 0" : "0 0 12px 0";
+          node.innerHTML = p;
+          (isLast ? el : block).appendChild(node);
+          if (isLast) this.setState({ aiBusy: false, aiDraft: true });
+        }, step * (i + 1)));
+      });
+    };
+
+    aiRevert = () => {
+      if (typeof this.aiUndo === "string") this.setBodyHtml(this.aiUndo);
+      this.setState({ aiDraft: false });
+    };
+
+    unmarkAiDraft = () => {
+      const el = this.bodyRef.current;
+      const block = el && el.querySelector("#ai-draft-block");
+      if (block) {
+        block.style.borderLeft = "none";
+        block.style.paddingLeft = "0";
+        block.style.marginLeft = "0";
+        block.removeAttribute("id");
+      }
+    };
+
+    pushMsg = (s2, msgs) => {
+      const convs = (s2.convs || []).slice();
+      let id = s2.convId;
+      let i = convs.findIndex(c => c.id === id);
+      if (i < 0) {
+        id = "c" + Date.now();
+        convs.push({ id, title: "", when: "now", msgs: [] });
+        i = convs.length - 1;
+      }
+      const conv = Object.assign({}, convs[i]);
+      conv.msgs = conv.msgs.concat(msgs.map(m => Object.assign({ ts: Date.now() }, m)));
+      if (!conv.title) {
+        const first = msgs.find(m => m.role === "user");
+        if (first) conv.title = first.text.length > 34 ? first.text.slice(0, 34) + "…" : first.text;
+      }
+      convs[i] = conv;
+      return { convs, convId: id };
+    };
+
+    autoSchedule = () => {
+      this.setState(s2 => {
+        const todo = TASKS.concat(s2.extraTasks || []).filter(t2 => t2.group === "Today" && (s2.taskDone || []).indexOf(t2.id) < 0 && (s2.taskSched || []).indexOf(t2.id) < 0);
+        let h = 11;
+        const blocks = todo.map(t2 => {
+          const slot = { day: "27", time: (h < 10 ? "0" : "") + h + ":00", h, t: t2.t, kind: "meeting", src: "task" };
+          h += 2;
+          return slot;
+        });
+        return {
+          taskSched: (s2.taskSched || []).concat(todo.map(t2 => t2.id)),
+          calAdded: (s2.calAdded || []).concat(blocks),
+        };
+      });
+    };
+
+    /* Real-time playback of the scripted example. One timer at a time so the run can be skipped
+       or interrupted at any point; every arrival scrolls the thread and animates in. */
+    demoAt = 0;
+
+    demoSpeed = () => Math.max(0.3, Math.min(2, (this.props.streamDelay ?? 550) / 550));
+
+    playDemo = () => {
+      clearTimeout(this.demoT);
+      this.demoAt = 0;
+      this.setState(s2 => ({
+        convs: (s2.convs || []).filter(c => c.id !== DEMO_CONV_ID)
+          .concat([{ id: DEMO_CONV_ID, title: "Real example — contract addendum", when: "now", msgs: [] }]),
+        screen: "agent", convId: DEMO_CONV_ID, agentInput: "", agentThinking: false, agentStatus: "", demoRun: true,
+      }));
+      this.startAgentPin();
+      this.demoNext();
+    };
+
+    demoNext = () => {
+      const step = DEMO_SCRIPT[this.demoAt];
+      if (!step) { this.stopAgentPin(); this.setState({ agentThinking: false, agentStatus: "", demoRun: false }); return; }
+      this.demoT = setTimeout(() => {
+        this.demoAt += 1;
+        this.demoApply(step, false);
+        this.demoNext();
+      }, Math.round((step.d || 600) * this.demoSpeed()));
+      this.timers.push(this.demoT);
+    };
+
+    demoApply = (step, instant) => {
+      this.setState(s2 => {
+        const convs = (s2.convs || []).slice();
+        const i = convs.findIndex(c => c.id === DEMO_CONV_ID);
+        if (i < 0) return null;
+        const conv = Object.assign({}, convs[i]);
+        const msgs = conv.msgs.slice();
+        const onLast = (fn) => {
+          if (!msgs.length) return;
+          const m = Object.assign({}, msgs[msgs.length - 1]);
+          fn(m);
+          msgs[msgs.length - 1] = m;
+        };
+        if (step.u) msgs.push({ role: "user", text: step.u, ts: Date.now(), anim: !instant });
+        if (step.b) msgs.push(Object.assign({ role: "bot", ts: Date.now(), anim: !instant, bullets: [], blocks: [] }, step.b));
+        if (step.t) onLast(m => { m.text = m.text ? m.text + " " + step.t : step.t; });
+        /* A longer answer lands one whole paragraph at a time — never letter by letter. */
+        if (step.p) onLast(m => { m.paras = (m.paras || []).concat([{ t: step.p, anim: !instant }]); });
+        if (step.n) onLast(m => { m.next = step.n.slice(0, 3); });
+        if (step.k) onLast(m => { m.blocks = (m.blocks || []).concat([Object.assign({ anim: !instant }, step.k)]); });
+        conv.msgs = msgs;
+        convs[i] = conv;
+        const out = { convs };
+        /* The indicator stays up for the whole run — content landing is not the end of the work,
+           so it only goes away when there is nothing left to load. */
+        if (step.s) { out.agentStatus = step.s; out.agentThinking = true; }
+        else { out.agentThinking = !!s2.demoRun; }
+        return out;
+      });
+      if (!instant) this.scrollAgentDown();
+    };
+
+    /* Cancel stops the playback or a pending reply where it stands — nothing is rolled back,
+       what already arrived stays, and the thread says the run was stopped. */
+    agentCancel = () => {
+      if (!this.state.agentThinking && !this.state.demoRun) return;
+      this.stopAgentPin();
+      clearTimeout(this.demoT);
+      clearTimeout(this._askT);
+      this.demoAt = DEMO_SCRIPT.length;
+      this.setState(s2 => Object.assign(
+        { agentThinking: false, agentStatus: "", demoRun: false },
+        this.pushMsg(s2, [{ role: "bot", anim: true, scope: "stopped by you", text: "Stopped. What arrived so far stays — tell me where to pick it up.", bullets: [], blocks: [] }])
+      ));
+      this.scrollAgentDown();
+    };
+
+    demoStop = () => {
+      this.stopAgentPin();
+      clearTimeout(this.demoT);
+      if (this.state.demoRun) this.setState({ demoRun: false, agentThinking: false, agentStatus: "" });
+    };
+
+    /* Proposed next actions — only when the agent has stopped working, only from the last reply,
+       never more than three. */
+    nextActs = (msgs, st) => {
+      const lm = msgs && msgs.length ? msgs[msgs.length - 1] : null;
+      if (st.agentThinking || st.demoRun || !lm || lm.role !== "bot") return [];
+      return (lm.next || []).slice(0, 3).map(label => ({
+        label,
+        aria: "Ask the agent to: " + label,
+        iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:var(--accent-d)",
+        style: "display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:8px;padding:7px 12px 7px 10px;text-align:left",
+        run: () => this.agentAsk(label),
+        key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.agentAsk(label); } },
+      }));
+    };
+
+    /* Keeping the tail in view. Two rAFs so the freshly inserted block has been laid out before we
+       measure; smooth only for short hops, an instant jump when a big widget would otherwise leave
+       the status line below the fold; and we stay out of the way once the user scrolls up. */
+    scrollAgentDown = () => {
+      cancelAnimationFrame(this._agRaf);
+      this._agRaf = requestAnimationFrame(() => requestAnimationFrame(this.pinAgentBottom));
+    };
+
+    pinAgentBottom = () => {
+      const el = this.agentScrollRef.current;
+      if (!el || this._agAway) return;
+      const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+      if (gap <= 2) return;
+      if (gap > el.clientHeight * 0.85 || !el.scrollTo) el.scrollTop = el.scrollHeight;
+      else el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    };
+
+    startAgentPin = () => {
+      this._agAway = false;
+      clearInterval(this._agPin);
+      this._agPin = setInterval(this.pinAgentBottom, 140);
+    };
+
+    stopAgentPin = () => {
+      clearInterval(this._agPin);
+      this.scrollAgentDown();
+    };
+
+    onAgentWheel = () => {
+      const el = this.agentScrollRef.current;
+      if (!el) return;
+      this._agAway = el.scrollHeight - el.clientHeight - el.scrollTop > 40;
+    };
+
+    onAgentScroll = (e) => {
+      const el = e.target;
+      if (el.scrollHeight - el.clientHeight - el.scrollTop < 40) this._agAway = false;
+    };
+
+    agentAsk = (text) => {
+      const q = (text || "").trim();
+      if (!q) return;
+      this.demoStop();
+      this.setState(s2 => Object.assign(
+        { screen: "agent", agentInput: "", agentThinking: true },
+        this.pushMsg(s2, [{ role: "user", anim: true, text: q }])
+      ));
+      this.startAgentPin();
+      this._askT = setTimeout(() => {
+        const hit = AGENT_REPLIES.find(r => r.match.test(q)) || AGENT_FALLBACK;
+        this.setState(s2 => Object.assign(
+          { agentThinking: false },
+          this.pushMsg(s2, [{ role: "bot", anim: true, scope: hit.scope, text: hit.text, bullets: hit.bullets || [], blocks: hit.blocks || [], next: hit.next || NEXT_DEFAULT }])
+        ));
+        this.stopAgentPin();
+      }, Math.max(500, (this.props.streamDelay ?? 550) * 1.1));
+      this.timers.push(this._askT);
+    };
+
+    /* One block, drawn exactly as the Discover catalogue draws it — plus, for the three actionable
+       types, the controls and the pending / accepted / declined phase. */
+    bkView = (b, key, isMobile) => {
+      const st = this.state;
+      const phase = (st.bkPhase || {})[key] || b.phase || null;
+      const bstate = (st.bkState || {})[key] || b.state || "ready";
+      const editRaw = (st.bkEdit || {})[key];
+      const editing = typeof editRaw === "string";
+      const LABEL = { timeline: "TIMELINE", evidence: "EVIDENCE", threadstate: "THREAD STATE", facttable: "FACT TABLE", attachments: "ATTACHMENTS", draft: "DRAFT", event: "EVENT PROPOSAL", task: "TASK PROPOSAL", action: "SUGGESTED ACTION" };
+      const declined = phase === "declined";
+      const accepted = phase === "accepted";
+      const failed = accepted && !!b.failed;
+      const ready = bstate === "ready" || bstate === "partial";
+
+      const icon = (size, color) => "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + size + "px;line-height:1;flex:0 0 auto;color:" + color;
+      const rowGap = isMobile ? 8 : 9;
+      const fieldRow = "display:flex;gap:10px;align-items:baseline";
+      const kStyle = "flex:0 0 " + (isMobile ? 66 : 78) + "px;font-size:11.5px;letter-spacing:0.03em;color:var(--muted)";
+      const vStyle = "flex:1;min-width:0;font-size:13.5px;color:var(--text);text-wrap:pretty";
+      const btn = (variant) => "display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;font-size:13.5px;white-space:nowrap;" +
+        (isMobile ? "width:100%;min-height:44px;padding:0 16px;" : "padding:9px 15px;") +
+        (variant === "primary" ? "font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);" : "color:var(--text2);background:var(--panel);border:1px solid var(--border2);");
+      const keyer = (run) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run(); } };
+
+      /* Controls only exist while the proposal is live and the block actually came back. */
+      let raw = [];
+      if (phase === "pending" && ready) {
+        if (b.type === "event") raw = [
+          { label: "Add to calendar", aria: "Add “" + b.title + "” to the calendar, " + (b.when || ""), primary: true, run: () => this.acceptBk(key, b) },
+          { label: "Another time", aria: "Ask for another time for “" + b.title + "”", run: () => this.anotherTimeBk(key, b) },
+          { label: "Decline", aria: "Decline putting “" + b.title + "” in the calendar", run: () => this.declineBk(key) },
+        ];
+        else if (b.type === "task") raw = [
+          { label: "Add", aria: "Add the task “" + b.title + "”, due " + (b.due || ""), primary: true, run: () => this.acceptBk(key, b) },
+          { label: "Decline", aria: "Decline the task “" + b.title + "”", run: () => this.declineBk(key) },
+        ];
+        else if (b.type === "draft") raw = editing
+          ? [{ label: "Send", aria: "Send the edited draft to " + b.to, primary: true, run: () => this.acceptBk(key, b) },
+             { label: "Stop editing", aria: "Stop editing the draft to " + b.to, run: () => this.editBk(key, false) }]
+          : [{ label: "Send", aria: "Send the draft to " + b.to, primary: true, run: () => this.acceptBk(key, b) },
+             { label: "Edit here", aria: "Edit the draft to " + b.to + " inside the conversation", run: () => this.editBk(key, true, (b.paras || []).join("\n\n")) },
+             { label: "Discard", aria: "Discard the draft to " + b.to, run: () => this.declineBk(key) }];
+        else if (b.type === "action") raw = [
+          { label: b.cta || "Do it", aria: b.title, primary: true, run: () => this.acceptBk(key, b) },
+          { label: "Decline", aria: "Decline: " + b.title, run: () => this.declineBk(key) },
+        ];
+      }
+      if (failed) raw = [{ label: "Try again", aria: "Try again: " + b.title, primary: true, run: () => this.setBk(key, { phase: "pending" }) }];
+
+      const controls = raw.map(c => ({ label: c.label, aria: c.aria, run: c.run, key: keyer(c.run), style: btn(c.primary ? "primary" : "quiet") }));
+
+      const nav = (declined ? [] : (b.nav || [])).map(n => ({
+        label: n.label, icon: n.icon, aria: n.label + " — leaves the conversation, you can come straight back",
+        run: () => this.goLook(n), key: keyer(() => this.goLook(n)),
+        iconStyle: icon(16, "var(--muted)"),
+        style: "display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text2);font-size:12.5px;white-space:nowrap;" +
+          (isMobile ? "min-height:44px;padding:0 14px;" : "padding:6px 12px;"),
+      }));
+
+      const chip = phase === "pending" ? { icon: "help", label: "needs confirmation" }
+        : failed ? { icon: "error", label: "not done" }
+        : accepted ? { icon: "check_circle", label: "done" }
+        : declined ? { icon: "block", label: "declined" } : null;
+
+      const fields = b.type === "event" ? [
+        { k: "When", v: b.when }, { k: "Duration", v: b.duration }, { k: "Attendees", v: b.attendees }, { k: "From", v: "thread “" + (b.from || "") + "”" },
+      ] : b.type === "task" ? [
+        { k: "Due", v: b.due }, { k: "From", v: "message “" + (b.from || "") + "”" },
+      ].concat(b.reminder ? [{ k: "Reminder", v: b.reminder }] : []) : b.type === "draft" ? [
+        { k: "To", v: b.to }, { k: "Subject", v: b.subject },
+      ] : [];
+
+      const cols = (b.cols || []).length;
+      const cells = b.type === "facttable"
+        ? (b.cols || []).map(c => ({ t: c, style: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.05em;color:var(--muted);padding:0 0 7px 0;border-bottom:1px solid var(--line2);white-space:nowrap" }))
+          .concat([].concat.apply([], (b.rows || []).map((r, ri) => r.map((c, ci) => ({
+            t: c,
+            style: "font-size:13px;padding:8px 0;white-space:nowrap;" + (ci === 0 ? "font-weight:600;" : "color:var(--text2);") + (ri ? "border-top:1px solid var(--line2);" : ""),
+          })))))
+        : [];
+
+      return {
+        label: LABEL[b.type] || "BLOCK",
+        meta: b.meta || "",
+        cardStyle: "display:flex;flex-direction:column;gap:" + rowGap + "px;border-radius:11px;padding:" + (isMobile ? "12px 13px" : "13px 15px") + ";" +
+          /* The thread itself is flat, so the blocks carry the separation: they sit on panel with a
+             visible edge instead of melting into the page. */
+          (declined ? "border:1px dashed var(--border2);background:transparent;"
+            : phase === "pending" ? "border:1px solid var(--accent-line);background:var(--accent-soft);box-shadow:0 1px 2px var(--sh-1);"
+            : "border:1px solid var(--border2);background:var(--panel);box-shadow:0 1px 2px var(--sh-1);")
+          + (b.anim ? "animation:mfblkin 0.52s cubic-bezier(0.22,0.61,0.36,1) both;" : ""),
+        headStyle: "display:flex;align-items:center;gap:9px;flex-wrap:wrap",
+        labelStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.09em;color:var(--muted)",
+        metaStyle: "font-size:11px;color:var(--faint)",
+        hasChip: !!chip,
+        chipLabel: chip ? chip.label : "",
+        chipIcon: chip ? chip.icon : "",
+        chipIconStyle: icon(13, "inherit"),
+        chipStyle: "margin-left:auto;display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:3px 9px;font-size:11px;white-space:nowrap;" +
+          (phase === "pending" ? "color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);"
+            : failed ? "color:var(--text);background:var(--hl);border:1px solid var(--hl-line);"
+            : "color:var(--muted);background:var(--sub);border:1px solid var(--border2);"),
+
+        isDeclined: declined,
+        showBody: !declined,
+        declinedStyle: "display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)",
+        declinedIconStyle: icon(16, "var(--muted)"),
+        strikeStyle: "text-decoration:line-through;min-width:0",
+        declinedWord: "Declined",
+        declinedNote: "nothing was done",
+
+        isLoading: bstate === "loading",
+        isError: bstate === "error",
+        isEmpty: bstate === "empty",
+        isPartial: bstate === "partial",
+        ready: ready,
+        skel: [96, 74, 58].map(w => ({ style: SHIM + "height:11px;border-radius:5px;width:" + w + "%" })),
+        emptyBodyStyle: "display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:4px 0 2px 0",
+        emptyIconStyle: icon(20, "var(--faint)"),
+        errIconStyle: icon(20, "var(--hl-line)"),
+        emptyIcon: b.type === "draft" ? "edit_note" : b.type === "task" ? "task_alt" : b.type === "event" ? "event_busy" : "find_in_page",
+        emptyTextStyle: "font-size:13px;color:var(--muted);text-wrap:pretty",
+        emptyText: b.emptyText || "Nothing came back for this one.",
+        errorText: b.errorText || "This block could not be built.",
+        retry: () => this.retryBk(key),
+        retryKey: keyer(() => this.retryBk(key)),
+        retryAria: "Try again: " + (LABEL[b.type] || "block").toLowerCase(),
+        retryStyle: btn("quiet"),
+        noteStyle: "display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)",
+        noteIconStyle: icon(15, "var(--muted)"),
+        partialNote: b.partialNote || "Still being read — more may appear.",
+
+        isTimeline: b.type === "timeline",
+        isEvidence: b.type === "evidence",
+        isThreadState: b.type === "threadstate",
+        isTable: b.type === "facttable",
+        isFiles: b.type === "attachments",
+        isDraft: b.type === "draft",
+        isProposal: b.type === "event" || b.type === "task" || b.type === "action",
+
+        tlWrapStyle: isMobile ? "display:flex;flex-direction:column;gap:0" : "display:flex;gap:0;overflow:auto",
+        items: b.type === "timeline" ? (b.items || []).map((t, i) => ({
+          date: t.date, title: t.title, detail: t.detail,
+          style: isMobile
+            ? "display:flex;flex-direction:column;gap:2px;border-top:2px solid var(--border2);padding:8px 0 10px 0"
+            : "flex:1;min-width:110px;display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--border2);padding:8px 12px 2px 0",
+          dateStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;color:var(--muted)",
+          titleStyle: "font-size:13px;font-weight:600;text-wrap:pretty",
+          detailStyle: "font-size:11.5px;color:var(--faint);text-wrap:pretty",
+        })) : b.type === "evidence" ? (b.items || []).map((e, i) => ({
+          n: e.n, source: e.source, snippet: e.snippet, relevance: e.relevance, freshness: e.freshness,
+          isPrivate: !!e.private, hasSnippet: !e.private && !!e.snippet,
+          badge: e.badge,
+          style: "display:flex;flex-direction:column;gap:5px;padding:9px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
+          nStyle: "flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:5px;font-size:11px;color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line)",
+          badgeStyle: "font-size:10.5px;letter-spacing:0.04em;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;white-space:nowrap",
+          privStyle: "font-size:12.5px;color:var(--faint);font-style:italic;text-wrap:pretty",
+          snipStyle: "font-size:13px;color:var(--text2);text-wrap:pretty",
+          subStyle: "font-size:11.5px;color:var(--faint)",
+        })) : b.type === "attachments" ? (b.items || []).map((f, i) => ({
+          name: f.name, meta: f.meta, icon: f.icon,
+          style: "display:flex;align-items:center;gap:10px;padding:8px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
+          iconStyle: icon(19, "var(--muted)"),
+          nameStyle: "font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
+          metaStyle: "font-size:11.5px;color:var(--faint)",
+        })) : [],
+
+        colsStyle: isMobile ? "display:flex;flex-direction:column;gap:12px" : "display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px",
+        stateCols: (b.cols || []).map(c => ({
+          label: c.label,
+          style: "display:flex;flex-direction:column;gap:6px;min-width:0",
+          labelStyle: "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.08em;color:var(--muted)",
+          items: (c.items || []).map(it => ({
+            t: it.t,
+            style: "font-size:12.5px;line-height:1.45;text-wrap:pretty;border-left:2px solid " + (it.late ? "var(--hl-line)" : "var(--line)") + ";padding-left:8px;" + (it.late ? "color:var(--text);" : "color:var(--text2);"),
+          })),
+        })),
+
+        tableScrollStyle: "overflow-x:auto;max-width:100%",
+        tableStyle: "display:grid;grid-template-columns:repeat(" + (cols || 1) + ",max-content);gap:0 18px;min-width:min-content",
+        cells: cells,
+
+        fields: fields.filter(f => !!f.v).map(f => ({ k: f.k, v: f.v, rowStyle: fieldRow, kStyle: kStyle, vStyle: vStyle })),
+        fieldsStyle: "display:flex;flex-direction:column;gap:5px",
+        propTitleStyle: "font-size:" + (isMobile ? 15 : 15.5) + "px;font-weight:600;letter-spacing:-0.01em;text-wrap:pretty",
+        title: b.title || "",
+        hasConflict: !!b.conflict && !accepted,
+        conflict: b.conflict || "",
+        conflictStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--text);background:var(--hl);border:1px solid var(--hl-line);border-radius:8px;padding:7px 9px;text-wrap:pretty",
+        conflictIconStyle: icon(16, "var(--hl-line)"),
+        hasReason: !!b.reason,
+        reason: b.reason || "",
+        reasonStyle: "font-size:13px;color:var(--text2);text-wrap:pretty",
+        hasEffect: !!b.effect,
+        effect: b.effect || "",
+        effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--muted);text-wrap:pretty",
+        effectIconStyle: icon(15, "var(--muted)"),
+
+        editing: editing,
+        notEditing: !editing,
+        editText: editing ? editRaw : "",
+        onEdit: (e) => this.editBk(key, true, e.target.value),
+        textareaStyle: "width:100%;box-sizing:border-box;min-height:" + (isMobile ? 150 : 130) + "px;resize:vertical;font-family:inherit;font-size:13.5px;line-height:1.6;color:var(--text);background:var(--sub);border:1px solid var(--accent-line);border-radius:9px;padding:10px 12px",
+        paras: (b.paras || []).map(p => ({ t: p, style: "font-size:13.5px;line-height:1.6;color:var(--text2);text-wrap:pretty" })),
+
+        hasControls: controls.length > 0,
+        controls: controls,
+        controlsStyle: (isMobile ? "display:flex;flex-direction:column;gap:8px;" : "display:flex;gap:8px;flex-wrap:wrap;align-items:center;") + "border-top:1px solid var(--line2);padding-top:10px",
+        hasResult: accepted && !declined,
+        resultText: (st.bkResult || {})[key] || b.result || ((b.done || "Done") + " · " + this.hm()),
+        resultIcon: failed ? "error" : "check_circle",
+        resultIconStyle: icon(16, failed ? "var(--hl-line)" : "var(--accent-d)"),
+        resultStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;color:" + (failed ? "var(--text)" : "var(--accent-d)") + ";text-wrap:pretty",
+        hasNav: nav.length > 0,
+        nav: nav,
+        navStyle: isMobile ? "display:flex;flex-direction:column;gap:8px" : "display:flex;gap:8px;flex-wrap:wrap",
+      };
+    };
+
+    /* Approving, declining and repairing a block. The phase lives outside the message, so the seeded
+       histories stay immutable and a re-proposal can reuse the very same block object. */
+    hm = (t) => { const d = new Date(t || Date.now()); return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes(); };
+
+    setBk = (key, patch) => this.setState(s2 => ({
+      bkPhase: Object.assign({}, s2.bkPhase, patch.phase ? { [key]: patch.phase } : {}),
+      bkState: Object.assign({}, s2.bkState, patch.state ? { [key]: patch.state } : {}),
+      bkResult: Object.assign({}, s2.bkResult, patch.result ? { [key]: patch.result } : {}),
+    }));
+
+    acceptBk = (key, b) => {
+      this.setBk(key, { phase: "accepted", result: (b.done || "Done") + " · " + this.hm() });
+      this.editBk(key, false);
+      if (b.type === "event") {
+        const t = (b.when || "").match(/\d{2}:\d{2}/);
+        this.setState(s2 => ({
+          calAdded: (s2.calAdded || []).concat([{ day: "27", time: t ? t[0] : "10:00", h: t ? parseInt(t[0], 10) : 10, t: b.title, kind: "meeting", src: "agent block" }]),
+        }));
+      }
+    };
+
+    declineBk = (key) => this.setBk(key, { phase: "declined" });
+    retryBk = (key) => this.setBk(key, { state: "ready" });
+
+    editBk = (key, on, text) => this.setState(s2 => ({
+      bkEdit: Object.assign({}, s2.bkEdit, { [key]: on ? (typeof text === "string" ? text : ((s2.bkEdit || {})[key] || "")) : null }),
+    }));
+
+    /* “Another time” is not a silent reshuffle — it says so in the conversation and comes back
+       with the same proposal at a new hour, still needing approval. */
+    anotherTimeBk = (key, b) => {
+      this.declineBk(key);
+      this.setState(s2 => Object.assign({ agentThinking: true }, this.pushMsg(s2, [{ role: "user", text: "Find another time for “" + b.title + "”" }])));
+      this.timers.push(setTimeout(() => this.setState(s2 => Object.assign({ agentThinking: false }, this.pushMsg(s2, [{
+        role: "bot", scope: ANOTHER_TIME.scope,
+        text: ANOTHER_TIME.text,
+        blocks: [Object.assign({}, b, { phase: "pending", when: ANOTHER_TIME.when, conflict: "" })],
+      }]))), Math.max(400, (this.props.streamDelay ?? 550))));
+    };
+
+    /* Going to look at a thread, a case or the calendar must not lose the place in the conversation. */
+    goLook = (a) => {
+      this.setState({ agentReturn: this.state.convId || null });
+      this.agentAction(a);
+    };
+
+    backToConv = () => this.setState(s2 => ({ screen: "agent", convId: s2.agentReturn || s2.convId, agentReturn: null }));
+
+    agentAction = (a) => {
+      if (a.kind === "draft") {
+        this.pendingDraft = AGENT_DRAFT_HTML;
+        if (this.tabsMode()) this.openTab("compose", { screen: "mail", compose: true, composeMin: false });
+        else this.setState({ screen: "mail", compose: true, composeMin: false });
+      } else if (a.kind === "cal") {
+        this.setState(s2 => ({
+          screen: "cal",
+          calView: "Day",
+          calAdded: (s2.calAdded || []).concat(AGENT_SCHEDULED),
+        }));
+      } else if (a.kind === "gocal") this.setState({ screen: "cal", calView: "Day" });
+      else if (a.kind === "case") this.setState({ screen: "cases", caseId: "contoso27", casePane: "detail" });
+      else if (a.kind === "thread") this.setState({ screen: "mail", threadId: a.tid, mailPane: "thread", threadOpen: true, cameFrom: false });
+      else if (a.kind === "planday") this.agentAsk("Plan my day");
+    };
+
+    /* Toolbar — full labels as long as they fit the available width.
+       A new screen is rendered "at full size", we measure the real content width and only then
+       collapse to icons if needed. The required width is cached per toolbar,
+       so on window resize the decision is instant and flicker-free. */
+    _tbNeed = {};
+    _tbNeedFab = {};
+
+    tbRef = el => {
+      if (this._tbEl === el) return;
+      if (this._tbRO) { this._tbRO.disconnect(); this._tbRO = null; }
+      this._tbEl = el;
+      if (el && typeof ResizeObserver === "function") {
+        this._tbRO = new ResizeObserver(() => this.tbMeasure());
+        this._tbRO.observe(el);
+      }
+      this.tbMeasure();
+    };
+
+    /* "full" = primary button in the bar + labels; "fab" = labels stay but the primary button
+       moves into a floating circle (the phone form); "icons" = icons only. */
+    tbModeFor(key) { return (this.state.tbMode || {})[key] || "full"; }
+
+    /* Once the icon font (ligatures) loads, widths change — we measure again. */
+    tbReset = () => {
+      this._tbNeed = {};
+      this._tbNeedFab = {};
+      this.setState({ tbMode: {} }, this.tbMeasure);
+    };
+
+    tbMeasure = () => {
+      const el = this._tbEl, key = this._tbKey;
+      if (!el || !key) return;
+      if (document.fonts && document.fonts.status !== "loaded") return;
+      const avail = el.clientWidth;
+      const kids = Array.prototype.slice.call(el.children);
+      if (!avail || !kids.length) return;
+      const mode = this.tbModeFor(key);
+      if (mode !== "icons") {
+        /* Sum of the children's real widths — not the edges, because "Select all"
+           has margin-left:auto and would stretch the measurement to the whole bar. */
+        const cs = getComputedStyle(el);
+        const gap = parseFloat(cs.columnGap || cs.gap || 0) || 0;
+        let need = parseFloat(cs.paddingLeft || 0) + parseFloat(cs.paddingRight || 0) + gap * (kids.length - 1);
+        kids.forEach(k => {
+          const ks = getComputedStyle(k);
+          /* margin:auto pushes an element to the end of the bar — we count real gaps only. */
+          const mg = m => { const v = parseFloat(m || 0); return isNaN(v) ? 0 : Math.min(v, 8); }; // margin:auto does not count towards the required width
+          need += k.offsetWidth + mg(ks.marginLeft) + mg(ks.marginRight);
+        });
+        if (mode === "full" && this._tbHasPri && kids.length > 2) {
+          const ks0 = getComputedStyle(kids[0]);
+          const pri = kids[0].offsetWidth + (parseFloat(ks0.marginLeft) || 0) + (parseFloat(ks0.marginRight) || 0);
+          const div = kids[1].offsetWidth + 4;
+          this._tbNeed[key] = need;
+          this._tbNeedFab[key] = need - pri - div - gap * 2;
+        } else {
+          this._tbNeedFab[key] = need;
+          if (this._tbNeed[key] == null) this._tbNeed[key] = need;
+        }
+      }
+      const needFull = this._tbNeed[key], needFab = this._tbNeedFab[key];
+      if (needFab == null) return;
+      const next = (this._tbHasPri && needFull != null && needFull <= avail + 1) ? "full"
+        : needFab <= avail + 1 ? (this._tbHasPri ? "fab" : "full")
+        : "icons";
+      if (this.tbModeFor(key) !== next) {
+        this.setState(s => {
+          const m = Object.assign({}, s.tbMode);
+          m[key] = next;
+          return { tbMode: m };
+        });
+      }
+    };
+
+    componentDidUpdate() {
+      this.tbMeasure();
+      if (!this.state.listLoading) this.restoreScrolls();
+      if (this.pendingDraft && this.bodyRef.current) {
+        this.bodyRef.current.innerHTML = this.pendingDraft;
+        this.pendingDraft = null;
+        this.setState({ aiDraft: true });
+      }
+      if (this.state.historyFocusPending && this.historySearchRef.current) {
+        this.historySearchRef.current.focus();
+        this.setState({ historyFocusPending: false });
+      }
+      if (this.state.agentFocusPending && this.agentInputRef.current) {
+        this.agentInputRef.current.focus();
+        this.setState({ agentFocusPending: false });
+      }
+      if (this.state.listSearchFocusPending && this.listSearchRef.current) {
+        this.listSearchRef.current.focus();
+        this.setState({ listSearchFocusPending: false });
+      }
+    }
+
+    revealMessage = (tid, idx) => {
+      const k = tid + ":" + idx;
+      this.setState(s => ({
+        msgOpen: Object.assign({}, s.msgOpen, { [k]: true }),
+        /* We leave the thread collapsed to the selected message — the pill offers "Show all". */
+        histOpen: Object.assign({}, s.histOpen, { [tid]: false }),
+        activeMsg: Object.assign({}, s.activeMsg, { [tid]: idx }),
+        msgFlash: k,
+      }));
+      this.timers.push(setTimeout(() => this.setState({ msgFlash: null }), 2200));
+    };
+
+    beginHistoryResize = (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = this.state.historyPanelW || 250;
+      const move = (ev) => {
+        const w = Math.max(200, Math.min(480, startW + (ev.clientX - startX)));
+        this.setState({ historyPanelW: w });
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    };
+
+    beginSideResize = (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = Math.max(210, Math.min(420, this.state.sideW || 210));
+      const move = (ev) => this.setState({ sideW: Math.max(210, Math.min(420, startW + (ev.clientX - startX))) });
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    };
+
+    beginResize = (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = this.state.listW;
+      const move = (ev) => {
+        const w = Math.max(232, Math.min(560, startW + (ev.clientX - startX)));
+        this.setState({ listW: w });
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    };
+
+    componentWillUnmount() {
+      document.removeEventListener("mousedown", this.onDocDown, true);
+      window.removeEventListener("message", this.onHtmlFrameMessage);
+      this.htmlFrames.forEach(r => { if (r.timer) clearTimeout(r.timer); });
+      this.htmlFrames.clear();
+      this.timers.forEach(clearTimeout);
+      if (this.measure) window.removeEventListener("resize", this.measure);
+      if (this.ro) this.ro.disconnect();
+    }
+
+    planFor(q) {
+      const s = (q || "").toLowerCase();
+      if (s.includes("polic") || s.includes("file") || s.includes("document") || s.includes("attach")) return "files";
+      if (s.includes("who") || s.includes("person") || s.includes("people") || s.includes("approv")) return "people";
+      return "contract";
+    }
+
+    run(q) {
+      this.timers.forEach(clearTimeout);
+      this.timers = [];
+      const key = this.planFor(q);
+      const blocks = PLANS[key].blocks;
+      this.setState({ query: q, planKey: key, phase: "running", ready: {}, ev: null, cameFrom: false, mailAnswer: false });
+      const step = Math.max(120, (this.props.streamDelay ?? 550));
+      blocks.forEach((b, i) => {
+        this.timers.push(setTimeout(() => {
+          this.setState(s => ({ ready: Object.assign({}, s.ready, { [b]: true, evidence: true }) }));
+        }, step * (i + 1)));
+      });
+      this.timers.push(setTimeout(() => this.setState({ phase: "done" }), step * (blocks.length + 1)));
+    }
+
+    renderVals() {
+      const st = this.state;
+      const aiSumThread = st.aiSum ? THREADS.find(t => t.id === st.aiSum) : null;
+      const hidMap = st.hidden || {};
+      const hid = (k, id) => (hidMap[k] || []).indexOf(id) >= 0;
+      const selMap = st.selBy || {};
+      const isSel = (kind, id) => (selMap[kind] || []).indexOf(id) >= 0;
+      const selMark = (kind, id) => (isSel(kind, id) ? "background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);" : "");
+      const plan = st.planKey ? PLANS[st.planKey] : null;
+      const selBarKind = st.notifOpen ? "notifs"
+        : st.screen === "cases" ? "cases"
+        : st.screen === "tasks" ? "tasks"
+        : st.screen === "cal" ? "events"
+        : st.screen === "people" ? "people"
+        : st.screen === "agent" ? "convs"
+        : "";
+      const selBarIds = (selMap[selBarKind] || []);
+      const hasRun = st.phase !== "idle";
+      const ready = st.ready;
+
+      const mode = this.props.layout ?? "auto";
+      const FR = FRAMES[mode] || null;
+      const w = FR ? FR.w : (st.vw || 1440);
+      const isMobile = w < 700;
+      const tablet = !isMobile && w < 1180;
+      const singlePane = isMobile || w < 820;
+      const compact = !isMobile && w < 1180;
+      const narrow = !isMobile && w < 1020;
+      const railW = tablet ? 66 : 96;
+      const touch = isMobile || tablet;
+      const notifFilter = st.notifFilter || "all";
+      const notifAll = (st.notifs || NOTIFS).filter(n => !hid("notifs", n.id));
+      const notifRead = st.notifRead || {};
+      const notifUnreadCount = notifAll.filter(n => isNotifUnread(n, notifRead)).length;
+      const notifIn = !!st.notifShown;
+      const notifDrag = st.notifDrag || 0;
+      const notifDragging = !!(this._notifG && this._notifG.live);
+      const notifH = st.notifH || Math.max(320, (st.vh || 844) - this.barH());
+      /* Scrim opacity straight from the distance travelled — panel and scrim move with the finger. */
+      const notifProg = notifIn ? Math.max(0, 1 - Math.min(1, notifDrag / notifH)) : 0;
+      const notifShown = notifFilter === "unread" ? notifAll.filter(n => isNotifUnread(n, notifRead)) : notifAll;
+      const avSz = isMobile ? 34 : 22;
+      const mailPane = st.mailPane || "list";
+      const thCollapsed = !!st.thScroll;
+      const drawer = tablet || isMobile;
+      const drawerOpen = !!st.sideDrawer;
+      const rowStyleFor = (active, selected) =>
+        "position:relative;display:flex;flex-direction:column;user-select:none;-webkit-user-select:none;" +
+        (isMobile ? "gap:6px;padding:14px 16px;min-height:76px;justify-content:center;" : "gap:5px;padding:12px 14px;") + "transition:background 120ms ease,box-shadow 120ms ease;" +
+        (selected
+          ? "background:var(--accent-soft);box-shadow:inset 0 1px 0 var(--inset),inset 4px 0 0 var(--accent),0 3px 9px var(--sh-2);z-index:2;"
+          : active
+          ? "background:var(--accent-soft);box-shadow:inset 0 1px 0 var(--inset),inset 3px 0 0 var(--accent-2),0 3px 9px var(--sh-2);z-index:1;"
+          : "background:var(--panel);box-shadow:inset 0 1px 0 var(--inset),0 1px 2px var(--sh-1);");
+      const tbBtn = "display:flex;align-items:center;gap:7px;flex:0 0 auto;font-size:13px;color:var(--text2);padding:7px 11px;border-radius:8px;white-space:nowrap;transition:background 120ms ease";
+      const tbIcon = "display:flex;align-items:center;justify-content:center;color:var(--text2);border-radius:9px;" +
+        (touch ? "font-size:19px;width:42px;height:42px;" : "font-size:15px;width:34px;height:34px;");
+      const selBtn = "display:flex;align-items:center;gap:7px;flex:0 0 auto;font-size:13px;color:var(--accent-d);padding:7px 11px;border-radius:8px;white-space:nowrap";
+      const sel = Array.isArray(st.sel) ? st.sel : [];
+      const screenKey = st.screen || "mail";
+      this._tbKey = screenKey === "mail" && sel.length ? "mailSel" : screenKey;
+      const tbHasPri = !isMobile && this._tbKey !== "mailSel";
+      this._tbHasPri = tbHasPri;
+      const tbMode = this.tbModeFor(this._tbKey);
+      const tbFull = tbMode !== "icons";
+      const tbPriInBar = tbHasPri && tbMode === "full";
+      const tbFabForced = tbHasPri && tbMode !== "full";
+      const inspW = narrow ? 288 : compact ? 320 : 400;
+
+      const railBase = isMobile
+        ? "flex:1;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;border-radius:16px;font-size:11px;"
+        : "display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;padding:" + (tablet ? 8 : 9) + "px 0;";
+      const activeStyle = isMobile
+        ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;"
+        : "background:var(--accent-soft);color:var(--accent-d);border-right:3px solid var(--accent);";
+      const idleColor = "color:var(--muted);";
+      const myName = st.myName !== undefined ? st.myName : ME;
+      const myPhoto = st.myPhoto || "";
+      const themePref = st.themePref || "auto";
+      const sysDark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = themePref === "auto"
+        ? (st.themeOverride || (this.props.theme ?? (sysDark ? "dark" : "light")))
+        : themePref;
+
+      const openEv = (cite) => () => {
+        if (!plan) return;
+        const e = plan.evidence.find(x => x.n === cite) || plan.evidence[0];
+        this.setState({ ev: e.n });
+      };
+      const evObj = plan && st.ev ? plan.evidence.find(x => x.n === st.ev) : null;
+      const thread = THREADS.find(t => t.id === st.threadId) || THREADS[0];
+      const threadAddr = msgAddrRows(thread, (msgsFor(thread) || [])[0] || { from: thread.from, mine: false }, msgsFor(thread) || []);
+      const flags = st.flags || {};
+      /* The demo starts with the five newest threads unread — opening a thread clears it. */
+      const unreadMap = st.unread || DEFAULT_UNREAD;
+      const movedMap = st.moved || {};
+      const rowAnim = st.rowAnim || {};
+      const rowOut = (id) => rowAnim[id] === "out" || rowAnim[id] === "outdel" || rowAnim[id] === "outarc";
+      /* the wash names the act: red for a deletion, orange for archive and move */
+      const rowWash = (id) => rowAnim[id] === "outdel" ? "animation:mfrowdel 460ms ease-out both;"
+        : rowAnim[id] === "outarc" ? "animation:mfrowarc 460ms ease-out both;"
+        : rowAnim[id] === "move" ? "animation:mfrowmoved 900ms ease-out both;"
+        : rowAnim[id] === "edit" ? "animation:mfrowedit 1700ms ease-out both;" : "";
+      const notifAnim = st.notifAnim || {};
+      const actTargets = sel.length ? sel : [st.threadId];
+      const flagOn = actTargets.every(id => !!flags[id]);
+      const wantTabs = (st.workMode || "tabs") === "tabs";
+      const rmode = st.replyMode || null;
+      const composeKind = rmode === "reply" ? "Reply" : rmode === "all" ? "Reply all" : rmode === "fwd" ? "Forward" : "New message";
+      const threadParticipants = (msgsFor(thread) || []).map(m => m.from).filter((n, i, a) => a.indexOf(n) === i);
+      const composeTo = rmode === "fwd" ? [] : rmode === "all" ? threadParticipants : rmode === "reply" ? threadParticipants.slice(-1) : NEW_MESSAGE_TO.slice();
+      const composeSubj = rmode === "fwd" ? "Fwd: " + thread.subject : rmode ? "Re: " + thread.subject : "";
+      const curSubj = st.composeSubjEdit !== undefined ? st.composeSubjEdit : composeSubj;
+      const bodyTxt = () => {
+        const el = this.bodyRef.current;
+        return el ? (el.innerText || "").replace(/\u200b/g, "").trim() : "";
+      };
+      const finishCompose = () => {
+        const patch = { compose: false, aiDraft: false, aiBusy: false, closeAsk: false, sendAsk: null, composeSubjEdit: undefined, ccOpen: false, composeCc: [], composeBcc: [], ccInput: "", bccInput: "", composeReplyTo: [], replyToInput: "" };
+        if ((st.workMode || "classic") === "tabs") this.closeTab("compose");
+        this.setState(patch);
+      };
+      const askSend = () => {
+        const w = [];
+        if (!curSubj.trim()) w.push("The message has no subject.");
+        if (!bodyTxt()) w.push("The message body is empty.");
+        if (!composeTo.length) w.push("The message has no recipient.");
+        if (st.aiDraft) w.push("The AI draft has not been accepted yet — check the text before sending.");
+        this.setState({ sendAsk: { warnings: w } });
+      };
+      const mailAct = {
+        reply: () => this.startReply("reply"),
+        reply_all: () => this.startReply("all"),
+        forward: () => this.startReply("fwd"),
+        archive: () => this.archiveThreads(),
+        delete: () => this.deleteThreads(),
+        flag: () => this.toggleFlagThreads(),
+        mark_email_unread: () => this.markUnread(),
+        drive_file_move: () => this.openMove(),
+        fullscreen: () => this.setState({ stateBarOff: true }),
+        fullscreen_exit: () => this.setState({ stateBarOff: false }),
+      };
+      const msgs = msgsFor(thread);
+      const htmlViewMode = st.msgView === "html";
+      const lastIdx = msgs.length - 1;
+      const openMap = st.msgOpen || {};
+      const mKey = (i) => thread.id + ":" + i;
+      const histRaw = (st.histOpen || {})[thread.id];
+      const histOpen = typeof histRaw === "boolean" ? histRaw : !!st.autoExpand;
+      /* The message picked from the list; the newest in the thread by default. */
+      const rawActive = (st.activeMsg || {})[thread.id];
+      const activeIdx = Math.max(0, Math.min(typeof rawActive === "number" ? rawActive : lastIdx, lastIdx));
+      const activeIsNewest = activeIdx === lastIdx;
+      const hiddenCount = histOpen ? 0 : lastIdx;
+      const items = [];
+      if (msgs.length > 1) {
+        items.push({
+          isPill: true, isMsg: false, key: "pill",
+          pillLabel: !hiddenCount
+            ? (activeIsNewest ? "Hide earlier messages" : "Hide the other messages")
+            : activeIsNewest
+              ? "Show " + hiddenCount + (hiddenCount === 1 ? " earlier message" : " earlier messages")
+              : "Show all messages",
+          togglePill: () => this.setState(s2 => ({ histOpen: Object.assign({}, s2.histOpen, { [thread.id]: !histOpen }) })),
+        });
+      }
+      msgs.forEach((m, i) => {
+        /* A collapsed thread shows only the message picked from the list — even when it is not
+           the newest; the pill then reveals both earlier and newer ones. */
+        if (hiddenCount && i !== activeIdx) return;
+        const k = mKey(i);
+        const open = true;
+        const flash = st.msgFlash === k;
+        const isActive = i === activeIdx && msgs.length > 1 && !hiddenCount;
+        const remoteRefs = m.remoteRefs != null ? m.remoteRefs
+          : m.mine ? 0 : (((m.from || "") + (m.when || "")).split("").reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 3 === 0 ? 0 : 3 + (((m.from || "").length * 7 + (m.when || "").length) % 16));
+        const remoteOn = !!(st.remoteLoaded || {})[k];
+        items.push({
+          isMsg: true, isPill: false, key: k, isActive,
+          remoteBlocked: remoteRefs > 0 && !remoteOn,
+          remoteLoaded: remoteRefs > 0 && remoteOn,
+          remoteCountLabel: "Removed references: " + remoteRefs,
+          loadRemote: () => this.setState(s2 => ({ remoteLoaded: Object.assign({}, s2.remoteLoaded, { [k]: true }) })),
+          remoteBoxStyle: "display:flex;flex-direction:column;gap:9px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:" + (touch ? "14px 15px" : "13px 16px"),
+          remoteBtnStyle: "font-size:" + (touch ? 14 : 13) + "px;font-weight:600;color:var(--onaccent);background:var(--accent);border-radius:7px;" + (touch ? "padding:11px 16px;min-height:44px;box-sizing:border-box;display:flex;align-items:center" : "padding:7px 14px"),
+          from: m.from, initials: m.initials, when: m.when,
+          hasAvatar: !!avatarOf(m.from), noAvatar: !avatarOf(m.from),
+          avatarImgStyle: "width:30px;height:30px;flex:0 0 30px;border-radius:50%;background-color:var(--border2);background-position:center;background-size:cover;background-repeat:no-repeat;background-image:url(" + avatarOf(m.from) + ")",
+          role: m.mine ? "Ty" : "",
+          num: (i + 1) + " / " + msgs.length,
+          open, collapsed: !open,
+          hasAtts: m.atts.length > 0,
+          atts: m.atts.map(x => ({ type: x.type, name: x.name, size: x.size, open: () => (this.tabsMode()
+            ? this.openTab("doc:" + x.name, { doc: x, docZoom: 1, docLoading: true }, { att: x })
+            : this.openDocLoad({ doc: x, docZoom: 1 })), download: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.notifyTask({ title: "Downloading file…", body: x.name, cancelText: "Downloading \u201C" + x.name + "\u201D is in progress. Aborting removes the incomplete file.", doneTitle: "File downloaded", doneBody: x.name, ms: 1800 }); } })),
+          showDownloadAll: m.atts.length > 1,
+          downloadAll: () => this.notifyTask({ title: "Packing attachments…", body: m.atts.length + " files → attachments.zip", cancelText: "The ZIP archive is being prepared. Aborting discards the partially packed file.", doneTitle: "Archive ready", doneBody: "attachments.zip — " + m.atts.length  + " files", ms: 2600 }),
+          clipLabel: m.atts.length ? String(m.atts.length) : "",
+          clipStyle: "display:flex;align-items:center;gap:3px;color:var(--faint);font-size:" + (touch ? 13 : 11) + "px",
+          clipIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;font-size:" + (touch ? 18 : 14) + "px",
+          whenStyle: "color:var(--faint);font-size:" + (touch ? 12.5 : 11) + "px",
+          htmlBtnStyle: "display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--faint);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;" +
+            (touch ? "width:38px;height:38px;font-size:21px;border:1px solid var(--line);" : "width:28px;height:28px;font-size:17px;"),
+          showHtmlBtn: !htmlViewMode,
+          simpleView: !htmlViewMode,
+          htmlView: htmlViewMode,
+          htmlFrameId: "fit:" + thread.id + ":" + i,
+          htmlEmbedSrc: htmlViewMode ? embedHtml(m.html || htmlFallback(m, thread.subject), "fit:" + thread.id + ":" + i) : "",
+          htmlFrameRef: this.htmlFrameRef,
+          htmlRich: !!m.html,
+          htmlTitle: m.html ? "Show the original message (rich content)" : "Show the original message",
+          openHtml: () => {
+            const doc = { title: thread.subject, from: m.from, when: m.when, rich: !!m.html, src: m.html || htmlFallback(m, thread.subject) };
+            this.setState({ htmlAsk: { key: "html:" + thread.id + ":" + i, doc } });
+          },
+          preview: (m.paras[0] || {}).text || mdPlain((m.paras[0] || {}).md || ""),
+          toggle: () => this.setState(s2 => ({ msgOpen: Object.assign({}, s2.msgOpen, { [k]: !open }), msgFlash: null })),
+          wrapStyle: (open
+            ? "flex:0 0 auto;display:flex;flex-direction:column;transition:background 140ms ease;" +
+              (flash
+                ? "border-left:3px solid var(--accent);padding-left:11px;background:var(--accent-soft);"
+                : isActive ? "border-left:3px solid var(--accent);padding-left:11px;" : "")
+            : "flex:0 0 auto;display:flex;flex-direction:column;border:1px solid " + (flash ? "var(--accent)" : "var(--line)") +
+              ";border-radius:10px;background:var(--sub);overflow:hidden;transition:border-color 140ms ease;")
+            + "box-sizing:border-box;width:100%;max-width:clamp(680px, 62vw, 1100px);margin-left:auto;margin-right:auto",
+          headPadStyle: open
+            ? "display:flex;align-items:center;gap:11px;padding:0 0 9px 0"
+            : "display:flex;align-items:center;gap:11px;padding:11px 13px",
+          bodyPadStyle: "display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:0 0 4px 0;width:100%;text-align:left",
+          avatarStyle:
+            "width:30px;height:30px;flex:0 0 30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;letter-spacing:0.02em;" +
+            (m.mine ? "background:var(--accent);color:var(--onaccent);" : "background:var(--border2);color:var(--text2);"),
+          paras: m.paras.reduce((acc, bb) => bb.md ? acc.concat(mdView(bb.md)) : acc.concat([{
+            isText: true,
+            runs: [{ text: bb.text, plain: true, isLink: false, href: "", style: "" }],
+            style: bb.hl && st.cameFrom
+              ? "font-size:16px;line-height:1.55;background:var(--hl);border-left:3px solid var(--hl-line);padding:13px 16px;text-wrap:pretty"
+              : MDTXT,
+          }]), []),
+        });
+      });
+      const selectionOn = sel.length > 0;
+      const aiHints = this.props.aiHints ?? true;
+      const allCases = CASES.concat(st.extraCases || []).filter(c => !hid("cases", c.id));
+      const kase = allCases.find(c => c.id === st.caseId) || allCases[0];
+      const ownContacts = CONTACTS.concat(st.extraContacts || []);
+      const hiddenCollected = st.hiddenCollected || [];
+      const collectedContacts = collectFromMail(ownContacts.map(c => c.name)).filter(c => hiddenCollected.indexOf(c.name) < 0);
+      const allContacts = ownContacts.concat(collectedContacts);
+      const peopleTab = st.peopleTab || "own";
+      const shownContacts = peopleTab === "collected" ? collectedContacts : ownContacts;
+      const allTasks = TASKS.concat(st.extraTasks || []).filter(t2 => !hid("tasks", t2.id));
+      const openTodayTasks = allTasks.filter(t2 => t2.group === "Today" && (st.taskDone || []).indexOf(t2.id) < 0);
+      const openToday = openTodayTasks.length;
+      const estToday = openTodayTasks.reduce((a, t2) => a + (parseInt(t2.est, 10) || 30), 0) + " min";
+      const convList = st.convs || [];
+      const activeConv = convList.find(c => c.id === st.convId) || null;
+      const convMsgs = activeConv ? activeConv.msgs : [];
+      const activeConvList = convList.filter(c => !c.archived);
+      const archivedConvList = convList.filter(c => c.archived);
+      const histQuery = (st.historySearch || "").trim().toLowerCase();
+      const matchesHistQuery = (c) => {
+        if (!histQuery) return true;
+        const lastMsg = c.msgs[c.msgs.length - 1];
+        return ((c.title || "New conversation") + " " + (lastMsg ? lastMsg.text : "")).toLowerCase().includes(histQuery);
+      };
+      const convRow = (c, isArchivedList) => {
+        const lastMsg = c.msgs[c.msgs.length - 1];
+        return {
+          title: c.title || "New conversation",
+          when: c.when || "today",
+          preview: lastMsg ? lastMsg.text : "no messages",
+          activate: this.rowTap("convs", c.id, () => this.setState({ convId: c.id })),
+          press: this.pressFor("convs", c.id, c.title || "New conversation", [
+            { icon: "check_box", label: "Select conversations", run: () => this.selStart("convs", c.id) },
+            { icon: "forum", label: "Open conversation", run: () => this.setState({ convId: c.id }) },
+            { icon: isArchivedList ? "unarchive" : "archive", label: isArchivedList ? "Restore from archive" : "Archive", run: () => this.setState(s2 => ({ convs: (s2.convs || []).map(x => x.id === c.id ? Object.assign({}, x, { archived: !isArchivedList }) : x), convId: (!isArchivedList && s2.convId === c.id) ? null : s2.convId })) },
+            { icon: "delete", label: "Delete conversation", danger: true, run: () => this.setState({ deleteConvAsk: c.id }) },
+          ]),
+          hasActions: !!c.id,
+          archiveIcon: isArchivedList ? "unarchive" : "archive",
+          archiveTitle: isArchivedList ? "Restore from archive" : "Archive",
+          toggleArchive: (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
+            this.setState(s2 => ({
+              convs: (s2.convs || []).map(x => x.id === c.id ? Object.assign({}, x, { archived: !isArchivedList }) : x),
+              convId: (!isArchivedList && s2.convId === c.id) ? null : s2.convId,
+            }));
+          },
+          askDelete: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ deleteConvAsk: c.id }); },
+          /* A readable list, not a stack of cards: hairline separation, the open one marked by an
+             accent edge and a tint. */
+          style: "display:flex;flex-direction:column;gap:2px;padding:9px 11px 10px 9px;border-radius:8px;border-left:3px solid " +
+            (c.id === (activeConv || {}).id ? "var(--accent);background:var(--accent-soft);" : "transparent;") +
+            (isSel("convs", c.id) ? "background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);" : ""),
+        };
+      };
+      const person = allContacts.find(c => c.id === st.personId) || allContacts[0];
+      const personAi = CONTACT_AI[person.id] || {};
+      const evStyle = (kind) => "display:flex;flex-direction:column;gap:3px;border-radius:8px;padding:8px 11px;border:1px solid " + (kind === "deadline"
+        ? "var(--hl-line);background:var(--hl);"
+        : kind === "mail"
+        ? "var(--line);background:var(--sub);"
+        : "var(--line);background:var(--panel);box-shadow:0 1px 2px var(--sh-1);");
+      const calAllDays = CAL_DAYS.map(d => Object.assign({}, d, { ev: d.ev.concat((st.calAdded || []).filter(x => x.day === d.d)) }));
+      const calToday = calAllDays.find(d => d.today) || calAllDays[0];
+      const monthCells = [];
+      for (let i = 0; i < 5; i++) monthCells.push({ blank: true, n: "", ev: [] });
+      for (let n = 1; n <= 31; n++) {
+        const src = calAllDays.find(d => parseInt(d.d, 10) === n);
+        monthCells.push({ n: String(n), today: n === 27, ev: src ? src.ev.slice(0, 2) : [], blank: false });
+      }
+      const tabsMode = w >= 1180 && (st.workMode || "tabs") === "tabs";
+      const emptyApp = false;
+      const filterCount = [!!st.fUnread, !!st.fFlagged, !!st.fAttach, !!st.fRange || !!st.fFrom || !!st.fTo, (st.fSort || "Newest") !== "Newest"].filter(Boolean).length;
+      const sideCollapsed = drawer ? false : (st.sideCollapsed !== undefined ? !!st.sideCollapsed : narrow);
+      const noop = () => {};
+      /* A real account carries all six standard folders. The unified view drops the three that only
+         make sense per account — Archive, Spam and Trash are always opened in the account they live in. */
+      const STD_FOLDERS = (counts, unified) => [
+        { icon: "inbox", label: "Inbox" },
+        { icon: "send", label: "Sent" },
+        { icon: "draft", label: "Drafts" },
+        { icon: "archive", label: "Archive", perAccount: true },
+        { icon: "report", label: "Spam", perAccount: true },
+        { icon: "delete", label: "Trash", perAccount: true },
+      ].filter(mb => !(unified && mb.perAccount))
+        .map(mb => ({ icon: mb.icon, label: mb.label, count: (counts || {})[mb.label] || "" }));
+      const sideW = drawer ? 0 : sideCollapsed ? 58 : Math.max(210, Math.min(420, st.sideW || 210));
+      const listW = Math.max(232, Math.min(st.listW, w - railW - sideW - (narrow ? 300 : 420)));
+      const composeTabActive = tabsMode && st.activeTab === "compose" && !!st.compose;
+      const docInPane = tabsMode && (st.activeTab || "").indexOf("doc:") === 0 && !!st.doc;
+      const htmlInPane = tabsMode && (st.activeTab || "").indexOf("html:") === 0 && !!st.htmlDoc;
+      const composeInPane = !isMobile && !!st.compose && (tabsMode ? composeTabActive : true);
+      const tabItems = (tabsMode ? (st.tabs || []) : []).map(tb => {
+        const isDoc = tb.kind === "doc";
+        const isHtml = tb.kind === "html";
+        const th = tb.kind === "thread" ? (THREADS.find(x => x.id === tb.id) || {}) : null;
+        const active = st.activeTab === tb.key;
+        return {
+          key: tb.key,
+          title: isDoc ? tb.att.name : isHtml ? "HTML · " + (tb.htmlDoc ? tb.htmlDoc.title : "message") : th ? th.subject : "New message",
+          icon: isDoc ? "description" : isHtml ? "code" : th ? "mail" : "edit_square",
+          activate: () => this.setState(Object.assign({ activeTab: tb.key }, this.tabPatch(tb))),
+          close: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.closeTab(tb.key); },
+          style: "display:flex;align-items:center;gap:8px;max-width:230px;padding:8px 11px;border-radius:9px 9px 0 0;font-size:13px;white-space:nowrap;border:1px solid " +
+            (active ? "var(--line);border-bottom-color:var(--panel);background:var(--panel);color:var(--text);box-shadow:0 -1px 0 var(--inset) inset;"
+                    : "transparent;background:transparent;color:var(--muted);"),
+          titleStyle: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + (active ? "font-weight:600;" : ""),
+        };
+      });
+
+      /* Empty reading panel: in tab mode when no tab is open, and outside it —
+         until something has been opened during this visit to mail. */
+      const emptyMail = !composeInPane && !docInPane && !htmlInPane &&
+        (tabsMode ? tabItems.length === 0 : (!singlePane && !st.threadOpen));
+
+      return {
+        rootRef: this.rootRef,
+        themeAttr: theme,
+        themeIcon: theme === "dark" ? "light_mode" : "dark_mode",
+        themeLabel: theme === "dark" ? "Light" : "Dark",
+        toggleTheme: () => this.setState({ themeOverride: theme === "dark" ? "light" : "dark" }),
+        themeMenuLabel: theme === "dark" ? "Light theme" : "Dark theme",
+        isPhone: isMobile,
+        userMenuRef: this.userMenuRef,
+        userMenuOpen: !!st.userMenu,
+        toggleUserMenu: () => this.setState({ userMenu: !st.userMenu }),
+        closeUserMenu: () => { if (st.userMenu) this.setState({ userMenu: false }); },
+        meName: myName,
+        meInitials: myPhoto ? "" : initialsOf(myName),
+        mePhoto: myPhoto,
+        meHasPhoto: !!myPhoto,
+        onMeName: (e) => this.setState({ myName: e.target.value }),
+        photoInputRef: this.photoRef,
+        pickPhoto: () => (this.photoRef.current ? this.photoRef.current.click() : null),
+        photoError: st.photoError || "",
+        onPhotoFile: (e) => {
+          const f = e.target.files && e.target.files[0];
+          if (!f) return;
+          if (f.size > 1048576) { this.setState({ photoError: "Plik ma " + (f.size / 1048576).toFixed(1) + " MB — limit to 1 MB." }); return; }
+          const r = new FileReader();
+          r.onload = () => this.setState({ myPhoto: String(r.result), photoError: "" });
+          r.readAsDataURL(f);
+        },
+        confirmDelOpen: !!st.confirmDel,
+        confirmDelTitle: st.confirmDel ? st.confirmDel.title : "",
+        confirmDelText: st.confirmDel ? st.confirmDel.text : "",
+        confirmDelLabel: st.confirmDel ? (st.confirmDel.label || "Delete") : "",
+        cancelConfirmDel: () => this.setState({ confirmDel: null }),
+        runConfirmDel: () => {
+          const c = st.confirmDel;
+          this.setState({ confirmDel: null });
+          if (c && c.run) c.run();
+        },
+        removePhoto: () => this.askDel({
+          title: "Remove the profile photo?",
+          text: "We will fall back to initials. The file will have to be uploaded again.",
+          label: "Remove photo",
+          run: () => this.setState({ myPhoto: "", photoError: "" }),
+        }),
+        mePreviewStyle: "width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;letter-spacing:0.02em;background:var(--border2);color:var(--text2);" +
+          (myPhoto ? "background-image:url(" + myPhoto + ");background-size:cover;background-position:center;" : ""),
+        avatarStyle:
+          "width:34px;height:34px;border-radius:50%;background:var(--border2);" + (myPhoto ? "background-image:url(" + myPhoto + ");background-size:cover;background-position:center;" : "") + "display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2);transition:transform 120ms ease,box-shadow 120ms ease;box-shadow:0 1px 0 var(--inset) inset,0 1px 3px var(--sh-2);" +
+          (st.userMenu ? "outline:2px solid var(--accent-line);outline-offset:2px;" : ""),
+        railThemeStyle: railBase + "color:var(--muted);",
+        notMobile: !isMobile,
+        railIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;font-size:" + (isMobile ? 25 : tablet ? 21 : 22) + "px",
+        railMoreStyle: railBase + (st.more ? activeStyle : idleColor),
+        moreOpen: !!st.more,
+        toggleMore: () => this.setState(s2 => ({ more: !s2.more })),
+        closeMore: () => this.setState({ more: false }),
+        moreItems: [
+          { icon: "task_alt", label: "Tasks", go: { screen: "tasks" } },
+          { icon: "topic", label: "Cases", go: { screen: "cases", casePane: "list" } },
+          { icon: "calendar_month", label: "Calendar", go: { screen: "cal" } },
+          { icon: "group", label: "People", go: { screen: "people", peoplePane: "list" } },
+          { icon: "settings", label: "Settings", settings: true },
+        ].map(mi => ({
+          icon: mi.icon, label: mi.label,
+          run: () => this.setState(Object.assign({ more: false }, mi.settings ? { settings: true } : mi.go)),
+          style: "display:flex;align-items:center;gap:16px;min-height:52px;padding:14px;border-radius:13px;font-size:15px;color:var(--text)",
+        })),
+        railLabelDiscover: "Discover",
+        railLabelMail: "Mail",
+        railLabelCases: "Cases",
+        railLabelAgent: "Agent",
+        railLabelTasks: "Tasks",
+        railLabelCal: "Calendar",
+        railLabelPeople: "People",
+        railLabelSettings: isMobile ? "Settings" : "Settings",
+        railLabelStyle: isMobile
+          ? "font-size:11.5px;line-height:1.1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%"
+          : tablet ? "font-size:10.5px;line-height:1.1;text-align:center" : "font-size:12px",
+        rootStyle: FONT + (isMobile ? ";flex-direction:column-reverse" : "") + (FR
+          ? ";width:" + FR.w + "px;max-width:100%;height:" + FR.h + "px;max-height:calc(100vh - 40px);margin:20px auto;transform:translateZ(0);border:1px solid var(--border2);border-radius:" + (isMobile ? 20 : 14) + "px;overflow:hidden;box-shadow:0 20px 50px var(--sh-2)"
+          : ""),
+        ctxMenuOpen: !!st.ctxMenu,
+        ctxMenuTitle: st.ctxMenu ? st.ctxMenu.title : "",
+        closeCtxMenu: () => { if (this.ctxArmed()) this.setState({ ctxMenu: null }); },
+        ctxMenuItems: (st.ctxMenu ? st.ctxMenu.items : []).map(mi => ({
+          icon: mi.icon, label: mi.label,
+          run: () => { if (!this.ctxArmed()) return; this.setState({ ctxMenu: null }); if (mi.run) mi.run(); },
+          style: "display:flex;align-items:center;gap:11px;border-radius:9px;padding:0 12px;color:" + (mi.danger ? "var(--err-text)" : "var(--text)") +
+            (touch ? ";min-height:48px;font-size:14.5px" : ";min-height:36px;font-size:13.5px"),
+        })),
+        ctxMenuStyle: (() => {
+          const c = st.ctxMenu || { x: 0, y: 0, items: [] };
+          const base = "display:flex;flex-direction:column;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:7px 6px 8px;box-shadow:0 20px 46px var(--sh-3);position:fixed;z-index:99;";
+          if (isMobile) return base + "left:50%;top:50%;transform:translate(-50%,-50%);width:min(300px,calc(100% - 36px));max-height:calc(100% - 120px);overflow:auto";
+          const W = touch ? 262 : 236;
+          const H = 46 + (c.items || []).length * (touch ? 50 : 38);
+          const bw = st.vw || 1200;
+          const bh = st.vh || (typeof window !== "undefined" ? window.innerHeight : 900);
+          const x = Math.max(10, Math.min(c.x, bw - W - 10));
+          const y = Math.max(10, Math.min(c.y, bh - H - 10));
+          return base + "left:" + x + "px;top:" + y + "px;width:" + W + "px";
+        })(),
+        selBarShown: !!selBarIds.length,
+        selClear: () => this.selClearKind(selBarKind),
+        selBarCount: selBarIds.length + " selected",
+        selBarStyle: "flex:0 0 auto;display:flex;align-items:center;gap:12px;background:var(--accent-soft);border-bottom:1px solid var(--accent-line);" +
+          (isMobile ? "padding:9px 10px 9px 14px;" : "padding:8px 14px 8px 18px;"),
+        selBarActions: (() => {
+          const ids = selBarIds.slice();
+          const kind = selBarKind;
+          const mk = (icon, label, run, danger) => ({ icon: icon, label: label, run: run, shown: isMobile ? "" : label, danger: !!danger });
+          const st2 = (a) => Object.assign({}, a, {
+            style: "display:flex;align-items:center;gap:7px;border-radius:9px;border:1px solid var(--line);white-space:nowrap;color:" + (a.danger ? "var(--err-text)" : "var(--text2)") +
+              (touch ? ";min-height:40px;padding:0 12px;font-size:13px" : ";min-height:32px;padding:0 10px;font-size:12.5px"),
+          });
+          if (kind === "tasks") return [
+            mk("check_circle", "Zrobione", () => this.setState(s3 => ({ taskDone: (s3.taskDone || []).concat(ids), selBy: Object.assign({}, s3.selBy || {}, { tasks: [] }) }))),
+            mk("calendar_month", "Schedule", () => this.setState(s3 => ({ taskSched: (s3.taskSched || []).concat(ids), selBy: Object.assign({}, s3.selBy || {}, { tasks: [] }) }))),
+            mk("delete", "Delete", () => this.askHide("tasks", ids, "Delete tasks?", ids.length + " tasks will disappear from the list."), true),
+          ].map(st2);
+          if (kind === "notifs") return [
+            mk("mark_email_read", "Read", () => this.setNotifsRead(ids, true)),
+            mk("mark_email_unread", "Unread", () => this.setNotifsRead(ids, false)),
+            mk("delete", "Delete", () => this.askHide("notifs", ids, "Delete notifications?", ids.length + " notifications will disappear from the centre."), true),
+          ].map(st2);
+          if (kind === "cases") return [
+            mk("check_circle", "Close", () => { this.notify(ids.length + " cases", { kind: "success", title: "Cases closed" }); this.selClearKind(kind); }),
+            mk("download", "Export", () => { this.notifyTask({ title: "Exporting cases\u2026", body: ids.length + " cases", doneTitle: "Cases exported", ms: 2000 }); this.selClearKind(kind); }),
+            mk("delete", "Delete", () => this.askHide("cases", ids, "Delete cases?", ids.length + " cases will disappear from the list."), true),
+          ].map(st2);
+          if (kind === "people") return [
+            mk("edit", "Write", () => { this.setState({ compose: true, composeMin: false, replyMode: null }); this.selClearKind(kind); }),
+            mk("download", "Export", () => { this.notifyTask({ title: "Exporting contacts\u2026", body: ids.length + " contacts", doneTitle: "Contacts exported", ms: 1800 }); this.selClearKind(kind); }),
+            mk("delete", "Delete", () => this.askHide("people", ids, "Delete contacts?", ids.length + " contacts will disappear from the list."), true),
+          ].map(st2);
+          if (kind === "convs") return [
+            mk("archive", "Archive", () => this.setState(s3 => ({ convs: (s3.convs || []).map(x => ids.indexOf(x.id) >= 0 ? Object.assign({}, x, { archived: true }) : x), selBy: Object.assign({}, s3.selBy || {}, { convs: [] }) }))),
+            mk("delete", "Delete", () => this.askDel({ title: "Delete conversations?", text: ids.length + " conversations will be permanently deleted.", label: "Delete", run: () => this.setState(s3 => ({ convs: (s3.convs || []).filter(x => ids.indexOf(x.id) < 0), convId: ids.indexOf(s3.convId) >= 0 ? null : s3.convId, selBy: Object.assign({}, s3.selBy || {}, { convs: [] }) })) }), true),
+          ].map(st2);
+          if (kind === "events") return [
+            mk("notifications_active", "Reminders", () => { this.setState({ remFor: { key: ids[0], title: ids.length + " events", timed: true, kind: "cal", hint: "before the event time", src: "Calendar" } }); this.selClearKind(kind); }),
+            mk("delete", "Delete", () => this.askDel({ title: "Delete events?", text: ids.length + " events will disappear from the calendar.", label: "Delete", run: () => this.setState(s3 => ({ calAdded: (s3.calAdded || []).filter(x => ids.indexOf(x.day + "|" + x.time + "|" + x.t) < 0), selBy: Object.assign({}, s3.selBy || {}, { events: [] }) })) }), true),
+          ].map(st2);
+          return [];
+        })(),
+        closeBtnStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:" + (touch ? "10px;width:38px;height:38px;" : "7px;width:28px;height:28px;"),
+        closeBtnAutoStyle: "margin-left:auto;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:" + (touch ? "10px;width:38px;height:38px;" : "7px;width:28px;height:28px;"),
+        closeIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;font-size:" + (touch ? 23 : 17) + "px",
+        toastCloseStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;" +
+          (touch ? "width:38px;height:38px;font-size:23px;" : "width:30px;height:30px;font-size:19px;"),
+        tabToolBtnStyle: "align-self:center;margin:0 10px 0 6px;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:8px;" +
+          (touch ? "width:38px;height:38px;flex:0 0 38px;" : "width:28px;height:28px;flex:0 0 28px;"),
+        tabToolIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;font-size:" + (touch ? 22 : 18) + "px",
+        ovZ95: this.ovStyle(95, isMobile),
+        ovZ96: this.ovStyle(96, isMobile),
+        ovZ97: this.ovStyle(97, isMobile),
+        ovZ98: this.ovStyle(98, isMobile),
+        ovZ99: this.ovStyle(99, isMobile),
+        ovAsk95: this.ovAskStyle(95, isMobile),
+        ovAsk97: this.ovAskStyle(97, isMobile),
+        ovAsk98: this.ovAskStyle(98, isMobile),
+        ovAsk99: this.ovAskStyle(99, isMobile),
+        dlgFormWide: isMobile
+          ? "width:100%;height:100%;display:flex;flex-direction:column;background:var(--panel);overflow:auto"
+          : "width:460px;max-width:100%;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 52px var(--sh-3);overflow:auto",
+        dlgForm: isMobile
+          ? "width:100%;height:100%;display:flex;flex-direction:column;background:var(--panel);overflow:auto"
+          : "width:440px;max-width:100%;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 52px var(--sh-3);overflow:auto",
+        dlgAsk: isMobile
+          ? "box-sizing:border-box;width:100%;max-width:344px;max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:19px 18px;box-shadow:0 24px 56px var(--sh-3)"
+          : "width:400px;max-width:100%;max-height:calc(100vh - 44px);overflow:auto;display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 22px 50px var(--sh-3)",
+        remRowStyle: touch ? "display:flex;align-items:center;gap:8px;flex-wrap:wrap" : "display:flex;align-items:center;gap:7px",
+        remHintStyle: touch ? "width:100%;font-size:11.5px;color:var(--faint);line-height:1.4" : "flex:1;min-width:0;font-size:11px;color:var(--faint);text-align:right",
+        dlgList: isMobile
+          ? "box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;gap:5px;background:var(--panel);padding:16px 14px 22px;overflow:auto"
+          : "width:330px;max-width:100%;max-height:calc(100vh - 44px);overflow:auto;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 22px 50px var(--sh-3)",
+        logoStyle: (tablet ? "width:30px;height:30px" : "width:40px;height:40px") + ";border-radius:10px;display:block;flex:0 0 auto",
+        railStyle: isMobile
+          ? "flex:0 0 70px;display:flex;flex-direction:row;align-items:stretch;justify-content:space-between;gap:3px;background:var(--rail);border-top:1px solid var(--line);padding:6px 6px 8px 6px;touch-action:none"
+          : "width:" + railW + "px;flex:0 0 " + railW + "px;display:flex;flex-direction:column;align-items:center;gap:" + (narrow ? 10 : 14) + "px;overflow:hidden;background:var(--rail);border-right:1px solid var(--line);padding:16px 0",
+        /* The nav scrolls on short viewports; the bottom cluster (demo, bell, avatar) stays pinned. */
+        railNavStyle: isMobile
+          ? "flex:1;min-width:0;display:flex;flex-direction:row;align-items:stretch;justify-content:space-between;gap:3px"
+          : "flex:1 1 auto;width:100%;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;align-items:center;gap:" + (narrow ? 10 : 14) + "px",
+        railCasesStyle: (isMobile ? "display:none;" : railBase + (st.screen === "cases" ? activeStyle : idleColor)),
+        goCases: () => this.goScreen("cases", { casePane: "list" }),
+        isCases: st.screen === "cases" && !emptyApp,
+        isCal: st.screen === "cal" && !emptyApp,
+        isTasks: st.screen === "tasks" && !emptyApp,
+        goTasks: () => this.goScreen("tasks"),
+        railTasksStyle: (isMobile ? "display:none;" : railBase + (st.screen === "tasks" ? activeStyle : idleColor)),
+        railNotifStyle: railBase + (st.notifCenter ? activeStyle : idleColor),
+        notifDotStyle: "position:absolute;top:-5px;right:-9px;min-width:17px;height:17px;box-sizing:border-box;padding:0 4px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--err);color:#fff;font-size:10px;font-weight:700;border:1.5px solid var(--rail)",
+        tbTaskLabel: tbFull ? "New task" : "",
+        taskActions: [
+          { icon: "search", label: "Find in mail", run: () => this.setState({ screen: "agent" }) },
+          { icon: "event", label: "Lay out the day", run: () => this.autoSchedule() },
+          { icon: "check_circle", label: "Show done", run: () => this.setState(s2 => ({ showDone: !s2.showDone })) },
+          { icon: "download", label: "Export", run: () => {} },
+        ].map(a => ({ icon: a.icon, label: tbFull ? a.label : "", run: a.run, style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
+        tasksBodyStyle: isMobile || compact
+          ? "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:14px"
+          : "flex:1;min-height:0;display:flex;gap:0",
+        tasksMainStyle: isMobile || compact
+          ? "display:flex;flex-direction:column;gap:18px"
+          : "flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:20px;padding:20px 26px",
+        tasksSideStyle: isMobile || compact
+          ? "display:flex;flex-direction:column;gap:10px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:14px"
+          : "width:310px;flex:0 0 310px;overflow:auto;display:flex;flex-direction:column;gap:10px;background:var(--sub);border-left:1px solid var(--line);padding:18px",
+        taskGroups: ["Today", "This week", "Later"].map(g => {
+          const items = allTasks.filter(t2 => t2.group === g && (st.showDone || (st.taskDone || []).indexOf(t2.id) < 0));
+          return {
+            label: g.toUpperCase(),
+            count: items.length,
+            items: items.map(t2 => {
+              const done = (st.taskDone || []).indexOf(t2.id) >= 0;
+              const sched = (st.taskSched || []).indexOf(t2.id) >= 0;
+              const remN = this.remList(t2.id).length;
+              return {
+                t: t2.t, est: t2.est, when: t2.when, src: t2.src, ai: !!t2.ai,
+                press: this.pressFor("tasks", t2.id, t2.t, [
+                  { icon: "check_box", label: "Select tasks", run: () => this.selStart("tasks", t2.id) },
+                  { icon: done ? "radio_button_unchecked" : "check_circle", label: done ? "Mark as not done" : "Mark as done", run: () => this.setState(s3 => ({ taskDone: done ? (s3.taskDone || []).filter(x => x !== t2.id) : (s3.taskDone || []).concat([t2.id]) })) },
+                  { icon: "notifications_active", label: "Reminders", run: () => this.setState({ remFor: { key: t2.id, title: t2.t, timed: false, kind: "task", hint: "before 09:00 \u00b7 " + t2.when, src: "Tasks" } }) },
+                  { icon: "calendar_month", label: "Schedule in the calendar", run: () => this.setState(s3 => ({ taskSched: (s3.taskSched || []).concat([t2.id]), calAdded: (s3.calAdded || []).concat([{ day: t2.day || "27", time: "11:00", h: 11, t: t2.t, kind: "meeting", src: "zadanie" }]) })) },
+                  { icon: "open_in_new", label: "Open source thread", run: () => this.setState({ screen: "mail", threadId: t2.tid || "contoso", mailPane: "thread", threadOpen: true, cameFrom: false }) },
+                  { icon: "delete", label: "Delete task", danger: true, run: () => this.askHide("tasks", [t2.id], "Delete task?", t2.t + " will disappear from the task list.") },
+                ]),
+                tap: this.rowTap("tasks", t2.id, () => {}),
+                selected: isSel("tasks", t2.id),
+                remCount: remN > 1 ? String(remN) : "",
+                remIcon: remN ? "notifications_active" : "notifications",
+                remTitle: remN ? "Reminders: " + remN : "Add a reminder",
+                remStyle: "display:flex;align-items:center;gap:4px;border-radius:9px;font-weight:600;border:1px solid " +
+                  (touch ? "" : "") + (remN ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--sub);color:var(--muted);") +
+                  (touch ? "height:36px;padding:0 12px;font-size:12px;" : "height:28px;padding:0 9px;font-size:11px;"),
+                remIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;font-size:" + (touch ? 19 : 16) + "px",
+                openRem: () => this.setState({ remFor: { key: t2.id, title: t2.t, timed: false, kind: "task", hint: "before 09:00 · " + t2.when, src: "Tasks" } }),
+                check: done ? "check" : "",
+                toggle: () => this.setState(s2 => ({
+                  taskDone: (s2.taskDone || []).indexOf(t2.id) >= 0
+                    ? (s2.taskDone || []).filter(x => x !== t2.id)
+                    : (s2.taskDone || []).concat([t2.id]),
+                })),
+                openSrc: () => this.setState({ screen: "mail", threadId: t2.tid || "contoso", mailPane: "thread", threadOpen: true, cameFrom: false }),
+                schedule: () => this.setState(s2 => sched ? {} : ({
+                  taskSched: (s2.taskSched || []).concat([t2.id]),
+                  calAdded: (s2.calAdded || []).concat([{ day: t2.day || "27", time: "11:00", h: 11, t: t2.t, kind: "meeting", src: "task" }]),
+                })),
+                schedLabel: sched ? "in the calendar" : "Schedule",
+                schedStyle: "border-radius:12px;white-space:nowrap;" + (touch ? "font-size:12.5px;padding:9px 14px;" : "font-size:11px;padding:5px 10px;") + (sched
+                  ? "color:var(--muted);background:var(--rail);border:1px solid var(--line);"
+                  : "color:var(--onaccent);background:var(--accent);"),
+                rowStyle: (touch
+                  ? "display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:13px 14px;"
+                  : "display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;") +
+                  "background:var(--panel);border:1px solid var(--line);border-radius:10px;" + (done ? "opacity:0.55;" : "") + selMark("tasks", t2.id),
+                mainStyle: "display:flex;align-items:" + (touch ? "flex-start" : "center") + ";gap:12px;flex:1;min-width:0",
+                metaStyle: touch
+                  ? "display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-left:38px"
+                  : "display:flex;align-items:center;gap:10px;flex-wrap:wrap",
+                boxStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:7px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;line-height:1;" +
+                  (touch ? "width:26px;height:26px;font-size:18px;" : "width:20px;height:20px;font-size:14px;") +
+                  "border:1px solid " + (done ? "var(--accent);background:var(--accent);color:var(--onaccent);" : "var(--border2);color:transparent;"),
+                titleStyle: "line-height:1.4;text-wrap:pretty;font-size:" + (touch ? 15 : 14) + "px;" + (done ? "text-decoration:line-through;color:var(--muted);" : ""),
+              };
+            }),
+          };
+        }),
+        taskAgenda: (calAllDays.find(d => d.today) || { ev: [] }).ev.map(e => ({ time: e.time, t: e.t })),
+        capacityText: "Today you have " + openToday + " tasks (≈ " + estToday + ") and " + TASK_CAPACITY.meetings + ". " + TASK_CAPACITY.advice,
+        autoSchedule: () => this.autoSchedule(),
+        newTaskOpen: !!st.newTask,
+        openNewTask: () => { this.remSet("new:task", REM_DEFAULT); this.setState({ newTask: true }); },
+        tkRem: this.remBlock("new:task", { timed: false, numRef: this.remNumTaskRef, hint: "09:00 on the day it is due" }),
+        remModalOpen: !!st.remFor,
+        remModalSubtitle: st.remFor ? st.remFor.title + (st.remFor.hint ? " — " + st.remFor.hint : "") : "",
+        remModal: this.remBlock(st.remFor ? st.remFor.key : "none", {
+          timed: !!(st.remFor && st.remFor.timed),
+          numRef: this.remNumModalRef,
+          hint: st.remFor ? st.remFor.hint : "",
+        }),
+        closeRemModal: () => {
+          const f = st.remFor;
+          if (f) this.remFire(f.title, this.remList(f.key), f.kind === "task" ? "task" : "cal", f.src || "Calendar", { screen: f.kind === "task" ? "tasks" : "cal" });
+          this.setState({ remFor: null });
+        },
+        remModalClear: () => { if (st.remFor) this.remSet(st.remFor.key, []); },
+        closeNewTask: () => this.setState({ newTask: false }),
+        tkPromptRef: this.tkPromptRef, tkTitleRef: this.tkTitleRef, tkDueRef: this.tkDueRef, tkEstRef: this.tkEstRef,
+        tkParse: () => {
+          const raw = ((this.tkPromptRef.current || {}).value || "").trim();
+          const p = parseEventPrompt(raw);
+          const est = (raw.match(/\d{1,3}\s*(?:min|minutes?|h|hrs?|hours?)\b/i) || ["30 min"])[0];
+          if (this.tkTitleRef.current) this.tkTitleRef.current.value = p.title;
+          if (this.tkDueRef.current) this.tkDueRef.current.value = p.day + ".09";
+          if (this.tkEstRef.current) this.tkEstRef.current.value = est;
+        },
+        saveTask: () => {
+          const t2 = (this.tkTitleRef.current || {}).value || "New task";
+          const when = (this.tkDueRef.current || {}).value || "no due date";
+          const est = (this.tkEstRef.current || {}).value || "30 min";
+          const rem = this.remList("new:task");
+          const id = "tk" + Date.now();
+          this.setState(s2 => ({
+            newTask: false,
+            remMap: Object.assign({}, s2.remMap || {}, { [id]: rem.slice() }),
+            extraTasks: (s2.extraTasks || []).concat([{
+              id: id, t: t2, when, day: (when.match(/^(\d{1,2})/) || [])[1] || "28",
+              group: when === "today" ? "Today" : "This week", src: "added manually", tid: "contoso", ai: false, est,
+            }]),
+          }));
+          this.notify(rem.length
+            ? "Due " + when + " · " + (rem.length === 1 ? remLabel(rem[0], "on the day") : rem.length + " reminders")
+            : "Due " + when + " · no reminder", { kind: "success", title: "Task added" });
+          this.remFire(t2, rem, "task", "Tasks", { screen: "tasks" });
+        },
+        isAgent: st.screen === "agent" && !emptyApp,
+        goAgent: () => this.goScreen("agent"),
+        railAgentStyle: railBase + (st.screen === "agent" ? activeStyle : idleColor),
+        agentScrollStyle: isMobile
+          ? "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:16px 14px"
+          : "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:22px " + (narrow ? "26px" : "max(26px, calc((100% - " + (compact ? 1170 : 1290) + "px) / 2))"),
+        agentBoxStyle: "display:flex;align-items:center;gap:12px;background:var(--panel);border:2px solid var(--accent);border-radius:11px;padding:10px 13px",
+        agentInputWrapStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:9px;background:var(--panel);border-top:1px solid var(--line);padding:12px 14px"
+          : "display:flex;flex-direction:column;gap:10px;background:var(--panel);border-top:1px solid var(--line);padding:14px " + (narrow ? "26px" : "max(26px, calc((100% - " + (compact ? 1170 : 1290) + "px) / 2))") + " 16px",
+        agentThinking: !!st.agentThinking,
+        agentScrollRef: this.agentScrollRef,
+        onAgentScroll: this.onAgentScroll,
+        onAgentWheel: this.onAgentWheel,
+        agentNext: this.nextActs(convMsgs, st),
+        agentNextShown: this.nextActs(convMsgs, st).length > 0,
+        /* What the agent is doing right now — it changes as the work moves on, it is not one fixed line. */
+        agentStatus: st.agentStatus || "Going through your mail",
+        /* Cancel sits next to Send at all times, greyed out until there is work to stop. */
+        agentCancelActive: !!(st.agentThinking || st.demoRun),
+        agentCancelDisabled: !(st.agentThinking || st.demoRun),
+        agentCancelTab: (st.agentThinking || st.demoRun) ? 0 : -1,
+        agentCancelAria: (st.agentThinking || st.demoRun) ? "Stop what the agent is doing" : "Cancel — nothing is running",
+        agentCancelStyle: "font-size:13px;border-radius:7px;padding:8px 14px;white-space:nowrap;border:1px solid " +
+          ((st.agentThinking || st.demoRun)
+            ? "var(--err);color:var(--onaccent);background:var(--err);font-weight:600;"
+            : "var(--line);color:var(--faint);background:transparent;"),
+        agentCancelHover: (st.agentThinking || st.demoRun)
+          ? "cursor:pointer;opacity:0.88"
+          : "cursor:default",
+        agentCancel: this.agentCancel,
+        agentCancelKey: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.agentCancel(); } },
+        convTitle: activeConv && activeConv.title ? activeConv.title : "Agent",
+        convBarShown: tabsMode && convList.length > 1,
+        convTabs: convList.map(c => ({
+          title: c.title || "New conversation",
+          activate: () => this.setState({ convId: c.id }),
+          close: (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
+            this.setState(s2 => {
+              const rest = (s2.convs || []).filter(x => x.id !== c.id);
+              return { convs: rest, convId: s2.convId === c.id ? (rest.length ? rest[rest.length - 1].id : null) : s2.convId };
+            });
+          },
+          style: "display:flex;align-items:center;gap:8px;max-width:220px;padding:8px 11px;border-radius:9px 9px 0 0;font-size:13px;white-space:nowrap;border:1px solid " +
+            (c.id === (activeConv || {}).id ? "var(--line);border-bottom-color:var(--sub);background:var(--panel);color:var(--text);" : "transparent;background:transparent;color:var(--muted);"),
+          titleStyle: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + (c.id === (activeConv || {}).id ? "font-weight:600;" : ""),
+        })),
+        agentNewConv: () => this.setState({ convId: null, agentInput: "", agentThinking: false }),
+        historyOpen: st.history == null ? !isMobile : !!st.history,
+        historyLabel: isMobile ? "" : "History",
+        toggleHistory: () => this.setState(s2 => ({ history: !s2.history })),
+        historyPanelW: Math.max(200, Math.min(480, st.historyPanelW || 250)),
+        showHistoryResizer: !isMobile,
+        startHistoryResize: this.beginHistoryResize,
+        resetHistoryResize: () => this.setState({ historyPanelW: 250 }),
+        historyCloseShown: isMobile,
+        historyPanelStyle: isMobile
+          ? "position:absolute;inset:0;z-index:45;display:flex;flex-direction:column;gap:1px;overflow:auto;background:var(--rail);padding:14px 12px 18px"
+          : "width:" + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;flex:0 0 " + Math.max(200, Math.min(480, st.historyPanelW || 250)) + "px;display:flex;flex-direction:column;gap:1px;overflow:auto;background:var(--rail);border-right:1px solid var(--line);padding:14px 10px",
+        convHistory: (activeConvList.length ? activeConvList : [{ id: null, title: "New conversation", when: "now", msgs: [] }]).filter(matchesHistQuery).slice().reverse().map(c => convRow(c, false)),
+        hasArchived: archivedConvList.length > 0,
+        archivedCount: archivedConvList.length,
+        archiveSectionOpen: !!st.historyArchiveOpen,
+        toggleArchiveSection: () => this.setState(s2 => ({ historyArchiveOpen: !s2.historyArchiveOpen })),
+        archiveChevron: st.historyArchiveOpen ? "expand_more" : "chevron_right",
+        archivedHistory: archivedConvList.filter(matchesHistQuery).slice().reverse().map(c => convRow(c, true)),
+        historySearchRef: this.historySearchRef,
+        historySearchValue: st.historySearch || "",
+        onHistorySearch: (e) => this.setState({ historySearch: e.target.value }),
+        clearHistorySearch: () => this.setState({ historySearch: "" }),
+        openHistorySearch: () => this.setState({ history: true, historyFocusPending: true }),
+        deleteConvAskOpen: !!st.deleteConvAsk,
+        cancelDeleteConv: () => this.setState({ deleteConvAsk: null }),
+        confirmDeleteConv: () => this.setState(s2 => {
+          const rest = (s2.convs || []).filter(x => x.id !== s2.deleteConvAsk);
+          return { convs: rest, convId: s2.convId === s2.deleteConvAsk ? null : s2.convId, deleteConvAsk: null };
+        }),
+        agentShowChips: convMsgs.length < 2,
+        /* Each starter chip opens the conversation it belongs to — a finished history, not an empty screen. */
+        agentChips: STARTER_CHIPS.map(c => ({
+          label: c.label,
+          aria: "Open the conversation: " + c.label,
+          hasIcon: false, icon: "", iconStyle: "",
+          style: "display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:16px;padding:7px 13px;white-space:nowrap",
+          run: () => { this.demoStop(); return (st.convs || []).some(x => x.id === c.id)
+            ? this.setState({ screen: "agent", convId: c.id, agentInput: "" })
+            : this.agentAsk(c.label); },
+          key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.demoStop(); if ((st.convs || []).some(x => x.id === c.id)) this.setState({ screen: "agent", convId: c.id, agentInput: "" }); else this.agentAsk(c.label); } },
+        })).concat([{
+          /* The one chip that plays instead of opening — content arrives live, block by block. */
+          label: "Real example",
+          aria: "Play the real example conversation in real time",
+          hasIcon: true, icon: "play_arrow",
+          iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1",
+          style: "display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent-d);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:16px;padding:7px 13px 7px 11px;white-space:nowrap",
+          run: this.playDemo,
+          key: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.playDemo(); } },
+        }]),
+        agentInput: st.agentInput || "",
+        onAgentInput: (e) => this.setState({ agentInput: e.target.value }),
+        onAgentKey: (e) => { if (e.key === "Enter") this.agentAsk(st.agentInput); },
+        agentSend: () => this.agentAsk(st.agentInput),
+
+        agentMsgs: (convMsgs.length ? convMsgs : [{
+          role: "bot",
+          scope: "3 accounts · mail, calendar, cases",
+          text: "Hi. I can write a message, lay out your day or check what is stuck. I always show the result for approval — nothing goes out without you.",
+          bullets: [],
+          blocks: [],
+          ts: Date.now(),
+        }]).map((m, mi) => ({
+          isUser: m.role === "user",
+          isBot: m.role === "bot",
+          time: formatMsgTime(m.ts),
+          text: m.text,
+          hasText: !!m.text,
+          md: (m.text ? mdView(m.text) : []).concat((m.paras || []).reduce((acc, p) => acc.concat(mdView(p.t).map(b => Object.assign({}, b, {
+            style: b.style + (p.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
+          }))), [])),
+          hasMd: !!m.text || (m.paras || []).length > 0,
+          scope: m.scope || "",
+          working: !!m.working,
+          hasParas: (m.paras || []).length > 0,
+          paras: (m.paras || []).map(p => ({
+            t: p.t,
+            style: "font-size:15px;line-height:1.62;color:var(--text2);text-wrap:pretty" + (p.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
+          })),
+          bullets: (m.bullets || []).map(t2 => ({ t: t2 })),
+          hasBlocks: (m.blocks || []).length > 0,
+          blocks: (m.blocks || []).map((b, bi) => this.bkView(b, (activeConv ? activeConv.id : "new") + "#" + mi + "#" + bi, isMobile)),
+          blocksStyle: "display:flex;flex-direction:column;gap:" + (isMobile ? 10 : 11) + "px",
+          rowStyle: "display:flex;justify-content:" + (m.role === "user" ? "flex-end" : "flex-start"),
+          colStyle: "display:flex;flex-direction:column;gap:4px;min-width:0;align-items:" + (m.role === "user" ? "flex-end" : "flex-start") + (m.role === "user" ? "" : ";flex:1"),
+          /* Quiet by default: the user turn is a lightly tinted block, the agent turn is plain text
+             on the page. The only cards in the thread are the result blocks themselves. */
+          bubbleStyle: (m.role === "user"
+            ? "max-width:" + (isMobile ? "92%" : "775px") + ";font-size:15px;line-height:1.55;color:var(--text);background:var(--accent-soft);border-radius:10px;padding:11px 14px;text-wrap:pretty"
+            : "width:100%;max-width:" + (isMobile ? "100%" : "900px") + ";display:flex;flex-direction:column;gap:11px")
+            + (m.anim ? ";animation:mfmsgin 0.44s cubic-bezier(0.22,0.61,0.36,1) both" : ""),
+        })),
+        isPeople: st.screen === "people" && !emptyApp,
+        goCal: () => this.goScreen("cal"),
+        goPeople: () => this.goScreen("people", { peoplePane: "list" }),
+        railCalStyle: (isMobile ? "display:none;" : railBase + (st.screen === "cal" ? activeStyle : idleColor)),
+        railPeopleStyle: (isMobile ? "display:none;" : railBase + (st.screen === "people" ? activeStyle : idleColor)),
+
+        isDiscover: st.screen === "discover" && !emptyApp,
+        isMail: st.screen === "mail" && !emptyApp,
+        goDiscover: () => this.goScreen("discover"),
+        goMail: () => this.goScreen("mail", { cameFrom: false, mailPane: "list" }),
+        railDiscoverStyle: railBase + (st.screen === "discover" ? activeStyle : idleColor),
+        railMailStyle: railBase + (st.screen === "mail" ? activeStyle : idleColor),
+
+        headerStyle: isMobile
+          ? "display:flex;align-items:center;gap:10px;flex:0 0 auto;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel)"
+          : "display:flex;align-items:center;gap:16px;padding:0 26px;height:56px;flex:0 0 56px;border-bottom:1px solid var(--line);background:var(--panel)",
+        searchBoxStyle: "display:flex;align-items:center;gap:12px;border:2px solid var(--accent);border-radius:11px;padding:11px 14px" + (isMobile ? "" : narrow ? "" : compact ? ";max-width:780px" : ";max-width:1520px"),
+        searchWrapStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column;gap:9px;padding:12px 14px;background:var(--panel);border-bottom:1px solid var(--line)"
+          : "flex:0 0 auto;display:flex;flex-direction:column;gap:10px;padding:18px 26px;background:var(--panel);border-bottom:1px solid var(--line)",
+        idleStyle: isMobile
+          ? "flex:1;display:flex;flex-direction:column;gap:22px;padding:20px 14px;overflow:auto;min-height:0"
+          : narrow
+          ? "flex:1;display:flex;flex-direction:column;gap:22px;padding:24px 18px 32px 18px;overflow:auto;min-height:0"
+          : "flex:1;display:flex;gap:34px;padding:32px 30px 40px 30px;overflow:auto;min-height:0",
+        idleMainStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:18px"
+          : narrow
+          ? "flex:1;display:flex;flex-direction:column;gap:20px;max-width:100%"
+          : compact
+          ? "flex:1;display:flex;flex-direction:column;gap:22px;max-width:780px"
+          : "flex:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px 22px;align-items:start;align-content:start;max-width:1520px",
+        idleTitleStyle: isMobile
+          ? "font-size:23px;font-weight:600;letter-spacing:-0.015em;text-wrap:pretty"
+          : "font-size:30px;font-weight:600;letter-spacing:-0.015em",
+        sugRowStyle: isMobile
+          ? "display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:13px 14px"
+          : "display:flex;justify-content:space-between;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px 16px",
+        sugMetaStyle: isMobile
+          ? "font-size:12px;color:var(--faint)"
+          : "font-size:12px;color:var(--faint);white-space:nowrap",
+        accountsStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:10px"
+          : "width:" + (compact ? 250 : 290) + "px;flex:0 0 " + (compact ? 250 : 290) + "px;display:flex;flex-direction:column;gap:10px",
+        answerHintStyle: isMobile
+          ? "display:none"
+          : "margin-left:auto;font-size:12px;color:var(--muted)",
+
+        resultStyle: isMobile
+          ? "flex:1;display:flex;flex-direction:column;min-height:0;overflow:auto"
+          : "flex:1;display:flex;min-height:0",
+        resultMainStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:12px;padding:14px;min-width:0"
+          : "flex:1;display:flex;flex-direction:column;gap:14px;padding:20px 24px;overflow:auto;min-width:0",
+        timelineRowStyle: isMobile ? "display:flex;flex-direction:column;gap:0" : "display:flex;gap:0",
+        tlItemStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--border2);padding:9px 0 11px 0"
+          : "flex:1;display:flex;flex-direction:column;gap:5px;border-top:2px solid var(--border2);padding:10px 14px 0 0",
+        tableGridStyle: "display:grid;grid-template-columns:1.3fr 1fr 0.8fr 1.4fr;gap:0" + (isMobile ? ";min-width:540px" : ""),
+        galleryGridStyle: isMobile
+          ? "display:grid;grid-template-columns:repeat(2,1fr);gap:10px"
+          : "display:grid;grid-template-columns:repeat(4,1fr);gap:10px",
+        actionRowStyle: isMobile
+          ? "display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:14px 16px"
+          : "display:flex;align-items:center;gap:14px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:14px 18px",
+        actionBtnsStyle: isMobile ? "display:flex;gap:9px;flex-wrap:wrap" : "margin-left:auto;display:flex;gap:9px",
+
+        inspectorPanelStyle: isMobile
+          ? (evObj
+              ? "position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;background:var(--sub)"
+              : "display:flex;flex-direction:column;background:var(--rail);border-top:1px solid var(--line)")
+          : "width:" + inspW + "px;flex:0 0 " + inspW + "px;display:flex;flex-direction:column;background:var(--rail);border-left:1px solid var(--line);min-height:0",
+        evWrapStyle: isMobile
+          ? "display:flex;flex-direction:column"
+          : "display:flex;flex-direction:column;min-height:0;flex:1",
+        evListStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:9px;padding:13px 14px"
+          : "flex:1;display:flex;flex-direction:column;gap:9px;padding:14px 18px;overflow:auto;min-height:0",
+
+        query: st.query,
+        onQuery: (e) => this.setState({ query: e.target.value }),
+        onKey: (e) => { if (e.key === "Enter" && (st.query || "").trim()) this.run(st.query); },
+        submit: () => { if ((st.query || "").trim()) this.run(st.query); },
+        continueInAgent: () => {
+          const q = st.query || "";
+          this.setState(s2 => Object.assign({ convId: null }, this.pushMsg(Object.assign({}, s2, { convId: null }), [
+            { role: "user", text: q },
+            { role: "bot", scope: "continuing a Discover result", text: "I have the context of that result: " + q + ". Here is the one step I would take next.", bullets: [], blocks: [{
+              type: "action", meta: "one step", phase: "pending",
+              title: "Draft a reply from this result",
+              reason: "The result already carries the numbers and the sources the reply needs.",
+              effect: "Writes a draft into this conversation — you approve it before anything is sent.",
+              cta: "Write it", done: "Draft prepared",
+              nav: [{ label: "Open the case", icon: "folder_open", kind: "case" }],
+            }] },
+          ])));
+          this.setState({ screen: "agent" });
+        },
+        reset: () => { this.timers.forEach(clearTimeout); this.setState({ phase: "idle", query: "", planKey: null, ready: {}, ev: null }); },
+        briefingWrapStyle: "display:flex;flex-direction:column;gap:12px;" + (isMobile || compact || narrow ? "" : "grid-column:1 / -1;"),
+        todoGridStyle: isMobile || !compact ? "display:flex;flex-direction:column;gap:10px" : "display:grid;grid-template-columns:repeat(3,1fr);gap:11px;align-items:start",
+        homeRowStyle: "display:flex;flex-direction:column;gap:12px",
+        homeCardStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:9px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px",
+        todayItems: HOME.todayItems.slice(0, isMobile ? 2 : 3).map(t2 => ({
+          title: t2.title, due: t2.due, why: t2.why, src: t2.src,
+          open: () => this.setState({ screen: "mail", threadId: t2.tid, mailPane: "thread", threadOpen: true, cameFrom: false }),
+          style: "display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid " + (t2.urgent ? "var(--hl-line)" : "var(--line)") + ";border-radius:10px;padding:13px 15px",
+          dueStyle: "margin-left:auto;font-size:11px;white-space:nowrap;border-radius:10px;padding:3px 8px;" + (t2.urgent
+            ? "background:var(--hl);color:var(--text);"
+            : "background:var(--rail);color:var(--muted);border:1px solid var(--line);"),
+        })),
+        homeCases: CASES.map(c => ({
+          title: c.title, status: c.status, scope: c.scope,
+          open: () => this.setState({ screen: "cases", caseId: c.id, casePane: "detail" }),
+          statusStyle: "font-size:11px;white-space:nowrap;border-radius:10px;padding:3px 8px;" + (c.statusKind === "urgent"
+            ? "background:var(--hl);color:var(--text);"
+            : "background:var(--rail);color:var(--muted);border:1px solid var(--line);"),
+        })),
+        homeAgenda: HOME.agenda.map(a => ({
+          when: a.when, t: a.t,
+          dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + (a.kind === "deadline" ? "var(--hl-line)" : "var(--accent)"),
+        })),
+        /* Text the template shows as written — see sample-text.js. */
+        sample: SAMPLE_TEXT,
+        briefingText: HOME.briefing,
+        briefingStatsStyle: isMobile
+          ? "display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;border-top:1px solid var(--line2);padding-top:11px"
+          : "display:flex;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line2);padding-top:11px",
+        briefingStats: HOME.briefingStats,
+        quickActions: [
+          { icon: "event", label: "Plan the day", run: () => this.agentAsk("Plan my day") },
+          { icon: "topic", label: "Open cases", run: () => this.setState({ screen: "cases", casePane: "list" }) },
+          { icon: "history", label: "What slipped?", run: () => this.agentAsk("What slipped this week?") },
+          { icon: "auto_awesome", label: "Ask the agent", run: () => this.setState({ screen: "agent" }) },
+        ].map(a => ({
+          icon: a.icon, label: a.label, run: a.run,
+          style: "display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text2);background:var(--panel);border:1px solid var(--border2);border-radius:9px;padding:9px 14px;white-space:nowrap",
+        })),
+        goMail: () => this.goScreen("mail", { mailPane: "list" }),
+        digest: HOME.digest.map(d => ({
+          n: d.n, label: d.label, note: d.note,
+          open: () => this.setState({ screen: "mail", threadId: d.tid, mailPane: "thread", threadOpen: true, cameFrom: false }),
+          countStyle: "flex:0 0 30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:14px;font-weight:600;background:" +
+            (d.n > 3 ? "var(--accent-soft);color:var(--accent-d);" : "var(--rail);color:var(--text2);border:1px solid var(--line);"),
+        })),
+        savedAnswers: SAVED_ANSWERS.map(x => ({
+          q: x.q, a: x.a, fresh: x.fresh,
+          run: () => this.run(x.q),
+          freshStyle: "font-size:11px;white-space:nowrap;border-radius:10px;padding:2px 8px;" + (x.fresh === "aktualne"
+            ? "color:var(--muted);background:var(--rail);border:1px solid var(--line);"
+            : "color:var(--accent-d);background:var(--accent-soft);"),
+        })),
+        suggestions: SUGGESTED_QUESTIONS.map(x => ({ text: x.text, plan: x.plan, pick: () => this.run(x.text) })),
+
+        showIdle: st.phase === "idle",
+        hasRun,
+        running: st.phase === "running",
+        progressText: plan ? (isMobile ? "Semantic retrieval… blocks arrive one by one" : "Semantic retrieval across 3 accounts… blocks arrive one by one") : "",
+        planLabel: plan ? plan.label : "",
+        runMeta: plan ? plan.meta : "",
+        confidence: plan ? plan.confidence : "",
+        gapNote: plan && plan.gap ? plan.gap : false,
+        answerReady: !!ready.answer,
+        answerParts: plan ? plan.parts.map(p => ({ text: p.text, cite: p.cite, open: openEv(p.cite) })) : [],
+        timelineReady: !!ready.timeline,
+        timeline: plan && plan.timeline ? plan.timeline.map(t => ({ date: t.date, title: t.title, detail: t.detail, open: openEv(t.cite) })) : [],
+        tableReady: !!ready.table,
+        table: plan && plan.table ? plan.table.map(r => {
+          const cell = (value, cite, isLast) => ({
+            value, cite, hasCite: !!cite, open: cite ? openEv(cite) : null,
+            cellStyle: "font-size:14px;border-bottom:1px solid var(--line2);padding:10px " + (isLast ? "0" : "10px") + " 10px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap",
+          });
+          return { version: cell(r.version, r.versionCite), price: cell(r.price, r.priceCite), sla: cell(r.sla, r.slaCite), index: cell(r.index, r.indexCite, true) };
+        }) : [],
+        galleryReady: !!ready.gallery,
+        gallery: plan && plan.gallery ? plan.gallery.map(g => ({ type: g.type, name: g.name, meta: g.meta, open: openEv(g.cite) })) : [],
+        peopleReady: !!ready.people,
+        people: plan && plan.people ? plan.people.map(p => ({ initials: p.initials, name: p.name, role: p.role, last: p.last, open: openEv(p.cite) })) : [],
+        actionReady: !!ready.action,
+        actionText: plan ? plan.action : "",
+        showTrace: hasRun && (this.props.showTrace ?? true) && st.phase === "done",
+        traceText: plan ? plan.trace : "",
+
+        evidenceCount: plan ? plan.evidence.length + " sources · click to see the passage" : "",
+        evidence: plan && ready.evidence ? plan.evidence.map(e => { const sb = srcBadge(e); return { n: e.n, title: e.title, snippet: e.snippet, meta: e.meta, open: () => this.setState({ ev: e.n }), badgeStyle: SRC_BADGE_STYLE, badgeIconStyle: SRC_BADGE_ICON_STYLE, badgeIcon: sb.icon, badgeLabel: sb.label, badgeTitle: sb.title }; }) : [],
+        inspectorOpen: !!evObj,
+        inspectorClosed: !evObj,
+        closeInspector: () => this.setState({ ev: null }),
+        inspectorIndex: evObj && plan ? "EVIDENCE " + evObj.n + " of " + plan.evidence[plan.evidence.length - 1].n : "",
+        inspectorTitle: evObj ? evObj.title : "",
+        inspectorMeta: evObj ? evObj.meta : "",
+        inspectorBadgeStyle: SRC_BADGE_STYLE,
+        inspectorBadgeIconStyle: SRC_BADGE_ICON_STYLE,
+        inspectorBadgeIcon: evObj ? srcBadge(evObj).icon : "",
+        inspectorBadgeLabel: evObj ? srcBadge(evObj).label : "",
+        inspectorBadgeTitle: evObj ? srcBadge(evObj).title : "",
+        inspectorPre: evObj ? evObj.pre : "",
+        inspectorQuote: evObj ? evObj.quote : "",
+        inspectorPost: evObj ? evObj.post : "",
+        inspectorSupports: evObj ? evObj.supports : "",
+        inspectorMail: evObj ? evObj.mail : "",
+        openInMail: () => this.setState({ screen: "mail", threadId: "contoso", cameFrom: true, fromCite: st.ev, mailAnswer: false, mailPane: "thread", threadOpen: true }),
+
+        sideExpanded: !sideCollapsed,
+        sideCollapsed,
+        toggleSide: drawer
+          ? (() => this.setState({ sideDrawer: false }))
+          : (() => this.setState(s2 => ({ sideCollapsed: !s2.sideCollapsed }))),
+        sideToggleIcon: drawer ? "close" : sideCollapsed ? "chevron_right" : "chevron_left",
+        sideToggleTitle: drawer ? "Close folders" : sideCollapsed ? "Expand the mailbox panel" : "Collapse the mailbox panel",
+        showSide: !drawer || drawerOpen,
+        sideScrim: drawer && drawerOpen,
+        closeDrawer: () => this.setState({ sideDrawer: false }),
+        showFolderBtn: drawer,
+        listSearchRef: this.listSearchRef,
+        listSearchActive: !!st.listSearchOn,
+        listSearchIdle: !st.listSearchOn,
+        listSearchValue: st.listSearch || "",
+        onListSearch: (e) => this.setState({ listSearch: e.target.value }),
+        openListSearch: () => this.setState({ listSearchOn: true, listSearchFocusPending: true }),
+        listIconBtnStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted)",
+        toggleFilters: () => this.setState(s2 => ({ filtersOpen: !s2.filtersOpen })),
+        filtersOpen: !!st.filtersOpen,
+        filtersActive: filterCount > 0,
+        filtersCount: filterCount,
+        filtersIcon: filterCount > 0 ? "filter_alt" : "tune",
+        filtersTitle: filterCount > 0 ? "Filters (" + filterCount + ") — click to show" : "Filters",
+        filtersBtnStyle: "flex:0 0 auto;min-width:34px;height:34px;display:flex;align-items:center;justify-content:center;gap:3px;padding:0 7px;border-radius:9px;" +
+          (filterCount > 0 ? "color:var(--accent-d);background:var(--accent-soft);" : "color:var(--muted);"),
+        filtersSummary: filterCount > 0 ? "Active filters: " + filterCount : "No active filters",
+        clearFilters: () => this.setState({ fUnread: false, fFlagged: false, fAttach: false, fSort: "Newest", fRange: "", fFrom: "", fTo: "" }),
+        filterToggles: [
+          { key: "fUnread", label: "Unread", icon: "mark_email_unread" },
+          { key: "fFlagged", label: "Flagged", icon: "flag" },
+          { key: "fAttach", label: "With attachments", icon: "attach_file" },
+        ].map(f => {
+          const on = !!st[f.key];
+          return {
+            label: f.label, icon: f.icon,
+            toggle: () => this.setState(s2 => ({ [f.key]: !s2[f.key] })),
+            iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1",
+            style: "display:flex;align-items:center;gap:6px;font-size:12.5px;border-radius:16px;padding:6px 11px;border:1px solid " +
+              (on ? "var(--accent);background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : "var(--line);background:var(--panel);color:var(--text2);"),
+          };
+        }),
+        sortOptions: ["Newest", "Oldest", "Sender", "Subject"].map(s => ({
+          label: s,
+          pick: () => this.setState({ fSort: s }),
+          style: "font-size:12.5px;border-radius:16px;padding:6px 11px;border:1px solid " +
+            ((st.fSort || "Newest") === s ? "var(--accent);background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : "var(--line);background:var(--panel);color:var(--text2);"),
+        })),
+        rangeOptions: ["Today", "Last 7 days", "Last 30 days", "This year"].map(r => ({
+          label: r,
+          pick: () => this.setState(s2 => ({ fRange: s2.fRange === r ? "" : r, fFrom: "", fTo: "" })),
+          style: "font-size:12.5px;border-radius:16px;padding:6px 11px;border:1px solid " +
+            ((st.fRange || "") === r ? "var(--accent);background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : "var(--line);background:var(--panel);color:var(--text2);"),
+        })),
+        filterFrom: st.fFrom || "",
+        filterTo: st.fTo || "",
+        onFilterFrom: (e) => this.setState({ fFrom: e.target.value, fRange: "" }),
+        onFilterTo: (e) => this.setState({ fTo: e.target.value, fRange: "" }),
+        searchFieldStyle: "flex:1;min-width:0;display:flex;align-items:center;color:var(--faint);background:var(--rail);border:1px solid var(--line);border-radius:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + (isMobile
+          ? "min-height:48px;padding:0 16px;font-size:14px;"
+          : "padding:9px 13px;font-size:13px;"),
+        openFolders: () => this.setState({ sideDrawer: true }),
+        folderBtnStyle: "flex:0 0 auto;width:" + (isMobile ? 48 : 36) + "px;height:" + (isMobile ? 48 : 36) + "px;display:flex;align-items:center;justify-content:center;border-radius:" + (isMobile ? 14 : 9) + "px;color:var(--text2);background:var(--rail);border:1px solid var(--line)",
+        sideStyle: drawer
+          ? "position:fixed;top:0;bottom:0;left:0;width:262px;z-index:80;display:flex;flex-direction:column;gap:4px;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:16px 14px;box-shadow:0 0 40px var(--sh-3)"
+          : sideCollapsed
+          ? "width:58px;flex:0 0 58px;display:flex;flex-direction:column;gap:4px;background:var(--sub);border-right:1px solid var(--line);padding:12px 9px"
+          : "width:" + sideW + "px;flex:0 0 " + sideW + "px;display:flex;flex-direction:column;gap:4px;background:var(--sub);border-right:1px solid var(--line);padding:16px 14px",
+        showSideResizer: !drawer && !sideCollapsed && !isMobile,
+        startSideResize: this.beginSideResize,
+        resetSideResize: () => this.setState({ sideW: 210 }),
+        sideTopStyle: sideCollapsed
+          ? "display:flex;align-items:center;justify-content:center;height:30px;border-radius:7px;margin-bottom:4px"
+          : "display:flex;align-items:center;gap:8px;padding:4px 11px 8px 11px;border-radius:7px",
+        filtersWrapStyle: sideCollapsed
+          ? "margin-top:12px;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:12px"
+          : "margin-top:16px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:14px",
+        sideGroups: [{ key: "all", label: UNIFIED_ACCOUNTS.label, title: UNIFIED_ACCOUNTS.title, dot: UNIFIED_ACCOUNTS.dot, folders: STD_FOLDERS(UNIFIED_ACCOUNTS.counts, true) }]
+          .concat(ACCOUNTS.map(a => ({ key: a.key, label: a.label, title: a.address, dot: a.dot, folders: STD_FOLDERS(a.counts) })))
+          .map(g => {
+          const open = (st.accOpen || {})[g.key] !== false;
+          const press = g.key === "all" ? null : this.pressFor("account", g.key, g.label, this.accountMenu(g.key, g.label));
+          return {
+            label: g.label, title: g.title, open, chevron: open ? "expand_more" : "chevron_right",
+            showHeader: !sideCollapsed, showDot: sideCollapsed,
+            /* Creating a folder is drawn, not hidden in a right-click: the unified view has no
+               server of its own, so only real accounts get the row. */
+            canAdd: g.key !== "all",
+            expanded: !sideCollapsed,
+            newFolder: () => this.openNewFolder(g.key, g.label),
+            newFolderStyle: sideCollapsed
+              ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;color:var(--accent-d)"
+              : "display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--accent-d);border-radius:7px;padding:" + (isMobile ? "12px 11px" : "7px 11px") + ";margin-top:1px",
+            newFolderIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" +
+              (sideCollapsed ? "font-size:22px;width:24px;" : "font-size:18px;width:20px;flex:0 0 20px;"),
+            ctxOpen: press ? press.ctx : noop, pressDown: press ? press.down : noop, pressUp: press ? press.up : noop,
+            toggle: () => this.setState(s2 => ({ accOpen: Object.assign({}, s2.accOpen, { [g.key]: !((s2.accOpen || {})[g.key] !== false) }) })),
+            wrapStyle: sideCollapsed ? "display:flex;flex-direction:column;gap:3px;padding-bottom:7px" : "display:flex;flex-direction:column;gap:2px;padding-bottom:9px",
+            headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:5px 9px;border-radius:6px",
+            dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
+            folders: (() => {
+              const extra = (st.extraFolders || {})[g.key] || [];
+              const fOpen = st.folderOpen || {};
+              const kidsOf = (p) => extra.filter(x => x.indexOf(p + "/") === 0 && x.indexOf("/", p.length + 1) < 0);
+              const rows = [];
+              const walk = (path, icon, count, depth, custom) => {
+                const kids = kidsOf(path);
+                const open = !!fOpen[g.key + "·" + path];
+                rows.push({ path, icon, count, depth, custom, kids: kids.length, open });
+                if (kids.length && open) kids.forEach(k => walk(k, "folder", "", depth + 1, true));
+              };
+              g.folders.forEach(f => walk(f.label, f.icon, f.count, 0, false));
+              extra.filter(x => x.indexOf("/") < 0 && !g.folders.some(f => f.label === x)).forEach(x => walk(x, "folder", "", 0, true));
+              return sideCollapsed ? rows.filter(r => r.depth === 0) : rows;
+            })().map(node => {
+              const label = node.path.split("/").pop();
+              const fk = g.key + "·" + node.path;
+              const active = (st.folderKey || "acc1·Inbox") === fk;
+              const dragOver = st.dragOverKey === fk;
+              const canNest = node.path.split("/").length < this.MAX_DEPTH;
+              const fpress = g.key === "all" ? null : this.pressFor("folder", fk, label, this.folderMenu(g.key, g.label, node.path, canNest, node.custom));
+              return {
+              ctxOpen: fpress ? fpress.ctx : noop, pressDown: fpress ? fpress.down : noop, pressUp: fpress ? fpress.up : noop,
+              icon: node.icon, label: label, count: node.count, expanded: !sideCollapsed,
+              title: g.title + " — " + node.path.split("/").join(" / ") + (node.count ? " · " + node.count : ""),
+              pick: () => this.pickFolder(fk, label),
+              dragOver: (e) => this.dragOverFolder(fk, e),
+              dragLeave: () => this.dragLeaveFolder(fk),
+              drop: (e) => this.dropOnFolder(label, g.label, e),
+              twisty: node.open ? "expand_more" : "chevron_right",
+              hasKids: node.kids > 0 && !sideCollapsed,
+              twistyTitle: node.open ? "Collapse subfolders" : "Show subfolders",
+              twistyStyle: "flex:0 0 18px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:5px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)",
+              toggleKids: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s2 => ({ folderOpen: Object.assign({}, s2.folderOpen, { [fk]: !((s2.folderOpen || {})[fk]) }) })); },
+              style: (sideCollapsed
+                ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;font-size:14px;"
+                : "display:flex;align-items:center;gap:10px;font-size:14px;padding:7px 11px 7px " + (11 + node.depth * 15) + "px;border-radius:7px;") +
+                (active ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : "") +
+                (dragOver ? "background:var(--accent-soft);color:var(--accent-d);box-shadow:inset 0 0 0 2px var(--accent);" : ""),
+              iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" + (sideCollapsed ? "font-size:23px;width:24px;" : "font-size:18px;width:20px;flex:0 0 20px;") + (active ? "" : "color:var(--muted);"),            countStyle: active ? "font-size:13px" : "font-size:13px;color:var(--faint)",
+            };
+            }),
+          };
+        }),
+
+        /* Loading skeletons — folder list and message window. */
+        listLoading: !!st.listLoading,
+        listReady: !st.listLoading,
+        listSkelStyle: "display:flex;flex-direction:column;gap:1px;padding:1px 0",
+        listSkelRows: [74, 58, 68, 50, 71, 61, 66, 54].slice(0, isMobile ? 7 : 8).map(w => ({
+          rowStyle: "display:flex;align-items:center;gap:10px;background:var(--panel);padding:" + (isMobile ? "15px 14px" : "12px 12px"),
+          avStyle: SHIM + "flex:0 0 " + (isMobile ? 34 : 22) + "px;width:" + (isMobile ? 34 : 22) + "px;height:" + (isMobile ? 34 : 22) + "px;border-radius:50%",
+          colStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:8px",
+          l1Style: SHIM + "height:9px;width:" + Math.max(28, w - 26) + "%",
+          l2Style: SHIM + "height:9px;width:" + w + "%",
+        })),
+        msgLoading: !!st.msgLoading,
+        msgSkelStyle: "position:absolute;inset:0;z-index:14;display:flex;flex-direction:column;gap:14px;background:var(--panel);padding:" + (singlePane ? "16px 16px" : "20px 24px"),
+        msgSkelSubjStyle: SHIM + "height:15px;width:" + (singlePane ? 74 : 52) + "%;border-radius:6px",
+        msgSkelMetaStyle: SHIM + "height:10px;width:" + (singlePane ? 56 : 34) + "%",
+        msgSkelHeadStyle: "display:flex;align-items:center;gap:11px;border-top:1px solid var(--line2);padding-top:16px",
+        msgSkelAvStyle: SHIM + "flex:0 0 30px;width:30px;height:30px;border-radius:50%",
+        msgSkelBodyStyle: "display:flex;flex-direction:column;gap:11px;padding-top:4px",
+        msgSkelLines: [97, 92, 99, 68, 0, 95, 88, 44].map(w => ({
+          style: w ? SHIM + "height:10px;width:" + w + "%" : "height:6px",
+        })),
+        aiFilters: [
+          { icon: "pending_actions", label: "Needs a decision" },
+          { icon: "handshake", label: "Commitments" },
+          { icon: "schedule", label: "Deadlines this week" },
+        ].map(fl => ({
+          icon: fl.icon, label: fl.label, expanded: !sideCollapsed, title: "AI filter: " + fl.label,
+          style: sideCollapsed
+            ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;color:var(--muted)"
+            : "display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);padding:5px 11px;border-radius:7px",
+          iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;color:var(--muted);" + (sideCollapsed ? "font-size:23px;width:24px;" : "font-size:18px;width:20px;"),
+        })),
+
+
+        tbEventLabel: tbFull ? "New event" : "",
+        tbContactLabel: tbFull ? "New contact" : "",
+        calActions: [
+          { icon: "today", label: "Today" },
+          { icon: "event_available", label: "Find a slot" },
+          { icon: "mail", label: "Invitation" },
+          { icon: "download", label: "Export" },
+          { icon: "print", label: "Print" },
+        ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
+        peopleActions: [
+          { icon: "edit", label: "Write" },
+          { icon: "event", label: "Schedule a meeting" },
+          { icon: "merge", label: "Merge duplicates" },
+          { icon: "upload", label: "Import" },
+          { icon: "download", label: "Export" },
+        ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
+        fieldStyle: "flex:1;min-width:0;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;outline:none",
+        newEventOpen: !!st.newEvent,
+        openNewEvent: () => { this.remSet("new:event", REM_DEFAULT); this.setState({ newEvent: true }); },
+        evRem: this.remBlock("new:event", { timed: true, numRef: this.remNumEventRef, hint: "before the event time" }),
+        closeNewEvent: () => this.setState({ newEvent: false, evParsed: null }),
+        evTitleRef: this.evTitleRef, evDayRef: this.evDayRef, evTimeRef: this.evTimeRef, evPromptRef: this.evPromptRef,
+        promptFieldStyle: "font-family:inherit;font-size:14px;color:var(--text);background:var(--panel);border:2px solid var(--accent);border-radius:9px;padding:10px 12px;outline:none",
+        evParsedShown: !!st.evParsed,
+        evParsedChips: (st.evParsed || []).map(x => ({ label: x })),
+        evParse: () => {
+          const raw = (this.evPromptRef.current || {}).value || "";
+          const p = parseEventPrompt(raw);
+          if (this.evTitleRef.current) this.evTitleRef.current.value = p.title;
+          if (this.evDayRef.current) this.evDayRef.current.value = p.day;
+          if (this.evTimeRef.current) this.evTimeRef.current.value = p.time;
+          this.setState({ evParsed: p.chips });
+        },
+        evFromThread: () => {
+          if (this.evTitleRef.current) this.evTitleRef.current.value = thread.subject;
+          if (this.evDayRef.current) this.evDayRef.current.value = EVENT_FROM_THREAD.day;
+          if (this.evTimeRef.current) this.evTimeRef.current.value = EVENT_FROM_THREAD.time;
+          this.setState({ evParsed: ["from thread: " + thread.subject, EVENT_FROM_THREAD.date, EVENT_FROM_THREAD.time, "attendee: " + thread.from] });
+        },
+        saveEvent: () => {
+          const t = (this.evTitleRef.current || {}).value || "New event";
+          const day = ((this.evDayRef.current || {}).value || "28").replace(/[^0-9]/g, "").slice(0, 2) || "28";
+          const time = (this.evTimeRef.current || {}).value || "12:00";
+          const rem = this.remList("new:event");
+          this.setState(s2 => ({
+            newEvent: false, evParsed: null,
+            remMap: Object.assign({}, s2.remMap || {}, { [day + "|" + time + "|" + t]: rem.slice() }),
+            calAdded: (s2.calAdded || []).concat([{ day, time, h: parseInt(time, 10) || 12, t, kind: "meeting" }]),
+          }));
+          this.notify(day + ".08, " + time + " · " + (rem.length
+            ? (rem.length === 1 ? remLabel(rem[0]) : rem.length + " reminders")
+            : "no reminder"), { kind: "success", title: "Event added" });
+          this.remFire(t, rem, "cal", "Calendar", { screen: "cal" });
+        },
+        newContactOpen: !!st.newContact,
+        openNewContact: () => this.setState({ newContact: true }),
+        closeNewContact: () => this.setState({ newContact: false }),
+        ctNameRef: this.ctNameRef, ctMailRef: this.ctMailRef, ctOrgRef: this.ctOrgRef, ctRoleRef: this.ctRoleRef,
+        saveContact: () => {
+          const name = (this.ctNameRef.current || {}).value || "New contact";
+          const mail = (this.ctMailRef.current || {}).value || "";
+          const org = (this.ctOrgRef.current || {}).value || "";
+          const role = (this.ctRoleRef.current || {}).value || "";
+          const id = "new" + Date.now();
+          this.setState(s2 => ({
+            newContact: false,
+            personId: id,
+            peoplePane: "detail",
+            extraContacts: (s2.extraContacts || []).concat([{
+              id, name, role: role || "—", org: org || "—", mail, last: "no correspondence yet",
+              owed: "—", cases: "—", note: "Contact added manually. After the first exchange of messages the relationship state appears here.",
+              threads: [], docs: [],
+            }]),
+          }));
+        },
+        eventOpen: !!st.event,
+        eventRemList: (st.event ? this.remList(st.event.day + "|" + st.event.time + "|" + st.event.t) : []).slice().sort((a, b) => b - a).map(m => ({
+          label: remLabel(m, st.event && st.event.time === "all day" ? "on the day" : "at the time"),
+          remove: () => this.remToggle(st.event.day + "|" + st.event.time + "|" + st.event.t, m),
+        })),
+        eventRemAny: !!(st.event && this.remList(st.event.day + "|" + st.event.time + "|" + st.event.t).length),
+        eventRemNone: !!(st.event && !this.remList(st.event.day + "|" + st.event.time + "|" + st.event.t).length),
+        eventRemAction: st.event && this.remList(st.event.day + "|" + st.event.time + "|" + st.event.t).length ? "Change" : "Add a reminder",
+        eventOpenRem: () => {
+          const e = st.event;
+          if (!e) return;
+          const key = e.day + "|" + e.time + "|" + e.t;
+          if (!this.remList(key).length) this.remSet(key, REM_DEFAULT);
+          this.setState({ remFor: { key: key, title: e.t, timed: e.time !== "all day", kind: "cal", hint: this.remAnchor({ time: e.time, day: e.day }), src: "Calendar" } });
+        },
+        eventTitle: st.event ? st.event.t : "",
+        eventWhen: st.event ? (st.event.day ? st.event.day + " August · " : "") + st.event.time : "",
+        eventKind: st.event ? (st.event.kind === "deadline" ? "Deadline" : st.event.kind === "mail" ? "From mail" : "Meeting") : "",
+        eventKindStyle: "font-size:11px;border-radius:11px;padding:3px 9px;" + (st.event && st.event.kind === "deadline"
+          ? "background:var(--hl);color:var(--text);border:1px solid var(--hl-line);"
+          : "background:var(--rail);color:var(--text2);border:1px solid var(--line);"),
+        eventSrc: st.event ? (st.event.src || "") : "",
+        eventHasSrc: !!(st.event && st.event.src),
+        eventNote: st.event && st.event.kind === "deadline"
+          ? "Deadline detected in the correspondence — changing the date in the thread updates this entry."
+          : "Event linked to a case; attendees come from the thread.",
+        closeEvent: () => this.setState({ event: null }),
+        eventOpenThread: () => this.setState({ event: null, screen: "mail", mailPane: "thread", threadOpen: true }),
+        eventDelete: () => this.askDel({
+          title: "Delete this event?",
+          text: (st.event ? "“" + st.event.t + "”" : "The event") + " will disappear from the calendar along with its reminders.",
+          label: "Delete event",
+          run: () => this.setState(s2 => ({
+            event: null,
+            calAdded: (s2.calAdded || []).filter(x => !(x.t === (s2.event || {}).t)),
+          })),
+        }),
+        calBriefing: CALENDAR_BRIEFING,
+        calTitleRowStyle: isMobile
+          ? "display:flex;align-items:flex-start;gap:10px"
+          : "display:flex;align-items:center;gap:14px;flex:1;min-width:0",
+        calNavRowStyle: isMobile
+          ? "margin-left:auto;display:flex;align-items:center;gap:6px"
+          : "margin-left:auto;display:flex;align-items:center;gap:7px",
+        calViewsRowStyle: isMobile
+          ? "display:flex;align-items:center;gap:6px;padding-top:2px"
+          : "display:flex;align-items:center;gap:7px;flex-wrap:wrap",
+        calTodayBtnStyle: "color:var(--text2);border:1px solid var(--border2);border-radius:8px;white-space:nowrap;" +
+          (touch ? "font-size:13px;padding:10px 14px" : "font-size:12px;padding:6px 12px"),
+        calViews: ["Day", "Week", "Month", "Agenda"].map(v => ({
+          label: v,
+          pick: () => this.setState({ calView: v }),
+          style: "border-radius:8px;white-space:nowrap;text-align:center;" +
+            (isMobile ? "flex:1;font-size:13px;padding:9px 4px;" : "font-size:12px;padding:6px 11px;") +
+            ((st.calView || "Week") === v
+              ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+              : "color:var(--text2);border:1px solid var(--border2);"),
+        })),
+        calIsWeek: (st.calView || "Week") === "Week",
+        calIsDay: st.calView === "Day",
+        calIsMonth: st.calView === "Month",
+        calIsAgenda: st.calView === "Agenda",
+        calDayWrapStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column;padding:6px 14px 16px 14px"
+          : narrow
+          ? "flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;padding:6px 14px 16px 14px"
+          : "flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;padding:8px 24px 20px 24px",
+        calHours: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map(h => ({
+          label: (h < 10 ? "0" : "") + h + ":00",
+          ev: calToday.ev.filter(e => (e.h || 0) === h).map(e => ({
+            t: e.t, time: e.time, src: e.src || "", hasSrc: !!e.src,
+            style: evStyle(e.kind) + (isSel("events", calToday.d + "|" + e.time + "|" + e.t) ? "background:var(--accent-soft);border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);" : ""),
+            press: this.pressFor("events", (calToday.d) + "|" + e.time + "|" + e.t, e.t, [
+              { icon: "check_box", label: "Select events", run: () => this.selStart("events", (calToday.d) + "|" + e.time + "|" + e.t) },
+              { icon: "event", label: "Open event", run: () => this.setState({ event: Object.assign({ day: calToday.d }, e) }) },
+              { icon: "notifications_active", label: "Reminders", run: () => this.setState({ remFor: { key: (calToday.d) + "|" + e.time + "|" + e.t, title: e.t, timed: e.time !== "all day", kind: "cal", hint: this.remAnchor({ time: e.time, day: calToday.d }), src: "Calendar" } }) },
+              { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("event \u201C" + e.t + "\u201D") },
+              { icon: "delete", label: "Delete event", danger: true, run: () => this.askDel({ title: "Delete this event?", text: "\u201C" + e.t + "\u201D will disappear from the calendar along with its reminders.", label: "Delete event", run: () => this.setState(s3 => ({ calAdded: (s3.calAdded || []).filter(x => x.t !== e.t) })) }) },
+            ]),
+            open: this.rowTap("events", calToday.d + "|" + e.time + "|" + e.t, () => this.setState({ event: Object.assign({ day: calToday.d }, e) })),
+          })),
+        })),
+        calMonthOuterStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column"
+          : "flex:1;min-width:0;display:flex;flex-direction:column",
+        calDowStyle: isMobile
+          ? "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.06em;color:var(--muted);text-align:center;padding:0 0 4px"
+          : "font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--muted);padding:0 0 6px 4px",
+        calMonthWrapStyle: isMobile
+          ? "flex:0 0 auto;display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:10px 8px 8px;align-content:start"
+          : narrow
+          ? "flex:1;min-width:0;overflow:auto;display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:12px 14px"
+          : "flex:1;min-width:0;overflow:auto;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:14px 24px 20px 24px;align-content:start",
+        calDowLabels: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map(l => ({ label: l })),
+        calMonthCells: monthCells.map(c => ({
+          n: c.n,
+          pick: () => (c.blank ? null : this.setState({ calSelDay: c.n })),
+          hasMarks: isMobile && !c.blank && c.ev.length > 0,
+          marks: (isMobile ? c.ev.slice(0, 3) : []).map(e => ({
+            style: "width:5px;height:5px;border-radius:50%;background:" + (e.kind === "deadline" ? "var(--hl-line)" : "var(--accent)"),
+          })),
+          style: isMobile
+            ? "aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:11px;" +
+              (c.blank ? "background:transparent;" : (c.n === (st.calSelDay || "27")
+                ? "background:var(--accent-soft);border:1px solid var(--accent-line);"
+                : "background:var(--panel);border:1px solid var(--line2);"))
+            : "min-height:88px;display:flex;flex-direction:column;gap:3px;border-radius:8px;padding:6px 7px;" +
+              (c.blank ? "background:transparent;" : "background:" + (c.today ? "var(--accent-soft)" : "var(--panel)") + ";border:1px solid var(--line);"),
+          numStyle: isMobile
+            ? (c.today
+              ? "width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--accent);color:var(--onaccent);font-size:14px;font-weight:600"
+              : "font-size:14px;color:var(--text2)")
+            : (c.today ? "font-size:12px;font-weight:600;color:var(--accent-d)" : "font-size:12px;color:var(--muted)"),
+          dots: (isMobile ? [] : c.ev).map(e => ({
+            t: e.t, open: () => this.setState({ event: Object.assign({ day: c.n }, e) }),
+            style: "font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:2px 5px;" +
+              (e.kind === "deadline" ? "background:var(--hl);color:var(--text);" : "background:var(--rail);color:var(--text2);"),
+          })),
+        })),
+        calMonthDayShown: isMobile,
+        calMonthDayLabel: (st.calSelDay || "27") + " sierpnia",
+        calMonthDayCount: (() => {
+          const d = calAllDays.find(x => x.d === (st.calSelDay || "27"));
+          const n = d ? d.ev.length : 0;
+          return n === 0 ? "" : n === 1 ? "1 event" : n + " events";
+        })(),
+        calMonthDayEmpty: !((calAllDays.find(x => x.d === (st.calSelDay || "27")) || { ev: [] }).ev.length),
+        calMonthDayEvents: ((calAllDays.find(x => x.d === (st.calSelDay || "27")) || { ev: [] }).ev).map(e => ({
+          t: e.t, time: e.time,
+          open: () => this.setState({ event: Object.assign({ day: st.calSelDay || "27" }, e) }),
+          style: "display:flex;flex-direction:column;gap:3px;border-radius:10px;padding:11px 13px;border:1px solid " +
+            (e.kind === "deadline" ? "var(--hl-line);background:var(--hl);" : "var(--line);background:var(--panel);"),
+        })),
+        calAgendaWrapStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column;padding:6px 14px 16px 14px"
+          : narrow
+          ? "flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;padding:6px 14px 16px 14px"
+          : "flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;padding:8px 24px 20px 24px",
+        agRowStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line2);padding:12px 0"
+          : "display:flex;gap:16px;align-items:flex-start;border-top:1px solid var(--line2);padding:12px 0",
+        agDayColStyle: isMobile
+          ? "display:flex;align-items:baseline;gap:8px"
+          : "flex:0 0 78px;display:flex;flex-direction:column;gap:2px",
+        agDowStyle: "font-family:'Instrument Sans',system-ui,sans-serif;letter-spacing:0.08em;color:var(--muted);font-size:" + (isMobile ? 11 : 10) + "px",
+        srcLinkStyle: touch
+          ? "align-self:flex-start;display:inline-flex;align-items:center;gap:7px;min-height:40px;max-width:100%;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--sub);font-size:13px;color:var(--accent-d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          : "align-self:flex-start;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--accent-d);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
+        calAgenda: calAllDays.filter(d => d.ev.length).map(d => ({
+          day: d.d + ".08",
+          dow: d.dow,
+          dayStyle: "font-weight:600;font-size:" + (isMobile ? 14 : 15) + "px;" + (d.today ? "color:var(--accent-d);" : ""),
+          ev: d.ev.map(e => ({
+            t: e.t, time: e.time, src: e.src || "", hasSrc: !!e.src,
+            press: this.pressFor("events", (d.d) + "|" + e.time + "|" + e.t, e.t, [
+              { icon: "check_box", label: "Select events", run: () => this.selStart("events", (d.d) + "|" + e.time + "|" + e.t) },
+              { icon: "event", label: "Open event", run: () => this.setState({ event: Object.assign({ day: d.d }, e) }) },
+              { icon: "notifications_active", label: "Reminders", run: () => this.setState({ remFor: { key: (d.d) + "|" + e.time + "|" + e.t, title: e.t, timed: e.time !== "all day", kind: "cal", hint: this.remAnchor({ time: e.time, day: d.d }), src: "Calendar" } }) },
+              { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("event \u201C" + e.t + "\u201D") },
+              { icon: "delete", label: "Delete event", danger: true, run: () => this.askDel({ title: "Delete this event?", text: "\u201C" + e.t + "\u201D will disappear from the calendar along with its reminders.", label: "Delete event", run: () => this.setState(s3 => ({ calAdded: (s3.calAdded || []).filter(x => x.t !== e.t) })) }) },
+            ]),
+            open: this.rowTap("events", d.d + "|" + e.time + "|" + e.t, () => this.setState({ event: Object.assign({ day: d.d }, e) })),
+            dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + (isSel("events", d.d + "|" + e.time + "|" + e.t) ? "var(--accent)" : e.kind === "deadline" ? "var(--hl-line)" : e.kind === "mail" ? "var(--border2)" : "var(--accent)"),
+            rowStyle: "display:flex;flex-direction:column;gap:3px;border-radius:9px;padding:6px 8px;margin:0 -8px;" + (isSel("events", d.d + "|" + e.time + "|" + e.t) ? "background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);" : ""),
+          })),
+        })),
+        calFocus: CAL_FOCUS.filter(f => (st.calDone || []).indexOf(f.t) < 0).map(f => ({
+          t: f.t, why: f.why, slot: f.day + ".08, " + f.time + " · " + f.len,
+          add: () => this.setState(s2 => ({
+            calDone: (s2.calDone || []).concat([f.t]),
+            calAdded: (s2.calAdded || []).concat([{ day: f.day, time: f.time, h: parseInt(f.time, 10), t: f.t, kind: "meeting", src: "blok od AI" }]),
+          })),
+          skip: () => this.setState(s2 => ({ calDone: (s2.calDone || []).concat([f.t]) })),
+        })),
+        calHeadStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:5px;background:var(--sub);border-bottom:1px solid var(--line);padding:13px 14px"
+          : "display:flex;align-items:center;gap:14px;background:var(--sub);border-bottom:1px solid var(--line);padding:14px 24px",
+        calNavStyle: "display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);color:var(--text2);border-radius:8px;" + (touch ? "width:38px;height:38px;font-size:16px;" : "width:30px;height:30px;font-size:14px;"),
+        calBodyStyle: isMobile || narrow
+          ? "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:14px"
+          : "flex:1;min-height:0;display:flex;gap:0",
+        calGridStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:10px"
+          : narrow
+          ? "flex:0 0 auto;min-height:420px;display:grid;grid-template-columns:repeat(7,minmax(112px,1fr));gap:0;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px"
+          : "flex:1;min-width:0;display:grid;grid-template-columns:repeat(7,1fr);gap:0;overflow:auto",
+        calDays: CAL_DAYS.map((d, i) => ({
+          dow: d.dow, d: d.d,
+          colStyle: isMobile
+            ? "display:flex;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px"
+            : "display:flex;flex-direction:column;gap:7px;min-height:0;padding:11px 10px;border-right:" + (i === 6 ? "none" : "1px solid var(--line2)") + ";background:" + (d.today ? "var(--accent-soft)" : "transparent"),
+          headStyle: "display:flex;align-items:baseline;gap:7px;padding-bottom:6px;border-bottom:1px solid var(--line2)",
+          numStyle: d.today
+            ? "font-size:16px;font-weight:600;color:var(--onaccent);background:var(--accent);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center"
+            : "font-size:16px;font-weight:600",
+          ev: (d.ev.concat((st.calAdded || []).filter(x => x.day === d.d))).map(e => ({
+            time: e.time, t: e.t, src: e.src || "", hasSrc: !!e.src,
+            press: this.pressFor("events", (d.d) + "|" + e.time + "|" + e.t, e.t, [
+              { icon: "check_box", label: "Select events", run: () => this.selStart("events", (d.d) + "|" + e.time + "|" + e.t) },
+              { icon: "event", label: "Open event", run: () => this.setState({ event: Object.assign({ day: d.d }, e) }) },
+              { icon: "notifications_active", label: "Reminders", run: () => this.setState({ remFor: { key: (d.d) + "|" + e.time + "|" + e.t, title: e.t, timed: e.time !== "all day", kind: "cal", hint: this.remAnchor({ time: e.time, day: d.d }), src: "Calendar" } }) },
+              { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("event \u201C" + e.t + "\u201D") },
+              { icon: "delete", label: "Delete event", danger: true, run: () => this.askDel({ title: "Delete this event?", text: "\u201C" + e.t + "\u201D will disappear from the calendar along with its reminders.", label: "Delete event", run: () => this.setState(s3 => ({ calAdded: (s3.calAdded || []).filter(x => x.t !== e.t) })) }) },
+            ]),
+            open: this.rowTap("events", d.d + "|" + e.time + "|" + e.t, () => this.setState({ event: Object.assign({ day: d.d }, e) })),
+            style: "display:flex;flex-direction:column;gap:3px;border-radius:8px;padding:8px 10px;border:1px solid " + (e.kind === "deadline"
+              ? "var(--hl-line);background:var(--hl);"
+              : e.kind === "mail"
+              ? "var(--line);background:var(--sub);"
+              : "var(--line);background:var(--panel);box-shadow:0 1px 2px var(--sh-1);") +
+              (isSel("events", d.d + "|" + e.time + "|" + e.t) ? "background:var(--accent-soft);border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);" : ""),
+          })),
+        })),
+        calSideStyle: isMobile || narrow
+          ? "flex:0 0 auto;display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:14px"
+          : "width:312px;flex:0 0 312px;display:flex;flex-direction:column;gap:11px;overflow:auto;background:var(--sub);border-left:1px solid var(--line);padding:16px 18px",
+        calProposed: CAL_PROPOSED.filter(p => (st.calDone || []).indexOf(p.id) < 0).map(p => ({
+          t: p.t, when: p.when, src: p.src,
+          add: () => this.setState(s2 => ({
+            calDone: (s2.calDone || []).concat([p.id]),
+            calAdded: (s2.calAdded || []).concat([{ day: p.when.slice(0, 2), time: "all day", t: p.t, kind: "deadline" }]),
+          })),
+          skip: () => this.setState(s2 => ({ calDone: (s2.calDone || []).concat([p.id]) })),
+        })),
+        calNoProposals: CAL_PROPOSED.every(p => (st.calDone || []).indexOf(p.id) >= 0),
+
+        showPeopleList: !isMobile || st.peoplePane !== "detail",
+        showPersonDetail: !isMobile || st.peoplePane === "detail",
+        showPeopleBack: isMobile && st.peoplePane === "detail",
+        backToPeople: () => this.setState({ peoplePane: "list" }),
+        peopleCount: shownContacts.length + (shownContacts.length === 1 ? " person" : " people"),
+        peopleTabHint: peopleTab === "collected" ? "from received mail headers" : "address book",
+        showOwnContacts: () => this.setState({ peopleTab: "own" }),
+        showCollectedContacts: () => this.setState({ peopleTab: "collected" }),
+        tabOwnStyle: "flex:1;text-align:center;padding:6px 10px;border-radius:7px;font-size:13px;" + (peopleTab !== "collected"
+          ? "background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 2px var(--sh-1);"
+          : "background:transparent;color:var(--muted);"),
+        tabCollectedStyle: "flex:1;text-align:center;padding:6px 10px;border-radius:7px;font-size:13px;" + (peopleTab === "collected"
+          ? "background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 2px var(--sh-1);"
+          : "background:transparent;color:var(--muted);"),
+        personCollected: !!person.collected,
+        addToOwnLabel: narrow || isMobile ? "Add" : "Add to my contacts",
+        personReadOnlyNote: "Read-only — editable once added to your contacts",
+        removeCollected: () => this.askDel({
+          title: "Remove contact from collected?",
+          text: person.name + " disappears from the collected list. They come back automatically if they write again.",
+          label: "Remove from collected",
+          run: () => this.setState(s2 => {
+          const rest = collectedContacts.filter(c => c.name !== person.name);
+          const at = collectedContacts.findIndex(c => c.name === person.name);
+          const nextOne = rest[Math.min(at, rest.length - 1)];
+          return {
+            hiddenCollected: (s2.hiddenCollected || []).concat([person.name]),
+            peopleTab: nextOne ? "collected" : "own",
+            personId: nextOne ? nextOne.id : (CONTACTS[0] || {}).id,
+            peoplePane: isMobile ? "list" : s2.peoplePane,
+          };
+          }),
+        }),
+        addToOwn: () => this.setState(s2 => ({
+          peopleTab: "own",
+          personId: "own-" + person.id,
+          extraContacts: (s2.extraContacts || []).concat([Object.assign({}, person, {
+            id: "own-" + person.id, collected: false, role: person.role === "Collected from mail" ? "—" : person.role,
+            note: "Contact moved from collected. Fill in role and notes — the data comes only from mail headers.",
+          })]),
+        })),
+        peopleListStyle: isMobile
+          ? "flex:1;display:flex;flex-direction:column;min-height:0;min-width:0"
+          : "width:" + (narrow ? 268 : 300) + "px;flex:0 0 " + (narrow ? 268 : 300) + "px;display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0",
+        peopleRows: shownContacts.map(c => ({
+          press: this.pressFor("people", c.id, c.name, [
+            { icon: "check_box", label: "Select contacts", run: () => this.selStart("people", c.id) },
+            { icon: "edit", label: "Write a message", run: () => this.setState({ compose: true, composeMin: false, replyMode: null }) },
+            { icon: "person", label: "Open contact", run: () => this.setState({ personId: c.id, peoplePane: "detail" }) },
+            { icon: "event", label: "Propose a meeting", run: () => this.setState({ screen: "cal", newEvent: true }) },
+            { icon: "delete", label: "Delete contact", danger: true, run: () => this.askHide("people", [c.id], "Delete contact?", c.name + " will disappear from the contact list.") },
+          ]),
+          name: c.name, org: c.org, last: c.last, initials: initialsOf(c.name),
+          selected: isSel("people", c.id),
+          hasAvatar: !!avatarOf(c.name), noAvatar: !avatarOf(c.name),
+          avatarImgStyle: "width:32px;height:32px;flex:0 0 32px;border-radius:50%;background-color:var(--border2);background-position:center;background-size:cover;background-repeat:no-repeat;background-image:url(" + avatarOf(c.name) + ")",
+          wait: (CONTACT_AI[c.id] || {}).wait || "", waiting: !!(CONTACT_AI[c.id] || {}).wait,
+          open: this.rowTap("people", c.id, () => this.setState({ personId: c.id, peoplePane: "detail" })),
+          style: "display:flex;align-items:center;gap:11px;padding:11px 15px;background:" + (c.id === person.id ? "var(--accent-soft)" : "var(--panel)") +
+            ";box-shadow:inset 0 1px 0 var(--inset)," + (c.id === person.id ? "inset 3px 0 0 var(--accent-2)," : "") + "0 1px 2px var(--sh-1);" + selMark("people", c.id),
+          avatarStyle: "width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--border2);color:var(--text2)",
+        })),
+        personName: person.name,
+        personRole: person.role,
+        personOrg: person.org,
+        personMail: person.mail,
+        personNote: person.note,
+        personInitials: initialsOf(person.name),
+        personAvatarImgStyle: "width:52px;height:52px;flex:0 0 52px;border-radius:50%;background-color:var(--border2);background-position:center;background-size:cover;background-repeat:no-repeat;background-image:url(" + avatarOf(person.name) + ")",
+        personHasAvatar: !!avatarOf(person.name),
+        personNoAvatar: !avatarOf(person.name),
+        personAvatarStyle: "width:52px;height:52px;flex:0 0 52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;background:var(--accent);color:var(--onaccent)",
+        personWrite: () => (this.tabsMode()
+          ? this.openTab("compose", { screen: "mail", compose: true, composeMin: false })
+          : this.setState({ screen: "mail", compose: true, composeMin: false })),
+        personHeadStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:9px;background:var(--sub);border-bottom:1px solid var(--line);padding:14px"
+          : "display:flex;flex-direction:column;gap:9px;background:var(--sub);border-bottom:1px solid var(--line);padding:18px 24px",
+        personBodyStyle: isMobile
+          ? "flex:1;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:12px;padding:14px"
+          : "flex:1;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:14px;padding:18px 24px",
+        personStatsStyle: isMobile || narrow ? "display:flex;flex-direction:column;gap:9px" : "display:flex;gap:10px",
+        personNext: personAi.next || "",
+        personHasNext: !!personAi.next,
+        personPatterns: [
+          { label: "REPLIES", value: personAi.reply || "" },
+          { label: "MOST ACTIVE", value: personAi.peak || "" },
+          { label: "STYLE", value: personAi.style || "" },
+        ].filter(p => !!p.value),
+        personStats: [
+          { label: "LAST CONTACT", value: person.last },
+          { label: "OPEN", value: person.owed },
+          { label: "CASES", value: person.cases },
+        ],
+        personColsStyle: isMobile || narrow ? "display:flex;flex-direction:column;gap:12px" : "display:flex;gap:12px",
+        personThreads: person.threads.map(t3 => ({
+          label: t3.label, meta: t3.meta,
+          open: () => this.setState({ screen: "mail", threadId: t3.id, mailPane: "thread", threadOpen: true, cameFrom: false }),
+        })),
+        personDocs: person.docs.map(d => ({
+          type: d.type, name: d.name, size: d.size,
+          open: () => (this.tabsMode()
+            ? this.openTab("doc:" + d.name, { doc: d, docZoom: 1, docLoading: true }, { att: d })
+            : this.openDocLoad({ doc: d, docZoom: 1 })),
+        })),
+        personNoDocs: person.docs.length === 0,
+
+        tbCaseLabel: tbFull ? "New case" : "",
+        caseActions: [
+          { icon: "summarize", label: "Summarise" },
+          { icon: "mail", label: "Add thread" },
+          { icon: "download", label: "Export" },
+          { icon: "check_circle", label: "Close case" },
+        ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
+        newCaseOpen: !!st.newCase,
+        openNewCase: () => this.setState({ newCase: true }),
+        closeNewCase: () => this.setState({ newCase: false, csFound: null }),
+        csPromptRef: this.csPromptRef, csTitleRef: this.csTitleRef, csPartiesRef: this.csPartiesRef, csDueRef: this.csDueRef,
+        csFoundShown: !!st.csFound,
+        csFound: st.csFound || [],
+        csBuild: () => {
+          const raw = ((this.csPromptRef.current || {}).value || "").trim();
+          const title = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "New case";
+          const org = (raw.match(new RegExp("(" + NEW_CASE.counterparties.join("|") + ")", "i")) || [])[1] || "New counterparty";
+          if (this.csTitleRef.current) this.csTitleRef.current.value = title;
+          if (this.csPartiesRef.current) this.csPartiesRef.current.value = org + " · " + NEW_CASE.ourSide;
+          if (this.csDueRef.current) this.csDueRef.current.value = NEW_CASE.due;
+          this.setState({ csFound: NEW_CASE.found });
+        },
+        csFromThread: () => {
+          if (this.csTitleRef.current) this.csTitleRef.current.value = thread.subject;
+          if (this.csPartiesRef.current) this.csPartiesRef.current.value = (thread.org || thread.from) + " · " + NEW_CASE.ourSide;
+          if (this.csDueRef.current) this.csDueRef.current.value = NEW_CASE.fromThread.due;
+          this.setState({ csFound: [
+            { kind: "thread", label: thread.subject },
+            { kind: "person", label: thread.from },
+            { kind: "deadline", label: NEW_CASE.fromThread.deadline },
+          ] });
+        },
+        saveCase: () => {
+          const title = (this.csTitleRef.current || {}).value || "New case";
+          const parties = (this.csPartiesRef.current || {}).value || "—";
+          const due = (this.csDueRef.current || {}).value || "";
+          const id = "case" + Date.now();
+          this.setState(s2 => ({
+            newCase: false, csFound: null, caseId: id, casePane: "detail",
+            extraCases: (s2.extraCases || []).concat([{
+              id, title, parties, status: due ? "Due " + due : "No deadline", statusKind: "attention", owner: "KK",
+              summary: "Case created from a description. The agent attached threads and documents found in the mailbox; the state updates as new messages arrive.",
+              scope: (s2.csFound || []).length + " linked items",
+              agreed: [], openQ: [{ text: "To be agreed after the first exchange", src: "—" }],
+              dates: due ? [{ text: "Case deadline", when: due, src: "—" }] : [],
+              facts: [], timeline: [{ d: "today", t: "Case created" }],
+              threads: (s2.csFound || []).filter(f => f.kind === "thread").map(f => ({ id: "contoso", label: f.label, meta: "linked thread" })),
+              docs: (s2.csFound || []).filter(f => f.kind === "document").map(f => ({ type: "PDF", name: f.label, size: "—" })),
+              duties: [{ who: "Karolina", what: "First step in the case", when: due || "—", state: "open" }],
+            }]),
+          }));
+        },
+        showCaseList: !isMobile || st.casePane !== "detail",
+        showCaseDetail: !isMobile || st.casePane === "detail",
+        showCaseBack: isMobile && st.casePane === "detail",
+        backToCases: () => this.setState({ casePane: "list" }),
+        caseListStyle: isMobile
+          ? "flex:1;display:flex;flex-direction:column;min-height:0;min-width:0"
+          : "width:" + (narrow ? 240 : 296) + "px;flex:0 0 " + (narrow ? 240 : 296) + "px;display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0",
+        caseRows: allCases.map(c => ({
+          selected: isSel("cases", c.id),
+          press: this.pressFor("cases", c.id, c.title, [
+            { icon: "check_box", label: "Select cases", run: () => this.selStart("cases", c.id) },
+            { icon: "topic", label: "Open case", run: () => this.setState({ caseId: c.id, casePane: "detail" }) },
+            { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("case \u201C" + c.title + "\u201D") },
+            { icon: "download", label: "Export", run: () => this.notifyTask({ title: "Exporting case\u2026", body: c.title, doneTitle: "Case exported", doneBody: c.title, ms: 1800 }) },
+            { icon: "check_circle", label: "Close case", run: () => this.notify(c.title, { kind: "success", title: "Case closed" }) },
+            { icon: "delete", label: "Delete case", danger: true, run: () => this.askHide("cases", [c.id], "Delete case?", c.title + " will disappear from the case list.") },
+          ]),
+          title: c.title, parties: c.parties, scope: c.scope, status: c.status, owner: c.owner,
+          open: this.rowTap("cases", c.id, () => this.setState({ caseId: c.id, casePane: "detail" })),
+          style: "display:flex;flex-direction:column;gap:6px;padding:13px 15px;background:" + (c.id === kase.id ? "var(--accent-soft)" : "var(--panel)") +
+            ";box-shadow:inset 0 1px 0 var(--inset)," + (c.id === kase.id ? "inset 3px 0 0 var(--accent-2)," : "") + "0 1px 2px var(--sh-1);" + selMark("cases", c.id),
+          statusStyle: "font-size:11px;border-radius:12px;padding:3px 9px;" + (c.statusKind === "urgent"
+            ? "background:var(--hl);color:var(--text);"
+            : "background:var(--rail);color:var(--text2);border:1px solid var(--line);"),
+        })),
+        caseTitle: kase.title,
+        caseParties: kase.parties,
+        caseScope: kase.scope,
+        caseSummary: kase.summary,
+        caseStatus: kase.status,
+        caseStatusStyle: "font-size:12px;font-weight:600;border-radius:13px;padding:5px 11px;" + (kase.statusKind === "urgent"
+          ? "background:var(--hl);color:var(--text);border:1px solid var(--hl-line);"
+          : "background:var(--rail);color:var(--text2);border:1px solid var(--line);"),
+        caseTitleStyle: "font-weight:600;letter-spacing:-0.015em;text-wrap:pretty;font-size:" + (isMobile ? (st.caseScroll ? 15 : 18) : 21) + "px",
+        caseSummaryStyle: "line-height:1.55;color:var(--text2);text-wrap:pretty;font-size:" + (isMobile ? 14 : 15) + "px",
+        caseHeadActionsShown: !isMobile,
+        caseHeadFullShown: !isMobile || !st.caseScroll,
+        onCaseScroll: (e) => {
+          const c = e.target.scrollTop > 30;
+          if (c !== !!this.state.caseScroll) this.setState({ caseScroll: c });
+        },
+        caseAskExtrasShown: !isMobile,
+        caseAskPlaceholder: isMobile ? "Ask about this case\u2026" : "Ask about this case \u2014 e.g. \u201Cwhat did we promise on the SLA?\u201D",
+        caseAskRowStyle: "display:flex;align-items:center;gap:10px;border:2px solid var(--accent);border-radius:10px;" + (isMobile ? "padding:7px 9px" : "padding:10px 13px"),
+        caseAskBadgeStyle: "font-family:'Instrument Sans',system-ui,sans-serif;letter-spacing:0.06em;color:var(--onaccent);background:var(--accent);border-radius:5px;" + (isMobile ? "font-size:10px;padding:3px 6px" : "font-size:11px;padding:4px 8px"),
+        caseAskTextStyle: "flex:1;min-width:0;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:" + (isMobile ? 13 : 15) + "px",
+        caseHeadStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column;gap:6px;background:var(--sub);border-bottom:1px solid var(--line);padding:" + (st.caseScroll ? "9px 14px" : "12px 14px")
+          : "display:flex;flex-direction:column;gap:9px;background:var(--sub);border-bottom:1px solid var(--line);padding:16px 24px",
+        caseBodyStyle: isMobile
+          ? "flex:1;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:12px;padding:14px"
+          : "flex:1;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:14px;padding:18px 24px",
+        caseStateGridStyle: isMobile || narrow
+          ? "display:flex;flex-direction:column;gap:12px"
+          : "display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start",
+        caseColumns: [
+          { label: "AGREED", items: kase.agreed },
+          { label: "OPEN QUESTIONS", items: kase.openQ },
+          { label: "DEADLINES", items: kase.dates },
+        ].map(col => ({
+          label: col.label,
+          count: col.items.length,
+          countStyle: "font-size:11px;color:var(--muted);background:var(--rail);border:1px solid var(--line);border-radius:9px;padding:1px 7px",
+          items: col.items.map(it => ({
+            text: it.text, src: it.src, when: it.when || "",
+            whenStyle: it.when ? "margin-left:auto;font-size:12px;font-weight:600;color:var(--accent-d);white-space:nowrap" : "display:none",
+          })),
+        })),
+        caseFactHeadStyle: "display:flex;gap:12px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.06em;color:var(--muted);padding:0 0 8px 0;border-bottom:1px solid var(--line)",
+        caseFactHeadShown: !isMobile,
+        caseFacts: kase.facts.map((f, i) => ({
+          p: f.p, a: f.a, b: f.b, src: f.src,
+          arrowShown: isMobile,
+          pStyle: isMobile ? "font-size:13px;color:var(--muted)" : "flex:2;min-width:0;font-size:14px",
+          valWrapStyle: isMobile ? "display:flex;align-items:baseline;gap:8px;flex-wrap:wrap" : "display:contents",
+          aStyle: isMobile ? "font-size:14px;color:var(--muted)" : "flex:1;min-width:0;font-size:14px;color:var(--muted)",
+          bStyle: isMobile ? "font-size:14px;font-weight:600" : "flex:1;min-width:0;font-size:14px;font-weight:600",
+          srcStyle: isMobile ? "font-size:12px;color:var(--accent-d)" : "flex:1;min-width:0;font-size:12px;color:var(--accent-d)",
+          rowStyle: (isMobile
+            ? "display:flex;flex-direction:column;gap:4px;padding:10px 0;"
+            : "display:flex;gap:12px;align-items:baseline;padding:10px 0;") + (i ? "border-top:1px solid var(--line2);" : ""),
+        })),
+        caseTimelineStyle: isMobile ? "display:flex;flex-direction:column;gap:0" : "display:flex;gap:0",
+        caseTimeline: kase.timeline.map((tl, i) => ({
+          d: tl.d, t: tl.t,
+          style: isMobile
+            ? "display:flex;flex-direction:column;gap:3px;border-top:2px solid " + (i === kase.timeline.length - 1 ? "var(--accent)" : "var(--border2)") + ";padding:9px 0 11px 0"
+            : "flex:1;display:flex;flex-direction:column;gap:4px;border-top:2px solid " + (i === kase.timeline.length - 1 ? "var(--accent)" : "var(--border2)") + ";padding:10px 14px 4px 0",
+        })),
+        caseMaterialsStyle: isMobile || narrow ? "display:flex;flex-direction:column;gap:12px" : "display:flex;gap:12px",
+        caseThreads: kase.threads.map(t2 => ({
+          label: t2.label, meta: t2.meta,
+          open: () => this.setState({ screen: "mail", threadId: t2.id, mailPane: "thread", threadOpen: true, cameFrom: false }),
+        })),
+        caseDocs: kase.docs.map(d => ({
+          type: d.type, name: d.name, size: d.size,
+          open: () => (this.tabsMode()
+            ? this.openTab("doc:" + d.name, { doc: d, docZoom: 1, docLoading: true }, { att: d })
+            : this.openDocLoad({ doc: d, docZoom: 1 })),
+        })),
+        caseNoDocs: kase.docs.length === 0,
+        caseDuties: kase.duties.map((d, i) => ({
+          who: d.who, what: d.what, when: d.when, state: d.state,
+          rowStyle: "display:flex;gap:12px;align-items:baseline;padding:9px 0;" + (i ? "border-top:1px solid var(--line2);" : ""),
+          stateStyle: "flex:0 0 auto;font-size:11px;border-radius:11px;padding:3px 9px;" + (d.state === "open"
+            ? "background:var(--accent-soft);color:var(--accent-d);"
+            : "background:var(--rail);color:var(--muted);border:1px solid var(--line);"),
+        })),
+        caseAskStyle: isMobile
+          ? "flex:0 0 auto;display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--line);background:var(--panel);padding:8px 12px 10px"
+          : "display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--line);background:var(--panel);padding:14px 24px",
+
+        /* On tablets and narrower screens "Hide panels" also removes the message list —
+           the correspondence gets the full width (on desktop the list stays, there is room). */
+        showThreadList: (!singlePane || mailPane === "list") && !(tablet && st.stateBarOff && mailPane !== "list"),
+        showContentPane: !singlePane || mailPane === "thread" || !!st.compose || !!st.doc,
+        showThreadPane: (!singlePane || mailPane === "thread") && !composeInPane && !docInPane && !htmlInPane && !emptyMail,
+        showMailBack: singlePane && mailPane === "thread",
+        backBtnStyle: "flex:0 0 auto;width:" + (isMobile ? 48 : 34) + "px;height:" + (isMobile ? 48 : 34) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;color:var(--text2)",
+        subjectStyle: singlePane
+          ? "font-size:" + (thCollapsed ? 15 : 16) + "px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:font-size 140ms ease"
+          : "font-size:19px;font-weight:600;min-width:0",
+        /* Expandable thread address details — the chevron sits in the sender row so that, collapsed,
+           it does not take a separate row in the header. */
+        metaWrapStyle: singlePane && thCollapsed
+          ? "display:none"
+          : "display:flex;flex-direction:column;gap:2px;min-width:0",
+        metaStyle: "display:flex;align-items:center;gap:4px;min-width:0;max-width:100%;align-self:flex-start;border-radius:6px;color:var(--muted);" +
+          (singlePane
+            ? "font-size:12px;margin:0 1px 2px 1px;padding:1px 5px"
+            : "font-size:13px;margin-left:-5px;padding:1px 5px"),
+        threadAddrChevStyle: "flex:0 0 auto;display:inline-block;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;color:var(--faint);transition:transform .13s ease" +
+          (st.threadAddrOpen ? ";transform:rotate(90deg)" : ""),
+        threadAddrOpen: !!st.threadAddrOpen,
+        threadAddrHasMore: !st.threadAddrOpen && threadAddr.count > 0,
+        threadAddrMore: "· " + threadAddr.count + " more people",
+        threadAddrRows: threadAddr.rows,
+        threadAddrTitle: st.threadAddrOpen ? "Collapse address details" : "Other people on this message",
+        threadAddrRowsStyle: "display:flex;flex-direction:column;gap:3px;padding:2px 0 3px " + (singlePane ? "27px" : "22px"),
+        toggleThreadAddr: () => this.setState(s2 => ({ threadAddrOpen: !s2.threadAddrOpen })),
+        threadActions: [
+          { icon: "reply", label: "Reply", title: "Reply", run: () => this.startReply("reply", [thread.id]) },
+          { icon: "forward", label: "Forward", title: "Forward", run: () => this.startReply("fwd", [thread.id]) },
+          { icon: "flag", label: flagOn ? "Unflag" : "Flag", title: flagOn ? "Remove flag" : "Flag", run: () => this.toggleFlagThreads([thread.id]) },
+        ].map(a => ({
+          title: a.title,
+          run: a.run,
+          label: singlePane ? a.icon : a.label,
+          style: singlePane
+            ? "width:" + (isMobile ? 48 : 38) + "px;height:" + (isMobile ? 48 : 38) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;color:var(" + (a.icon === "flag" && flagOn ? "--warn" : "--text2") + ");font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px;line-height:1"
+            : "display:flex;align-items:center;padding:5px 8px;border-radius:7px;font-size:13px;color:var(" + (a.icon === "flag" && flagOn ? "--warn" : "--muted") + ")",
+        })),
+        showComposerChips: !singlePane && !tablet,
+        askThreadLabel: singlePane ? "Draft" : "Draft a reply",
+        askThreadBtnStyle: "display:flex;align-items:center;justify-content:center;flex:0 0 auto;white-space:nowrap;color:var(--onaccent);background:var(--accent);border-radius:" + (isMobile ? 24 : 7) + "px;" + (isMobile
+          ? "min-height:48px;padding:0 20px;font-size:14px;font-weight:600;"
+          : "padding:8px 15px;font-size:13px;"),
+        backToList: () => this.setState({ mailPane: "list" }),
+        threadListStyle: "position:relative;" + (singlePane
+          ? "flex:1;display:flex;flex-direction:column;min-height:0;min-width:0"
+          : "width:" + (tablet ? 284 : listW) + "px;flex:0 0 " + (tablet ? 284 : listW) + "px;display:flex;flex-direction:column;min-height:0"),
+        selectionOn,
+        selectionOff: !selectionOn,
+        showMailToolbar: !selectionOn && !singlePane,
+        undoShown: isMobile && !!st.lastArchived && (st.archived || []).indexOf(st.lastArchived) >= 0,
+        undoDelete: this.undoArchive,
+        showScreenFab: (isMobile || tbFabForced) && !st.newTask && !st.newEvent && !st.newCase && !st.newContact && !st.settings &&
+          !(st.screen === "cases" && (st.casePane || "list") === "detail") &&
+          !(st.screen === "people" && (st.peoplePane || "list") === "detail"),
+        tbPrimaryShown: tbPriInBar,
+        showFab: !st.compose && !st.doc && !selectionOn && (singlePane ? mailPane === "list" : tbFabForced),
+        fabStyle: "position:absolute;right:16px;bottom:16px;z-index:30;width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--accent);color:var(--onaccent);box-shadow:0 6px 18px var(--sh-2)",
+        /* In multi-panel layouts the circle sits over the thread list, not the reading panel —
+           otherwise it would cover the reply composer. */
+        mailFabStyle: "position:absolute;right:16px;bottom:16px;z-index:30;" +
+          "width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--accent);color:var(--onaccent);box-shadow:0 6px 18px var(--sh-2)",
+        selectionCount: sel.length + " selected",
+        clearSelection: () => this.setState({ sel: [] }),
+        selectAllThreads: () => this.setState({ sel: THREADS.map(t => t.id) }),
+        tbRef: this.tbRef,
+        toolbarStyle: "flex:0 0 auto;display:flex;align-items:center;gap:2px;overflow-x:auto;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 1px 2px var(--sh-1)",
+        tbNewLabel: tbFull ? "New message" : "",
+        tbPrimaryStyle: tbFull
+          ? "display:flex;align-items:center;gap:7px;flex:0 0 auto;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--accent);padding:8px 13px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 2px var(--sh-2)"
+          : "display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--accent);color:var(--onaccent);flex:0 0 auto;" + (touch ? "width:42px;height:42px" : "width:34px;height:34px"),
+        toolbarActions: [
+          { icon: "reply", label: "Reply", key: 1 },
+          { icon: "reply_all", label: "Reply all" },
+          { icon: "forward", label: "Forward" },
+          { icon: "archive", label: "Archive", key: 1 },
+          { icon: "delete", label: "Delete", key: 1 },
+          { icon: "flag", label: flagOn ? "Remove flag" : "Flag", key: 1 },
+          { icon: "mark_email_unread", label: "Unread" },
+          { icon: "drive_file_move", label: "Move" },
+          /* Condensed view: hides the agreed/questions bar under the thread header.
+             The setting is global for mail, so it survives switching messages. */
+          /* Glyph only — fullscreen/exit reads instantly, the label lives in the tooltip. */
+          { icon: st.stateBarOff ? "fullscreen_exit" : "fullscreen", label: st.stateBarOff ? "Show thread panels" : "Hide panels — correspondence only", iconOnly: true, key: 1 },
+        ].map(a => ({
+           icon: a.icon, title: a.label, label: (tbFull && !a.iconOnly) ? a.label : "", run: mailAct[a.icon],
+           style: ((tbFull && !a.iconOnly) ? tbBtn : tbIcon + ";flex:0 0 auto") +
+             (a.icon === "flag" && flagOn ? ";color:var(--warn);background:var(--warn-soft)" : "") +
+             (a.icon === "fullscreen_exit" ? ";color:var(--accent-d);background:var(--accent-soft)" : "") +
+             /* Focus mode is a view toggle, not a message action — kept separate, at the right edge. */
+             (a.iconOnly ? ";margin-left:auto" : ""),
+         })),
+        selBarStyle: "flex:0 0 auto;display:flex;align-items:center;gap:2px;overflow-x:auto;padding:8px 12px;background:var(--accent-soft);border-bottom:1px solid var(--accent-line)",
+        selectionActions: [
+          { icon: "archive", label: "Archive" },
+          { icon: "delete", label: "Delete" },
+          { icon: "flag", label: "Flag" },
+          { icon: "mark_email_unread", label: "Unread" },
+          { icon: "drive_file_move", label: "Move" },
+        ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", run: mailAct[a.icon], style: tbFull ? selBtn : tbIcon + ";flex:0 0 auto;color:var(--accent-d)" })),
+        aiSumOpen: !!aiSumThread,
+        aiSumSubject: aiSumThread ? aiSumThread.subject : "",
+        aiSumCards: aiSumThread ? this.aiSumCards(aiSumThread).map(c => Object.assign({}, c, {
+          cardStyle: "display:flex;flex-direction:column;gap:8px;background:var(--rail);border:1px solid var(--line2);border-radius:12px;padding:" + (isMobile ? "14px 14px" : "13px 15px"),
+          quoteStyle: "max-height:" + (isMobile ? 168 : 150) + "px;overflow:auto;font-size:12.5px;line-height:1.6;color:var(--text2);background:var(--panel);border-left:3px solid var(--line);border-radius:0 8px 8px 0;padding:10px 12px;text-wrap:pretty",
+        })) : [],
+        closeAiSum: this.closeAiSum,
+        dlgAi: isMobile
+          ? "box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;background:var(--panel);overflow:hidden"
+          : "width:620px;max-width:100%;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 52px var(--shadow);overflow:hidden",
+        aiSumHeadStyle: "display:flex;align-items:center;gap:10px;flex:0 0 auto;padding:" + (isMobile ? "16px 14px 13px" : "15px 16px 13px") + ";border-bottom:1px solid var(--line2)",
+        aiSumBodyStyle: "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:13px;padding:" + (isMobile ? "14px 14px 24px" : "15px 16px 18px"),
+        moveOpen: !!(st.moveFor && st.moveFor.length),
+        moveTitle: st.moveFor ? "Move " + this.countWord(st.moveFor.length) : "",
+        closeMove: this.closeMove,
+        moveGroups: ACCOUNTS.map(a => ({ key: a.key, label: a.label, dot: a.dot, folders: a.moveFolders })).map(g => ({
+          label: g.label,
+          wrapStyle: "display:flex;flex-direction:column;gap:1px;padding-bottom:6px",
+          headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:8px 9px 5px",
+          dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
+          newFolder: () => this.openNewFolder(g.key, g.label),
+          newFolderStyle: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "11px 14px" : "8px 13px") + ";border-radius:9px;font-size:13px;color:var(--accent-d)",
+          folders: g.folders.concat(((st.extraFolders || {})[g.key] || []).map(n => ({ icon: "folder", label: n }))).map(mf => ({
+            icon: mf.icon, label: mf.label, pick: () => this.moveThreads(mf.label, g.label),
+            style: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "13px 14px" : "10px 13px") + ";border-radius:9px;font-size:14px;color:var(--text2)",
+          })),
+        })),
+        undoOp: this.undoOp,
+        hideToast: this.hideToast,
+        railBellIcon: notifUnreadCount ? "notifications_active" : "notifications",
+        newFolderOpen: !!st.newFolder,
+        newFolderTitle: st.newFolder && st.newFolder.mode === "edit" ? "Edit folder" : "New folder",
+        nfSaveLabel: st.newFolder && st.newFolder.mode === "edit" ? "Save changes" : "Create folder",
+        createFolder: this.saveFolder,
+        delFolderOpen: !!st.delFolder,
+        delFolderName: st.delFolder ? st.delFolder.path.split("/").pop() : "",
+        /* Four outcomes, four sentences: nested folders go too, mail stored in them goes with them,
+           and whether that mail can still be recovered is the account's own delete setting. */
+        delFolderText: (() => {
+          const df = st.delFolder;
+          if (!df) return "";
+          const nested = ((st.extraFolders || {})[df.key] || []).filter(p => p.indexOf(df.path + "/") === 0);
+          const names = [df.path].concat(nested).map(p => p.split("/").pop());
+          const held = Object.keys(st.moved || {}).filter(id => names.indexOf((st.moved || {})[id]) >= 0).length;
+          const acc = (st.accounts || [])[df.key === "acc2" ? 1 : 0];
+          const hard = !acc || acc.hardDelete !== false;
+          const what = nested.length
+            ? "The folder and the " + (nested.length === 1 ? "folder nested" : nested.length + " folders nested") + " inside it"
+            : "The folder";
+          return what + " will be deleted in " + df.label + " and on your mail server. " + (held
+            ? (held === 1 ? "The conversation" : "All " + held + " conversations") + " stored in it " + (hard
+                ? "will be deleted permanently on both servers — there will be nothing left to restore."
+                : "will move to Trash, so you can still bring " + (held === 1 ? "it" : "them") + " back.")
+            : "It holds no mail, and deleting it cannot be undone.");
+        })(),
+        closeDeleteFolder: this.closeDeleteFolder,
+        confirmDeleteFolder: this.confirmDeleteFolder,
+        dangerBtnStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--err);border:1px solid var(--err);border-radius:9px;padding:9px 14px",
+        newFolderAccount: st.newFolder ? st.newFolder.label : "",
+        closeNewFolder: this.closeNewFolder,
+        nfName: st.nfName || "",
+        nfParent: st.nfParent || "",
+        onNfName: this.onNfName,
+        onNfParent: this.onNfParent,
+        nfLocations: st.newFolder ? this.folderLocations(st.newFolder.key, st.newFolder.mode === "edit" ? st.newFolder.path : "") : [],
+        nfPathHint: "MailFathom creates the folder on this account's mail server and picks where it sits there — you only choose where it shows up in your folder list.",
+        nfCancelStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px",
+        nfCreateStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;border-radius:9px;padding:9px 14px;" +
+          ((st.nfName || "").trim()
+            ? "color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);"
+            : "color:var(--faint);background:var(--rail);border:1px solid var(--line);"),
+        nfCreateHover: (st.nfName || "").trim() ? "cursor:pointer;opacity:0.9" : "cursor:not-allowed",
+        /* The one refresh: it re-reads the mail in front of the reader and the notification centre.
+           Solid border, no spinner — waiting is the pulse the prototype uses for work in progress. */
+        refreshAll: this.refreshAll,
+        refreshIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:" + (tablet ? 18 : 20) + "px;line-height:1;display:block" +
+          (st.refreshBusy ? ";animation:mfpulse 1s ease-in-out infinite" : ""),
+        refreshBtnStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 30 : 34) + "px;height:" + (tablet ? 30 : 34) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px solid " +
+          (st.refreshBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);") +
+          "transition:background 140ms ease,color 140ms ease,border-color 140ms ease",
+        refreshFabStyle: "position:fixed;left:12px;bottom:82px;z-index:70;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px solid " +
+          (st.refreshBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);") +
+          "box-shadow:0 2px 8px var(--sh-2)",
+        railBellStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 40 : 46) + "px;height:" + (tablet ? 40 : 46) + "px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px solid " +
+          (st.notifCenter ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);box-shadow:0 1px 2px var(--sh-1);"),
+        notifBadgeStyle: "position:absolute;top:-6px;right:-6px;min-width:21px;height:21px;box-sizing:border-box;padding:0 5px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:var(--err);color:#fff;font-size:11.5px;font-weight:700;border:2px solid var(--rail)",
+        notifHasUnread: notifUnreadCount > 0,
+        notifNewBadgeStyle: "flex:0 0 auto;font-weight:600;border-radius:11px;background:var(--err-soft);color:var(--err-text);" + (touch ? "font-size:12px;padding:5px 11px" : "font-size:11px;padding:3px 9px"),
+        notifCloseStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:10px;" + (touch ? "width:38px;height:38px;border:1px solid var(--line)" : "width:32px;height:32px"),
+        notifCloseIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 23 : 19) + "px;line-height:1",
+        notifCountLabel: notifUnreadCount > 9 ? "9+" : String(notifUnreadCount),
+        notifNewLabel: notifUnreadCount === 1 ? "1 new" : notifUnreadCount + " new",
+        notifCenterOpen: !!st.notifCenter,
+        closeNotifCenter: this.closeNotifCenter,
+        toggleNotifCenter: this.toggleNotifCenter,
+        markAllNotifsRead: this.markAllNotifsRead,
+        notifPanelRef: this.notifPanelRef,
+        notifListRef: this.notifListRef,
+        notifPanelDown: isMobile ? this.notifGest("close") : null,
+        railGestDown: isMobile ? this.notifGest("open") : null,
+        railTapGuard: isMobile ? this.railTapGuard : null,
+        notifGrabStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:8px 0 2px;cursor:grab",
+        notifScrimStyle: "position:fixed;inset:0;z-index:88;background:var(--scrim);" +
+          (notifDragging ? "transition:none;" : "transition:opacity " + (st.notifSpring ? NG.springMs + "ms " + NG.springEase : "260ms ease") + ";") +
+          "opacity:" + (isMobile ? notifProg : notifIn ? 1 : 0),
+        notifPanelStyle: "position:fixed;z-index:89;top:0;" +
+          (isMobile ? "left:0;right:0;bottom:" + this.barH() + "px;" : "bottom:0;left:" + railW + "px;width:min(400px,calc(100vw - " + (railW + 24) + "px));border-right:1px solid var(--line);") +
+          "display:flex;flex-direction:column;background:var(--panel);box-shadow:26px 0 60px var(--sh-3);" +
+          (isMobile
+            ? "touch-action:pan-y;transform:translateY(" + (notifIn ? notifDrag + "px" : "100%") + ");" +
+              (notifDragging
+                ? "transition:none;"
+                : st.notifSpring
+                ? "transition:transform " + NG.springMs + "ms " + NG.springEase + ";"
+                : "transition:transform 300ms cubic-bezier(.32,.72,0,1);")
+            : "transform:translateX(" + (notifIn ? "0" : "-102%") + ");transition:transform 260ms cubic-bezier(.3,.7,.1,1);"),
+        notifTabs: [{ k: "all", label: "All" }, { k: "unread", label: "Unread" + (notifUnreadCount ? " · " + notifUnreadCount : "") }].map(x => ({
+          label: x.label,
+          pick: () => this.setState({ notifFilter: x.k }),
+          style: "display:flex;align-items:center;height:30px;padding:0 12px;border-radius:9px;font-size:12.5px;border:1px solid " +
+            (notifFilter === x.k ? "var(--accent);background:var(--accent-soft);color:var(--accent-d);font-weight:600" : "var(--border2);background:var(--panel);color:var(--text2)"),
+        })),
+        notifEmpty: notifShown.length === 0,
+        notifItems: notifShown.map(n => {
+          const K = NKIND[n.kind] || NKIND.system;
+          const unread = isNotifUnread(n, st.notifRead || {});
+          return {
+            title: n.title, body: n.body, src: n.src, icon: K.icon, unread: unread,
+            time: notifTime(n.mins),
+            press: this.pressFor("notifs", n.id, n.title, [
+              { icon: "check_box", label: "Select notifications", run: () => this.selStart("notifs", n.id) },
+              { icon: unread ? "mark_email_read" : "mark_email_unread", label: unread ? "Mark as read" : "Mark as unread", run: () => this.toggleNotifRead(n) },
+              { icon: "open_in_new", label: "Open source", run: () => this.openNotif(n) },
+              { icon: "delete", label: "Delete notification", danger: true, run: () => this.askHide("notifs", [n.id], "Delete notification?", n.title + " will disappear from the notification centre.") },
+            ], 420),
+            open: this.rowTap("notifs", n.id, () => this.openNotif(n)),
+            toggleRead: (e) => this.toggleNotifRead(n, e),
+            readIcon: unread ? "mark_email_read" : "mark_email_unread",
+            readTitle: unread ? "Mark as read" : "Mark as unread",
+            readBtnStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid " + (unread ? "var(--accent-line)" : "var(--line)") + ";border-radius:10px;" + (touch ? "width:38px;height:38px;" : "width:32px;height:32px;") + "background:" + (unread ? "var(--accent-soft)" : "var(--panel)") + ";color:" + (unread ? "var(--accent-d)" : "var(--muted)"),
+            readIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 21 : 19) + "px;line-height:1",
+            titleStyle: "flex:1;min-width:0;font-size:14px;line-height:1.35;text-wrap:pretty;font-weight:" + (unread ? "600" : "500") + ";color:" + (unread ? "var(--text)" : "var(--text2)"),
+            iconWrapStyle: "flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:" + K.soft,
+            iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:19px;line-height:1;color:" + K.c,
+            style: "display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line2);" + (unread ? "background:var(--sub);" : "") + selMark("notifs", n.id) +
+              (notifAnim[n.id] === "in" ? "overflow:hidden;animation:mfrowin 480ms cubic-bezier(.22,1,.36,1) both;" : ""),
+          };
+        }),
+        toastWrapStyle: "position:fixed;z-index:97;top:" + (isMobile ? 12 : 18) + "px;" + (isMobile ? "left:12px;right:12px;" : "right:18px;width:min(400px,calc(100vw - 36px));") + "display:flex;flex-direction:column;gap:10px;pointer-events:none",
+        toasts: (st.toasts || []).map(t => {
+          const K = {
+            neutral: ["info", "var(--text2)", "var(--hover)", "var(--border2)"],
+            success: ["check_circle", "var(--ok-text)", "var(--ok-soft)", "var(--ok)"],
+            error: ["error", "var(--err-text)", "var(--err-soft)", "var(--err)"],
+            warning: ["warning", "var(--warn-text)", "var(--warn-soft)", "var(--warn)"],
+            info: ["campaign", "var(--accent-2)", "var(--accent-soft)", "var(--accent)"],
+            loading: ["progress_activity", "var(--accent-2)", "var(--accent-soft)", "var(--accent)"],
+          }[t.kind] || ["info", "var(--text2)", "var(--hover)", "var(--border2)"];
+          const loading = t.kind === "loading";
+          return {
+            id: t.id,
+            icon: K[0],
+            title: t.title,
+            body: t.body,
+            hasBody: !!t.body,
+            hasAction: !!t.actionLabel,
+            actionLabel: t.actionLabel,
+            action: t.onAction || this.undoOp,
+            close: loading ? () => this.askCancelToast(t.id) : () => this.dismissToast(t.id),
+            closeTitle: loading ? "Abort operation" : "Close",
+            hasBar: !t.sticky && !t.out,
+            barStyle: "position:absolute;left:0;right:0;bottom:0;height:2px;transform-origin:left;opacity:0.55;background:" + K[3] + ";animation:mftbar " + (t.ms || 5000) + "ms linear both",
+            iconWrapStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:" + K[2],
+            iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:21px;line-height:1;color:" + K[1] + (loading ? ";animation:mfspin 1.1s linear infinite" : ""),
+            style: "pointer-events:auto;position:relative;overflow:hidden;display:flex;align-items:flex-start;gap:12px;padding:13px 12px 15px 13px;border-radius:15px;background:var(--panel);border:1px solid var(--line);box-shadow:0 16px 38px var(--sh-2),0 2px 6px var(--sh-1);opacity:0.8;transition:opacity .15s ease;animation:" + (t.out ? "mftout .2s ease forwards" : "mftin .24s cubic-bezier(.2,.85,.3,1) backwards"),
+          };
+        }),
+        cancelAskOpen: !!st.cancelAsk,
+        cancelAskTitle: st.cancelAsk ? st.cancelAsk.title : "",
+        cancelAskText: st.cancelAsk ? st.cancelAsk.text : "",
+        keepTask: () => this.setState({ cancelAsk: null }),
+        abortTaskNow: this.abortTask,
+        showResizer: !singlePane && !tablet,
+        startResize: this.beginResize,
+        resetResize: () => this.setState({ listW: 340 }),
+        /* The thread list leaves the DOM when a message opens (single-panel layout),
+           so we keep the scroll position ourselves and restore it on return. */
+        listScrollRef: this.keepScroll("mail"),
+        onListScroll: this.keepScrollOn("mail"),
+        caseListRef: this.keepScroll("cases"),
+        onCaseListScroll: this.keepScrollOn("cases"),
+        peopleListRef: this.keepScroll("people"),
+        onPeopleListScroll: this.keepScrollOn("people"),
+        tasksBodyRef: this.keepScroll("tasks"),
+        onTasksScroll: this.keepScrollOn("tasks"),
+        calScrollRef: this.keepScroll("cal"),
+        onCalScroll: this.keepScrollOn("cal"),
+        listScrollStyle: "position:relative;flex:1;overflow:auto;min-height:160px;background:var(--sub)",
+        listInnerStyle: "display:flex;flex-direction:column;gap:1px;padding:1px 0",
+        threadHeadStyle: singlePane
+          ? "flex:0 0 auto;display:flex;flex-direction:column;gap:2px;padding:" + (thCollapsed ? "3px 6px" : "6px 8px 8px 8px") + ";border-bottom:1px solid var(--line);background:var(--panel);transition:padding 140ms ease"
+          : "display:flex;flex-direction:column;gap:7px;padding:16px 22px;border-bottom:1px solid var(--line)",
+        showThreadStateBar: (!singlePane || !thCollapsed) && !tablet && !st.stateBarOff,
+        /* Condensed view: only the correspondence remains. On a narrow screen the header stays —
+           mieszka w nim przycisk powrotu do listy. */
+        showThreadHead: !st.stateBarOff || singlePane,
+        showComposerBar: !st.stateBarOff,
+        /* A reading that predates the conversation's newest message: a message joined or left after
+           the state was derived, so the reading is held back instead of being shown out of date. */
+        stateStale: !!thread.stateStale,
+        stateFresh: !thread.stateStale,
+        stateInBody: tablet && !st.stateBarOff && !thread.stateStale,
+        staleInBody: tablet && !st.stateBarOff && !!thread.stateStale,
+        threadAiLine: thread.ai || (thread.state[0] ? thread.state[0].value : ""),
+        threadSheetOpen: !!st.threadSheet,
+        showAgentJump: !isMobile && !st.stateBarOff,
+        agentJumpRowStyle: "flex:0 0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--sub);padding:" + (tablet ? "9px 16px" : "10px 24px"),
+        askSheetLabel: isMobile || tablet ? "" : "Thread state",
+        askSheetAltStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--border2);border-radius:20px;color:var(--text2);white-space:nowrap;" +
+          (isMobile ? "min-height:48px;padding:0 16px;font-size:14px" : "min-height:38px;padding:0 " + (tablet ? 12 : 14) + "px;font-size:13px"),
+        askSheetBtnStyle: "flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:7px;min-height:" + (isMobile ? 48 : 34) + "px;padding:0 " + (isMobile ? 18 : 13) + "px;border-radius:24px;font-size:" + (isMobile ? 14 : 13) + "px;font-weight:600;color:var(--onaccent);background:var(--accent)",
+        openThreadSheet: () => this.setState({ threadSheet: true }),
+        threadSheetAsks: [
+          "Summarise where this stands",
+          "What the other side expects from me",
+          "Draft a reply for me",
+        ].map(q => ({ label: q, run: () => this.setState({ threadSheet: false, mailAnswer: true }) })),
+        goAgentBtnStyle: "display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid var(--accent-line);border-radius:12px;background:var(--accent-soft);color:var(--accent-d);font-weight:600;" +
+          (touch ? "min-height:50px;padding:0 14px;font-size:14px" : "min-height:40px;padding:0 14px;font-size:13px"),
+        askAgentThread: () => this.goAgentWith("thread “" + thread.subject + "”"),
+        askAgentCase: () => this.goAgentWith("case “" + kase.title + "”"),
+        agentCtxShown: !!(st.agentCtx || (activeConv && activeConv.ctx && !st.agentCtxCleared)),
+        agentInputRef: this.agentInputRef,
+        agentCtxLabel: st.agentCtx || (activeConv ? activeConv.ctx : "") || "",
+        clearAgentCtx: () => this.setState({ agentCtx: null, agentCtxCleared: true }),
+        convReturnShown: !!st.agentReturn && st.screen !== "agent",
+        convReturnLabel: "Back to the conversation",
+        backToConv: this.backToConv,
+        backToConvKey: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.backToConv(); } },
+        convReturnStyle: "position:fixed;z-index:120;left:50%;transform:translateX(-50%);" + (isMobile ? "bottom:78px;" : "bottom:22px;") +
+          "display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:24px;font-size:13.5px;font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);box-shadow:0 6px 20px var(--sh-1)",
+        convReturnIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1",
+        closeThreadSheet: () => this.setState({ threadSheet: false }),
+        onThreadScroll: (e) => {
+          const y = e.target.scrollTop, c = y > 40;
+          if (c !== !!this.state.thScroll) this.setState({ thScroll: c });
+        },
+        threadTouchStart: (e) => {
+          const t2 = e.touches && e.touches[0];
+          this._sx = t2 ? t2.clientX : 0; this._sy = t2 ? t2.clientY : 0;
+        },
+        threadTouchEnd: (e) => {
+          const t2 = e.changedTouches && e.changedTouches[0];
+          if (!t2 || !singlePane) return;
+          const dx = t2.clientX - this._sx, dy = t2.clientY - this._sy;
+          if (Math.abs(dx) < 72 || Math.abs(dy) > 56) return;
+          const i = THREADS.findIndex(x => x.id === thread.id);
+          const next = THREADS[dx < 0 ? i + 1 : i - 1];
+          if (next) this.setState({ threadId: next.id, thScroll: false, stateOpen: false });
+        },
+        threadStateStyle: singlePane
+          ? "flex:0 0 auto;display:flex;align-items:center;gap:9px;background:var(--sub);border-bottom:1px solid var(--line);padding:9px 12px"
+          : "display:flex;flex-direction:column;gap:6px;background:var(--sub);border-bottom:1px solid var(--line);padding:9px 22px",
+        stateRowStyle: isMobile ? "display:flex;flex-direction:column;gap:6px;padding-top:1px"
+          : thread.state.length >= 4 ? "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px" : "display:flex;gap:8px;flex-wrap:wrap",
+        stateBodyRowStyle: thread.state.length >= 4
+          ? "flex:0 0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px"
+          : "flex:0 0 auto;display:flex;gap:7px;flex-wrap:wrap;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px",
+        stateChips: thread.state.map(st2 => ({
+          label: st2.label,
+          value: st2.value,
+          valueStyle: thread.state.length >= 4
+            ? "font-size:12.5px;line-height:1.35;text-wrap:pretty"
+            : "font-size:12.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",
+          style: "flex:1 1 190px;min-width:0;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 9px",
+        })),
+        isMobileState: singlePane,
+        mobileStateLine: singlePane && !thread.stateStale,
+        showStateCards: !singlePane && !thread.stateStale,
+        stateToggleStyle: singlePane
+          ? "margin-left:auto;font-size:12px;color:var(--accent-d);background:var(--accent-soft);border-radius:14px;padding:3px 10px"
+          : "display:none",
+        stateToggleLabel: st.stateOpen ? "hide" : "3 fields",
+        threadBodyStyle: singlePane
+          ? "flex:1;display:flex;flex-direction:column;gap:10px;padding:12px;overflow:auto;min-height:0"
+          : "flex:1;display:flex;flex-direction:column;gap:12px;padding:18px 22px;overflow:auto;min-height:0",
+        composerStyle: singlePane || tablet
+          ? "display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding:9px 12px;background:var(--panel)"
+          : "display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--line);padding:14px 22px;background:var(--panel)",
+        backBannerStyle: isMobile
+          ? "display:flex;flex-direction:column;gap:3px;background:var(--accent-soft);border-bottom:1px solid var(--accent-line);padding:9px 14px"
+          : "display:flex;align-items:center;gap:10px;background:var(--accent-soft);border-bottom:1px solid var(--accent-line);padding:10px 22px",
+
+        cameFromResult: st.cameFrom,
+        fromCitation: st.fromCite || "",
+        backToResult: () => this.setState({ screen: "discover", cameFrom: false }),
+        threads: THREADS.filter(t => (st.archived || []).indexOf(t.id) < 0 && (st.deleted || []).indexOf(t.id) < 0).map(t => ({
+          flagged: !!flags[t.id],
+          isUnread: !!unreadMap[t.id],
+          movedTo: movedMap[t.id] || "",
+          showMoved: !!movedMap[t.id],
+          swipeWrapStyle: "position:relative;overflow:hidden" +
+            (rowAnim[t.id] === "in" ? ";animation:mfrowin 480ms cubic-bezier(.22,1,.36,1) both"
+              : rowOut(t.id) ? ";animation:mfrowout 440ms cubic-bezier(.4,0,.2,1) both;pointer-events:none" : ""),
+          swiping: isMobile && st.swipeId === t.id && Math.abs(st.swipeDx || 0) > 8,
+          swipeBgStyle: "position:absolute;inset:0;display:flex;align-items:center;" +
+            ((st.swipeDx || 0) < 0
+              ? "justify-content:flex-end;padding-right:22px;background:var(--accent-soft);color:var(--accent-d);"
+              : "justify-content:flex-start;padding-left:22px;background:var(--warn-soft);color:var(--warn-text);"),
+          swipeIcon: (st.swipeDx || 0) < 0 ? "reply" : "archive",
+          swipeLabel: (st.swipeDx || 0) < 0 ? "Reply" : "Archive",
+          swipeIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px;line-height:1;margin-right:8px" + (Math.abs(st.swipeDx || 0) >= 96 ? ";font-variation-settings:'wght' 500" : ""),
+          swipeTextStyle: "font-size:13px;font-weight:600;opacity:" + (Math.abs(st.swipeDx || 0) >= 96 ? "1" : "0.55"),
+          aiStyle: isMobile ? "display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);line-height:1.35" : "display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)",
+          from: t.from, org: t.org, time: t.time, subject: t.subject, ai: t.ai,
+          hasAvatar: !!avatarOf(t.from), noAvatar: !avatarOf(t.from), initials: initialsOf(t.from),
+          avatarStyle: "width:" + avSz + "px;height:" + avSz + "px;flex:0 0 " + avSz + "px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:" + (isMobile ? 12 : 9) + "px;letter-spacing:0.02em;background:var(--border2);color:var(--text2)",
+          avatarImgStyle: "width:" + avSz + "px;height:" + avSz + "px;flex:0 0 " + avSz + "px;border-radius:50%;background-color:var(--border2);background-position:center;background-size:cover;background-repeat:no-repeat;background-image:url(" + avatarOf(t.from) + ");display:block",
+          fromStyle: (isMobile ? "flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" : "font-size:14px;font-weight:600;white-space:nowrap") + (unreadMap[t.id] ? ";color:var(--text)" : ""),
+          subjStyle: isMobile ? "font-size:14px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" : "font-size:14px",
+          orgStyle: isMobile || tablet ? "display:none" : "font-size:12px;color:var(--muted);white-space:nowrap",
+          showAi: aiHints && !!t.ai,
+          openAiSum: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.openAiSum(t.id); },
+          aiBtnStyle: "width:" + (touch ? 32 : 24) + "px;height:" + (touch ? 32 : 24) + "px;flex:0 0 " + (touch ? 32 : 24) + "px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 19 : 16) + "px;line-height:1",
+          selected: sel.indexOf(t.id) >= 0,
+          select: (e) => this.pickThread(t.id, e),
+          longPress: (e) => { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); } this.armCtx(false); this.openMailMenu(t.id, e.clientX, e.clientY); },
+          touchStart: (e) => {
+            const p = e && e.touches && e.touches[0];
+            if (isMobile) this.swipeStart(t.id, e);
+            this.startLongPress(t.id, p ? p.clientX : 0, p ? p.clientY : 0);
+          },
+          touchMove: (e) => { this.cancelLongPress(); if (isMobile) this.swipeMove(t.id, e); },
+          touchEnd: () => { this.cancelLongPress(); if (isMobile) this.swipeEnd(t.id); },
+          dragStart: (e) => this.dragThreadsStart(t.id, e),
+          dragEnd: this.dragThreadsEnd,
+          rowStyle: rowStyleFor(!isMobile && t.id === st.threadId && !selectionOn, sel.indexOf(t.id) >= 0) +
+            ((st.dragIds || []).indexOf(t.id) >= 0 ? "opacity:0.45;" : "") +
+            (isMobile && st.swipeId === t.id
+              ? "transform:translateX(" + (st.swipeDx || 0) + "px);"
+              : "transform:translateX(0);transition:transform 160ms ease,background 120ms ease;") +
+            rowWash(t.id),
+          count: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10),
+          multi: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10) > 1,
+        })),
+        activeSubject: thread.subject,
+        activeMeta: thread.meta,
+        activeState: thread.state.map((s, i) => {
+          const src = (STATE_SRC[thread.id] || [])[i];
+          const idx = typeof src === "number" ? Math.min(src, lastIdx) : lastIdx;
+          return {
+            label: s.label,
+            value: s.value,
+            srcLabel: "message " + (idx + 1) + " · " + msgs[idx].from.split(" ")[0],
+            showSrc: msgs.length > 1,
+            openSrc: () => this.revealMessage(thread.id, idx),
+          };
+        }),
+        activeMessages: items,
+        showExpandAll: false,
+        showCitationTag: st.cameFrom && thread.id === "contoso",
+        askThread: () => this.setState({ mailAnswer: true }),
+        closeMailAnswer: () => this.setState({ mailAnswer: false }),
+        mailAnswer: st.mailAnswer && thread.id === "contoso",
+        aiHints,
+
+        composeMode: st.replyMode || "new",
+        composeKindLabel: composeKind,
+        composeOpen: !!st.compose && (!tabsMode || composeTabActive) && !docInPane,
+        composeExpanded: (!!st.compose && !st.composeMin) || composeInPane,
+        composeChromeShown: !composeTabActive,
+        openCompose: () => (tabsMode
+          ? this.openTab("compose", { compose: true, composeMin: false, replyMode: null, composeSubjEdit: undefined, closeAsk: false, sendAsk: null })
+          : this.setState({ compose: true, composeMin: false, replyMode: null, composeSubjEdit: undefined, closeAsk: false, sendAsk: null })),
+        composeSubjValue: curSubj,
+        onComposeSubj: (e) => this.setState({ composeSubjEdit: e.target.value }),
+        closeCompose: () => (bodyTxt() || curSubj.trim() ? this.setState({ closeAsk: true }) : finishCompose()),
+        keepEditing: () => this.setState({ closeAsk: false, sendAsk: null }),
+        discardCompose: () => { finishCompose(); this.notify("Draft discarded", false); },
+        saveDraftAndClose: () => { finishCompose(); this.notify("The message is waiting in Drafts.", { kind: "success", title: "Draft saved" }); },
+        closeAskOpen: !!st.closeAsk,
+        composeKeyDown: (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); askSend(); } },
+        askSend: askSend,
+        sendAskOpen: !!st.sendAsk,
+        sendWarnings: ((st.sendAsk && st.sendAsk.warnings) || []).map(w => ({ text: w })),
+        sendHasWarn: !!(st.sendAsk && st.sendAsk.warnings.length),
+        sendConfirmLabel: st.sendAsk && st.sendAsk.warnings.length ? "Send anyway" : "Send",
+        sendSummaryTo: composeTo.length ? composeTo.join(", ") : "— no recipient —",
+        sendSummarySubj: curSubj.trim() || "— no subject —",
+        confirmSend: () => {
+          const to = composeTo.length ? composeTo.join(", ") : "no recipient";
+          finishCompose();
+          this.notifyTask({
+            title: "Sending message…",
+            body: "Do: " + to,
+            cancelText: "The message is being sent. Aborting stops delivery and saves it as a draft.",
+            doneTitle: "Message sent",
+            doneBody: "Do: " + to,
+            ms: 2400,
+          });
+        },
+        toggleComposeMin: () => (composeInPane ? null : this.setState(s => ({ composeMin: !s.composeMin }))),
+        composeShellStyle: composeInPane
+          ? "flex:1;display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel)"
+          : isMobile
+          ? "position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;background:var(--panel)"
+          : "position:fixed;right:26px;bottom:0;width:680px;max-width:calc(100vw - 52px);max-height:86vh;z-index:90;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-bottom:none;border-radius:13px 13px 0 0;box-shadow:0 -1px 0 var(--inset) inset,0 18px 44px var(--sh-3)",
+        composeTitle: (st.composeMin ? composeKind + " — collapsed" : composeKind),
+        composeToChips: composeTo.map(n => ({ name: n })),
+        ccOpen: !!st.ccOpen,
+        ccTitle: st.ccOpen ? "Hide CC and BCC fields" : "Show CC and BCC fields",
+        ccToggleStyle: "font-size:12px;padding:2px 8px;border-radius:7px;" + (st.ccOpen ? "color:var(--accent-d);background:var(--accent-soft)" : "color:var(--muted)"),
+        toggleCc: () => this.setState(s => ({ ccOpen: !s.ccOpen })),
+        composeCcChips: (st.composeCc || []).map((n, i) => ({ name: n, remove: () => this.setState(s => ({ composeCc: (s.composeCc || []).filter((_, j) => j !== i) })) })),
+        composeBccChips: (st.composeBcc || []).map((n, i) => ({ name: n, remove: () => this.setState(s => ({ composeBcc: (s.composeBcc || []).filter((_, j) => j !== i) })) })),
+        composeReplyToChips: (st.composeReplyTo || []).map((n, i) => ({ name: n, remove: () => this.setState(s => ({ composeReplyTo: (s.composeReplyTo || []).filter((_, j) => j !== i) })) })),
+        replyToValue: st.replyToInput || "",
+        replyToPlaceholder: (st.composeReplyTo || []).length ? "another address…" : "default " + DEFAULT_REPLY_TO,
+        onReplyToInput: (e) => this.setState({ replyToInput: e.target.value }),
+        onReplyToKey: (e) => {
+          if (e.key !== "Enter" && e.key !== ",") return;
+          e.preventDefault();
+          const v = (this.state.replyToInput || "").trim();
+          if (v) this.setState(s => ({ composeReplyTo: (s.composeReplyTo || []).concat(v), replyToInput: "" }));
+        },
+        ccValue: st.ccInput || "",
+        bccValue: st.bccInput || "",
+        onCcInput: (e) => this.setState({ ccInput: e.target.value }),
+        onBccInput: (e) => this.setState({ bccInput: e.target.value }),
+        onCcKey: (e) => {
+          if (e.key !== "Enter" && e.key !== ",") return;
+          e.preventDefault();
+          const v = (this.state.ccInput || "").trim();
+          if (v) this.setState(s => ({ composeCc: (s.composeCc || []).concat(v), ccInput: "" }));
+        },
+        onBccKey: (e) => {
+          if (e.key !== "Enter" && e.key !== ",") return;
+          e.preventDefault();
+          const v = (this.state.bccInput || "").trim();
+          if (v) this.setState(s => ({ composeBcc: (s.composeBcc || []).concat(v), bccInput: "" }));
+        },
+        composeToEmpty: composeTo.length === 0,
+        composeSubjLine: composeSubj,
+        minLabel: composeInPane ? "" : st.composeMin ? "expand_less" : "minimize",
+        composeMinShown: !composeInPane && !isMobile,
+        composeMinBtnStyle: "display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;color:var(--muted)",
+        composeCloseBtnStyle: "display:flex;align-items:center;justify-content:center;border-radius:" + (touch ? "10px;width:38px;height:38px;border:1px solid var(--line);" : "7px;width:28px;height:28px;") + "color:var(--muted)",
+        composeChromeIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 23 : 17) + "px;line-height:1",
+        fmtBarShown: !touch || !!st.fmtBar,
+        fmtToggleShown: touch,
+        fmtToggleLabel: st.fmtBar ? "Hide formatting" : "Text formatting",
+        fmtToggleIcon: st.fmtBar ? "expand_less" : "expand_more",
+        toggleFmtBar: () => this.setState(s2 => ({ fmtBar: !s2.fmtBar })),
+        fmtHintShown: !touch,
+        fmtBarStyle: "display:flex;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line2);" + (touch ? "gap:6px;padding:9px 12px" : "gap:2px;padding:6px 12px"),
+
+        htmlOpen: !!st.htmlDoc && (!tabsMode || htmlInPane),
+        htmlTitleText: st.htmlDoc ? st.htmlDoc.title : "",
+        htmlMeta: st.htmlDoc ? st.htmlDoc.from + " · " + st.htmlDoc.when : "",
+        htmlSrc: st.htmlDoc ? st.htmlDoc.src : "",
+        closeHtml: () => (htmlInPane ? this.closeTab(st.activeTab) : this.setState({ htmlDoc: null })),
+        htmlOverlayStyle: htmlInPane
+          ? "flex:1;display:flex;min-height:0;min-width:0;background:var(--sub)"
+          : isMobile
+          ? "position:fixed;top:0;left:0;right:0;bottom:" + this.barH() + "px;z-index:88;display:flex;background:var(--sub)"
+          : singlePane
+          ? "position:fixed;inset:0;z-index:88;display:flex;background:var(--sub)"
+          : "position:fixed;inset:0;z-index:88;display:flex;align-items:center;justify-content:center;padding:26px;background:var(--scrim)",
+        htmlWindowStyle: htmlInPane || singlePane
+          ? "flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel)"
+          : "width:min(1000px,100%);height:min(90vh,100%);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 26px 60px var(--scrim);overflow:hidden",
+        htmlFrameStyle: "flex:1;min-height:0;width:100%;border:0;background:#ffffff" + (st.htmlLoading ? ";visibility:hidden" : ""),
+        htmlLoading: !!st.htmlLoading,
+        htmlSkelStyle: "position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;gap:14px;background:#ffffff;padding:26px 30px",
+        htmlSkelLines: [{ w: 46, h: 15 }, { w: 28, h: 10 }, { w: 0, h: 0 }, { w: 98, h: 11 }, { w: 94, h: 11 }, { w: 99, h: 11 }, { w: 62, h: 11 }, { w: 0, h: 0 }, { w: 100, h: 90 }, { w: 88, h: 11 }, { w: 51, h: 11 }].map(l => ({
+          style: l.w
+            ? "border-radius:5px;background:linear-gradient(90deg,#e9edf2 0%,#f6f8fa 42%,#e9edf2 78%);background-size:260% 100%;animation:mfshim 1.05s linear infinite;height:" + l.h + "px;width:" + l.w + "%"
+            : "height:6px",
+        })),
+        docLoading: !!st.docLoading,
+        docReady: !st.docLoading,
+        docSkelStyle: "flex:0 0 auto;width:" + Math.round(620 * (st.docZoom || 1)) + "px;max-width:100%;min-height:" + Math.round(830 * (st.docZoom || 1)) + "px;display:flex;flex-direction:column;gap:15px;background:#ffffff;border:1px solid var(--line);border-radius:4px;box-shadow:0 10px 30px var(--sh-2);padding:44px 46px",
+        docSkelLines: [{ w: 34, h: 10 }, { w: 72, h: 17 }, { w: 0, h: 0 }, { w: 97, h: 11 }, { w: 93, h: 11 }, { w: 99, h: 11 }, { w: 58, h: 11 }, { w: 0, h: 0 }, { w: 96, h: 11 }, { w: 90, h: 11 }, { w: 44, h: 11 }, { w: 0, h: 0 }, { w: 99, h: 11 }, { w: 66, h: 11 }].map(l => ({
+          style: l.w
+            ? "border-radius:5px;background:linear-gradient(90deg,#e9edf2 0%,#f6f8fa 42%,#e9edf2 78%);background-size:260% 100%;animation:mfshim 1.05s linear infinite;height:" + l.h + "px;width:" + l.w + "%"
+            : "height:8px",
+        })),
+        docOpen: !!st.doc && (!tabsMode || docInPane),
+        docOverlayStyle: docInPane
+          ? "flex:1;display:flex;min-height:0;min-width:0;background:var(--sub)"
+          : isMobile
+          ? "position:fixed;top:0;left:0;right:0;bottom:" + this.barH() + "px;z-index:97;display:flex;background:var(--sub)"
+          : "position:fixed;inset:0;z-index:97;display:flex;align-items:center;justify-content:center;padding:28px;background:var(--scrim)",
+        docName: st.doc ? st.doc.name : "",
+        docType: st.doc ? st.doc.type : "",
+        docMeta: st.doc ? st.doc.size : "",
+        closeDoc: () => (docInPane ? this.closeTab(st.activeTab) : this.setState({ doc: null })),
+        docZoomLabel: Math.round((st.docZoom || 1) * 100) + "%",
+        docZoomIn: () => this.setState(s2 => ({ docZoom: Math.min(1.6, (s2.docZoom || 1) + 0.15) })),
+        docZoomOut: () => this.setState(s2 => ({ docZoom: Math.max(0.7, (s2.docZoom || 1) - 0.15) })),
+        stopProp: (e) => { if (e && e.stopPropagation) e.stopPropagation(); },
+        docWindowStyle: docInPane
+          ? "flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);overflow:hidden"
+          : isMobile
+          ? "flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);overflow:hidden"
+          : "width:min(940px,100%);height:min(88vh,100%);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 26px 60px var(--scrim);overflow:hidden",
+        docBtnStyle: "display:flex;align-items:center;justify-content:center;color:var(--text2);border-radius:" + (touch ? "10px;width:38px;height:38px;font-size:15px;" : "7px;width:28px;height:28px;font-size:13px;"),
+        docPageStyle: "flex:0 0 auto;width:" + Math.round(620 * (st.docZoom || 1)) + "px;max-width:100%;min-height:" + Math.round(830 * (st.docZoom || 1)) + "px;display:flex;flex-direction:column;background:#ffffff;color:#1a1f26;border-radius:3px;box-shadow:0 18px 40px var(--scrim);padding:" + Math.round(56 * (st.docZoom || 1)) + "px " + Math.round(58 * (st.docZoom || 1)) + "px",
+        docLines: docContent(st.doc).map(l => ({
+          text: l.text,
+          style: l.h
+            ? "font-size:" + Math.round(19 * (st.docZoom || 1)) + "px;font-weight:600;letter-spacing:-0.01em"
+            : l.s
+            ? "font-size:" + Math.round(12 * (st.docZoom || 1)) + "px;letter-spacing:0.08em;color:#7b8592"
+            : "font-size:" + Math.round(14 * (st.docZoom || 1)) + "px;line-height:1.65;color:#39414d;text-wrap:pretty",
+        })),
+        userMailboxes: MAILBOXES.map(mb => ({
+          mail: mb.mail, dot: mb.dot, current: false, pick: null,
+          style: "display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--muted)",
+        })),
+        tabsRowAvailable: w >= 1180,
+        tabsRowStyle: "display:flex;align-items:center;gap:10px;padding:10px 13px;font-size:13px" + (w >= 1180 ? "" : ";opacity:0.5"),
+        tabsRowNote: w >= 1180 ? "" : "available on a wider screen",
+        tabsSwitchStyle: "flex:0 0 auto;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (wantTabs ? "--accent" : "--border2") + ");justify-content:" + (wantTabs ? "flex-end" : "flex-start"),
+        toggleTabsMode: () => (w >= 1180 ? this.setState({ workMode: wantTabs ? "classic" : "tabs" }) : null),
+        denseKnobStyle: "width:13px;height:13px;border-radius:50%;background:var(--panel)",
+        themeSegs: [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]].map(([v, label]) => ({
+          label,
+          pick: () => this.setState({ themePref: v, themeOverride: null }),
+          style: "flex:1;text-align:center;font-size:11.5px;padding:5px 0;border-radius:7px;" + (themePref === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--muted);"),
+        })),
+        settingsScrimStyle: isMobile
+          ? "position:fixed;top:0;left:0;right:0;bottom:" + this.barH() + "px;z-index:96;display:flex;background:var(--bg)"
+          : singlePane
+          ? "position:fixed;inset:0;z-index:96;display:flex;background:var(--bg)"
+          : "position:fixed;inset:0;z-index:96;display:flex;align-items:center;justify-content:center;background:var(--scrim);padding:20px",
+        appVersion: "v" + APP_VERSION,
+        appBuild: APP_BUILD,
+        settingsCardStyle: singlePane
+          ? "flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel)"
+          : "position:relative;width:" + Math.min(st.settingsW || 700, w - 40) + "px;height:" + Math.min(st.settingsH || 720, Math.round((st.vh || (typeof window !== "undefined" ? window.innerHeight : 900)) * 0.92)) + "px;transform:translate(" + (st.settingsDX || 0) + "px," + (st.settingsDY || 0) + "px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3);overflow:hidden",
+        settingsHeadDown: singlePane ? null : (e) => {
+          if (e.target && e.target.closest && e.target.closest("[data-nodrag]")) return;
+          const card = e.currentTarget.parentElement;
+          if (!card) return;
+          e.preventDefault();
+          const x0 = e.clientX, y0 = e.clientY, dx0 = st.settingsDX || 0, dy0 = st.settingsDY || 0;
+          const r = card.getBoundingClientRect();
+          const move = (ev) => {
+            const maxX = Math.max(0, Math.round((window.innerWidth - r.width) / 2));
+            const maxY = Math.max(0, Math.round((window.innerHeight - r.height) / 2));
+            this.setState({
+              settingsDX: Math.max(-maxX, Math.min(maxX, dx0 + ev.clientX - x0)),
+              settingsDY: Math.max(-maxY, Math.min(maxY, dy0 + ev.clientY - y0)),
+            });
+          };
+          const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        },
+        notifDevice: !!st.notifDevice,
+        notifDeviceSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.notifDevice ? "--accent" : "--border2") + ");justify-content:" + (st.notifDevice ? "flex-end" : "flex-start"),
+        toggleNotifDevice: () => this.setState(s => ({ notifDevice: !s.notifDevice })),
+        notifDuration: st.notifDuration == null ? 5 : st.notifDuration,
+        notifDurationLabel: (st.notifDuration == null ? 5 : st.notifDuration) + " s",
+        onNotifDuration: (e) => {
+          const n = parseInt(e.target.value, 10);
+          this.setState({ notifDuration: isNaN(n) ? 5 : Math.max(1, Math.min(30, n)) });
+        },
+        settingsResizable: !singlePane,
+        settingsResizeDown: (e) => {
+          const card = e.currentTarget.parentElement;
+          if (!card) return;
+          e.preventDefault();
+          const r = card.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+          const move = (ev) => this.setState({
+            settingsW: Math.max(560, Math.min(window.innerWidth - 40, Math.round(r.width + (ev.clientX - x0) * 2))),
+            settingsH: Math.max(420, Math.min(window.innerHeight - 40, Math.round(r.height + (ev.clientY - y0) * 2))),
+          });
+          const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        },
+        settingsBodyStyle: singlePane
+          ? "flex:1;min-height:0;display:flex;flex-direction:column;gap:11px;padding:14px 16px 28px;overflow:auto"
+          : "flex:1;min-height:0;display:flex;flex-direction:column;gap:11px;padding:18px 22px 24px;overflow:auto",
+        settingsHeadStyle: singlePane
+          ? "display:flex;align-items:center;gap:12px;padding:14px 14px 12px;border-bottom:1px solid var(--line);background:var(--sub)"
+          : "display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sub);cursor:move;user-select:none",
+        settingsTitleStyle: singlePane ? "font-size:18px;font-weight:600" : "font-size:15px;font-weight:600",
+        tabProfil: (st.settingsTab || "profil") === "profil",
+        tabApp: st.settingsTab === "app",
+        settingsTabs: [["profil", "Profile"], ["accounts", "Accounts"], ["ai", "AI"], ["notif", "Notifications"], ["app", "Application"]].map(([v, label]) => ({
+          label,
+          pick: () => this.setState({ settingsTab: v }),
+          style: "white-space:nowrap;border-bottom:2px solid " +
+            ((st.settingsTab || "profil") === v
+              ? "var(--accent);color:var(--text);font-weight:600"
+              : "transparent;color:var(--muted)") +
+            (touch ? ";padding:14px 4px 12px;font-size:16px" : ";padding:10px 1px 8px;font-size:13.5px"),
+        })),
+        autoImages: !!st.autoImages,
+        autoImagesSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.autoImages ? "--accent" : "--border2") + ");justify-content:" + (st.autoImages ? "flex-end" : "flex-start"),
+        toggleAutoImages: () => this.setState(s => ({ autoImages: !s.autoImages })),
+        autoExpand: !!st.autoExpand,
+        autoExpandSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.autoExpand ? "--accent" : "--border2") + ");justify-content:" + (st.autoExpand ? "flex-end" : "flex-start"),
+        toggleAutoExpand: () => this.setState(s2 => ({ autoExpand: !s2.autoExpand, histOpen: {} })),
+        htmlModeWarn: st.msgView === "html",
+        htmlAskOpen: !!st.htmlAsk,
+        cancelHtmlAsk: () => this.setState({ htmlAsk: null }),
+        confirmHtmlAsk: () => {
+          const ask = st.htmlAsk;
+          if (!ask) return;
+          this.setState({ htmlAsk: null });
+          if (this.tabsMode()) this.openTab(ask.key, { htmlDoc: ask.doc, htmlSrcMode: false, doc: null, htmlLoading: true }, { htmlDoc: ask.doc });
+          else this.setState({ htmlDoc: ask.doc, htmlSrcMode: false, htmlLoading: true });
+          this.loadHtml();
+        },
+        setViewAi: () => this.setState({ msgView: "ai" }),
+        setViewSimple: () => this.setState({ msgView: "simple" }),
+        setViewHtml: () => this.setState({ msgView: "html", htmlDoc: null }),
+        viewAiStyle: segStyle(st.msgView === "ai"),
+        viewSimpleStyle: segStyle(st.msgView !== "ai" && st.msgView !== "html"),
+        viewHtmlStyle: segStyle(st.msgView === "html"),
+        viewHint: st.msgView === "html"
+          ? "Messages show the original as its sender wrote it, inline; the control on the message head goes."
+          : st.msgView === "ai"
+            ? "The same deterministic cleanup as Simplified, with AI deciding only what to keep and what to drop — it never rewrites a word, so the text stays exactly as the sender wrote it; only the presentation changes. Usually cleaner than plain Simplified, especially on newsletters and long reply chains."
+            : "Messages are shown as cleaned-up text; the original is one control away on the message head.",
+        telemetryOptOut: !!st.telemetryOptOut,
+        telemetrySwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.telemetryOptOut ? "--accent" : "--border2") + ");justify-content:" + (st.telemetryOptOut ? "flex-end" : "flex-start"),
+        toggleTelemetry: () => this.setState(s => ({ telemetryOptOut: !s.telemetryOptOut })),
+        ...(() => {
+          const ENC = [["auto", "Auto"], ["none", "None"], ["starttls", "STARTTLS"], ["ssl", "SSL/TLS"]];
+          const DEF = structuredClone(MAIL_ACCOUNTS);
+          const accounts = st.accounts || DEF;
+          const d = st.acctDraft || null;
+          const upd = (k, v) => this.setState(s => ({ acctDraft: Object.assign({}, s.acctDraft, { [k]: v }), acctTest: null }));
+          const test = st.acctTest || null;
+          const missing = !d ? [] : [
+            [(d.imapHost || "").trim(), "IMAP host"],
+            [(d.imapPort || "").trim(), "IMAP port"],
+            [(d.smtpHost || "").trim(), "SMTP host"],
+            [(d.smtpPort || "").trim(), "SMTP port"],
+            [((d.login || "").trim() || (d.mail || "").trim()), "login or e-mail address"],
+            [(d.pass || "").trim(), "password"],
+          ].filter(p => !p[0]).map(p => p[1]);
+          const ev = k => e => upd(k, e.target.value);
+          const canSave = !!d && !!(d.name || "").trim() && !!(d.mail || "").trim();
+          const hardDel = d ? d.hardDelete !== false : true;
+          const purgeGone = d ? d.purgeGone !== false : true;
+          const saveSent = d ? d.saveSent !== false : true;
+          const secretScan = d ? d.secretScan !== false : true;
+          const sw = on => "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (on ? "--accent" : "--border2") + ");justify-content:" + (on ? "flex-end" : "flex-start");
+          const FOLD = [["inbox", "Inbox", "inbox", "INBOX"], ["sent", "Sent", "send", "Sent"], ["drafts", "Drafts", "draft", "Drafts"], ["archive", "Archive", "archive", "Archive"], ["junk", "Spam", "report", "Junk"], ["trash", "Trash", "delete", "Trash"]];
+          const DEFFOLD = { inbox: "INBOX", sent: "Sent", drafts: "Drafts", archive: "Archive", junk: "Junk", trash: "Trash" };
+          const folders = (d && d.folders) || DEFFOLD;
+          const updFolder = (k, v) => this.setState(s => ({
+            acctDraft: Object.assign({}, s.acctDraft, { folders: Object.assign({}, (s.acctDraft || {}).folders || DEFFOLD, { [k]: v }) }),
+          }));
+          const btn = (kind) => "display:flex;align-items:center;justify-content:center;align-self:flex-start;gap:6px;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;white-space:nowrap;" + kind;
+          const onAiLang = v => this.setState({ aiLang: v });
+          const aiLang = st.aiLang || "en";
+          return {
+            userMailboxes: accounts.map(a => ({
+              mail: a.mail, dot: a.dot, current: false, pick: null,
+              style: "display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--muted)",
+            })),
+            tabAi: st.settingsTab === "ai",
+            tabNotif: st.settingsTab === "notif",
+            resetLayoutStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+            resetLayoutDone: !!st.layoutReset,
+            resetLayout: () => {
+              this.setState({
+                listW: null, historyPanelW: null, settingsW: null, settingsH: null, settingsDX: 0, settingsDY: 0,
+                notifH: null, notifDrag: null, docZoom: null, layoutReset: true,
+              });
+              setTimeout(() => this.setState({ layoutReset: false }), 3200);
+            },
+            notifAutoClear: !!st.notifAutoClear,
+            notifAutoClearSwitchStyle: sw(!!st.notifAutoClear),
+            toggleNotifAutoClear: () => this.setState(s => ({ notifAutoClear: !s.notifAutoClear })),
+            notifAutoClearAfter: st.notifAutoClearAfter || "24h",
+            onNotifAutoClearAfter: e => this.setState({ notifAutoClearAfter: e.target.value }),
+            notifAfterOptions: [["now", "Right away"], ["1h", "After 1 hour"], ["24h", "After 24 hours"], ["7d", "After 7 days"]].map(([v, label]) => ({ v, label })),
+            aiLangOptions: [["en", "English"], ["pl", "Polski"]].map(([v, label]) => ({
+              label,
+              pick: () => onAiLang(v),
+              style: "padding:7px 13px;border-radius:8px;font-size:13.5px;" + (aiLang === v
+                ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+                : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
+            })),
+            aiMatchReply: !!st.aiMatchReply,
+            aiMatchSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.aiMatchReply ? "--accent" : "--border2") + ");justify-content:" + (st.aiMatchReply ? "flex-end" : "flex-start"),
+            toggleAiMatch: () => this.setState(s => ({ aiMatchReply: !s.aiMatchReply })),
+            tabAccounts: st.settingsTab === "accounts",
+            acctListShown: st.settingsTab === "accounts" && !d,
+            acctEditShown: st.settingsTab === "accounts" && !!d,
+            acctCount: accounts.length === 1 ? "1 account" : accounts.length + " accounts",
+            acctItems: accounts.map(a => ({
+              name: a.name,
+              mail: a.mail,
+              servers: "IMAP " + a.imapHost + ":" + a.imapPort + "  ·  SMTP " + a.smtpHost + ":" + a.smtpPort,
+              dotStyle: "flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:6px;background:" + a.dot,
+              edit: () => this.setState({ acctDraft: Object.assign({}, a), acctPassShown: false }),
+            })),
+            acctBack: () => this.setState({ acctDraft: null }),
+            acctTitle: d ? "Edit account" : "",
+            acctIsExisting: !!d && !!d.id,
+            acctName: d ? d.name : "",
+            acctMail: d ? d.mail : "",
+            acctLogin: d ? d.login : "",
+            acctPass: d ? d.pass : "",
+            acctImapHost: d ? d.imapHost : "",
+            acctImapPort: d ? d.imapPort : "",
+            acctImapEnc: d ? (d.imapEnc || "auto") : "auto",
+            acctSmtpHost: d ? d.smtpHost : "",
+            acctSmtpPort: d ? d.smtpPort : "",
+            acctSmtpEnc: d ? (d.smtpEnc || "auto") : "auto",
+            acctSecretScan: secretScan,
+            acctSecretScanSwitchStyle: sw(secretScan),
+            acctSecretScanWarn: secretScan,
+            toggleAcctSecretScan: () => upd("secretScan", !secretScan),
+            onAcctName: ev("name"),
+            onAcctLogin: ev("login"),
+            onAcctPass: ev("pass"),
+            onAcctImapHost: ev("imapHost"),
+            onAcctImapPort: ev("imapPort"),
+            onAcctImapEnc: ev("imapEnc"),
+            onAcctSmtpHost: ev("smtpHost"),
+            onAcctSmtpPort: ev("smtpPort"),
+            onAcctSmtpEnc: ev("smtpEnc"),
+            encOptions: ENC.map(([v, label]) => ({ v, label })),
+            acctTestStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+            acctTestRun: () => this.setState({
+              acctTest: missing.length
+                ? { ok: false, title: "Cannot test the connection", text: "Fill in first: " + missing.join(", ") + "." }
+                : { ok: true, title: "Connection works", text: "Signed in to " + (d.imapHost || "") + " and sent a test handshake to " + (d.smtpHost || "") + "." },
+            }),
+            acctTestShown: !!test,
+            acctTestOk: !!test && test.ok,
+            acctTestBad: !!test && !test.ok,
+            acctTestTitle: test ? test.title : "",
+            acctTestText: test ? test.text : "",
+            acctEarliest: d ? (d.earliest || "") : "",
+            onAcctEarliest: ev("earliest"),
+            acctEarliestHint: d && d.earliest
+              ? "Mail that arrived before this date stays on the mail server and is never downloaded — it will not show up in the list or in search."
+              : "No limit: everything the mail server still holds gets downloaded.",
+            acctEarliestClearShown: !!(d && d.earliest),
+            acctEarliestClear: () => upd("earliest", ""),
+            acctFolders: FOLD.map(([k, label, icon, ph]) => ({
+              label, icon, ph,
+              value: folders[k] || "",
+              set: e => updFolder(k, e.target.value),
+            })),
+            acctHardDelete: hardDel,
+            acctHardDeleteSwitchStyle: sw(hardDel),
+            toggleAcctHardDelete: () => upd("hardDelete", !hardDel),
+            acctHardDeleteHint: hardDel
+              ? "Deleting removes the message from both the MailFathom server and the mail server it came from (IMAP). It is gone from every device and there is nothing left to restore."
+              : "The message stays on both servers, only marked as deleted, and you can bring it back at any time.",
+            acctPurgeGone: purgeGone,
+            acctPurgeGoneSwitchStyle: sw(purgeGone),
+            toggleAcctPurgeGone: () => upd("purgeGone", !purgeGone),
+            acctPurgeGoneHint: purgeGone
+              ? "A message removed in the IMAP source disappears from MailFathom on the next sync."
+              : "A message removed in the IMAP source is only flagged as deleted in MailFathom and stays searchable.",
+            acctSaveSent: saveSent,
+            acctSaveSentSwitchStyle: sw(saveSent),
+            toggleAcctSaveSent: () => upd("saveSent", !saveSent),
+            acctPassType: st.acctPassShown ? "text" : "password",
+            acctPassIcon: st.acctPassShown ? "visibility_off" : "visibility",
+            toggleAcctPass: () => this.setState(s => ({ acctPassShown: !s.acctPassShown })),
+            acctLoginHint: d && !(d.login || "").trim() ? "Empty = the e-mail address is used as the login." : "",
+            acctSaveStyle: btn(canSave
+              ? "background:var(--accent);color:var(--onaccent);"
+              : "background:var(--border2);color:var(--panel);opacity:0.6;pointer-events:none;"),
+            acctSave: () => {
+              if (!canSave) return;
+              this.setState(s => {
+                const list = (s.accounts || DEF).slice();
+                const dr = s.acctDraft;
+                if (!dr) return { acctDraft: null };
+                if (dr.id) {
+                  const i = list.findIndex(a => a.id === dr.id);
+                  if (i >= 0) list[i] = dr; else list.push(dr);
+                } else list.push(Object.assign({}, dr, { id: "a" + Date.now() }));
+                return { accounts: list, acctDraft: null };
+              });
+            },
+            acctCancelStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+          };
+        })(),
+        settingsOpen: !!st.settings,
+        openSettings: () => this.setState({ settings: true, userMenu: false }),
+        closeSettings: () => this.setState({ settings: false, acctDraft: null, acctDel: null }),
+        langOptions: [["en", "English"], ["pl", "Polski"]].map(([v, label]) => ({
+          label,
+          pick: () => this.setState({ lang: v }),
+          style: "padding:7px 13px;border-radius:8px;font-size:12.5px;" + ((st.lang || "en") === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
+        })),
+        themeOptions: [["light", "Light"], ["dark", "Dark"]].map(([v, label]) => ({
+          label,
+          pick: () => this.setState({ themeOverride: v }),
+          style: "flex:1;text-align:center;font-size:13px;padding:9px 12px;border-radius:9px;" + (theme === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
+        })),
+        workModeOptions: [["classic", "Classic"], ["tabs", "Tabs"]].map(([v, label]) => ({
+          label,
+          pick: () => this.setState(s2 => ({
+            workMode: v,
+            tabs: v === "tabs" ? [{ key: "thread:" + s2.threadId, kind: "thread", id: s2.threadId }] : [],
+            activeTab: v === "tabs" ? "thread:" + s2.threadId : null,
+          })),
+          style: "flex:1;text-align:center;font-size:13px;padding:9px 12px;border-radius:9px;" + ((st.workMode || "tabs") === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
+        })),
+        workModeHint: tabsMode
+          ? "Every open mail, attachment and new message gets its own tab above the content panel."
+          : "Mail opens in the panel next to the list; a new message replaces the content panel.",
+        tabsBarShown: tabsMode && tabItems.length > 0,
+        noTabsOpen: emptyMail,
+        emptyMailText: tabsMode
+          ? "Pick a message from the list, write a new one or ask about the whole correspondence history — each opens as a tab."
+          : "Pick a message from the list, write a new one or ask about the whole correspondence history.",
+        openLastThread: () => this.openTab("thread:" + thread.id, { screen: "mail", threadId: thread.id, mailPane: "thread", threadOpen: true }),
+        closeAllAsk: !!st.closeAllAsk,
+        closeAllInfo: "Open tabs: " + tabItems.length + ". An unsent draft will be discarded.",
+        askCloseAll: () => this.setState({ closeAllAsk: true }),
+        cancelCloseAll: () => this.setState({ closeAllAsk: false }),
+        confirmCloseAll: () => this.setState({ tabs: [], activeTab: null, compose: false, closeAllAsk: false }),
+        tabItems,
+        workModeLabel: tabsMode ? "Mode: tabs" : "Mode: classic",
+        toggleWorkMode: () => this.setState(s => ({
+          workMode: (s.workMode || "tabs") === "tabs" ? "classic" : "tabs",
+          userMenu: false,
+          tabs: (s.workMode || "tabs") === "tabs" ? [] : [{ key: "thread:" + s.threadId, kind: "thread", id: s.threadId }],
+          activeTab: (s.workMode || "tabs") === "tabs" ? null : "thread:" + s.threadId,
+        })),
+        bodyRef: this.bodyRef,
+        fmtButtons: [
+          { key: "b", label: "B", title: "Bold", style: "font-weight:700", run: () => this.exec("bold") },
+          { key: "i", label: "I", title: "Italic", style: "font-style:italic;font-family:Georgia,serif", run: () => this.exec("italic") },
+          { key: "u", label: "U", title: "Underline", style: "text-decoration:underline", run: () => this.exec("underline") },
+          { key: "s", label: "S", title: "Strikethrough", style: "text-decoration:line-through", run: () => this.exec("strikeThrough") },
+          { key: "ul", label: "•—", title: "Bulleted list", style: "", run: () => this.exec("insertUnorderedList") },
+          { key: "ol", label: "1.", title: "Numbered list", style: "", run: () => this.exec("insertOrderedList") },
+          { key: "q", label: "format_quote", title: "Quote", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("formatBlock", "blockquote") },
+          { key: "lnk", label: "link", title: "Insert link", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("createLink", "https://") },
+          { key: "clr", label: "format_clear", title: "Clear formatting", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("removeFormat") },
+        ].map(b => ({ key: b.key, label: b.label, title: b.title, style: "display:flex;align-items:center;justify-content:center;border-radius:" + (touch ? "9px;min-width:40px;height:40px;padding:0 9px;font-size:15px;border:1px solid var(--line);" : "7px;min-width:30px;height:30px;padding:0 7px;font-size:13px;") + "color:var(--text2);" + b.style, run: b.run })),
+        aiActions: [
+          { label: "Write a draft", run: () => this.aiWrite("full") },
+          { label: "Shorten", run: () => this.aiWrite("short") },
+          { label: "Expand", run: () => this.aiWrite("full") },
+          { label: "Fix the language", run: () => this.aiWrite("full") },
+        ].map(a => ({
+          label: a.label, run: a.run,
+          style: "font-size:12px;color:var(--accent-d);background:var(--panel);border:1px solid var(--accent-line);border-radius:15px;padding:6px 12px;white-space:nowrap",
+        })),
+        tones: ["Formal", "Neutral", "Direct"].map(t => ({
+          label: t,
+          pick: () => this.setState({ tone: t }),
+          style: "font-size:12px;padding:5px 11px;border-radius:14px;white-space:nowrap;" + ((st.tone || "Neutralny") === t
+            ? "background:var(--accent);color:var(--onaccent);"
+            : "color:var(--text2);border:1px solid var(--line);"),
+        })),
+        aiBusy: !!st.aiBusy,
+        aiDraftShown: !!st.aiDraft,
+        aiRevert: this.aiRevert,
+        acceptDraft: () => { this.unmarkAiDraft(); this.setState({ aiDraft: false }); },
+        composeContext: thread.subject,
+      };
+    }
+  }
+
+  return Component;
+};

@@ -1,0 +1,79 @@
+/*
+ * Copyright © 2026 Krzysztof Kasprowicz
+ * Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+ * Project repository: https://github.com/Krzysztof318/MailFathom
+ */
+/* MailFathom colours come from the product icon, not a sample palette: the same values
+   that frontend/src/Client.App/src/styles.css carries. */
+:root {
+  color-scheme: light;
+  --fathom-950: #010d33; --fathom-800: #0028a0; --fathom-600: #0048e0;
+  --fathom-500: #0068f8; --fathom-200: #a8c8f8; --fathom-star: #f8d848;
+  --page: #f6f7fb; --panel: #ffffff; --rail: #eef0f7; --sunken: #f1f3f9; --hover: #e4e8f3;
+  --line: #d7dced; --line-soft: #e8ebf5;
+  --text: #0b1020; --text-soft: #38405a; --muted: #515a72; --faint: #666f8a;
+  --accent: var(--fathom-600); --accent-strong: var(--fathom-800); --accent-soft: #e6edfd;
+  --on-accent: #ffffff;
+  --healthy: #1a7f4b; --healthy-soft: #e6f4ec; --warning: #b45309; --warning-soft: #fdf0e2;
+  --row: 76px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #070d20; --panel: #0f1730; --rail: #0a1128; --sunken: #0c142c; --hover: #182242;
+    --line: #232e4d; --line-soft: #182140;
+    --text: #e9edf8; --text-soft: #c2c9dc; --muted: #9aa2ba; --faint: #7e87a1;
+    --accent: var(--fathom-500); --accent-strong: var(--fathom-200); --accent-soft: #0c1c3f;
+    --healthy: #4ec98a; --healthy-soft: #10291d; --warning: #f0a14a; --warning-soft: #2e2013;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.sheet { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 34px; }
+h1 { font-size: 24px; letter-spacing: -0.015em; margin: 0; }
+h2 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+     font-family: 'Instrument Sans', system-ui, sans-serif; font-weight: 600; margin: 0; }
+.lede { color: var(--text-soft); max-width: 72ch; text-wrap: pretty; margin: 0; }
+.state { display: flex; flex-direction: column; gap: 10px; }
+.note { color: var(--muted); font-size: 13px; max-width: 78ch; text-wrap: pretty; margin: 0; }
+.column { width: 420px; max-width: 100%; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.head { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.pill { display: flex; align-items: center; gap: 8px; background: var(--rail); border: 1px solid var(--line);
+        border-radius: 999px; padding: 8px 13px; color: var(--faint); font-size: 14px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text-soft);
+       border-radius: 7px; padding: 5px 11px; font-size: 13px; white-space: nowrap; }
+.row-actions { display: flex; align-items: center; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.chip { display: flex; align-items: center; gap: 5px; background: var(--accent-soft); color: var(--accent-strong);
+        border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+.chip button { all: unset; line-height: 1; padding: 1px 3px; border-radius: 3px; cursor: pointer; }
+.fold { color: var(--muted); font-size: 13px; }
+.rows { background: var(--panel); }
+.row { height: var(--row); border-bottom: 1px solid var(--line-soft); padding: 0 12px;
+       display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
+.row.open { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.line1 { display: flex; align-items: baseline; gap: 8px; }
+.who { font-size: 14px; font-weight: 600; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org { font-size: 12px; color: var(--faint); }
+.when { margin-left: auto; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 11px; color: var(--faint); }
+.line2 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+.subject { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Third line. There is one row shape — folder and results draw the same one — and the height always
+   reserves it, so a row with something to say is the same row, not a taller one. */
+.why { height: 16px; overflow: hidden; font-size: 12px; color: var(--faint); }
+.why mark { background: none; color: var(--accent-strong); font-weight: 600; }
+.foot { padding: 8px 12px; font-size: 13px; color: var(--faint); }
+.banner { margin: 10px 12px; padding: 9px 11px; border-radius: 8px; font-size: 13px;
+          background: var(--warning-soft); color: var(--warning); text-wrap: pretty; }
+.empty { padding: 22px 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.empty p { margin: 0; color: var(--text-soft); text-wrap: pretty; }
+.waiting { padding: 14px 12px; font-size: 13px; color: var(--muted); }
+.recent { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line-soft); }
+.recent .btn { border-radius: 999px; }
+.gallery { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
