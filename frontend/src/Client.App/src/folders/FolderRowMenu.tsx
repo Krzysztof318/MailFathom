@@ -41,7 +41,7 @@ export function FolderRowMenu({
     onAct,
     onClose,
 }: {
-    /** What this row offers, in the order the design project draws them. */
+    /** What this row offers, in the order the design draws them. */
     readonly acts: readonly FolderAct[];
 
     /** What the menu is about, in the row's own words, which is the name the menu carries. */

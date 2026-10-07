@@ -142,7 +142,7 @@ describe('MessageBody', () => {
     );
 
     // A sender who wrote no formatted version is not a refusal a reader is owed a sentence about: plain text is what
-    // that message is, and the design project draws it as the message rather than as a message with a note over it.
+    // that message is, and the design draws it as the message rather than as a message with a note over it.
     it('draws a message written as text alone without a note over it', () => {
         drawing({ ...readable, document: { ...drawnDocument, blocks: [], refusal: 'NoHtmlPart' } });
 

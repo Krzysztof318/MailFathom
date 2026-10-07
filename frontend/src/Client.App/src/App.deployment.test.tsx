@@ -203,7 +203,7 @@ describe('App deployment', () => {
         });
     });
 
-    // The menu inside the frame does not carry this and the design project draws it nowhere there. Pointing the client
+    // The menu inside the frame does not carry this and the design draws it nowhere there. Pointing the client
     // elsewhere ends the session anyway, so the screen that offers it is the one signing out lands on.
     it('offers to be pointed elsewhere once the session ends, where somebody named the deployment themselves', async () => {
         renderApp(chose('https://mail.example.invalid'));

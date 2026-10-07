@@ -56,18 +56,18 @@ import { ThreadState } from './ThreadState';
 // tall as what it says. A conversation that ever renders slowly is the argument for reopening this.
 
 // How long a message landed on from a search result stays marked before it settles into an ordinary open message. The
-// design project's own dwell rather than a transition duration, which is why it is a number here and not a token: it is
+// design's own dwell rather than a transition duration, which is why it is a number here and not a token: it is
 // how long something is said for, and the theme decides how movement happens rather than how long a screen speaks.
 const landingHeldFor = 2_200;
 
 // What the one control over the correspondence says, which is a question about two things rather than one: whether the
 // rest of it is standing, and whether the message it was opened at is the newest. A conversation opened in the middle
 // of its history hides messages on both sides of that one, so what it offers is the whole correspondence rather than
-// the earlier part of it — the design project words all four, and each is a different sentence rather than a wording of
+// the earlier part of it — the design words all four, and each is a different sentence rather than a wording of
 // one.
 //
 // Three of the four are one sentence each. The fourth counts, so it is a form per plural category rather than a number
-// appended to a sentence: Polish words one earlier message, two, and five differently, and the design project writes
+// appended to a sentence: Polish words one earlier message, two, and five differently, and the design writes
 // all three out.
 const earlierHidden: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     zero: 'thread.showEarlier.other',
@@ -465,7 +465,7 @@ export function Thread({
                 <>
                     {/* The whole history behind one control, which is what a conversation of eight messages is
                         otherwise eight decisions about. It names how many are behind it, so pressing it is a choice
-                        rather than a guess, and it stands above them because that is where the design project draws
+                        rather than a guess, and it stands above them because that is where the design draws
                         it — between the head of the conversation and the messages themselves. A conversation of one
                         message has no history to offer, and no control.
 
@@ -628,7 +628,7 @@ function actedOn(message: MailThreadMessage): ActedMessage {
     };
 }
 
-// The frame every state of this screen is drawn in. The header stands across the column, as the design project draws a
+// The frame every state of this screen is drawn in. The header stands across the column, as the design draws a
 // conversation's head, and everything under it stands inset from the edges.
 //
 // **Nothing here closes the conversation**, because the design draws nothing that does: the way out of what is being

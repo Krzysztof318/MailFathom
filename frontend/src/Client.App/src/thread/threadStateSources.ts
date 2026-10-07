@@ -8,7 +8,7 @@ import type { MailThreadMessage } from '@mailfathom/client-backend';
 export interface ThreadStateSource {
     readonly storedEmailId: string;
 
-    /** The message's place counted from one, which is what a reader counts and what the design project draws. */
+    /** The message's place counted from one, which is what a reader counts and what the design draws. */
     readonly position: number;
 
     /** Who wrote it, short enough to sit on one line beside the place. */
@@ -38,7 +38,7 @@ export function sourceOf(
     return { storedEmailId, position: held.position + 1, name: shortName(held) };
 }
 
-// The design project draws the source as a place and a first name, because the link sits on one line inside a card
+// The design draws the source as a place and a first name, because the link sits on one line inside a card
 // that is already narrow. A name is one word here and several there, so what is taken is the leading word rather than
 // a name parsed into parts — and a message whose sender was never named falls back to the address, which is the only
 // other thing a reader could recognize it by. A header naming the sender with no visible characters is never named

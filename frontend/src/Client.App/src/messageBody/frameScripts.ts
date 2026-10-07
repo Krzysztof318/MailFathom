@@ -27,7 +27,7 @@ try{parent.postMessage({link:href},"*")}catch(err){}},true)})()`;
 // and the number would grow without end — and observes the body rather than the document element, which would close
 // the same loop. It reports by `postMessage` and does nothing else, which is what makes granting the flag bounded.
 //
-// It also stops the framed document scrolling inside itself, which is the design project's `scrolling="no"` written
+// It also stops the framed document scrolling inside itself, which is the design's `scrolling="no"` written
 // the way the platform still has: that attribute is deprecated and the lint set refuses it, and what replaces it is
 // `overflow: hidden` on the framed document. The one case the frame is meant to scroll is the one where no report ever
 // arrives, and nothing there ran this script to hide it.

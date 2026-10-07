@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The four shapes one event takes in the design project, stated once for the single component that draws one. They are
+// The four shapes one event takes in the design, stated once for the single component that draws one. They are
 // here rather than in that component for the reason `controls/controlShapes.ts` gives about its own table: a module
 // Vite hot-reloads may export components alone.
 //

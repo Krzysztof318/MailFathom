@@ -11,7 +11,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { folderRoleIcons } from '../workspace/mailScope';
 import { destinationName, type MoveDestination, type MoveDestinationGroup } from './mailboxDestinations';
 
-// Where mail is being filed, asked as the design project draws it: the folders grouped under the mailbox they belong
+// Where mail is being filed, asked as the design draws it: the folders grouped under the mailbox they belong
 // to, each group headed by that mailbox's name and its colour, and each folder named and drawn the way the folder
 // column names and draws it — by the role it plays where it plays one, and by its place on the server otherwise.
 //
@@ -20,7 +20,7 @@ import { destinationName, type MoveDestination, type MoveDestinationGroup } from
 // moves between folders of its own account and nowhere else and a selection spanning two accounts is refused before
 // this dialog is reached; `mailboxDestinations.ts` is where that is decided.
 //
-// **Each group ends with a way to make a folder**, which is the design project's *New folder here*: the folder
+// **Each group ends with a way to make a folder**, which is the design's *New folder here*: the folder
 // somebody meant to file into does not always exist yet, and a sheet that could only offer what is already there
 // would send them to the folder column and back. It opens the same dialog the column's own menus open —
 // `folders/FolderMaintenance.tsx` owns it — and it closes this sheet first, because two dialogs at once is a reader

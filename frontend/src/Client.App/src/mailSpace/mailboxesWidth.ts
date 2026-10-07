@@ -8,7 +8,7 @@ import { deviceStore, mailboxesWidthKey } from '../device/deviceStore';
 // the same reason: the bounds, the reset, and where the chosen width is written are arithmetic over one number, and
 // each of them is testable without rendering three columns.
 //
-// The three widths are the design project's own — a column that opens at 210 and is dragged as far as 420 — and they
+// The three widths are the design's own — a column that opens at 210 and is dragged as far as 420 — and they
 // are written here rather than in `styles.css` for the reason the list's are: what reads them is the drag arithmetic,
 // the keyboard step, and the position the grip reports as a separator, none of which the markup spells.
 //
@@ -18,7 +18,7 @@ import { deviceStore, mailboxesWidthKey } from '../device/deviceStore';
 // clamping against whatever room is left — which is why widening the mailboxes narrows the list rather than
 // squeezing the message.
 
-/** The narrowest the mailbox column is drawn at, which is the width the design project opens it at. */
+/** The narrowest the mailbox column is drawn at, which is the width the design opens it at. */
 export const narrowestMailboxes = 210;
 
 /** The widest it is drawn at, past which it stops being a column of names and becomes a second list. */

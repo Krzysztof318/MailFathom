@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// How a written block is drawn, whoever wrote it. The design project draws a message body and the prose of an agent's
+// How a written block is drawn, whoever wrote it. The design draws a message body and the prose of an agent's
 // answer with the same helpers, so a quotation, a table, or a code block looks the same in both, and it is stated once
 // here rather than twice.
 

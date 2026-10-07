@@ -5,7 +5,7 @@
 import type { PersonalTask } from '@mailfathom/client-backend';
 import { calendarDayIn, dayFrom } from '../localization/instants';
 
-// When work is due, as the three headings the design project draws the list under. It is a rendering decision and
+// When work is due, as the three headings the design draws the list under. It is a rendering decision and
 // therefore the application's: the deployment answers one ordered walk, soonest due first with the undated last, and
 // which heading a day falls under is what a reader is shown rather than something the service has an opinion about.
 //

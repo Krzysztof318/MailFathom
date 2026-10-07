@@ -471,7 +471,7 @@ describe('MessageRow, under a pointer', () => {
     });
 });
 
-// The other thing one finger on a row can mean. The two directions are the design project's own — left to answer the
+// The other thing one finger on a row can mean. The two directions are the design's own — left to answer the
 // message, right to file it away — and everything below is a rule about when the row acts on neither.
 describe('MessageRow, under a finger carried across it', () => {
     it('answers the message when the finger goes left past the threshold, and opens it as it does', () => {

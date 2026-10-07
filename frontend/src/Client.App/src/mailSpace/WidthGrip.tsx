@@ -5,7 +5,7 @@
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 
 // The grip on a boundary between two columns, which is what lets a reader give either side more room. It draws the
-// line the design project puts there and it is the control on it — those are one element rather than two, because a
+// line the design puts there and it is the control on it — those are one element rather than two, because a
 // boundary somebody can move is a boundary they have to be able to point at.
 //
 // **One component for both boundaries the Mail space has**, the one between the mailboxes and the list and the one

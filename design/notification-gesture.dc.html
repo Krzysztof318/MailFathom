@@ -1,23 +1,24 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="./support.js"></script>
+<script src="runtime/support.js"></script>
+<script src="design.js"></script>
+<script src="data/notification-gesture.js"></script>
+<script src="logic/notification-gesture.js"></script>
 </head>
 <body>
 <x-dc>
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
-<style>
-  html, body { margin: 0; padding: 0; background: oklch(0.980 0.004 88); }
-  body:has([data-theme="dark"]) { background: oklch(0.183 0.016 262); }
-  a { color: var(--accent); }
-  a:hover { color: var(--accent-2); }
-  [data-theme="light"] { color-scheme:light;--bg:oklch(0.980 0.004 88);--panel:#ffffff;--rail:oklch(0.951 0.006 88);--hover:oklch(0.906 0.010 88);--sub:oklch(0.969 0.005 88);--line:oklch(0.906 0.008 88);--line2:oklch(0.949 0.005 88);--border2:oklch(0.856 0.010 88);--text:oklch(0.240 0.014 262);--text2:oklch(0.420 0.012 240);--muted:oklch(0.565 0.010 200);--faint:oklch(0.690 0.009 160);--accent:oklch(0.555 0.185 262);--accent-2:oklch(0.465 0.175 262);--accent-d:oklch(0.385 0.150 262);--accent-soft:oklch(0.945 0.038 258);--accent-line:oklch(0.870 0.062 258);--onaccent:#ffffff;--ok:oklch(0.56 0.14 155);--ok-text:oklch(0.44 0.11 155);--ok-soft:oklch(0.945 0.038 155);--warn:oklch(0.62 0.155 62);--warn-soft:oklch(0.955 0.045 75);--warn-text:oklch(0.46 0.135 55);--err:oklch(0.545 0.195 25);--err-soft:oklch(0.958 0.028 25);--err-text:oklch(0.470 0.180 25);--hl:oklch(0.945 0.070 88);--hl-line:oklch(0.775 0.145 85);--inset:rgba(255,255,255,0.65);--sh-1:oklch(0.30 0.02 262 / 0.07);--sh-2:oklch(0.30 0.025 262 / 0.14);--sh-3:oklch(0.28 0.03 262 / 0.28);--scrim:oklch(0.26 0.03 262 / 0.36); }
-  [data-theme="dark"] { color-scheme:dark;--bg:oklch(0.183 0.016 262);--panel:oklch(0.246 0.016 262);--rail:oklch(0.212 0.017 262);--hover:oklch(0.325 0.021 262);--sub:oklch(0.277 0.016 262);--line:oklch(0.336 0.018 262);--line2:oklch(0.283 0.015 262);--border2:oklch(0.416 0.022 262);--text:oklch(0.945 0.007 262);--text2:oklch(0.835 0.011 262);--muted:oklch(0.705 0.013 262);--faint:oklch(0.585 0.015 262);--accent:oklch(0.615 0.175 262);--accent-2:oklch(0.735 0.150 262);--accent-d:oklch(0.865 0.085 262);--accent-soft:oklch(0.320 0.070 262);--accent-line:oklch(0.430 0.095 262);--onaccent:#ffffff;--ok:oklch(0.72 0.14 155);--ok-text:oklch(0.82 0.12 155);--ok-soft:oklch(0.30 0.045 155);--warn:oklch(0.74 0.13 55);--warn-soft:oklch(0.315 0.05 50);--warn-text:oklch(0.87 0.10 62);--err:oklch(0.660 0.190 25);--err-soft:oklch(0.325 0.078 22);--err-text:oklch(0.845 0.105 25);--hl:oklch(0.345 0.055 85);--hl-line:oklch(0.72 0.13 85);--inset:rgba(255,255,255,0.045);--sh-1:oklch(0.10 0.03 262 / 0.38);--sh-2:oklch(0.10 0.03 262 / 0.50);--sh-3:oklch(0.09 0.035 262 / 0.64);--scrim:oklch(0.12 0.045 262 / 0.66); }
-</style>
+<link rel="stylesheet" href="styles/notification-gesture.css" />
 </helmet>
 <div data-theme="{{ themeAttr }}" style="min-height:100vh;box-sizing:border-box;padding:26px;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:22px">
 
@@ -223,56 +224,7 @@
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:1180},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot; | \&quot;dark\&quot;&quot;}}">
-class Component extends DCLogic {
-  state = { theme: null };
-
-  icon = (tone) => "flex:0 0 26px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:8px;" +
-    (tone === "accent" ? "background:var(--accent-soft);color:var(--accent-d)" : tone === "ok" ? "background:var(--ok-soft);color:var(--ok-text)" : "background:var(--hover);color:var(--muted)");
-
-  bar = (activeIdx) => ["explore", "mail", "topic", "auto_awesome", "notifications", "more_horiz"].map((ic, i) => ({
-    icon: ic,
-    style: "flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:100%;border-radius:9px;" +
-      (i === activeIdx ? "background:var(--accent-soft);color:var(--accent-d)" : "color:var(--muted)"),
-  }));
-
-  renderVals() {
-    const theme = this.state.theme ?? (this.props.theme ?? "light");
-    return {
-      themeAttr: theme,
-      themeIcon: theme === "dark" ? "dark_mode" : "light_mode",
-      toggleTheme: () => this.setState({ theme: theme === "dark" ? "light" : "dark" }),
-      barIcons: this.bar(1),
-      barIconsOpen: this.bar(4),
-      rows: [{ icon: "mail", iconWrapStyle: this.icon("accent") }, { icon: "event", iconWrapStyle: this.icon("ok") }, { icon: "task_alt", iconWrapStyle: this.icon() }],
-      rowsFull: [{ icon: "mail", iconWrapStyle: this.icon("accent") }, { icon: "event", iconWrapStyle: this.icon("ok") }, { icon: "task_alt", iconWrapStyle: this.icon() }, { icon: "topic", iconWrapStyle: this.icon("accent") }, { icon: "group", iconWrapStyle: this.icon() }],
-      numbers: [
-        { value: "1:1", name: "Follows the finger", text: "The panel sits where the finger is — no smoothing, no inertia, no delay. The zero point is set the moment the gesture is taken over, not on touch, so the panel never jumps by the slop distance." },
-        { value: "= distance", name: "Scrim opacity", text: "Scrim opacity is simply the distance travelled divided by panel height: 0 when closed, 1 when open. The same number in both directions of the gesture." },
-        { value: "0.32", name: "Distance threshold", text: "The gesture commits once the finger has travelled more than 0.32 of the panel height — measured from where the gesture was taken over, not from the screen edge." },
-        { value: "0.5 px/ms", name: "Velocity threshold", text: "A short flick above 0.5 px/ms commits the gesture even below the distance threshold. Velocity is measured over the last segment of movement; a flick in the opposite direction always beats distance." },
-        { value: "260 ms", name: "Spring back", text: "When neither distance nor velocity was met, the panel returns in 260 ms on a cubic-bezier(.32,.72,0,1) curve. That single curve serves both directions of return." },
-        { value: "12 / 10 px", name: "Bar and row slop", text: "12 px upward takes the tap away from the nav bar; 10 px downward takes the long press away from a row. The first threshold is larger because the bar has a tap target and a mistake costs a jump to another screen." },
-      ],
-      handovers: [
-        {
-          icon: "swipe_down", name: "A scrolled list hands the gesture to the panel", iconWrapStyle: this.icon("accent"),
-          text: "When the notification list is not at its top, a downward move scrolls the list first. The panel does not move a single pixel.",
-          rule: "One drag, without lifting the finger: the moment the list reaches the top, the same move becomes a panel dismissal. The zero point is set right then — the remaining distance counts from there, so the panel does not jump to meet the finger.",
-        },
-        {
-          icon: "touch_app", name: "Row: drag or long press", iconWrapStyle: this.icon("ok"),
-          text: "Movement beyond 10 px cancels the 420 ms long press — the row context menu will not open.",
-          rule: "Tight the other way too: once the menu has opened, that same finger no longer starts a panel dismissal, and a new dismissal gesture does not start while the menu is open. Never both, never neither.",
-        },
-        {
-          icon: "swipe_up", name: "The nav bar hands the gesture to the panel", iconWrapStyle: this.icon(),
-          text: "Up to 12 px upward the gesture belongs to the bar item it started on — releasing is an ordinary tap and navigates to that screen.",
-          rule: "After 12 px the bar hands over: the tap is cancelled and will not fire on release, and the panel comes out from under the finger. A downward move started on the bar belongs to nobody — nothing happens.",
-        },
-      ],
-    };
-  }
-}
+const Component = MailFathomDesign.artboards.notificationGesture(DCLogic, React);
 </script>
 </body>
 </html>

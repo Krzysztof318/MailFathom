@@ -117,7 +117,7 @@ describe('Space', () => {
         expect(screen.getByRole('main', { name: 'Cases' })).toBeDefined();
     });
 
-    it('draws Mail without a heading, as the design project does, and names the landmark instead', () => {
+    it('draws Mail without a heading, as the design does, and names the landmark instead', () => {
         render(inStrictMode('mail'));
 
         expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
@@ -143,7 +143,7 @@ describe('Space', () => {
         expect(within(agent).queryByText(handedTheStatus)).toBeNull();
     });
 
-    // The one space the two regions are not stood beneath: the design project draws the question field under this
+    // The one space the two regions are not stood beneath: the design draws the question field under this
     // screen's own head, so the space is handed them where it is built rather than given them here as well — and a
     // second copy of the field is exactly what this asserts is absent.
     it('stands neither region beneath Discover, which is handed them instead', () => {

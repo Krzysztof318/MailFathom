@@ -4,7 +4,7 @@
 
 import { createContext, useContext } from 'react';
 
-// The head row of the mail column, which the design project draws as one line: the way to the mailboxes, the search
+// The head row of the mail column, which the design draws as one line: the way to the mailboxes, the search
 // field, what searches it, and the control that opens the list's filters. The first three belong to the search, which
 // draws the row; the last belongs to the list, which owns the filters it opens and stands a component below the row.
 //

@@ -135,9 +135,9 @@ offer to go deeper on any one of them instead of expanding all six.
    from; and `frontend/tests/` holds the contract governing all three client suites beside the two that drive a built
    bundle — the browser spec and the end-to-end one — because a *unit* test sits beside the source it covers rather
    than in a tree of its own. `frontend/design-parity/` is what holds a running screen against its design.
-   `design/` beside both stacks is the design project mirrored into the repository — the screen sources byte for byte,
-   the manifest of their etags, and the state inventory a screen is actually built from. It is where a client screen
-   comes from, `$read-design` is the reading half of it, and `design/README.md` is its page.
+   `design/` beside both stacks is the design, written in this repository — the artboards with their sample data,
+   logic, and styles in files of their own, and the state inventory a screen is actually built from. It is where a
+   client screen comes from, `$read-design` is how it is read, and `design/README.md` is its page.
    `docs/` states what the code *does*, and `docs/decisions/` holds the ADRs a change is written to be
    consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
    the deployment assets, the gates, and the development utilities — `backend/tools/SyntheticMail` fills a mailbox to work
@@ -656,10 +656,6 @@ offer to go deeper on any one of them instead of expanding all six.
      for a verdict waits for one that cannot arrive yet — which is what the local instruction file above says out loud;
    - `Fathom review` runs on a fork's pull request only when a maintainer applies the `fathom-review` label. Your own
      pushes never start one, and nothing you can write in a comment does either;
-   - **`$mf-sync-design` is the one skill that cannot run here**, and its absence is not a permission to repair. It
-     reads the design project over an MCP server one account is connected to, so refreshing `design/` is the
-     maintainer's act and arrives as a pull request of its own. Everything on the reading side does run: `design/` is
-     tracked, `$read-design` reads it, and `scripts/capture-design.sh` holds a running screen against it in any clone;
    - the integration suite starts containers and runs when a maintainer asks for it.
 
    **Refresh:** read this again when `AGENTS.md` moved, and then say what changed rather than reciting the list a

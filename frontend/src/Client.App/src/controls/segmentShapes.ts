@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The four shapes one choice out of a group takes in the design project, stated once for the single component that
+// The four shapes one choice out of a group takes in the design, stated once for the single component that
 // draws one. They are here rather than in that component for the reason `controlShapes.ts` gives about its own table:
 // a module Vite hot-reloads may export components alone.
 //
@@ -12,7 +12,7 @@
 // own border and fill when nobody has chosen it, because it stands on the page rather than inside a pill that already
 // drew them.
 //
-// **A filter is drawn more quietly than a setting**, which is the design project's own distinction and the whole
+// **A filter is drawn more quietly than a setting**, which is the design's own distinction and the whole
 // reason `filter` stands beside `chip` rather than reusing it: a setting says what this client will do from now on and
 // is drawn in the full accent, while a filter says what the list in front of you is showing and is drawn as a tint —
 // loud enough to read against the other chip, quiet enough not to compete with the rows underneath it.

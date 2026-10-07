@@ -557,7 +557,7 @@ export function App({
     const openTabs = useOpenTabs(inTabs);
 
     // Whether somebody left an agent conversation to look at what one of its proposals pointed to, which is what raises
-    // the way back over whichever space they opened. Only that way back puts it down, which is the design project's
+    // the way back over whichever space they opened. Only that way back puts it down, which is the design's
     // own rule: arriving at the Agent by the rail merely hides it, and leaving again brings it back.
     const [lookedAwayFromAgent, setLookedAwayFromAgent] = useState(false);
     const lookFromAgent = useCallback(
@@ -1389,8 +1389,8 @@ export function App({
                                                                                         ) : null
                                                                                     }
                                                                                     mail={
-                                                                                        // A message being written stands where one being read stands, which is the design
-                                                                                        // project's composition rather than a window over it — and what is open is still open
+                                                                                        // A message being written stands where one being read stands, which is the design's
+                                                                                        // composition rather than a window over it — and what is open is still open
                                                                                         // underneath, so closing the composer is a return rather than a second thing to find.
                                                                                         // Keyed by what is being written, so asking for an answer while a message of its own is
                                                                                         // open starts that answer rather than pouring it into the fields already on the screen.
@@ -1751,7 +1751,7 @@ function SignInScreen({
             <main className="flex flex-1 justify-center overflow-y-auto px-4.5 pt-5.5 pb-7 workspace:px-8.5 workspace:py-7.5 split:items-center split:px-11.5 split:py-11">
                 <div className="flex w-full max-w-98 flex-col gap-4.5 workspace:gap-5.5">
                     {/* The version is not on this row and is at the foot of the form, which is where the design
-                        project draws it. Off this row the two pickers fit one line at the narrowest width, which is
+                        draws it. Off this row the two pickers fit one line at the narrowest width, which is
                         the composition the design draws. */}
                     <div className="flex flex-wrap items-center justify-end gap-3.5">
                         <ThemeChoice />

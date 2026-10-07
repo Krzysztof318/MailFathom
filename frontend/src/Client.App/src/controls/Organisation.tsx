@@ -9,8 +9,8 @@
 // Shared for the reason `ReceivedAt` and `MessageMarkers` are: the mail list and the conversation say the same thing
 // about the same sender, and two spellings of one host is how they start disagreeing about who wrote.
 //
-// It is drawn in the desktop composition alone, which is where the design project draws it. That is a decision about
-// the composition rather than about the room on the line: the project gives the list the same width at the tablet as
+// It is drawn in the desktop composition alone, which is where the design draws it. That is a decision about
+// the composition rather than about the room on the line: the design gives the list the same width at the tablet as
 // at the desktop and still leaves the host off the narrower one, because a column that has given up its mailboxes to a
 // drawer has given up the least-read thing on the row with them. Nothing is lost by width alone — the address is on
 // the message's own head, which is one press away and is where somebody checking who wrote actually looks.

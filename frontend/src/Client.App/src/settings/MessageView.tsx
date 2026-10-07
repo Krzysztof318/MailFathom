@@ -9,14 +9,14 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 
-// Which of the three reading surfaces a message opens on, as the design project draws it: three segments, the chosen
+// Which of the three reading surfaces a message opens on, as the design draws it: three segments, the chosen
 // one carrying the accent, and a line beneath saying what the choice does — which is a different sentence per choice
 // rather than one sentence describing the control.
 //
 // The segments themselves are `controls/ChoiceSegment.tsx`, which is what the theme and the language are drawn from as
 // well; what stands here is the pill around them and the sentence under it.
 //
-// The warning is the design project's and belongs to the HTML choice alone. It says what the reduced view is
+// The warning is the design's and belongs to the HTML choice alone. It says what the reduced view is
 // protecting somebody from, and it is careful about the same distinction the confirmation on the message head is: the
 // markup is drawn in isolation, and a message drawn at all can still tell its sender it was opened. The cleaned
 // rendering reveals none of it — it is the same closed document tree with blocks dropped, so nothing a sender wrote
@@ -24,7 +24,7 @@ import type { ClientPreferencesInForce } from '../preferences/useClientPreferenc
 // separately because the design closes the section with it, below the thread-expansion switch rather than between that
 // switch and the control it is about — a caution reads as the section's last word rather than as a line inside it.
 
-/** Which of the three the segment stands for, in the order the design project puts them in. */
+/** Which of the three the segment stands for, in the order the design puts them in. */
 const views: readonly ClientMessageView[] = ['cleaned', 'reduced', 'embeddedHtml'];
 
 const viewNames: Readonly<Record<ClientMessageView, MessageKey>> = {

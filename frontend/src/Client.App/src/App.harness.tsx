@@ -831,7 +831,7 @@ export async function signOut(): Promise<void> {
 }
 
 // Inside the frame the language and the telemetry decision are made on the settings screen rather than in the menu
-// that leads to it, which is where the design project puts them — so a test about either opens that screen the way a
+// that leads to it, which is where the design puts them — so a test about either opens that screen the way a
 // person does, on the tab that holds both, which is the second of its two.
 export function openSettings(): void {
     fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));

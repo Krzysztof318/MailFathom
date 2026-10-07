@@ -4,7 +4,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
-// How a strip of controls fits the width it was given, which the design project decides by measuring rather than by a
+// How a strip of controls fits the width it was given, which the design decides by measuring rather than by a
 // breakpoint: the controls keep their names in words for as long as the words fit, and only then give something up.
 // What they give up first is the control that writes a message — it leaves the strip for the floating control over
 // the list, which is the phone's form of it — and only if the names still do not fit do they all become symbols. A

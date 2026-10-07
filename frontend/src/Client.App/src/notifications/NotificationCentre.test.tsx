@@ -128,7 +128,7 @@ describe('NotificationCentre', () => {
 
     // `translate-x-*` and `translate-y-*` write the one `translate` property, so a class list that leaves both on the
     // panel at once composes a diagonal — which is the travel a reader sees as a slide out of the lower corner rather
-    // than the one axis the design project draws for each composition. Nothing in jsdom applies a stylesheet, so what
+    // than the one axis the design draws for each composition. Nothing in jsdom applies a stylesheet, so what
     // is asserted is that every displacement the panel carries is gated on exactly one of the two compositions.
     it('travels along one axis in each composition: up from under a phone, in from the side beside a rail', () => {
         panel();

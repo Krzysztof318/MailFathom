@@ -7,7 +7,7 @@ import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
-// What a new conversation offers to start with. The design project's prototype opens a seeded conversation from each;
+// What a new conversation offers to start with. The design's prototype opens a seeded conversation from each;
 // a client has none to open, so each asks its question exactly as typing it would.
 const starters: readonly MessageKey[] = ['agent.starter.day', 'agent.starter.slipped', 'agent.starter.cases'];
 

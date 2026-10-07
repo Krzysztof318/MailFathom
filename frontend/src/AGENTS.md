@@ -363,7 +363,7 @@ so this is written to be mechanically visible in a diff rather than remembered.
 - **How small a control may be under a finger is decided once too**, in a base rule in `Client.App/src/styles.css`
   beside the focus ring, and for the same reason: a floor met by seven control shapes and forty hand-written buttons is
   a floor most of them eventually stop meeting, and the one that stops is invisible in the diff that stopped it. So a
-  screen writes no `pointer-coarse:` size of its own — what it writes is the measurement the design project gives the
+  screen writes no `pointer-coarse:` size of its own — what it writes is the measurement the design gives the
   control, and the rule lifts whatever falls below the floor. It is stated as a `min-*`, so a control the design already
   draws large keeps its own size. This is the one place where the two questions § _The two heads_ separates are visible
   side by side: what a screen composes as follows the width it was given, and how big a target is follows what is

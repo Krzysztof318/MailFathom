@@ -16,7 +16,7 @@ import { useDesktopComposition } from './useWideWorkspace';
 // the deployment — the theme and the tab mode — and one follows the machine, which is the language: what a client is
 // read in is a fact about where somebody is sitting rather than about them.
 //
-// Two shapes of each control stand here rather than one, and that is the design project's decision rather than drift.
+// Two shapes of each control stand here rather than one, and that is the design's decision rather than drift.
 // Inside the frame each is the full-width row the account menu and the settings screen draw. On the sign-in screen
 // both are the compact segmented pickers below: the same radio group in the same pill, sized for a strip above a form
 // rather than for a menu, because the screen a person meets before any mail is where the two settings that belong to
@@ -31,7 +31,7 @@ const segmentNames: Readonly<Record<(typeof themeChoices)[number], MessageKey>> 
 const settingRow = 'flex items-center gap-2.5 px-3.25 py-2.5 text-base';
 
 // The compact pill the sign-in screen's two pickers stand in. Written once here because the two are one shape in the
-// design project and a second arrangement of the same utilities is how a client stops looking like one product; what
+// design and a second arrangement of the same utilities is how a client stops looking like one product; what
 // stands inside it is `controls/ChoiceSegment.tsx`, which the settings screen's groups draw from as well.
 const compactGroup = 'flex gap-0.75 rounded-lg border border-line bg-sunken p-0.5';
 

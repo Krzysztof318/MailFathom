@@ -10,7 +10,7 @@ import { standingViews, type StandingView } from '../messageList/listing';
 import { useListedMail } from '../messageList/useListedMail';
 import { useAiFiltersShown } from '../preferences/aiFilters';
 
-// The section the design project draws under the mailbox tree: three standing views of the mailbox, over what
+// The section the design draws under the mailbox tree: three standing views of the mailbox, over what
 // MailFathom's own reading of the mail already produced.
 //
 // Each entry is a shortcut to filter criteria and nothing else. Pressing one narrows the list in front of the reader

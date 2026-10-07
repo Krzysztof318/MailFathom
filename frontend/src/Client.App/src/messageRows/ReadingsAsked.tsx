@@ -81,7 +81,7 @@ export function ReadingsAsked({
         <dialog
             ref={dialog}
             aria-labelledby={names}
-            // The whole screen at a phone width and a card above it, which is the design project's own `dlgAi` and the
+            // The whole screen at a phone width and a card above it, which is the design's own `dlgAi` and the
             // arrangement the settings surface already takes: a card of readings centred in a 390-pixel window leaves
             // a strip of scrim down either side and a body too narrow for the passages the surface exists to show.
             // So the narrow shape is the screen — full size, no border, no radius, no shadow, its own safe-area

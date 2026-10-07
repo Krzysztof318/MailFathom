@@ -10,12 +10,12 @@ import { spaceIcons } from './spaceIcons';
 import { useRef, useState, type ReactNode } from 'react';
 
 // The fifth place in the bottom bar, and what stands behind it. A narrow window has room for five items and the design
-// project spends them on three spaces, the bell, and this — so what does not fit is reached rather than dropped, which
+// spends them on three spaces, the bell, and this — so what does not fit is reached rather than dropped, which
 // is the whole of why this component exists.
 //
 // **It is the platform's own popover**, for the reasons the account menu beside it is one: it opens and closes from the
 // control that names it, a press outside it closes it, Escape closes it, and focus goes back to that control — none of
-// which is written here. It is drawn as a sheet against the foot of the screen because that is where the design project
+// which is written here. It is drawn as a sheet against the foot of the screen because that is where the design
 // draws it and because that is where the thumb that opened it already is.
 //
 // **What it holds is a place to go and the person going there.** The spaces are links, exactly as the bar's own are,
@@ -32,7 +32,7 @@ export function SpaceOverflow({
     account,
     refresh,
 }: {
-    /** The spaces the bar had no place for, which this offers in the order the design project lists them. */
+    /** The spaces the bar had no place for, which this offers in the order the design lists them. */
     readonly spaces: readonly Space[];
 
     /** The space being shown, so a reader who is already inside the overflow can see which of these they are on. */
@@ -43,7 +43,7 @@ export function SpaceOverflow({
 
     /**
      * The control that reads again what the client is already showing. It stands here rather than in the bar for the
-     * reason everything here does: the bar has five places and the design project spends all five, so a sixth control
+     * reason everything here does: the bar has five places and the design spends all five, so a sixth control
      * is reached rather than squeezed in beside them.
      */
     readonly refresh: ReactNode;
@@ -92,13 +92,13 @@ export function SpaceOverflow({
                     setStanding(event.newState === 'open');
                 }}
                 aria-label={translate('shell.more')}
-                // Dimmed behind, which the design project draws and which is what says the sheet is the whole of what
+                // Dimmed behind, which the design draws and which is what says the sheet is the whole of what
                 // is being answered right now. The platform paints it: a popover has a `::backdrop` of its own exactly
                 // as the notification panel's dialog does, and this is the same token that one uses.
                 className="inset-x-0 top-auto bottom-0 m-0 w-full max-w-full rounded-t-2xl border-t border-line bg-panel px-3 pt-3 pb-safe-bottom text-base text-text shadow-overlay backdrop:bg-scrim open:block"
             >
                 <div className="flex flex-col gap-0.5 pb-3">
-                    {/* The bar the design project draws across the top of the sheet, which says a sheet is what this
+                    {/* The bar the design draws across the top of the sheet, which says a sheet is what this
                         is. It is decoration and nothing is done with it: the gesture that would pull it is the
                         notification centre's, and this sheet is left by pressing outside it or by Escape. */}
                     <span aria-hidden="true" className="mx-auto mb-1.5 h-1 w-9.5 rounded-full bg-line-strong" />

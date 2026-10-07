@@ -7,7 +7,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { portOf, type ResolvedConnection } from './connection';
 
-// Everything about the connection that is not the address itself, behind the one disclosure the design project puts
+// Everything about the connection that is not the address itself, behind the one disclosure the design puts
 // under the sign-in form: what the address resolved to, row by row, and — where the address is being typed here — the
 // permission an unsecured connection needs and the warning that permission raises; where the address was chosen on an
 // earlier run, the way to change it.
@@ -145,7 +145,7 @@ export function AdvancedConnection({
 /**
  * The one control on this screen that gives something away.
  *
- * A bordered row that turns to the warning weight once it is on, drawn as the design project draws it, with a real
+ * A bordered row that turns to the warning weight once it is on, drawn as the design draws it, with a real
  * checkbox inside a `label` wrapping the whole row — so it is operable from the keyboard, announced as a checkbox, and
  * hittable by a finger. Where a deployment configured the permission the same row is drawn without one, because there
  * is no choice left to offer and a disabled control saying nothing about why is worse than a sentence that says it.

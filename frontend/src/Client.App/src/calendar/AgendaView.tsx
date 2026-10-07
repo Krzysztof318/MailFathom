@@ -9,7 +9,7 @@ import { wordAgendaDay, wordDay, wordWeekday } from './calendarWording';
 import { EventEntry } from './EventEntry';
 import type { EventActs } from './eventActs';
 
-// The span as a list of the days that have something in them, which is the design project's agenda: a date down one
+// The span as a list of the days that have something in them, which is the design's agenda: a date down one
 // side and what is on it beside. A day with nothing on it is not a row, because a list of empty days is the calendar
 // telling a reader at length that there is nothing to tell them.
 //

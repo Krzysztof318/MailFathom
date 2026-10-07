@@ -534,7 +534,7 @@ export function FolderTree({
     const carried = acts.carried;
     const offered = carried.length > 0 && acts.refusalOf('move', carried) === null ? acts.destinationsOf(carried) : [];
 
-    // A mailbox's own row is not one of them although pressing it opens its inbox, which is the design project's own:
+    // A mailbox's own row is not one of them although pressing it opens its inbox, which is the design's own:
     // the rows heading the groups carry no drop at all, so a drop always names the folder it lands on.
     function droppedOn(row: FolderTreeRow): (() => void) | undefined {
         const destination =

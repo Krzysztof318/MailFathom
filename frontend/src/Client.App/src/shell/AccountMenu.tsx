@@ -18,14 +18,14 @@ import { TabModeSwitch, ThemeSegments } from './Preferences';
 import { useScreenLayer } from './screenLayers';
 import { useWideWorkspace } from './useWideWorkspace';
 
-// The menu at the foot of the rail, which is where the design project puts everything that is about the person rather
+// The menu at the foot of the rail, which is where the design puts everything that is about the person rather
 // than about the mail: who they are, which mailboxes this deployment reads for them and which of those the client is
 // scoped to, the two settings that follow them between machines, the way into everything else about them, and the way
 // out. It is the platform's own popover rather than a menu built out of state — it opens and closes from the control
 // that names it, closes on Escape and on a press outside it, and hands focus back to that control, none of which this
 // file has to write.
 //
-// Two things a reader might expect here are deliberately elsewhere, both because the design project draws them there.
+// Two things a reader might expect here are deliberately elsewhere, both because the design draws them there.
 // The language is on the settings screen: the menu holds what somebody reaches for between messages, and what language
 // the client reads in is set once. What the client and the deployment are running is on the sign-in screen and at the
 // foot of that same settings screen, which is where somebody looks for a version — this menu only carries the
@@ -72,7 +72,7 @@ export function AccountMenu({
     const menu = useRef<HTMLDivElement>(null);
     const settingsRow = useRef<HTMLButtonElement>(null);
 
-    // The menu is folded away while the screen behind it is open, which is what the design project draws, and put back
+    // The menu is folded away while the screen behind it is open, which is what the design draws, and put back
     // when it closes so that focus returns to the row it was opened from rather than to the rail. The platform's own
     // two methods rather than a state of ours: the popover is the platform's, and a second opinion about whether it is
     // open is the pair that comes to disagree.
@@ -106,7 +106,7 @@ export function AccountMenu({
 
     return (
         <>
-            {/* The control is the circle alone at the foot of the rail, where the design project draws it beside six
+            {/* The control is the circle alone at the foot of the rail, where the design draws it beside six
                 other symbols, and a named row at the foot of the overflow sheet, where it stands among rows that each
                 carry a name. Same control, same menu, same accessible name — what changes is that a row in a list of
                 rows says what it is rather than leaving a lone circle to be recognised. */}
@@ -146,7 +146,7 @@ export function AccountMenu({
 
                 <TabModeSwitch on={preferences.openMailInTabs} onChange={preferences.chooseTabMode} />
 
-                {/* One rule under the theme block and none above it, which is where the design project draws the
+                {/* One rule under the theme block and none above it, which is where the design draws the
                     menu's second divider: the tab row and the theme row read as one group of settings. */}
                 <div className="border-b border-line-soft">
                     <ThemeSegments onChoose={preferences.chooseTheme} />

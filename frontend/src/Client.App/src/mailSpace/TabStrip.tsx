@@ -10,7 +10,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { closed, type OpenTab, type OpenTabKind } from './openTabs';
 
-// The strip of what is open, which the design project draws above the content pane on a wide screen. It is a tab list
+// The strip of what is open, which the design draws above the content pane on a wide screen. It is a tab list
 // to the platform rather than a row of buttons that look like one: the arrow keys move between tabs, Enter and Space
 // bring one forward, Delete closes the one focused, and the one being read is the one reported as selected.
 //
@@ -192,7 +192,7 @@ export function TabStrip({
 // element's state rather than a second copy of it in React, and leaving it by any route puts focus back on the control
 // that opened it.
 //
-// The design project draws the sentence about a draft unconditionally; it is said here only where a draft is actually
+// The design draws the sentence about a draft unconditionally; it is said here only where a draft is actually
 // open, because a confirmation that names a consequence that will not happen is a confirmation a reader learns to stop
 // reading.
 

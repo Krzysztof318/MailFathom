@@ -252,7 +252,7 @@ describe('AttachmentView', () => {
     // surface that keeps state of its own: what is being proven is that pressing it starts that download and that what
     // becomes of it is said here rather than in the message the file was opened from.
     // The viewer's own head offers the download, and what became of it is said from the corner rather than inside the
-    // surface somebody is looking at the file in — which is the one place the design project reports a task.
+    // surface somebody is looking at the file in — which is the one place the design reports a task.
     it('downloads the file from the control in its head, and says what became of it from the corner', async () => {
         const held = delivering();
         drawing(photograph, held.exchange);

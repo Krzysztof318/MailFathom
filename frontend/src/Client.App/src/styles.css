@@ -9,10 +9,10 @@
  * the type scale, the radii, the shadow steps, the breakpoints, and the motion defaults are `@theme` tokens here and
  * there is no JavaScript configuration file to keep in step with them.
  *
- * Every value below is the design project's rather than this file's. The project is the single source of truth for what
+ * Every value below is the design's rather than this file's. The design is the single source of truth for what
  * MailFathom looks like, and it declares its palette in OKLCH under two themes; what this file adds is the semantic
  * name each value is reached by, so a screen composes against `panel`, `line`, or `faint` and never learns a hue. Where
- * a screen and the project disagree the project wins and the screen changes — the icon-sampled ramp that used to stand
+ * a screen and the design disagree the design wins and the screen changes — the icon-sampled ramp that used to stand
  * here was replaced by this one for exactly that reason, accent included.
  *
  * The light values are the ones declared in the `@theme` blocks — the palette, and the mailbox-mark ramp after it,
@@ -29,7 +29,7 @@
 
 @import 'tailwindcss';
 
-/* Instrument Sans, the project's typeface, as the two variable faces Google Fonts publishes it in — one upright, one
+/* Instrument Sans, the design's typeface, as the two variable faces Google Fonts publishes it in — one upright, one
    italic, each covering the whole 400–700 range so a weight is an axis position rather than a second file. The two
    subsets are split by `unicode-range` the way the upstream stylesheet splits them, so a reader whose mail is entirely
    Latin-1 never pulls the extended file that Polish needs. */
@@ -119,7 +119,7 @@
 
     /* The weight above a warning, and the one a warning is not: something failed. It is a hue of its own rather than a
        heavier warning, because a message that was not sent and a message that was sent to fewer people than asked are
-       different statements and the design project draws them apart. The fill is what the one control that destroys
+       different statements and the design draws them apart. The fill is what the one control that destroys
        work in progress is painted with, so it carries `on-accent` as its words rather than a tint of itself; the tint
        and the text weight beside it are what a surface reporting a failure is drawn from. */
     --color-error: oklch(0.545 0.195 25);
@@ -151,7 +151,7 @@
         0 1px 0 var(--color-inset) inset, 0 10px 24px var(--color-shadow-soft), 0 2px 6px var(--color-shadow-soft);
     --shadow-dialog: 0 20px 48px var(--color-shadow-strong);
 
-    /* The project's type ladder, in the order it climbs. It is finer and lower than a stock scale because a mail client
+    /* The design's type ladder, in the order it climbs. It is finer and lower than a stock scale because a mail client
        is dense: the row a mailbox is scanned down sets at `base`, everything said about a row sets below it, and only a
        screen's own title reaches the top three steps. */
     --text-2xs: 0.625rem;
@@ -177,7 +177,7 @@
     --text-5xl: 2.125rem;
     --text-5xl--line-height: 1.15;
 
-    /* The project's corners. A control takes one of the first three, a panel or a card one of the next two, and the
+    /* The design's corners. A control takes one of the first three, a panel or a card one of the next two, and the
        last is what a sheet rising from the bottom of a narrow window is cut with. */
     --radius-xs: 0.25rem;
     --radius-sm: 0.3125rem;
@@ -189,14 +189,14 @@
     --radius-4xl: 1.125rem;
 
     /* The one corner outside that ladder, and it belongs to two surfaces: the window a message's own markup and an
-       opened file stand in over the message. The design project cuts both at a corner of its own rather than at the
+       opened file stand in over the message. The design cuts both at a corner of its own rather than at the
        one it gives a card, so the value is named here for the surfaces that read it instead of being rounded onto the
        nearest rung — a rung the ladder does not have. */
     --radius-window: 0.8125rem;
 
-    /* The three widths the shell is composed at, and they are the design project's own numbers rather than three
-       roundings of one idea. The project's prototype asks exactly these three questions of the width it was given, and
-       the client asks them under these names — so the four compositions the project frames fall out of the same
+    /* The three widths the shell is composed at, and they are the design's own numbers rather than three
+       roundings of one idea. The design's prototype asks exactly these three questions of the width it was given, and
+       the client asks them under these names — so the four compositions the design frames fall out of the same
        arithmetic rather than out of a breakpoint that happens to sit near each of them.
 
        The first is where the phone shape stops. Below it the shell lays out in the reverse direction: the rail leaves
@@ -213,7 +213,7 @@
        window can carry a rail long before it can carry two columns beside one. */
     --breakpoint-panes: 51.25rem;
 
-    /* The third is where the desktop composition begins, and it is one width with three consequences the project draws
+    /* The third is where the desktop composition begins, and it is one width with three consequences the design draws
        together: the mailbox column stands beside the list rather than in a drawer over it, the toolbar's controls carry
        their labels rather than standing as symbols alone, and the tab mode is worth offering at all — a row of tabs
        above the columns needs room a rail beside two of them does not. Below it the shell is the tablet composition,
@@ -225,45 +225,45 @@
        than a rail beside a list. It is the sign-in artboard's own number rather than a fourth shell composition. */
     --breakpoint-split: 58.75rem;
 
-    /* One row of the message list, in the two heights the design project draws it. Declared here rather than in the
+    /* One row of the message list, in the two heights the design draws it. Declared here rather than in the
        list because it is a density decision like any other — and because the list is arithmetic over it: the window
        that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value off a
        rendered row rather than holding a second copy of it. It is three lines and the space around them: who wrote,
        what about, and a line for a sentence about the message rather than from it — why a search result matched, and
        what MailFathom made of the message once stage 3 lands.
 
-       The narrow one is not the wide one loosened by taste: the project draws one height at the desktop, the tablet
+       The narrow one is not the wide one loosened by taste: the design draws one height at the desktop, the tablet
        and the fold alike, and a taller row at the phone, where the list is the whole screen and a row is something a
        thumb lands on rather than something a cursor points at. So the row is the one place a composition changes a
        height, and it changes it at the width the phone shape begins at. */
     --spacing-message-row: 5.6875rem;
     --spacing-message-row-narrow: 6.875rem;
 
-    /* One row of the address book, which is one height at every width — the design project draws the contact row the
+    /* One row of the address book, which is one height at every width — the design draws the contact row the
        same at the phone as at the desktop, unlike the message row above it. It is here for the other reason that one
        is: the book is windowed over this value, measured off a rendered row rather than held a second time in
        JavaScript. Two lines and the space around them: who they are, and the address to write to. */
     --spacing-contact-row: 3.875rem;
 
     /* How wide the address book's column stands where the window has room for it beside the person opened, which is
-       the width the design project draws it at. It is fixed rather than a fraction for the reason the mailbox column
+       the width the design draws it at. It is fixed rather than a fraction for the reason the mailbox column
        is: what the list holds is a name and an address, and a column that grew with the window would leave a person's
        own page narrower for no reading gained. */
     --spacing-contact-list: 18.75rem;
 
     /* How wide the column of dates the calendar read out of somebody's mail stands where the window has room for it
-       beside the views, which is the width the design project draws it at. Fixed for the reason the address book's
+       beside the views, which is the width the design draws it at. Fixed for the reason the address book's
        column is: a card there holds a title and a range, and a column that grew with the window would take the room
        the week's own seven columns need. */
     --spacing-calendar-side: 17.5rem;
 
     /* How tall a cell of the month grid stands before what is in it decides. It is a floor rather than a height: a day
        with four events grows past it, and a month whose cells were all as tall as their busiest day would be a grid
-       mostly of blank space. The value is the design project's own cell, which holds its date and two entries. */
+       mostly of blank space. The value is the design's own cell, which holds its date and two entries. */
     --spacing-month-cell: 5.75rem;
 
     /* How wide the Tasks screen's sidebar stands where the composition has room for it beside the list, which is the
-       width the design project draws it at. Fixed for the address book column's reason: what stands in it is a day's
+       width the design draws it at. Fixed for the address book column's reason: what stands in it is a day's
        events and a sentence about the day, and a column that grew with the window would take that width off the list
        without either panel reading better for it. */
     --spacing-tasks-side: 21.75rem;
@@ -275,10 +275,10 @@
        navigation beneath the frame. This is the ceiling; what does not fit is reached by scrolling the strip. */
     --spacing-grant-notices: 11.5rem;
 
-    /* How wide the rail is in the desktop composition and in the tablet one, where the project draws it narrower with
+    /* How wide the rail is in the desktop composition and in the tablet one, where the design draws it narrower with
        the label under the symbol at a smaller size; how wide the column beside it that holds the mailbox tree is once
        it has been folded to a strip; and how wide the drawer the narrow shape holds the mailboxes in is. All four are
-       the project's, and they are here rather than on the components because they have to add up to a composition.
+       the design's, and they are here rather than on the components because they have to add up to a composition.
        Two widths are not among them, and for one reason: the message list's in the desktop composition, and the
        mailbox column's while it is open, are widths a person sets rather than the design. Each is drawn from a value
        whose bounds live beside the arithmetic that reads them — `mailSpace/listWidth.ts` and
@@ -288,23 +288,23 @@
     --spacing-mailboxes-folded: 3.625rem;
     --spacing-drawer: 16.375rem;
 
-    /* The message list at the tablet and the fold, where the project draws it at one width and offers no boundary to
+    /* The message list at the tablet and the fold, where the design draws it at one width and offers no boundary to
        move: the list's width is somebody's to set only in the desktop composition, which is the one wide enough for
        the choice to change anything but the message beside it. */
     --spacing-list-tablet: 17.75rem;
 
-    /* The notification centre, in the two shapes the design project draws it: how wide the panel is beside the rail,
+    /* The notification centre, in the two shapes the design draws it: how wide the panel is beside the rail,
        and how tall the bottom navigation is — which the panel reads as well as the navigation itself, because the
-       narrow shape is a sheet that stops above the bar rather than covering it. Both are the project's own, and the
+       narrow shape is a sheet that stops above the bar rather than covering it. Both are the design's own, and the
        second is here rather than left to whatever the bar's contents come to precisely because two things have to
        agree about it. */
     --spacing-notifications: 25rem;
     --spacing-navigation: 4rem;
 
     /* The settings surface, in the composition where it is a card rather than the whole screen: the width the design
-       project draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
+       draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
        change size as somebody moves between its two tabs, and a tall window does not stretch it past what it needs.
-       Both are the project's, and both are a size the card is given rather than a ceiling it stops at, which is why
+       Both are the design's, and both are a size the card is given rather than a ceiling it stops at, which is why
        they sit here beside the rail's widths rather than among the `--container-*` measures a column is read against.
        Below the workspace breakpoint neither is read, because the surface is the screen. */
     --spacing-settings: 28.75rem;
@@ -312,9 +312,9 @@
 
     /* The two windows that stand over the message where somebody does not work in tabs — the sender's own markup and an
        opened file — in the composition where each is a window rather than the whole screen. Each is a width and a
-       height the design project draws it at, and each stops short of the viewport by the room the project leaves around
+       height the design draws it at, and each stops short of the viewport by the room the design leaves around
        it, so the window never runs to the edge of the screen it is centred on. The two are separate names rather than
-       one because the project draws them at two sizes; below the pane breakpoint neither is read, the surface being the
+       one because the design draws them at two sizes; below the pane breakpoint neither is read, the surface being the
        screen there. */
     --spacing-markup-window: min(62.5rem, calc(100% - 3.25rem));
     --spacing-markup-window-tall: min(90vh, calc(100% - 3.25rem));
@@ -322,11 +322,11 @@
     --spacing-file-window-tall: min(88vh, calc(100% - 3.5rem));
 
     /* The surface a message's readings are checked on, in the composition where it is a card rather than the whole
-       screen — the width the design project draws it at, and the height it stops short of the viewport by the room the
-       project leaves above and below it. The height is a ceiling rather than a size, which is where this parts from the
+       screen — the width the design draws it at, and the height it stops short of the viewport by the room the
+       design leaves above and below it. The height is a ceiling rather than a size, which is where this parts from the
        settings card: a message carrying one reading is a short card and one carrying three scrolls inside a tall one,
-       and the project draws the surface that way because what is in it varies with the message. Below the workspace
-       breakpoint neither is read, because the surface is the screen there, which is what the project draws for a
+       and the design draws the surface that way because what is in it varies with the message. Below the workspace
+       breakpoint neither is read, because the surface is the screen there, which is what the design draws for a
        phone. */
     --spacing-readings: 38.75rem;
     --spacing-readings-tall: calc(100vh - 2.75rem);
@@ -338,7 +338,7 @@
 
     /* The widest a message's own content is ever drawn, which is a ceiling rather than a width: the reading pane takes
        whatever the three columns leave it, and this is where the words inside it stop taking more. It is the width the
-       design draws the pane at, so a window the size the project was drawn against is unchanged by it and a wider one
+       design draws the pane at, so a window the size the design was drawn against is unchanged by it and a wider one
        gains margin instead of line length. It binds the content alone and everything the pane lays out around that
        keeps the pane's width, which is why the name says reading rather than pane. A `--container-*` name rather than
        a `--spacing-*` one because what reads it is `max-w-reading`. */
@@ -349,16 +349,16 @@
        opened from, while a conversation is a column of messages with nothing beside it, so the column is centred and
        grows with the window instead of stopping at a fixed width. The floor is where a measure stops being readable at
        all, the ceiling is where a line stops being comfortable, and between them it is a share of the window — all
-       three the design project's. Below the floor the pane itself is the measure, which is what the narrow composition
+       three the design's. Below the floor the pane itself is the measure, which is what the narrow composition
        is. */
     --container-conversation: clamp(42.5rem, 62vw, 68.75rem);
 
     /* The widest one tab in the strip above the content pane is drawn, which is a ceiling in the same sense: a tab
        takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off
-       the side. It is the width the design project draws a tab at. */
+       the side. It is the width the design draws a tab at. */
     --container-tab: 14.375rem;
 
-    /* The Agent screen's measures, all the design project's. Its history panel stands at the first, which is the
+    /* The Agent screen's measures, all the design's. Its history panel stands at the first, which is the
        design's 250-pixel column with its padding and its rule counted in. A question is
        drawn at most the second wide — a share of the width on a phone — an answer at most the third, and the whole thread and the field under it stop at
        the fourth, so a wide window gains margin instead of line length. A conversation's tab stops at the last, a
@@ -371,7 +371,7 @@
     --container-agent-tab: 13.75rem;
 
     /* What a dialog asking a question is drawn at, and what it is held inside on a screen narrower than that: the
-       project draws every such dialog at one width on the desktop and, on the phone, as a card with the same margin
+       design draws every such dialog at one width on the desktop and, on the phone, as a card with the same margin
        on either side rather than one filling the screen edge to edge. The margin is stated as the ceiling the card
        stops at, so a dialog composes against one name and never learns the window's width. */
     --container-dialog: 27.5rem;
@@ -391,13 +391,13 @@
     --default-transition-timing-function: ease;
 
     /* The one animation the client runs, and the same rule decides it once: how fast a symbol saying that something is
-       still happening turns. Tailwind ships the keyframes and a rate of its own; the rate here is the design project's,
+       still happening turns. Tailwind ships the keyframes and a rate of its own; the rate here is the design's,
        and it is written beside the transition defaults so a surface that spins something composes against this rather
        than naming a duration of its own. Removed entirely under `prefers-reduced-motion`, by the rule at the foot of
        this file that removes every animation. */
     --animate-spin: spin 1.2s linear infinite;
 
-    /* How a control says that what it asked for is under way without turning anything, which is the design project's
+    /* How a control says that what it asked for is under way without turning anything, which is the design's
        pulse: the symbol dims and brightens once a second. The rail's refresh is the surface drawing it. Removed under
        `prefers-reduced-motion` by the same rule as the spin, which leaves the control's accent colours saying it. */
     --animate-working: working 1s ease-in-out infinite;
@@ -415,7 +415,7 @@
 
     /* How something arrives in an Agent conversation while somebody is watching it: a turn, a status line and the
        proposed next steps rise into place, and a block rises a little further and a little slower, because it is the
-       larger thing landing. Both are the design project's own, and neither plays for history that was already there
+       larger thing landing. Both are the design's own, and neither plays for history that was already there
        when the conversation was opened. Removed under `prefers-reduced-motion` by the rule at the foot of this file. */
     --animate-arrival: arrival 440ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
     --animate-block-arrival: block-arrival 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -435,7 +435,7 @@
     }
 
     /* What a toast does beyond that: it arrives from the edge it is stacked against, it leaves the same way, and the
-       bar along its bottom edge empties over its lifetime. All three are the design project's, and they are declared
+       bar along its bottom edge empties over its lifetime. All three are the design's, and they are declared
        here for the reason every other duration is — a component writing one of its own is the same drift as one
        writing a colour. A toast following an operation turns the symbol above rather than one of its own.
        Two of the three carry no duration here, and deliberately: how long a toast stands and how long it takes to
@@ -443,12 +443,12 @@
        against — so an animation and the timer beside it cannot come to disagree. */
     /* The two curves a surface that slides rather than fades is moved on. The first is what a sheet rising from the
        bottom of a narrow window travels on, and it is also what a gesture released short of its threshold springs
-       back on; the second is what a panel entering from the side of a wide one travels on. Both are the design
-       project's own, and they are named here so the three utilities below — and nothing else — carry them. */
+       back on; the second is what a panel entering from the side of a wide one travels on. Both are the design's
+       own, and they are named here so the three utilities below — and nothing else — carry them. */
     --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
     --ease-panel: cubic-bezier(0.3, 0.7, 0.1, 1);
 
-    /* What one tile of a list does when it is the only thing that changed, which is the design project's own pair and
+    /* What one tile of a list does when it is the only thing that changed, which is the design's own pair and
        the standing rule this client holds every list to: a list is drawn as a skeleton once, when it has nothing, and
        every later change reaches the rows it actually touched rather than the whole column. A row that arrived opens
        into its own height, and a row whose message changed is washed in the accent and marked down its leading edge
@@ -632,7 +632,7 @@
    Nothing else here needs that, which is why this is a block of its own rather than a modifier on the palette.
 
    The first hue is the accent and follows it into the dark theme below. The ones after it do not follow the theme: the
-   design project draws each of them as one colour on both of its artboards, so a lightened dark counterpart would be a
+   design draws each of them as one colour on both of its artboards, so a lightened dark counterpart would be a
    hue this client invented rather than one it was given. Nothing is lost by that — each clears 4.9:1 against the dark
    panel and the dark rail, which is more than either clears against the light ones. */
 @theme static {
@@ -642,7 +642,7 @@
 }
 
 /* What each provider mark on the sign-in screen is drawn in. These are the one family of colours here that is not
-   MailFathom's: each is the brand's own, quoted from the design project's provider table exactly as it wrote it, which
+   MailFathom's: each is the brand's own, quoted from the design's provider table exactly as it wrote it, which
    is why they are the only values in this file written as hexadecimal rather than in `oklch` — a converted colour would
    read as a value somebody chose rather than as one that was given. There is one per mark committed under
    `assets/providers/`, and a provider the bundle carries no mark for is drawn with the credential symbol in the text
@@ -719,7 +719,7 @@
     --color-scrim: oklch(0.12 0.045 262 / 0.66);
 }
 
-/* What an operation that cannot say how far it has got draws instead of a reading: a block of the design project's own
+/* What an operation that cannot say how far it has got draws instead of a reading: a block of the design's own
    width travelling the track and back. Both halves of it are values rather than markup — how wide the block is, and how
    far and how fast it travels — so it is declared here beside the palette rather than assembled out of utilities on the
    element, which is what would put a width and a duration into a component. `prefers-reduced-motion` removes the travel
@@ -734,7 +734,7 @@
    a lighter band travelling across it. It is one utility rather than a component's utilities for the reason the block
    above is one — the gradient, how wide it is against the block, and how fast it travels are values, and a screen
    writing any of them is the drift a colour written into a component is. Every skeleton in the client is this utility
-   sized by the shape it stands in, so the four the design project draws are one decision rather than four.
+   sized by the shape it stands in, so the four the design draws are one decision rather than four.
    `prefers-reduced-motion` removes the travel by the rule at the foot of this file, which leaves a block of the line
    colour standing in the space — still reserving it, which is the half of this that carries the meaning. */
 @utility shimmering {
@@ -754,7 +754,7 @@
     }
 }
 
-/* How the notification centre travels, in the three motions the design project gives it: a sheet rising from the foot
+/* How the notification centre travels, in the three motions the design gives it: a sheet rising from the foot
    of a narrow window, a panel entering from the side of a wide one, and the return a gesture released short of its
    threshold makes. Each is a duration and a curve together rather than two utilities on the element, for the reason
    the token block gives about motion being decided once — and the durations are here rather than in the theme because
@@ -814,7 +814,7 @@
         color-scheme: dark;
     }
 
-    /* The ladder's own base rather than the browser's 16px, so text nothing sized reads at the size the project draws
+    /* The ladder's own base rather than the browser's 16px, so text nothing sized reads at the size the design draws
        body text at instead of a step and a half above everything around it. The tokens stay in `rem` against the root,
        which this does not move, so spacing and the breakpoints are unaffected by it. */
     body {
@@ -832,7 +832,7 @@
     }
 
     /* What the pointer says over something that can be pressed, decided once here for the same reason the ring above
-       is. The design project writes `cursor:pointer` into the hover state of every control it draws, and a browser
+       is. The design writes `cursor:pointer` into the hover state of every control it draws, and a browser
        draws the default arrow over a `button` — so a client leaving it to each control is a client where most of them
        eventually stop saying it, and the one that stopped is invisible in the diff that stopped it.
 
@@ -880,10 +880,10 @@
        that stops is invisible in the diff that stopped it.
 
        It is asked of the pointer rather than of the width, and that is the whole distinction this client draws between
-       the two questions. A composition follows the width it was given — the design project frames four of them and
+       the two questions. A composition follows the width it was given — the design frames four of them and
        every screen composes against those breakpoints. A target follows what is driving it: a touch screen on a
        desktop is a finger at 1440 pixels and a narrow window on a laptop is a mouse at 390, so neither question
-       answers the other. The design project cannot state this half at all, its prototype having only a width to infer
+       answers the other. The design cannot state this half at all, its prototype having only a width to infer
        touch from, which is why the number is the platform's rather than an artboard's.
 
        `min-*` rather than a size, so a control the design already draws large keeps its own measurement and only the

@@ -17,14 +17,14 @@ import { useWideWorkspace } from './useWideWorkspace';
 //
 // **The two shapes hold a different number of things, and that is the one part CSS cannot lay out.** A rail has room
 // for all seven spaces, the bell, and the account down the side of the window. A bar has five places across the foot
-// of it, and the design project spends them on three spaces, the bell, and an overflow — so what the bar has no room
+// of it, and the design spends them on three spaces, the bell, and an overflow — so what the bar has no room
 // for stands in a sheet behind that fifth item rather than being hidden by width, which is what the width question is
 // asked for. Which three the bar carries is `routing/spaces.ts`, beside the order they are drawn in.
 //
 // Which destinations there are at all is the session's answer rather than this component's: a space this credential
 // may not open is absent from both shapes, because offering it would offer an action the deployment is going to refuse.
 //
-// A space with nothing behind it yet is present and says so. The design project shows seven, so drawing three would
+// A space with nothing behind it yet is present and says so. The design shows seven, so drawing three would
 // make this a different product from the one that was designed; drawing all seven as though they worked would be
 // worse. What separates them is the name the link carries and the weight it is drawn at, and the screen it opens says
 // the same thing in a sentence.
@@ -32,7 +32,7 @@ import { useWideWorkspace } from './useWideWorkspace';
 // Links rather than buttons, because these navigate: the browser then supplies the keyboard path, the history entry,
 // and opening one in a window of its own, none of which a click handler would have.
 //
-// The account stands at the foot of the rail and at the foot of the overflow sheet, which is where the design project
+// The account stands at the foot of the rail and at the foot of the overflow sheet, which is where the design
 // puts what is about the person rather than about a space: last in both, and never in the bar itself, where the five
 // places are spent. It is offered before the deployment has answered which spaces there are, because signing out and
 // pointing the client elsewhere are the way out of a deployment that never answers.
@@ -62,7 +62,7 @@ export function SpaceNavigation({
 
     /**
      * What an upward swipe anywhere on the bar begins, which is the second way into the notification centre on a
-     * phone. It is bound here rather than on the bell because the design project gives the gesture the whole bar.
+     * phone. It is bound here rather than on the bell because the design gives the gesture the whole bar.
      */
     readonly onPointerDown: (event: PointerEvent) => void;
 
@@ -100,7 +100,7 @@ export function SpaceNavigation({
             {/* The bell and the account, in that order at both widths: what happened while nobody was looking stands
                 beside who is looking. In the rail that is the foot of it, with the bell above the account; in the bar
                 the bell is the fourth place and the account has moved behind the fifth, which is what the design
-                project draws and what leaves the bar five items wide however many spaces the session offers. */}
+                draws and what leaves the bar five items wide however many spaces the session offers. */}
             {wide ? (
                 <div className="mt-auto flex flex-none flex-col items-center justify-center gap-2 pt-3">
                     {refresh}

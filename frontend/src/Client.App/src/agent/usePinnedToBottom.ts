@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 
-// Keeping the tail of a conversation in view while it is composed, as the design project's rule rather than as a
+// Keeping the tail of a conversation in view while it is composed, as the design's rule rather than as a
 // `scrollTop` written whenever something arrives. The thread follows the bottom until the reader scrolls up past the
 // threshold, and follows it again once they come back down to it. The measurement is made two frames after the content
 // changed, so what arrived has been laid out before the gap is read; and a hop across most of the viewport is a jump

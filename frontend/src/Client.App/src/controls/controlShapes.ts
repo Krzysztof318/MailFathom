@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The shapes a control takes in the design project, stated once for the two components that draw one: the control that
+// The shapes a control takes in the design, stated once for the two components that draw one: the control that
 // does something and the control that stands for something the client cannot do yet. They are here rather than in
 // either of those because a shape written twice is how the same button comes to look like two buttons — and because a
 // module Vite hot-reloads may export components alone, which is what keeps this table out of the component files.
@@ -29,7 +29,7 @@
 // head of a conversation, which hands the thread to the agent. It is a shape of its own rather than `primary` with a
 // rounder corner because the two differ in every measure — the corner, the height, the padding — and not only in one.
 //
-// What is deliberately absent is the size a finger needs. Every shape below is drawn at the measure the design project
+// What is deliberately absent is the size a finger needs. Every shape below is drawn at the measure the design
 // gives it, and the floor a control grows to under a coarse pointer is stated once for the whole client in
 // `styles.css` — a bar met in eight shapes and forty hand-written controls is a bar most of them eventually stop
 // meeting.

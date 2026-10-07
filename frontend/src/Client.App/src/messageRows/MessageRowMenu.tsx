@@ -13,7 +13,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking, type ReadMarking } from '../readMarking/useReadMarking';
 import { useAgentHandOver } from '../routing/agentHandOver';
 
-// What a message row offers, which is the design project's own menu for it: picking messages out, answering the
+// What a message row offers, which is the design's own menu for it: picking messages out, answering the
 // message, and the five acts that change the mailbox it is in. It is this row's items and nothing else — where the
 // menu stands, how it is walked, and how it is left are `contextMenu/ContextMenu.tsx`'s, because six more lists draw
 // the same menu with items of their own.
@@ -108,7 +108,7 @@ export function MessageRowMenu({
     );
 }
 
-/** Everything this row offers, in the order the design project draws it. */
+/** Everything this row offers, in the order the design draws it. */
 function rowItems({
     email,
     messages,

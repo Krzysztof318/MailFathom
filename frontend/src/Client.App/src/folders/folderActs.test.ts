@@ -50,7 +50,7 @@ describe('actsOffered', () => {
         expect(actsOffered(mailbox, { account: [], folder: null })).toEqual(['markAllRead']);
     });
 
-    it('offers a folder the whole set, in the order the design project draws them', () => {
+    it('offers a folder the whole set, in the order the design draws them', () => {
         expect(actsOffered(folder, everything)).toEqual([
             'newFolderInside',
             'markAllRead',

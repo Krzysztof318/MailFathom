@@ -128,7 +128,7 @@ export function MessageList({
     const listed = useListedMail();
     const acts = useMailboxActs();
 
-    // Dragging a row to a folder is a pointer's gesture alone, which is the design project's own: it leaves the move
+    // Dragging a row to a folder is a pointer's gesture alone, which is the design's own: it leaves the move
     // dialog as what a finger reaches, and on a touch screen the folder column is a drawer a drag cannot reach while a
     // held finger is the row's menu — which a platform starting a drag on that same hold would take away.
     const coarse = useCoarsePointer();
@@ -723,7 +723,7 @@ export function MessageList({
 
         // Adding one at a time, which is what the modifier key does under a pointer. A finger has no modifier and
         // reaches the same thing through the row's own menu, whose first item puts that row into the selection — which
-        // is the design project's answer to picking several out, and why no *select several* control stands over this
+        // is the design's answer to picking several out, and why no *select several* control stands over this
         // column any more.
         if (event.ctrlKey || event.metaKey) {
             setAnchor(email.id);
@@ -739,7 +739,7 @@ export function MessageList({
         }
 
         // While messages are picked out, a plain press picks this one out too rather than opening it, which is the
-        // design project's rule: a selection is left by its own bar, not by a press that would have replaced it with
+        // design's rule: a selection is left by its own bar, not by a press that would have replaced it with
         // whatever was pressed.
         if (workspace.selected.length > 0) {
             setAnchor(email.id);
@@ -786,7 +786,7 @@ export function MessageList({
         }
 
         return () => {
-            // The message is opened as well as answered, which is the design project's own: an answer written over a
+            // The message is opened as well as answered, which is the design's own: an answer written over a
             // list nobody chose a message from would be a composition with no message behind it on the screen.
             open(row);
             composing.compose({ kind: 'answer', answers: 'senderOnly', storedEmailId: email.id });
@@ -817,7 +817,7 @@ export function MessageList({
         (act === 'delete' ? deleting : filing).current?.showModal();
     }
 
-    // What dragging a row carries towards the folder column, which is the design project's own: the whole selection
+    // What dragging a row carries towards the folder column, which is the design's own: the whole selection
     // where the row is one of several picked out, and the row alone otherwise. Absent on the terms `filingAway` is:
     // where the move could never be seen through there is nothing to drag, rather than a row that fades and lands
     // nowhere.
@@ -1145,7 +1145,7 @@ function ArrivingRow({ position }: { readonly position: number }) {
     );
 }
 
-// How long each waiting row's two lines are, as the design project's own raggedness: the pair a row draws is the
+// How long each waiting row's two lines are, as the design's own raggedness: the pair a row draws is the
 // shorter line above the longer one, so a column of them reads as a folder rather than as a striped block.
 const waitingRowLengths: readonly number[] = [74, 58, 68, 50, 71, 61, 66, 54];
 

@@ -14,7 +14,7 @@ import type { ArrivalMark } from './threadOpening';
 // One message of a conversation, drawn out in full — which is the whole of what this component decides, because what a
 // message looks like is `readingPane/OpenedMessage.tsx`'s and is the same drawing wherever a message is drawn.
 //
-// **Nothing here collapses.** The design project draws a conversation as one document with every message in it written
+// **Nothing here collapses.** The design draws a conversation as one document with every message in it written
 // out, and it hands the mail screen `showExpandAll: false` — so there is no per-message control, and what a reader
 // decides is how much of the correspondence stands in front of them rather than which message of it is open. The
 // conversation's own head is where that decision is made, and this is what it reveals.
@@ -37,7 +37,7 @@ const arrivalLabels: Readonly<Record<ArrivalMark, MessageKey>> = {
 
 // What a mark draws around the message: the accent rule down its edge with everything it says indented past it, and —
 // for a landing, which announces itself rather than recording something — the accent tint behind it until it settles.
-// A message carrying neither takes no rule and no fill, which is what the design project draws an open message as.
+// A message carrying neither takes no rule and no fill, which is what the design draws an open message as.
 const arrivalStyles: Readonly<Record<ArrivalMark, string>> = {
     list: 'border-s-3 border-s-accent ps-2.75',
     result: 'border-s-3 border-s-accent bg-accent-soft ps-2.75',

@@ -19,7 +19,7 @@ import type { MessageBodyRead } from './useMessageBody';
 // opened the message rather than at the moment its description answered: this component is drawn inside the branch
 // that already holds that description, so a read owned here would be a second round trip waiting on the first.
 
-// The lines a message's words stand as before they arrive, which is the design project's own raggedness: uneven
+// The lines a message's words stand as before they arrive, which is the design's own raggedness: uneven
 // lengths broken into two paragraphs, so the block reads as prose that is coming rather than as something loading.
 const waitingLines: readonly SkeletonLine[] = [
     { fills: 97, height: 'h-2.5' },
@@ -38,7 +38,7 @@ export function WordsWaiting() {
 }
 
 /**
- * A whole message before the deployment has answered, in the arrangement the design project draws: the subject and
+ * A whole message before the deployment has answered, in the arrangement the design draws: the subject and
  * the line under it, then the head that carries who wrote it, then the words.
  *
  * It stands where the message will rather than beside a sentence, so the answer lands into the space it was already
@@ -46,7 +46,7 @@ export function WordsWaiting() {
  * wait, the conversation's, and the state block the conversation carries are one shape stated once, and a second
  * arrangement of the same four blocks is how two screens come to wait differently for the same thing.
  *
- * The two lengths widen where the column is the whole window, which is the design project's own pair: a column beside
+ * The two lengths widen where the column is the whole window, which is the design's own pair: a column beside
  * a list and a column that is the screen are two measures, and a skeleton drawn at the narrower one in the wider case
  * reads as a message that arrived half empty.
  */
@@ -104,7 +104,7 @@ interface MessageToDraw {
 }
 
 // The measure a message is read at is the surface's rather than this component's, which is why nothing here writes
-// one. The two surfaces answer it differently and both answers are the design project's: the reading pane binds one
+// one. The two surfaces answer it differently and both answers are the design's: the reading pane binds one
 // message's content and ranges it left against the list it was opened from, and a conversation binds a whole message —
 // head and words together — and centres the column in the pane. A ceiling stated here would have made the second of
 // those unreachable, since a ceiling inside a narrower one is the narrower one.

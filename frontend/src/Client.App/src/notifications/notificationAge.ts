@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Locale } from '../localization/locale';
 
-// How long ago a notification happened, in the ladder the design project draws on a row: now, minutes, hours, the
+// How long ago a notification happened, in the ladder the design draws on a row: now, minutes, hours, the
 // language's own word for yesterday, then days. It sits beside the centre rather than in `localization/instants.ts`
 // because it is a different reading of an instant from the three that module words — a row here says *how long ago*
 // where a message row says *when* — and the two would otherwise be one function with a mode.
@@ -37,7 +37,7 @@ export function wordNotificationAge(instant: string, locale: Locale, now: number
     // Ahead of the reader's own clock is a deployment and a machine that disagree by a few seconds rather than
     // something that has not happened yet, so it is worded as having just happened rather than as a countdown.
     const since = Math.max(0, now - at);
-    // Short rather than long, because the design project draws the age beside a title on one line and a wording that
+    // Short rather than long, because the design draws the age beside a title on one line and a wording that
     // pushed the title into wrapping would be the row's own defect. It is the platform's short form in each language
     // rather than an abbreviation written here, which is the same rule the whole ladder is built on.
     const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });

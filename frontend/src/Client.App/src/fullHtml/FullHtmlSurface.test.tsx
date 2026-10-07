@@ -183,7 +183,7 @@ describe('FullHtmlSurface', () => {
         );
     });
 
-    it('says the preview is isolated, in the one line the design project gives its foot', async () => {
+    it('says the preview is isolated, in the one line the design gives its foot', async () => {
         const { transport } = deploymentServing();
 
         await drawing(transport);

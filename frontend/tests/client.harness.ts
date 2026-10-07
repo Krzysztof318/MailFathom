@@ -26,12 +26,12 @@ export const declaredVersion = execFileSync(resolve(import.meta.dirname, '../../
 export const wideWindow = { width: 1280, height: 720 };
 export const narrowWindow = { width: 380, height: 720 };
 
-// The design project's phone frame, which is the composition where the list is the whole screen and the one width at
-// which the row and the head are drawn differently. It is the project's own number rather than a rounding of the
+// The design's phone frame, which is the composition where the list is the whole screen and the one width at
+// which the row and the head are drawn differently. It is the design's own number rather than a rounding of the
 // breakpoint, so what is measured against it is what the artboard shows.
 export const phoneWindow = { width: 390, height: 844 };
 
-// The design project's other three frames, each its own number for the reason the phone's is. The fold and the tablet
+// The design's other three frames, each its own number for the reason the phone's is. The fold and the tablet
 // are the two compositions with two panes and a drawer, and the desktop is the artboard's own preview size.
 export const foldWindow = { width: 884, height: 832 };
 export const tabletWindow = { width: 1024, height: 768 };
@@ -139,7 +139,7 @@ export async function openAccountMenu(page: Page): Promise<void> {
 
     // The rail carries the control itself. The bottom bar has five places and spends them on three spaces, the bell,
     // and the overflow, so in a narrow window what is about the person stands one press further in — which is where
-    // the design project puts it and what this helper has to know to reach it at either width.
+    // the design puts it and what this helper has to know to reach it at either width.
     if (!(await control.isVisible())) {
         await page.getByRole('button', { name: 'More' }).click();
     }

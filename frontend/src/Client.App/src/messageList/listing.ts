@@ -207,7 +207,7 @@ export function narrowedToRange(filters: MailListFilters, range: MailListDateRan
 /** The standing views of the mailbox the folder tree offers, each of them a set of criteria and nothing else. */
 export type StandingView = 'needsDecision' | 'commitments' | 'deadlinesThisWeek';
 
-/** Every standing view, in the order the design project draws them under the tree. */
+/** Every standing view, in the order the design draws them under the tree. */
 export const standingViews: readonly StandingView[] = ['needsDecision', 'commitments', 'deadlinesThisWeek'];
 
 /**

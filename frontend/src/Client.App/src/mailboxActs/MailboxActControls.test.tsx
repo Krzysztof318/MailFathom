@@ -59,7 +59,7 @@ describe('MailboxActControls', () => {
     });
 
     // The three that file a message happen on the press and report in a toast that offers the way back, which is the
-    // design project's rule: asking about every act is what teaches a reader to agree without reading.
+    // design's rule: asking about every act is what teaches a reader to agree without reading.
     it.each([
         ['Archive', 'archive'],
         ['Flag', 'flag'],

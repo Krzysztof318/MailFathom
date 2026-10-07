@@ -478,7 +478,7 @@ describe('Thread', () => {
         expect(screen.getByText(/thread: 2 messages/)).toBeDefined();
     });
 
-    // The head over a conversation is the head over one message, which is what the design project draws — so what
+    // The head over a conversation is the head over one message, which is what the design draws — so what
     // stands on the author's line is the author of the message being read rather than a roll call of everybody in it.
     it('names the author of the message being read rather than everybody the conversation holds', async () => {
         drawing(deploymentAnswering(pageOf(['one'])));

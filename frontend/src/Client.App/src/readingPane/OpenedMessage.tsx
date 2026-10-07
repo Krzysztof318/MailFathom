@@ -23,7 +23,7 @@ import { SenderVerdict } from './SenderVerdict';
 // wrote it and what the copy holds on one line, the words themselves, and the files the message carries.
 //
 // It is one component rather than two because a message read on its own and a message read inside the correspondence it
-// belongs to are the same message. The design project draws them identically, and a second implementation of this is
+// belongs to are the same message. The design draws them identically, and a second implementation of this is
 // how the two would come to differ by a line height nobody meant to change — which is exactly what the conversation
 // screen had before it drew the message this way.
 //
@@ -92,7 +92,7 @@ export function OpenedMessage({
         <>
             <SenderVerdict verdict={message.sender} />
 
-            {/* The message as the design project draws one: flat on the column, at the measure a conversation's
+            {/* The message as the design draws one: flat on the column, at the measure a conversation's
                 messages take, with who wrote it and what the copy holds on its first line — how many attachments, the
                 sender's own markup where there is one, and when this deployment recorded it — and what it says under
                 that. */}

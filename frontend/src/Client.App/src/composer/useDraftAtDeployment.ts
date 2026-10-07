@@ -106,7 +106,7 @@ export interface DraftAtDeployment {
     /**
      * Queues the message, saving what has been written since first, and answers what it came to.
      *
-     * The standing is answered as well as held because the surface says what became of a send where the design project
+     * The standing is answered as well as held because the surface says what became of a send where the design
      * says it — in a toast, which stands over whatever the person moved on to rather than at the foot of the composer.
      * A toast is raised at the moment of the outcome rather than watched for, so what is owed to the caller is the
      * outcome itself; reading it back out of state afterwards would raise a second toast on every later render.

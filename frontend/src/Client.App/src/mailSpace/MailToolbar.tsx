@@ -16,7 +16,7 @@ import { useTwoPanes } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import type { StripFitting } from './useStripFit';
 
-// The strip the design project draws across the top of the Mail space: composing, and the eight things a person does
+// The strip the design draws across the top of the Mail space: composing, and the eight things a person does
 // to a message. Four of them write a message and five change the mailbox it is in, and both halves act here — the
 // mailbox half over the message that is open, which is what the design draws this strip as being about.
 //

@@ -15,7 +15,7 @@ import { ContactRow } from './ContactRow';
 import { ContactRowMenu } from './ContactRowMenu';
 import type { ContactBookInForce, ContactBookName } from './useContactBook';
 
-// The column the address book is read down: the two books as the design project draws them, how many people the one in
+// The column the address book is read down: the two books as the design draws them, how many people the one in
 // front holds, and the rows themselves.
 //
 // **The two books are a choice rather than a filter**, which is what the design draws and what the surface publishes —
@@ -26,7 +26,7 @@ import type { ContactBookInForce, ContactBookName } from './useContactBook';
 // collected book holds everybody who has ever written, and a list that keeps every row in the document grows with it.
 // The arithmetic is `messageRows/rowWindow.ts`, which the search results read as well.
 //
-// **A page is asked for from the scroll that reaches the end of what is read**, which is the design project's own
+// **A page is asked for from the scroll that reaches the end of what is read**, which is the design's own
 // scrolling rather than a control at the foot. The wait for it is drawn under the rows instead of replacing them,
 // because a reader who has scrolled to the end of what is read has not left what they were reading.
 

@@ -9,11 +9,11 @@ import { wordDay, wordDayOfMonth, weekdayNames } from './calendarWording';
 import { EventEntry } from './EventEntry';
 import type { EventActs } from './eventActs';
 
-// The month as a grid of whole weeks, which is the view the design project draws for a reader looking for a shape
+// The month as a grid of whole weeks, which is the view the design draws for a reader looking for a shape
 // rather than for an hour. The days either side of the month are in the grid and are drawn quieter, because a week is
 // seven days whichever month they belong to and a cell left blank would hide an event that is there.
 //
-// The date in each cell is a control rather than a label: pressing it opens that day. That is the design project's own
+// The date in each cell is a control rather than a label: pressing it opens that day. That is the design's own
 // gesture — it draws a day's own list under the grid when a cell is picked on a phone — answered at every width by the
 // view the client already has for exactly that reading, rather than by a second list that only one composition draws.
 //

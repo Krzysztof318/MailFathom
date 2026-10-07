@@ -9,7 +9,7 @@ import { wordDay, wordDayOfMonth, wordWeekday } from './calendarWording';
 import { EventEntry } from './EventEntry';
 import type { EventActs } from './eventActs';
 
-// The week as the design project draws it: seven columns side by side, each headed by its weekday and its date, with
+// The week as the design draws it: seven columns side by side, each headed by its weekday and its date, with
 // the day the reader is standing on tinted.
 //
 // It is drawn only where the composition has room for seven columns. Below that width the screen draws the same span

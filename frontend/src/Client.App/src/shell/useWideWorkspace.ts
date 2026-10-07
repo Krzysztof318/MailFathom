@@ -97,7 +97,7 @@ export function useTwoPanes(): boolean {
 /**
  * Whether the window is in the desktop composition rather than the tablet one.
  *
- * It is the widest of the three, and the design project draws three things at it together: the mailbox column stands
+ * It is the widest of the three, and the design draws three things at it together: the mailbox column stands
  * beside the list rather than in a drawer over it, the toolbar's controls carry their labels, and the tab mode is
  * worth offering at all — a row of tabs above the columns needs room a rail beside two of them does not. Below it the
  * tab switch is inert rather than absent: a control that vanished by width alone would leave somebody who had turned

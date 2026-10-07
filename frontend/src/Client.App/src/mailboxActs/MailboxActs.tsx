@@ -71,7 +71,7 @@ import {
 // no archive folder is a control that says so rather than one that fails once it has been pressed.
 
 // The three acts that file a message elsewhere are reported and the four that write a flag are not, which is the
-// design project's own and is a statement about what a report is for rather than about how much each act matters. A
+// design's own and is a statement about what a report is for rather than about how much each act matters. A
 // message filed somewhere else has left the screen it was on, so the toast is where somebody learns where it went and
 // the only place the way back is offered; a flag is a mark the row draws the moment it is asked for, and a card in the
 // corner saying the mark that just appeared has appeared is the client narrating itself.
@@ -529,7 +529,7 @@ export function MailboxActsProvider({
         );
 
         toasts.raise(
-            // A delete that destroys the mail offers nothing to take back, which is the design project's own: the
+            // A delete that destroys the mail offers nothing to take back, which is the design's own: the
             // question in front of it has already said it cannot be undone.
             destroying
                 ? { kind: 'neutral', title: translate('act.purging'), body: counted(recorded.length) }
@@ -540,7 +540,7 @@ export function MailboxActsProvider({
                       }),
                       body: counted(recorded.length),
 
-                      // The way back is the toast's single action, which is the design project's own.
+                      // The way back is the toast's single action, which is the design's own.
                       action: {
                           label: translate('act.undo'),
                           take: () => {

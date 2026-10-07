@@ -76,7 +76,7 @@ export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
 // The heights this frame is drawn at, and the two bounds on what it will accept from inside itself. They are numbers
 // the bridge computes with rather than utilities a screen composes, which is why they stand here as constants instead
 // of in the token layer: two of the three are applied to an element whose height is a measurement most of the time.
-// Each is the design project's own, named on #1507's acceptance.
+// Each is the design's own, named on #1507's acceptance.
 const heightBeforeAReportArrives = 320;
 const heightWhenNoneArrives = 1_600;
 const windowWhenNoneArrives = 620;
@@ -115,7 +115,7 @@ const beforeAnythingReported: Fitted = {
 };
 
 // What the strip beneath the frame says in each of the three states. The measured one is the sentence the design
-// project draws, and it is the footer ADR 0024 keeps: on this surface both halves of it are the representation's,
+// draws, and it is the footer ADR 0024 keeps: on this surface both halves of it are the representation's,
 // because the frame no longer holds the first.
 const fittingNotes: Readonly<Record<Fitting, MessageKey>> = {
     measuring: 'body.markupFitting',

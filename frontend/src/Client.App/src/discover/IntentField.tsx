@@ -21,7 +21,7 @@ import {
 import { folderRoleLabels, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 
-// Discover's question, drawn as the design project draws it under that screen's head: a field with the product's mark
+// Discover's question, drawn as the design draws it under that screen's head: a field with the product's mark
 // on it, and the scope the question would be asked under beneath it. Submitting records the question and its scope in
 // the workspace, which is what the screen starts a run from.
 //

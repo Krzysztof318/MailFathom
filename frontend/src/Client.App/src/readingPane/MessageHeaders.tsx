@@ -19,7 +19,7 @@ import { useWorkspace } from '../workspace/useWorkspace';
 // else it names behind a disclosure the platform already has an element for — a message addressed to two hundred
 // people would otherwise be a screen of addresses in front of the words somebody opened it to read.
 //
-// The disclosure is the sender's own line, as the design project draws it: a chevron leads the line, how many others
+// The disclosure is the sender's own line, as the design draws it: a chevron leads the line, how many others
 // there are trails it in the faint tone, and pressing the line unfolds a row per header underneath. The chevron turns
 // rather than the line taking a second row for itself, so a head with the disclosure folded is exactly as tall as one
 // with nothing to disclose.

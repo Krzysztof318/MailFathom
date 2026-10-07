@@ -429,7 +429,7 @@ describe('FolderTree', () => {
         expect(row(/^Archiwum/).getAttribute('aria-level')).toBe('2');
     });
 
-    // The design project opens a mailbox and shuts what nests inside a folder, which is the only reading that scales:
+    // The design opens a mailbox and shuts what nests inside a folder, which is the only reading that scales:
     // a folder filed three levels deep would otherwise open as a list of everything the mailbox has ever held.
     it('opens a mailbox and leaves what nests inside a folder shut until somebody opens it', async () => {
         renderTree(answering(JSON.stringify(tree)));
@@ -752,7 +752,7 @@ describe('FolderTree', () => {
         expect(carried().foldsToggled).toEqual(['account:work']);
     });
 
-    // The design project answers a press on a mailbox heading and on a folder with a menu, and answers a press on the
+    // The design answers a press on a mailbox heading and on a folder with a menu, and answers a press on the
     // row spanning every mailbox with nothing — a folder is made, marked and removed inside one mailbox.
     it('answers a press on a mailbox with making a folder in it and marking everything in it read', async () => {
         const { maintenance } = offering();

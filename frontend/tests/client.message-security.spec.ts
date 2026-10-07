@@ -201,7 +201,7 @@ test('carries nothing that runs, and reaches no host but its own until the reade
     // than the one it was served. The script host stands beside it as the shape of the other promise rather than as a
     // proof of it — since #1797 the frame permits script, so what keeps a message inert is that the representation
     // holds nothing executable, which is the service's own suite to prove and is why the corpus writes none. The
-    // sentence under the frame is the design project's own wording of both, which #1693 brought the surface to.
+    // sentence under the frame is the design's own wording of both, which #1693 brought the surface to.
     await expect(surface.getByText(/scripts and remote content are blocked/)).toBeVisible();
     expect([...hosts]).not.toContain(messages.senderScriptHost);
     expect([...hosts]).not.toContain(messages.senderPictureHost);
@@ -259,7 +259,7 @@ test('reads mail, the sender own markup, its pictures, and its links under a pol
 });
 
 // What only a browser can say about the shape the two surfaces take where somebody does not work in tabs: the design
-// project draws each as a window over the message, and a window is the platform's own modal — which jsdom carries the
+// draws each as a window over the message, and a window is the platform's own modal — which jsdom carries the
 // element of and none of the behaviour of. So the focus handed back as it closes is asserted here and nowhere else.
 test('leaves the markup surface for the message it was opened from, and asks again next time', async ({ page }) => {
     await openTheFirstMessage(page);

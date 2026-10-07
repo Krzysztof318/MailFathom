@@ -24,10 +24,10 @@ import { useSignalledChanges } from '../signals/signalledChanges';
 // It is drawn the two ways the navigation around it is, exactly as the bell beside it: an item with its name under it
 // where the navigation is a sheet, and the symbol alone in the rail of a wide window.
 
-/** How long the control says a refresh is under way, which is one beat of the design project's pulse. */
+/** How long the control says a refresh is under way, which is one beat of the design's pulse. */
 export const refreshShownFor = 1_000;
 
-// The design project's two looks for the control: at rest it is the rail's panel, and under way it is the accent — its
+// The design's two looks for the control: at rest it is the rail's panel, and under way it is the accent — its
 // ground, its line, and its glyph. A pointer over it draws the hover ground and the text colour over either look,
 // leaving the line it stands in, which is the order the design draws them in.
 const resting =
@@ -72,7 +72,7 @@ export function Refresh() {
         <button
             type="button"
             aria-label={translate('shell.refresh')}
-            // Refused while one is under way, which is the design project's rule: a second press would read everything
+            // Refused while one is under way, which is the design's rule: a second press would read everything
             // again under reads that have not landed yet.
             aria-disabled={working}
             className={`flex flex-1 cursor-pointer flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition workspace:size-8.5 workspace:flex-none workspace:justify-center workspace:gap-0 workspace:rounded-xl workspace:border workspace:px-0 workspace:py-0 ${working ? underWay : resting}`}

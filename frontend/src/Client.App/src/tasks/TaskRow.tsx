@@ -13,7 +13,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
 import { wordReminderCount } from '../reminders/reminderWords';
 
-// One thing a person owes, as the design project draws a task: the box that completes it, the line it is drawn with,
+// One thing a person owes, as the design draws a task: the box that completes it, the line it is drawn with,
 // the mark saying it came out of mail, the way back to the message it came out of, the day it is due, and the act that
 // puts it in the day.
 //

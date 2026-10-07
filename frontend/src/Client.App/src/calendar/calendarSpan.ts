@@ -16,7 +16,7 @@ import type { CalendarEvent } from '@mailfathom/client-backend';
 // **Nothing here words anything.** A month name, a weekday, and a week number said out loud are the locale's, so this
 // module answers days and numbers and `calendarWording.ts` beside it asks `Intl` what they are called.
 
-/** The four views the design project draws over a calendar, in the order it draws them. */
+/** The four views the design draws over a calendar, in the order it draws them. */
 export const calendarViews = ['day', 'week', 'month', 'agenda'] as const;
 
 export type CalendarView = (typeof calendarViews)[number];
@@ -49,11 +49,11 @@ export function addDays(day: Date, count: number): Date {
     return moved;
 }
 
-/** Midnight on the Monday of that day's week, which is the week the design project draws. */
+/** Midnight on the Monday of that day's week, which is the week the design draws. */
 export function startOfWeek(day: Date): Date {
     const midnight = startOfDay(day);
 
-    // `getDay` counts from Sunday, and the design project's own week runs Monday to Sunday.
+    // `getDay` counts from Sunday, and the design's own week runs Monday to Sunday.
     return addDays(midnight, -((midnight.getDay() + 6) % 7));
 }
 
@@ -142,7 +142,7 @@ export function sameDay(one: Date, other: Date): boolean {
 /**
  * The week of the year that day falls in, as ISO 8601 counts one.
  *
- * The design project draws it beside the week's own dates, and it is arithmetic rather than something `Intl` answers.
+ * The design draws it beside the week's own dates, and it is arithmetic rather than something `Intl` answers.
  * The standard puts a week in the year that holds its Thursday, which is both shifts below: the week is named by its
  * own Thursday, and week one is the week holding the fourth of January — the one day the standard guarantees is in it.
  * The distance is rounded rather than truncated because a daylight-saving boundary inside the run would otherwise

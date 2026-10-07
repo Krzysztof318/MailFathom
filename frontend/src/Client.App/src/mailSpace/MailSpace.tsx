@@ -38,13 +38,13 @@ import { MailToolbar } from './MailToolbar';
 import { SelectionBar } from './SelectionBar';
 import { useStripFit } from './useStripFit';
 
-// The Mail space as the design project composes it, out of the three regions a mail client is: the mailboxes, the list
+// The Mail space as the design composes it, out of the three regions a mail client is: the mailboxes, the list
 // of what is in the one that is scoped, and what is open from it. What this component owns is the composition alone —
 // each region is handed in already built — and the composition comes out of one tree, decided by the width the space
 // has been given rather than by which head it runs on.
 //
-// **Three widths decide it, and they are three separate questions rather than one asked three ways.** The design
-// project's prototype asks exactly these, and `shell/useWideWorkspace.ts` is where each is asked once:
+// **Three widths decide it, and they are three separate questions rather than one asked three ways.** The design's
+// prototype asks exactly these, and `shell/useWideWorkspace.ts` is where each is asked once:
 //
 // - *Two panes or one.* Below that width the space draws the list **or** what is open and never both, so a row that is
 //   not on the screen is not in the document either; above it the two stand side by side with a boundary to move.
@@ -53,7 +53,7 @@ import { useStripFit } from './useStripFit';
 // - *The toolbar at all*, which is the phone question: bottom navigation already spends the foot of a phone-width
 //   window, and the toolbar's acts are on the selection bar and the message's own head there.
 //
-// So the four compositions the project frames fall out of those three: the phone has one pane, a drawer and no toolbar;
+// So the four compositions the design frames fall out of those three: the phone has one pane, a drawer and no toolbar;
 // the fold and the tablet have two panes, a drawer and a toolbar; the desktop has two panes, the mailbox column and the
 // tab strip. Nothing is hidden by the width alone; what a narrower composition cannot show at once is reached rather
 // than dropped.
@@ -267,7 +267,7 @@ export function MailSpace({
         <div className="flex min-h-0 flex-1 flex-col">
             {desktop ? tabs : null}
 
-            {/* The bar replaces the toolbar while messages are picked out, which is the design project's composition:
+            {/* The bar replaces the toolbar while messages are picked out, which is the design's composition:
                 one strip saying what the next press is about. It stands at every width because the narrow shape has no
                 toolbar to replace and a selection still needs both a way to act on it and a way out of it. */}
             {selecting ? <SelectionBar /> : wide ? <MailToolbar strip={toolbarStrip} fit={toolbarFit} /> : null}

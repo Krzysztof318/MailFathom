@@ -9,7 +9,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
-// How spoken-for the day is, and the offer to arrange what is left of it — the design project's second sidebar panel.
+// How spoken-for the day is, and the offer to arrange what is left of it — the design's second sidebar panel.
 //
 // **What the panel says about the day is counted rather than composed.** The design writes a sentence a model would
 // have written, ending in a judgement about which task to start with; this deployment publishes no route that answers

@@ -9,7 +9,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { goToSpace } from '../routing/useSpace';
 
 // What the content pane holds when a person working in tabs has closed all of them: what the space is for, and the one
-// way back into it there is. The design project offers three ways out of here; two of them — writing a message and
+// way back into it there is. The design offers three ways out of here; two of them — writing a message and
 // asking about the whole correspondence — are screens this client does not have yet, so what is drawn is the one that
 // exists rather than two controls that would answer nothing.
 //

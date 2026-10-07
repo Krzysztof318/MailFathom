@@ -23,7 +23,7 @@ import { wordReminderCount, wordReminderLead } from './reminderWords';
 // is attached to. What it does read about that record is one value: what a lead is measured back from.
 //
 // **A record carrying none says so in as many words.** A panel with no chips pressed reads as a control nobody has
-// touched; what the design project states instead is that nothing will be raised about this record, because that is a
+// touched; what the design states instead is that nothing will be raised about this record, because that is a
 // decision somebody made rather than a field they left.
 //
 // **The leads are the caller's state, and every act here answers with the whole set.** A panel that held its own copy

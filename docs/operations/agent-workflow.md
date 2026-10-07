@@ -124,40 +124,6 @@ an empty diff measures too — which is still an order below every other step he
 so it belongs in the loop rather than in a checklist somebody reaches for when a
 change looks like it needs one.
 
-Ask whether the design a client screen is built from has moved:
-
-```bash
-bash scripts/design-mirror.sh plan "$WORK_DIR/listing.json"
-```
-
-The client's screens are settled in a design project read through an MCP server,
-and that project is read one windowed call at a time because its prototype file
-is well past the per-call cap. `$mf-sync-design` is the step that reads it, and this
-script is the half of that step a session should not be doing by eye: it compares
-one full-depth listing — every path, size and opaque `etag`, no content read at
-all — against the manifest under `design/`, and names which screen
-sources and which generated runtime still have to be read. The runtime is the one
-file that is not a screen source and is still mirrored, because an artboard is a
-component it boots rather than a document a browser draws, and the parity loop
-below serves the mirror to a browser. An unchanged project costs the listing and nothing
-else. Its other four commands are `extract`, which takes the wrapper off a read
-result the harness saved to a file and copies bytes that never passed through a
-model at all — including the note the server appends to a window that hit the
-cap, which is a message about the read rather than a line of the file and would
-otherwise land in the middle of the screen source at every window boundary —
-`decode`, which is for the opposite case — a result small enough to
-come back inline, which the session wrote onto disk by hand — and only undoes the
-entity escaping on what is already there, `record`, which writes the manifest and
-checks every mirrored file against the byte count the project states, and
-`stamp`, which prints the etag set the mirror stands on so the state inventory
-beside it can say whether it still describes the current design.
-
-It reaches no design server itself. What it writes is the mirror and nothing
-else: `extract` and `decode` write a mirrored screen source, `record` writes the
-manifest, and `plan` and `stamp` write nothing at all. Everything it touches is
-tracked under `design/`, so a refresh is a diff to review rather than a local
-file one checkout holds, and every clone builds a screen from the same bytes.
-
 Ask whether a client screen still looks like the design it was built from:
 
 ```bash
@@ -166,7 +132,7 @@ bash scripts/capture-client.sh --out "$WORK_DIR/pairs" --screen <id>
 bash scripts/compare-captures.sh "$WORK_DIR/pairs"
 ```
 
-The first serves the mirror above to a browser, the second serves the client from
+The first serves `design/` to a browser, the second serves the client from
 the fixture corpus, and both read one manifest —
 [`frontend/design-parity/screens.json`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/design-parity/screens.json) —
 so a pair cannot differ in size, state or device pixel ratio. The third compares
@@ -782,7 +748,7 @@ The canonical skills are:
 
 - `get-started-contributors` takes somebody from arriving to a first green run: a
   welcome, then an orientation in what MailFathom is, how this repository is
-  worked, where both stacks and the design mirror live, what the AGPL grant and
+  worked, where both stacks and the design live, what the AGPL grant and
   the contributor licence agreement each ask, what each closure carries that is
   not permissive, the file header that carries no name, and what a public
   repository is careful about
@@ -829,27 +795,15 @@ The canonical skills are:
   the one state it was clicked into, while the source states every screen, every
   variant and every reaction at once, so the empty state, the failing state, the
   state that only exists under a coarse pointer, and the state no click reaches at
-  all are each invisible in a screenshot. What it reads is `design/`, which is
-  tracked, so this is the one part of the design loop a clone without the design
-  server can run in full; the inventory names the etag set it was extracted from,
-  so it says for itself whether it still describes the design the mirror stands
-  on, and its last section is the one that has to be there: the states the source
-  gates and no preview reaches. One of those is a gap rather than a screen to
-  invent — it goes to the owner as a correction to make in the project, never into
-  the client as a guess;
-- `mf-sync-design` brings that mirror up to the design project and opens a pull
-  request when anything moved. It reads that project and never writes to it: not a
-  file, not a screen, not a one-word fix to a label that is provably wrong,
-  because what makes a source of truth one is that a single person writes it. The
-  refresh is one full-depth listing compared against the recorded manifest of the
-  server's own etags, then a read of only the paths whose etag moved, which makes
-  an unchanged project cost a listing rather than a windowed re-read of half a
-  megabyte of prototype — and an unchanged project ends the run there, with no
-  branch and no pull request. What a moved screen source still owes is the two
-  files nothing derives: the state inventory, re-extracted and re-stamped, and the
-  parity pairing, whose own stamp is what stops a capture from being taken against
-  an artboard that has since moved. It needs the design server, so it is the one
-  skill here that cannot run in a fork;
+  all are each invisible in a screenshot. What it reads is `design/`, the artboards
+  written in this repository with their data, logic, and styles in files of their
+  own, so every clone runs the whole design loop. The inventory's last section is
+  the one that has to be there: the states the source gates and no preview
+  reaches. One of those is a gap rather than a screen to invent — it is closed in
+  `design/` first, in a change whose issue asks for it, never in the client as a
+  guess. When the task is the design itself, the skill says what that change owes:
+  the inventory and the parity pairing moved in the same change, sample data kept
+  made up and in `data/`, and the artboard opened at the compositions it reaches;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -1394,14 +1348,13 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-Two classes of changed file never reach the readers. `design/files/` is the design
-project's screen sources and its generated runtime copied byte for byte, and
-`scripts/design-mirror.sh record` checks each of them against the size the project
-states — so nobody here writes a line of them, an edit to one is caught by that
-check rather than by a reader's judgement, and a single artboard is more added
-lines than a large change. It is that one directory rather than the tree above it:
-`design/manifest.json`, `design/state-inventory.md`, `design/parity.json` and
-`design/README.md` are written in this repository and are read like anything else.
+Two classes of changed file never reach the readers. `design/runtime/` holds the
+generated runtime the design's artboards boot on — one minified bundle a design
+tool wrote, which nobody here writes a line of and which is more added lines than
+a large change. It is that one directory rather than the tree above it: the
+artboards, their data, logic and styles, `design/state-inventory.md`,
+`design/parity.json` and `design/README.md` are written in this repository and are
+read like anything else.
 
 `backend/src/Infrastructure/Persistence/Migrations/` is the second. EF Core writes
 the migration, its `.Designer.cs` twin and the model snapshot; `AGENTS.md` makes

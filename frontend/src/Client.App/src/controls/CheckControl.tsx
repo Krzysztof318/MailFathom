@@ -4,7 +4,7 @@
 
 import { chip } from './chrome';
 
-// A checkbox drawn as one of the design project's chips, because that is what a filter that is on looks like there: a
+// A checkbox drawn as one of the design's chips, because that is what a filter that is on looks like there: a
 // pill that is tinted while it is in force. The box itself stays, so the state is carried by the control and not by
 // the tint alone.
 

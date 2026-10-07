@@ -7,11 +7,11 @@ import { Icon } from '../controls/Icon';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 
-// The control the design project puts on a message's head, and the question it asks before anything is shown. Pressing
+// The control the design puts on a message's head, and the question it asks before anything is shown. Pressing
 // it opens neither a frame nor a read: it opens a confirmation, because what the surface behind it draws is markup a
 // stranger wrote and the reader is owed the chance to stay where they are.
 //
-// The question names what that markup can carry and what this client does about it, in the design project's own
+// The question names what that markup can carry and what this client does about it, in the design's own
 // words: scripts and remote resources are blocked, and the sender may still come to know the message was opened —
 // which is what a reader who then asks for the pictures has asked for. Staying is drawn as words alone and showing as
 // the one accented control, so the way that costs nothing is never the one a hand lands on by reflex.

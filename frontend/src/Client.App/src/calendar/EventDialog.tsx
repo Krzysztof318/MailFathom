@@ -17,7 +17,7 @@ import { wordReminderCount } from '../reminders/reminderWords';
 import { EventFields } from './EventFields';
 import { draftOf, recordOf, type EventDraft } from './eventDraft';
 
-// One event opened, which is where it is read and where it is changed. The design project draws both in one surface —
+// One event opened, which is where it is read and where it is changed. The design draws both in one surface —
 // the record, and an *Edit* beside *Delete* — so this holds the two rather than opening a second dialog over the
 // first: a reader amending a time is looking at the event they are amending.
 //

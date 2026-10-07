@@ -27,7 +27,7 @@ import { mannerDrawn, type Manner } from './wayOutShapes';
 // third answer meaning *nobody thought about it*. Offering a way back from something that has none is the same failure
 // as *Are you sure?* wearing different clothes.
 //
-// **What it states about afterwards is prose rather than a row of its own**, which is how the design project words it:
+// **What it states about afterwards is prose rather than a row of its own**, which is how the design words it:
 // *we move it to the trash — it leaves the trash after 30 days* is one sentence somebody reads, and lifting the second
 // half of it into a labelled line under an icon would turn the thing this exists to make legible into chrome.
 //
@@ -98,7 +98,7 @@ export function Confirmation({
      */
     readonly asked: RefObject<HTMLDialogElement | null>;
 
-    /** The act's own symbol, drawn beside the question as the design project draws it. */
+    /** The act's own symbol, drawn beside the question as the design draws it. */
     readonly mark: IconName;
 
     /** The question, naming the act rather than asking whether to proceed. */
@@ -120,7 +120,7 @@ export function Confirmation({
     const explains = useId();
     const [standing, setStanding] = useState(false);
 
-    // The mark takes the error hue where one of the ways out takes something away, which is how the design project
+    // The mark takes the error hue where one of the ways out takes something away, which is how the design
     // colours the symbol on a question whose answer cannot be taken back.
     const destroys = ways.some((way) => way.manner === 'destroy');
 

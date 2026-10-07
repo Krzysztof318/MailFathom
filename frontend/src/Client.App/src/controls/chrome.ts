@@ -14,7 +14,7 @@
 export const borderedControl = 'rounded-md border border-line bg-panel text-text-soft transition hover:bg-hover';
 
 /**
- * What a chip is drawn with: the pill the design project draws a filter, a scope, or a choice as, on the rail surface
+ * What a chip is drawn with: the pill the design draws a filter, a scope, or a choice as, on the rail surface
  * with a line around it. The list's order chooser, its filters, and the composer's scope chips all take it, so a
  * restyle of the pill is one edit rather than three that drift.
  */

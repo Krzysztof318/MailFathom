@@ -28,12 +28,12 @@ import type { PanelSwipe } from './usePanelSwipe';
 // is asked to close instead, so leaving by the keyboard is the same act as leaving by the scrim or by the close
 // control — and travels the same way off the screen rather than vanishing.
 //
-// **The selection is this list's own**, which is what the design project says of all seven of its lists: what is
+// **The selection is this list's own**, which is what the design says of all seven of its lists: what is
 // picked out here is nothing to what is picked out in the mail list, and it goes when the panel does.
 //
 // **What is drawn is what the deployment answered**, less whatever the reader has marked since. Nothing here filters
 // a row out from under somebody: the unread tab is read at the moment it is drawn, so marking a row read on that tab
-// takes it out, which is the design project's own list and what a reader marking things read expects to see happen.
+// takes it out, which is the design's own list and what a reader marking things read expects to see happen.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -168,7 +168,7 @@ export function NotificationCentre({
             }}
             aria-label={translate('notifications.title')}
             style={swipe.offset === null ? undefined : { transform: `translateY(${String(swipe.offset)}px)` }}
-            // The two compositions are the design project's own: a sheet that stops above the bottom navigation in a
+            // The two compositions are the design's own: a sheet that stops above the bottom navigation in a
             // narrow window, and a panel standing beside the rail in a wide one. Where it comes from differs with it,
             // which is what the two motions and the two closed positions below say.
             //
@@ -201,7 +201,7 @@ export function NotificationCentre({
             }}
             onClose={clear}
         >
-            {/* The handle the design project draws at the top of the sheet, which says the panel is something a finger
+            {/* The handle the design draws at the top of the sheet, which says the panel is something a finger
                 can push away. It is drawn where that gesture exists and nowhere else. */}
             <span
                 aria-hidden="true"
@@ -311,7 +311,7 @@ export function NotificationCentre({
                         }}
                     />
 
-                    {/* Last on the bar and apart from the two markings, which is where the design project puts the one
+                    {/* Last on the bar and apart from the two markings, which is where the design puts the one
                         act that takes something away. */}
                     <Control
                         label={translate('notifications.deleteSelected')}
@@ -429,7 +429,7 @@ export function NotificationCentre({
 }
 
 // The three things an empty list can mean, each said as what it is rather than as an absence: a read still in flight, a
-// read that did not answer, and a centre with nothing in it. The last is the design project's own, and it says the
+// read that did not answer, and a centre with nothing in it. The last is the design's own, and it says the
 // thing a reader actually wants to know — that nothing is waiting — rather than that a list is empty.
 function Nothing({ reading, failure }: { readonly reading: boolean; readonly failure: ClientFailureReason | null }) {
     const { translate } = useLocalization();

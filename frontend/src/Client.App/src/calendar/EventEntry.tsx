@@ -17,7 +17,7 @@ import { eventShapes, timeShown, type EventShape } from './eventShapes';
 // picking an event out of a week the same gesture as picking one out of an agenda.
 //
 // **It answers a press exactly as every other list in this client does**, through `contextMenu/rowPress.ts` rather
-// than through a gesture of its own — the design project gives all seven of its lists one behaviour.
+// than through a gesture of its own — the design gives all seven of its lists one behaviour.
 //
 // **Every entry is its own tab stop**, which is where this list differs from the address book's. That one is a single
 // column with a roving tab stop walked by the arrow keys; a week is seven columns and a day is twenty-four rows, so

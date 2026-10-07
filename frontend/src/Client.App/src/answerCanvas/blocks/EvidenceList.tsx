@@ -153,7 +153,7 @@ function MatchedFragment({ declared, fragment }: { readonly declared: DeclaredSo
     );
 }
 
-/** What a source is, drawn as the design project's two kinds plus the one note a described picture owes a reader. */
+/** What a source is, drawn as the design's two kinds plus the one note a described picture owes a reader. */
 function SourceBadge({ source }: { readonly source: DeclaredSource }) {
     const { translate } = useLocalization();
     const kind = source.target === null ? null : sourceKinds[source.target.kind];

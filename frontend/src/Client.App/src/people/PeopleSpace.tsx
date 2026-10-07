@@ -24,7 +24,7 @@ import { NewContact, type ContactDraft } from './NewContact';
 import { PersonPage } from './PersonPage';
 import { useContactCorrespondence } from './useContactCorrespondence';
 
-// The People space as the design project composes it: the address book down one side and one person's own page beside
+// The People space as the design composes it: the address book down one side and one person's own page beside
 // it, with the acts that change the book held here rather than in either.
 //
 // **The book and the person are one pane below the width the mail screens collapse at**, and the same width decides

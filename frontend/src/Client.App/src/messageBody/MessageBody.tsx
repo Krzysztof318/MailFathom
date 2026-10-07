@@ -29,7 +29,7 @@ import { splitQuotedHistory } from './quotedHistory';
 // read instead, what the message asked to load from somebody else's server, and what a bound left out. None of it is
 // silent — a fallback nobody is told about reads as a message the sender wrote badly.
 
-// The measure a message's own words are set at, which is the design project's body: the step above what the client
+// The measure a message's own words are set at, which is the design's body: the step above what the client
 // says *about* a message, loosened, and in the softer of the two text tones so the sender's words sit under the head
 // rather than beside it. It is stated once here and inherited by every block, which is what makes a message of nothing
 // but paragraphs read as plain text and a message full of headings and tables read as the design draws one.

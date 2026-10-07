@@ -6,7 +6,7 @@ import type { DeclaredSource } from '@mailfathom/client-backend';
 import { useLocalization, type Translate } from '../../localization/useLocalization';
 import { useAnswerSources } from '../answerSources';
 
-// One source a block rests on, drawn where the block rests on it. The design project states the rule this implements
+// One source a block rests on, drawn where the block rests on it. The design states the rule this implements
 // in its own legend: *a citation is always an activatable element with its own name — never a bare superscript*, which
 // is why this is a button carrying the source's own label rather than a number a reader has to match against a list.
 //

@@ -852,7 +852,7 @@ describe('SignIn', () => {
 
         expect(screen.getByText(sentence)).toBeDefined();
     });
-    // The screen the design project draws says three things about the connection before a password is typed into it:
+    // The screen the design draws says three things about the connection before a password is typed into it:
     // what port will be reached, what it costs to turn TLS off, and whether the password about to be entered can be
     // read back. None of the three is decoration, so each is asserted here rather than looked at once.
 

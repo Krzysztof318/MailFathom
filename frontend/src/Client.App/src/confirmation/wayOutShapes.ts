@@ -15,7 +15,7 @@
  * `back` leaves the act undone, `act` is the thing being confirmed, `aside` is a second way out that gives something
  * up without being the act — discarding what was written rather than filing it is the one today — and `destroy` is the
  * act where what it does is take something away: mail out of the folder it is in, or an operation half-finished. It is
- * the accent's weight in the error hue, which is how the design project draws the one control a reader should not
+ * the accent's weight in the error hue, which is how the design draws the one control a reader should not
  * press by reflex.
  */
 export type Manner = 'back' | 'aside' | 'act' | 'destroy';

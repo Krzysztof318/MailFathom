@@ -15,8 +15,8 @@ import type { MessageKey } from '../localization/en';
 // one. A fragment is never sent to a server at all, so every address below reloads on both heads with nothing
 // configured, and the desktop shell's WebView needs no rule of its own either.
 
-// The order is the design project's, and it is the order the rail draws them in at either width. Two of the seven have
-// nothing behind them yet and are placeholders rather than screens — the project shows them, so leaving them out would
+// The order is the design's, and it is the order the rail draws them in at either width. Two of the seven have
+// nothing behind them yet and are placeholders rather than screens — the design shows them, so leaving them out would
 // make the client a different product from the one that was designed, and drawing them as though they worked would be
 // worse. `Space` is what renders them as what they are.
 export const spaces = ['discover', 'mail', 'cases', 'agent', 'tasks', 'calendar', 'people'] as const;
@@ -24,11 +24,11 @@ export const spaces = ['discover', 'mail', 'cases', 'agent', 'tasks', 'calendar'
 export type Space = (typeof spaces)[number];
 
 // A rail down the side of a wide window has room for all seven; the bottom bar of a narrow one has five places, and
-// the design project spends them on three spaces, the bell, and an overflow holding everything else. So the bar is a
+// the design spends them on three spaces, the bell, and an overflow holding everything else. So the bar is a
 // partition of the set above rather than the first few of it, and the two halves are declared here beside the order
 // they are drawn in — the navigation reads which spaces it has room for rather than counting them.
 //
-// The overflow's order is the design project's own and is not the order the rail draws them in: what a sheet opened
+// The overflow's order is the design's own and is not the order the rail draws them in: what a sheet opened
 // on purpose lists is not the same reading as a rail somebody's eye travels down.
 
 /** The spaces the bottom bar carries itself. */

@@ -8,7 +8,7 @@ import { useScreenLayer } from '../shell/screenLayers';
 // The other shape the two surfaces opened from a message take, and the one `useOpenTabs.ts` describes as standing *in
 // front of* the message rather than beside it: where somebody does not work in tabs, the sender's own markup and an
 // opened file are drawn in a window over the message instead of taking the reading column. The message they were opened
-// from is therefore still where it was when the window goes, which is the whole reason the design project draws one.
+// from is therefore still where it was when the window goes, which is the whole reason the design draws one.
 //
 // It is a `dialog` opened as a modal rather than a panel drawn to look like one, for the reason `settings/Settings.tsx`
 // gives about the same choice: focus moves in and is kept, Escape leaves it, the page behind it is out of reach, and
@@ -20,15 +20,15 @@ import { useScreenLayer } from '../shell/screenLayers';
 // all arrive at one event and the platform restores focus on each of them. Taking the surface off the screen from
 // underneath instead would remove an open modal from the document, which closes it and hands focus to nothing.
 //
-// Three compositions, and none of them is asked for in code: the design project draws the window over a scrim where
+// Three compositions, and none of them is asked for in code: the design draws the window over a scrim where
 // there is room for two panes, the whole screen between that width and the phone shape, and the whole screen stopping
 // above the bottom navigation on a phone. All three are the width variants on the element itself.
 
-/** Which of the two windows the design project draws. It is a size and nothing else. */
+/** Which of the two windows the design draws. It is a size and nothing else. */
 export type SurfaceWindowKind = 'markup' | 'file';
 
-// The project draws the two at two sizes rather than at one, and each stops short of the viewport by the room the
-// project leaves around it — which is what the tokens carry, so this names them rather than composing a size here.
+// The design draws the two at two sizes rather than at one, and each stops short of the viewport by the room the
+// design leaves around it — which is what the tokens carry, so this names them rather than composing a size here.
 const windowSizes: Readonly<Record<SurfaceWindowKind, string>> = {
     markup: 'panes:h-markup-window-tall panes:w-markup-window',
     file: 'panes:h-file-window-tall panes:w-file-window',
@@ -43,7 +43,7 @@ export function SurfaceWindow({
     /** What this window is, for a reader who meets it as a dialog before they meet what is inside it. */
     readonly label: string;
 
-    /** Which of the two the design project draws, which decides the size and nothing else. */
+    /** Which of the two the design draws, which decides the size and nothing else. */
     readonly drawn: SurfaceWindowKind;
 
     /** What the window having closed comes to, which is the workspace letting go of the surface that stood in it. */

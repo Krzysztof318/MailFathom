@@ -2707,14 +2707,14 @@ case "$endpoint" in
     # contract about it is a pull request wide enough to cross it.
     response="$(
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
-        --argjson mirrored "${FAKE_MIRRORED_DESIGN_FILE_COUNT:-0}" \
+        --argjson runtime "${FAKE_DESIGN_RUNTIME_FILE_COUNT:-0}" \
         --argjson migrations "${FAKE_MIGRATION_FILE_COUNT:-0}" \
         '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
          | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end
-         | . + [range($mirrored)
-                | {filename: "design/files/Artboard\(.).dc.html", previous_filename: null,
+         | . + [range($runtime)
+                | {filename: "design/runtime/bundle\(.).js", previous_filename: null,
                    status: "modified", additions: 6000, deletions: 5000,
                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
          | . + [range($migrations)
@@ -2722,7 +2722,7 @@ case "$endpoint" in
                    previous_filename: null,
                    status: "added", additions: 4000, deletions: 0,
                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
-         | . + (if $mirrored > 0 then
+         | . + (if $runtime > 0 then
                   [{filename: "design/state-inventory.md", previous_filename: null,
                     status: "modified", additions: 4, deletions: 2,
                     patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
@@ -2835,9 +2835,9 @@ run_fathom_review_collect() {
   # what moved since the previous one. A push is the ordinary case, and the narrowing contracts are
   # the ones that name the other.
   local explicit="${5:-false}"
-  # How many mirrored design sources the pull request carries beside the changed files above. The
-  # ordinary case is none, so every other contract here measures a collection the drop never touched.
-  local mirrored_design_file_count="${6:-0}"
+  # How many generated design runtime files the pull request carries beside the changed files above.
+  # The ordinary case is none, so every other contract here measures a collection the drop never touched.
+  local design_runtime_file_count="${6:-0}"
   # How many generated EF Core migration files it carries beside them, for the same reason: the
   # ordinary change adds none, so every other contract measures a collection the drop never touched.
   local migration_file_count="${7:-0}"
@@ -2865,7 +2865,7 @@ run_fathom_review_collect() {
     export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
     export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
-    export FAKE_MIRRORED_DESIGN_FILE_COUNT="$mirrored_design_file_count"
+    export FAKE_DESIGN_RUNTIME_FILE_COUNT="$design_runtime_file_count"
     export FAKE_MIGRATION_FILE_COUNT="$migration_file_count"
     # The list the obligations index is given, which the step writes beside the review directory
     # rather than into it. The workflow declares the path from `runner.temp`; here it is the same
@@ -2923,17 +2923,17 @@ fathom_review_stops_reading_head_content_when_its_window_is_gone() {
   [[ ! -e "$collect_review_directory/head/backend/src/Sample.cs" ]]
 }
 
-# The design mirror is the design project's own screen sources copied byte for byte, and a review has
-# nothing to say about them: nobody here writes a line of them, and one artboard is more added lines
-# than a large change. Left in, they would take groups of the reader matrix and spend the coverage
-# ledger on files it cannot mean anything about — so they are dropped where the collection is frozen,
-# once, ahead of the anchors, the head content and the groups that all read it. The note is what keeps
-# a reader of the review able to tell a file nobody looked at from one nobody was meant to.
+# The design's generated runtime is one minified bundle a design tool wrote, and a review has nothing to
+# say about it: nobody here writes a line of it, and it is more added lines than a large change. Left in,
+# it would take a group of the reader matrix and spend the coverage ledger on a file it cannot mean
+# anything about — so it is dropped where the collection is frozen, once, ahead of the anchors, the head
+# content and the groups that all read it. The note is what keeps a reader of the review able to tell a
+# file nobody looked at from one nobody was meant to.
 #
 # The drop is one directory rather than the tree above it, which the same collection proves: the state
-# inventory beside the mirror is written in this repository, as the manifest, the pairing and the page
-# are, and a prefix match on `design/` would take all four with it and leave a refresh nobody read.
-fathom_review_never_reads_the_mirrored_design() {
+# inventory beside the runtime is written in this repository, as the artboards, their data, logic and
+# styles, and the pairing are, and a prefix match on `design/` would take every one of them with it.
+fathom_review_never_reads_the_design_runtime() {
   local output_file="$test_directory/fathom-review-collect-design-output"
 
   run_fathom_review_collect "$output_file" 120 120 1 false 2
@@ -2942,10 +2942,10 @@ fathom_review_never_reads_the_mirrored_design() {
     '[.[].filename] | sort' "$collect_review_directory/files.json"
   assert_json '["backend/src/Sample.cs","design/state-inventory.md"]' \
     '[.[].filename] | sort' "$collect_review_directory/lines.json"
-  assert_contains '2 mirrored design sources under design/files/ are not reviewed' \
+  assert_contains '2 generated design runtime files under design/runtime/ are not reviewed' \
     "$collect_review_directory/truncation.txt"
   # The drop is not the file ceiling, and saying so twice would report a truncation that never
-  # happened on every pull request that refreshes the mirror.
+  # happened on every pull request that replaces the runtime.
   assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
 }
 
@@ -8653,7 +8653,6 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
   [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
   [[ -x "$source_repository_root/scripts/review-obligations.sh" ]]
-  [[ -x "$source_repository_root/scripts/design-mirror.sh" ]]
   [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
 
   # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
@@ -9013,15 +9012,13 @@ every_browser_asset_carries_the_license_header() {
     # Everything else under that roof is ours and is covered, so a regeneration that starts writing a fourth template
     # file fails here — which is where the answer to whose file it is belongs.
     #
-    # `design/files/` is the second, and it is excluded for a stronger reason than authorship: those files are the
-    # design project's screen sources copied byte for byte, and `scripts/design-mirror.sh record` checks each one
-    # against the byte count the project itself states. Three lines of header would fail that check on every file at
-    # every refresh, so the mirror carries none and `AGENTS.md` states the exemption beside the rule it is an exemption
-    # to. Nothing under it is written here; `design/README.md` beside it is prose and carries no header for the same
-    # reason no `.md` does.
+    # `design/runtime/` is the second, for the same reason: `support.js` there is the minified bundle a design tool
+    # generated for the artboards to boot on, so nobody here writes it, it is replaced whole rather than edited, and a
+    # typed header would go with the next replacement. `AGENTS.md` states the exemption beside the rule it is an
+    # exemption to. Everything else under `design/` is written here and is covered.
   done < <(git -C "$source_repository_root" ls-files -- \
     '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.kt' '*.css' '*.html' \
-    ':(exclude)design/files/*' \
+    ':(exclude)design/runtime/*' \
     ':(exclude)frontend/src-tauri/gen/android/buildSrc/*' \
     ':(exclude)frontend/src-tauri/gen/android/app/src/main/java/io/github/krzysztof318/mailfathom/MainActivity.kt')
 
@@ -9262,214 +9259,17 @@ no_two_tracked_paths_differ_only_by_case() {
   (( failures == 0 ))
 }
 
-# The design mirror is what makes a client screen's state space legible before the screen is built,
-# and the property that earns it is the one below: a session opening onto an unchanged project reads
-# nothing at all. Everything the script decides is decided from one listing and the recorded
-# manifest, so all three contracts run with no design server anywhere near them.
-#
-# The listing is written rather than fetched here for the same reason: what is under test is the
-# comparison, and a fixture listing states the etags a server would have.
-#
-# The screen source it names is one of the real ones, because what the script mirrors is a list
-# written into it rather than a pattern. That couples this fixture to that list on purpose: renaming
-# a mirrored screen is a refresh that edits the list, and a test still naming the old one is the
-# reminder that both halves move together.
-mirrored_test_screen="MailFathom Toasts.dc.html"
-
-write_design_listing() {
-  local target="$1" prototype_etag="$2" runtime_etag="${3:-200}"
-
-  cat >"$target" <<LISTING
-[
-  { "path": "$mirrored_test_screen", "size": 6, "etag": "$prototype_etag" },
-  { "path": "avatars/somebody.png", "size": 4, "etag": "100" },
-  { "path": "support.js", "size": 3, "etag": "$runtime_etag" }
-]
-LISTING
-}
-
-the_design_mirror_reads_only_what_the_etags_say_moved() {
-  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
-
-  rm -rf "$work" "$repository_root/design"
-  mkdir -p "$work"
-  write_design_listing "$work/listing.json" "300"
-
-  # With no manifest yet every screen source and the generated runtime have to be read, and nothing
-  # else: the avatar is covered by the manifest and copied by nothing, because it is an image rather
-  # than text and no screen is built from it.
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing.json") >"$output"
-  assert_contains "$mirrored_test_screen" "$output"
-  assert_contains 'support.js' "$output"
-  assert_excludes 'avatars/somebody.png' "$output"
-
-  mkdir -p "$repository_root/design/files"
-  printf 'screen' >"$repository_root/design/files/$mirrored_test_screen"
-  printf 'run' >"$repository_root/design/files/support.js"
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    record "$work/listing.json") >"$output"
-  assert_contains 'stamp' "$output"
-
-  # An unchanged project is the case this exists for, and it costs the listing and nothing else.
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing.json") >"$output"
-  assert_contains 'Nothing moved' "$output"
-
-  # A file the project gained that the list does not name is reported and not read. This repository
-  # is public and the project is not, so a screen arriving upstream is somebody's decision to copy
-  # rather than a file that turns up in the next refresh because its name ends in `.html`.
-  jq '. + [{ "path": "Unlisted.dc.html", "size": 5, "etag": "400" }]' \
-    "$work/listing.json" >"$work/listing-unlisted.json"
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing-unlisted.json") >"$output"
-  assert_contains 'new       Unlisted.dc.html' "$output"
-  assert_contains 'the mirror does not carry them' "$output"
-  assert_contains 'none — nothing that moved is on the mirrored list' "$output"
-
-  local stamp
-  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
-
-  # A moved etag names the one path that moved, and the assets around it stay quiet.
-  write_design_listing "$work/listing.json" "301"
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing.json") >"$output"
-  assert_contains "changed   $mirrored_test_screen" "$output"
-  assert_excludes 'avatars/somebody.png' "$output"
-
-  # The runtime is read like a screen source and stamped unlike one. It is mirrored because an
-  # artboard is a component it boots, so a mirror without it renders nothing — but the stamp is what
-  # the state inventory records itself against, and that describes what a screen has rather than what
-  # draws it. A runtime rebuilt upstream is therefore a file to re-read and not a design that moved.
-  write_design_listing "$work/listing.json" "300" "201"
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing.json") >"$output"
-  assert_contains 'changed   support.js' "$output"
-
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    record "$work/listing.json") >"$output"
-  if [[ "$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)" != "$stamp" ]]; then
-    printf 'A rebuilt runtime moved the stamp the state inventory records itself against\n' >&2
-    return 1
-  fi
-
-  rm -rf "$repository_root/design"
-}
-
-the_design_mirror_refuses_a_transcription_that_lost_a_window() {
-  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
-
-  rm -rf "$work" "$repository_root/design"
-  mkdir -p "$work" "$repository_root/design/files"
-  write_design_listing "$work/listing.json" "300"
-
-  # A windowed read that dropped or doubled a window arrives as a file of the wrong length, and the
-  # size the project itself states is the only check available that costs no second read of it.
-  printf 'scree' >"$repository_root/design/files/$mirrored_test_screen"
-  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    record "$work/listing.json") >"$output" 2>&1; then
-    printf 'The mirror recorded a screen source of the wrong length\n' >&2
-    return 1
-  fi
-  assert_contains '5 bytes where the project states 6' "$output"
-
-  # And no manifest, which is the half that matters after the refusal has scrolled past: a manifest
-  # recorded over a mirror that does not match it makes the next session's `plan` report that
-  # nothing moved, and a screen is then built from a file nobody has reason to doubt.
-  if [[ -e "$repository_root/design/manifest.json" ]]; then
-    printf 'A refused record left a manifest describing a mirror it rejected\n' >&2
-    return 1
-  fi
-
-  # A mirrored file that never arrived is the same failure said differently.
-  rm -f "$repository_root/design/files/$mirrored_test_screen"
-  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    record "$work/listing.json") >"$output" 2>&1; then
-    printf 'The mirror recorded a screen source that is not there\n' >&2
-    return 1
-  fi
-  assert_contains 'Missing from the mirror' "$output"
-
-  rm -rf "$repository_root/design"
-}
-
-the_design_mirror_refuses_a_path_that_leaves_the_mirror() {
-  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
-  local escapee="$test_directory/design-mirror-escapee"
-
-  rm -rf "$work" "$repository_root/design" "$escapee"
-  mkdir -p "$work"
-  printf 'the file this must not touch' >"$escapee"
-
-  # Every path in a listing is a value the design server chose, and this script expands each of them
-  # into a filesystem path. One carrying `..` walks out of the mirror, which would have a refresh
-  # create or overwrite a file somewhere else on the machine that ran it.
-  cat >"$work/listing.json" <<'LISTING'
-[
-  { "path": "../../../design-mirror-escapee", "size": 6, "etag": "300" },
-  { "path": "Screen.dc.html", "size": 6, "etag": "300" }
-]
-LISTING
-
-  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    plan "$work/listing.json") >"$output" 2>&1; then
-    printf 'The mirror planned a read of a path that leaves it\n' >&2
-    return 1
-  fi
-  assert_contains 'leaves the mirror' "$output"
-
-  # And the same value handed to `extract` directly, since a session builds that argument from the
-  # listing rather than from anything this script validated.
-  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    extract "design/files/../../../design-mirror-escapee" "$work/listing.json") \
-    >"$output" 2>&1; then
-    printf 'The mirror extracted onto a path outside itself\n' >&2
-    return 1
-  fi
-  assert_contains 'stays under' "$output"
-  assert_file_content 'the file this must not touch' "$escapee"
-
-  rm -rf "$repository_root/design" "$escapee"
-}
-
-the_design_mirror_decodes_a_read_result_without_retyping_it() {
-  local work="$test_directory/design-mirror" target
-
-  rm -rf "$work" "$repository_root/design"
-  mkdir -p "$work"
-  target="$repository_root/design/files/Screen.dc.html"
-
-  # What the harness saves when a read result is too large to return inline: one wrapper line, the
-  # entity-escaped body, a blank line the wrapper adds, the closing tag, and a note after it.
-  cat >"$work/saved.txt" <<'SAVED'
-<untrusted-project-content path="Screen.dc.html" etag="300">
-&lt;p&gt;Yes &amp; no&lt;/p&gt;
-&lt;span&gt;&amp;amp;lt;&lt;/span&gt;
-
-</untrusted-project-content>
-(The body above is HTML-entity-escaped.)
-SAVED
-
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    extract "design/files/Screen.dc.html" "$work/saved.txt") >/dev/null
-
-  # `&lt;` and `&gt;` before `&amp;`, exactly once: a body that itself carries `&amp;lt;` comes back
-  # as `&amp;lt;` rather than collapsing into a tag that was never in the design.
-  assert_file_content '<p>Yes & no</p>
-<span>&amp;lt;</span>' "$target"
-
-  rm -rf "$repository_root/design"
-}
+parity_test_artboard="prototype.dc.html"
 
 # The design-parity loop: two capture scripts and a comparison. What is asserted here is everything
 # they decide before a browser is involved — where a capture may be written, how many pairs one
-# invocation produces, whether the design half of the pairing still describes the mirror beside it,
-# and what the comparison prints. Driving a browser is not one of those things and is not faked: a
+# invocation produces, whether the design carries the runtime its artboards boot on, and what the
+# comparison prints. Driving a browser is not one of those things and is not faked: a
 # contract that stubbed Chromium would prove that the stub answered.
 write_parity_fixture() {
   local screens="${1:-2}"
 
-  mkdir -p "$repository_root/frontend/design-parity" "$repository_root/design/files"
+  mkdir -p "$repository_root/frontend/design-parity" "$repository_root/design/runtime"
 
   # Two screens at three compositions, which is six pairs and past what one invocation produces, and
   # one screen at three, which is inside it. The bound is therefore exercised from either side of it
@@ -9521,34 +9321,27 @@ MANIFEST
 MANIFEST
   fi
 
-  printf 'screen' >"$repository_root/design/files/$mirrored_test_screen"
-  printf 'run' >"$repository_root/design/files/support.js"
-  write_design_listing "$test_directory/parity-listing.json" "300"
-  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    record "$test_directory/parity-listing.json") >/dev/null
+  printf 'screen' >"$repository_root/design/$parity_test_artboard"
+  printf 'run' >"$repository_root/design/runtime/support.js"
 }
 
 write_parity_pairing() {
-  local stamp="$1"
-
   cat >"$repository_root/design/parity.json" <<PAIRING
 {
-  "stamp": "$stamp",
   "screens": {
-    "first": { "file": "$mirrored_test_screen", "properties": { "theme": null }, "steps": [] },
-    "second": { "file": "$mirrored_test_screen", "properties": { "theme": null }, "steps": [] }
+    "first": { "file": "$parity_test_artboard", "properties": { "theme": null }, "steps": [] },
+    "second": { "file": "$parity_test_artboard", "properties": { "theme": null }, "steps": [] }
   }
 }
 PAIRING
 }
 
 a_capture_refuses_a_destination_in_the_tree() {
-  local output="$test_directory/capture.out" stamp
+  local output="$test_directory/capture.out"
 
   rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 1
-  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
-  write_parity_pairing "$stamp"
+  write_parity_pairing
 
   # A capture is generated rather than authored, and the client side of a pair shows whatever mail the
   # run was answering with — which is why neither is committed however tracked the design it rasterises
@@ -9573,12 +9366,11 @@ a_capture_refuses_a_destination_in_the_tree() {
 }
 
 a_capture_refuses_more_pairs_than_one_invocation_produces() {
-  local output="$test_directory/capture.out" stamp
+  local output="$test_directory/capture.out"
 
   rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 2
-  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
-  write_parity_pairing "$stamp"
+  write_parity_pairing
 
   # A screenshot costs a session context by its pixel dimensions, so a run that captured everything
   # would spend a context window before anything had been compared. Naming no screen means every
@@ -9601,32 +9393,23 @@ a_capture_refuses_more_pairs_than_one_invocation_produces() {
   rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
 }
 
-the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror() {
+the_design_capture_refuses_a_design_with_no_runtime() {
   local output="$test_directory/capture.out"
 
   rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 1
-  write_parity_pairing 'written-for-an-older-design'
+  write_parity_pairing
 
-  # A pairing recorded against a design that has since moved points every capture at an artboard that
-  # is no longer the one it names, and the comparison would then report the design having changed as
-  # the client being wrong. The stamp is what makes that visible rather than plausible.
+  # An artboard is a component the runtime boots rather than a document a browser draws, so a design
+  # carrying no runtime would be captured as an empty document and every region would read as the
+  # client being wrong.
+  rm -f "$repository_root/design/runtime/support.js"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
     --out "$test_directory/parity-captures" --screen first --composition desktop) >"$output" 2>&1; then
-    printf 'The design capture ran against a pairing written for an older design\n' >&2
+    printf 'The design capture ran against a design with no runtime in it\n' >&2
     return 1
   fi
-  assert_contains 'was written for stamp written-for-an-older-design' "$output"
-
-  # A mirror carrying no runtime is the other way a design capture cannot mean anything: an artboard
-  # is a component that runtime boots, so what would be captured is an empty document.
-  rm -f "$repository_root/design/files/support.js"
-  if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
-    --out "$test_directory/parity-captures" --screen first --composition desktop) >"$output" 2>&1; then
-    printf 'The design capture ran against a mirror with no runtime in it\n' >&2
-    return 1
-  fi
-  assert_contains 'no design runtime' "$output"
+  assert_contains 'carries no runtime' "$output"
 
   rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
 }
@@ -10256,7 +10039,7 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
-run_test fathom_review_never_reads_the_mirrored_design
+run_test fathom_review_never_reads_the_design_runtime
 run_test fathom_review_never_reads_a_generated_migration
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
@@ -10460,13 +10243,9 @@ run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test the_editor_workspace_opens_the_service_and_the_repository
 run_test every_shell_script_carries_the_license_header
-run_test the_design_mirror_reads_only_what_the_etags_say_moved
-run_test the_design_mirror_refuses_a_transcription_that_lost_a_window
-run_test the_design_mirror_refuses_a_path_that_leaves_the_mirror
-run_test the_design_mirror_decodes_a_read_result_without_retyping_it
 run_test a_capture_refuses_a_destination_in_the_tree
 run_test a_capture_refuses_more_pairs_than_one_invocation_produces
-run_test the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror
+run_test the_design_capture_refuses_a_design_with_no_runtime
 run_test the_comparison_reports_where_a_pair_differs_before_any_image_is_opened
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
