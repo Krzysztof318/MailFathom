@@ -2709,6 +2709,7 @@ case "$endpoint" in
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
         --argjson runtime "${FAKE_DESIGN_RUNTIME_FILE_COUNT:-0}" \
         --argjson migrations "${FAKE_MIGRATION_FILE_COUNT:-0}" \
+        --argjson vendored "${FAKE_VENDORED_FILE_COUNT:-0}" \
         '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
@@ -2722,6 +2723,15 @@ case "$endpoint" in
                    previous_filename: null,
                    status: "added", additions: 4000, deletions: 0,
                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | . + [range($vendored)
+                | {filename: ".agents/skills/brandkit/vendored\(.).md", previous_filename: null,
+                   status: "added", additions: 800, deletions: 0,
+                   patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | . + (if $vendored > 0 then
+                  [{filename: ".agents/skills/start-task/SKILL.md", previous_filename: null,
+                    status: "modified", additions: 2, deletions: 1,
+                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+                else [] end)
          | . + (if $runtime > 0 then
                   [{filename: "design/state-inventory.md", previous_filename: null,
                     status: "modified", additions: 4, deletions: 2,
@@ -2841,6 +2851,8 @@ run_fathom_review_collect() {
   # How many generated EF Core migration files it carries beside them, for the same reason: the
   # ordinary change adds none, so every other contract measures a collection the drop never touched.
   local migration_file_count="${7:-0}"
+  # How many vendored files it carries beside them, which the ordinary change does not either.
+  local vendored_file_count="${8:-0}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2867,6 +2879,7 @@ run_fathom_review_collect() {
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
     export FAKE_DESIGN_RUNTIME_FILE_COUNT="$design_runtime_file_count"
     export FAKE_MIGRATION_FILE_COUNT="$migration_file_count"
+    export FAKE_VENDORED_FILE_COUNT="$vendored_file_count"
     # The list the obligations index is given, which the step writes beside the review directory
     # rather than into it. The workflow declares the path from `runner.temp`; here it is the same
     # directory the review one sits in.
@@ -2946,6 +2959,25 @@ fathom_review_never_reads_the_design_runtime() {
     "$collect_review_directory/truncation.txt"
   # The drop is not the file ceiling, and saying so twice would report a truncation that never
   # happened on every pull request that replaces the runtime.
+  assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
+}
+
+# A vendored file is somebody else's text: a change to one is a refresh from its upstream, and its
+# licence is reviewed in the register rather than by a reader. What marks one is `linguist-vendored`
+# in `.gitattributes`, so the drop is proved against the real attributes of this checkout — which on
+# the runner is the base commit — and a skill written here, in the same directory as the vendored
+# ones, still reaches the readers.
+fathom_review_never_reads_a_vendored_file() {
+  local output_file="$test_directory/fathom-review-collect-vendored-output"
+
+  run_fathom_review_collect "$output_file" 120 120 1 false 0 0 2
+
+  assert_json '[".agents/skills/start-task/SKILL.md","backend/src/Sample.cs"]' \
+    '[.[].filename] | sort' "$collect_review_directory/files.json"
+  assert_json '[".agents/skills/start-task/SKILL.md","backend/src/Sample.cs"]' \
+    '[.[].filename] | sort' "$collect_review_directory/lines.json"
+  assert_contains '2 vendored files marked linguist-vendored in .gitattributes are not reviewed' \
+    "$collect_review_directory/truncation.txt"
   assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
 }
 
@@ -9163,6 +9195,13 @@ every_skill_declares_its_license() {
         printf '%s is vendored from %s without a license and a THIRD_PARTY_LICENSES.md row\n' "$file" "$upstream" >&2
         failures=$(( failures + 1 ))
       fi
+
+      # `Fathom review` skips what `.gitattributes` marks vendored, so a vendored skill without the
+      # attribute is read as though it had been written here.
+      if [[ "$(git -C "$source_repository_root" check-attr linguist-vendored -- "$file")" != *': set' ]]; then
+        printf '%s is vendored but .gitattributes does not mark it linguist-vendored\n' "$file" >&2
+        failures=$(( failures + 1 ))
+      fi
       continue
     fi
 
@@ -10072,6 +10111,7 @@ run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
 run_test fathom_review_never_reads_the_design_runtime
 run_test fathom_review_never_reads_a_generated_migration
+run_test fathom_review_never_reads_a_vendored_file
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone

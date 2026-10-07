@@ -1350,7 +1350,7 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-Two classes of changed file never reach the readers. `design/runtime/` holds the
+Three classes of changed file never reach the readers. `design/runtime/` holds the
 generated runtime the design's artboards boot on — one minified bundle a design
 tool wrote, which nobody here writes a line of and which is more added lines than
 a large change. It is that one directory rather than the tree above it: the
@@ -1368,7 +1368,17 @@ budget from the files somebody wrote. It is the same reasoning
 `index-obligations.sh` has always applied to the test obligation, extended to the
 reading.
 
-Both are dropped where the collection is frozen, once, ahead of the anchors, the
+The third is every file `.gitattributes` marks `linguist-vendored`, which today is
+the skills vendored from another repository and listed as such in
+`.agents/skills/README.md`. Somebody else wrote them, a change to one is a refresh
+from its upstream rather than an edit made here, and their licence is reviewed in
+`THIRD_PARTY_LICENSES.md` rather than by a reader. The attribute is read with
+`git check-attr` from the base commit the collection checked out, never from the
+head, so a change cannot mark its own files vendored and exempt them from its own
+review — which also means a pull request that adds the attribute is still read in
+full, and the files it marks stop being read from the next pull request on.
+
+All three are dropped where the collection is frozen, once, ahead of the anchors, the
 head content and the groups that all read it, and each count joins the truncation
 notes so a reader of the review can tell a file nobody looked at from a file nobody
 was meant to. The obligations index is the one step given the change with the

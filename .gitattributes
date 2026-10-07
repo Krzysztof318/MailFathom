@@ -14,3 +14,16 @@
 *.woff2 binary
 *.jar binary
 *.zip binary
+
+.agents/skills/brandkit/** linguist-vendored
+.agents/skills/design-taste-frontend/** linguist-vendored
+.agents/skills/full-output-enforcement/** linguist-vendored
+.agents/skills/gpt-taste/** linguist-vendored
+.agents/skills/high-end-visual-design/** linguist-vendored
+.agents/skills/image-to-code/** linguist-vendored
+.agents/skills/imagegen-frontend-mobile/** linguist-vendored
+.agents/skills/imagegen-frontend-web/** linguist-vendored
+.agents/skills/industrial-brutalist-ui/** linguist-vendored
+.agents/skills/minimalist-ui/** linguist-vendored
+.agents/skills/redesign-existing-projects/** linguist-vendored
+.agents/skills/stitch-design-taste/** linguist-vendored
