@@ -47,8 +47,12 @@ project and the repository disagreeing about what the product looks like.
 `new/` holds every mirrored artboard rewritten so that the design can be authored in this repository. A mirrored
 artboard is one generated document with its template, stylesheet, logic, and every piece of sample mail, person, and
 conversation inside it; here each of those is a file of its own, and the sample data is plain objects with named fields.
-Each artboard in `new/` renders the same DOM as its mirrored original, in both themes and at every composition, so
-nothing a client screen is held against changes by reading one instead of the other.
+Each artboard in `new/` was held against its mirrored original side by side in a browser, in the states its properties
+and its controls reach, in both themes, and for the prototype at each of the four compositions. They render the same
+DOM, except in `client-states.dc.html`, where three repeated chips are one `sc-for` over data and so carry the
+runtime's own template markers; what differs in the image is antialiasing. Those checked states are what a client
+screen is held against, so reading one copy instead of the other changes nothing there — a state nobody checked is not
+covered by that claim.
 
 The mirror is still what everything else reads: `scripts/capture-design.sh`, the inventory, and the pairing name files
 under `files/`, and `$mf-sync-design` refreshes the mirror alone. Nothing carries a refresh across into `new/`, so a
