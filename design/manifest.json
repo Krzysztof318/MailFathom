@@ -1,8 +1,8 @@
 [
   {
-    "etag": "1790622970441823",
+    "etag": "1790696726266031",
     "path": ".thumbnail",
-    "size": 7568
+    "size": 3044
   },
   {
     "etag": "1789913123894867",
@@ -13,6 +13,11 @@
     "etag": "1790612445872290",
     "path": "MailFathom Client States.dc.html",
     "size": 241284
+  },
+  {
+    "etag": "1790696721848893",
+    "path": "MailFathom Compose with AI.dc.html",
+    "size": 58247
   },
   {
     "etag": "1790611963629015",
