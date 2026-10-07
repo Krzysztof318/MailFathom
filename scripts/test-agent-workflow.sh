@@ -9131,14 +9131,28 @@ every_shell_script_carries_the_license_header() {
 # defines where a skill declares its license and leaves `metadata` open for the rest. A comment above
 # the frontmatter would be read as content by every client that parses one. No version key joins
 # them: `<VersionPrefix>` in `Version.props` is the only version number in this repository.
+#
+# A skill vendored from elsewhere keeps its upstream's licence and names its upstream repository
+# instead, and is accepted only when `THIRD_PARTY_LICENSES.md` carries that repository — so naming a
+# foreign repository is a licensing review recorded rather than a way around this check.
 every_skill_declares_its_license() {
-  local file frontmatter holder repository failures=0
+  local file frontmatter holder repository upstream failures=0
 
   holder="$(license_header_lines | sed -n '1s/^Copyright © [0-9]\{4\} //p')"
   repository="$(license_header_lines | sed -n '3s/^Project repository: //p')"
 
   while IFS= read -r file; do
     frontmatter="$(awk 'NR == 1 { next } /^---$/ { exit } { print }' "$source_repository_root/$file")"
+    upstream="$(sed -n 's/^  repository: //p' <<< "$frontmatter")"
+
+    if [[ -n "$upstream" && "$upstream" != "$repository" ]]; then
+      if ! grep -q '^license: ' <<< "$frontmatter" \
+        || ! grep -qF "$upstream" "$source_repository_root/THIRD_PARTY_LICENSES.md"; then
+        printf '%s is vendored from %s without a license and a THIRD_PARTY_LICENSES.md row\n' "$file" "$upstream" >&2
+        failures=$(( failures + 1 ))
+      fi
+      continue
+    fi
 
     if ! grep -qxF 'license: AGPL-3.0-only' <<< "$frontmatter"; then
       printf '%s declares no license in its frontmatter\n' "$file" >&2

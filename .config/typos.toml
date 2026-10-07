@@ -173,6 +173,12 @@ extend-ignore-re = [
   # no committed line carries a string shaped like a live credential. Encoding a run of letters is
   # what puts `Iz` in the middle of it.
   '\bQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo\w*',
+  # Two strings in the `design-taste-frontend` skill vendored from `Leonxlnx/taste-skill`, which is
+  # kept as upstream wrote it so a refresh is a diff against upstream rather than against local edits:
+  # `Ines Caetano` is a person's name in a sample caption, and `OT-aware` abbreviates operational
+  # transformation. Entered whole so neither `Ines` nor `OT` is silenced anywhere else.
+  '\bInes Caetano\b',
+  '\bOT-aware\b',
 ]
 
 [default.extend-identifiers]
