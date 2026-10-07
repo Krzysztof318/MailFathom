@@ -20,7 +20,7 @@ public sealed class DocumentationAddressTests
         var address = DocumentationAddress.ForVersion("0.6.0");
 
         // Assert
-        Assert.Equal("https://krzysztof318.github.io/MailFathom/v0.6.0/", address);
+        Assert.Equal("https://krzysztof318.github.io/MailFathom/docs/v0.6.0/", address);
     }
 
     /// <summary>
@@ -37,13 +37,13 @@ public sealed class DocumentationAddressTests
         var address = DocumentationAddress.ForVersion(version);
 
         // Assert
-        Assert.Equal("https://krzysztof318.github.io/MailFathom/latest/", address);
+        Assert.Equal("https://krzysztof318.github.io/MailFathom/docs/latest/", address);
     }
 
     /// <summary>The revision an SDK stamps after SemVer's plus sign says which build this is, never which pages describe it.</summary>
     [Theory]
-    [InlineData("0.6.0+3f1c9abcdef", "https://krzysztof318.github.io/MailFathom/v0.6.0/")]
-    [InlineData("0.7.0-nightly.41+3f1c9abcdef", "https://krzysztof318.github.io/MailFathom/latest/")]
+    [InlineData("0.6.0+3f1c9abcdef", "https://krzysztof318.github.io/MailFathom/docs/v0.6.0/")]
+    [InlineData("0.7.0-nightly.41+3f1c9abcdef", "https://krzysztof318.github.io/MailFathom/docs/latest/")]
     public void ForVersion_AVersionCarryingBuildMetadata_ReadsAsTheVersionItIsABuildOf(string version, string expected)
     {
         // Act
@@ -67,7 +67,7 @@ public sealed class DocumentationAddressTests
         var address = DocumentationAddress.ForVersion(version);
 
         // Assert
-        Assert.Equal("https://krzysztof318.github.io/MailFathom/v0.6.0/", address);
+        Assert.Equal("https://krzysztof318.github.io/MailFathom/docs/v0.6.0/", address);
     }
 
     /// <summary>

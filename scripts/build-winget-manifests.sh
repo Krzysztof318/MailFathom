@@ -124,7 +124,7 @@ PackageIdentifier: $package_identifier
 PackageVersion: $package_version
 PackageLocale: en-US
 Publisher: MailFathom
-PublisherUrl: https://krzysztof318.github.io/MailFathom/
+PublisherUrl: https://krzysztof318.github.io/MailFathom/docs/
 PublisherSupportUrl: https://github.com/Krzysztof318/MailFathom/issues
 Author: Krzysztof Kasprowicz
 PackageName: MailFathom CLI
@@ -159,9 +159,9 @@ Tags:
 ReleaseNotesUrl: https://github.com/Krzysztof318/MailFathom/releases/tag/v$package_version
 Documentations:
 - DocumentLabel: Administering a deployment
-  DocumentUrl: https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html
+  DocumentUrl: https://krzysztof318.github.io/MailFathom/docs/operations/admin-endpoint.html
 - DocumentLabel: Installation
-  DocumentUrl: https://krzysztof318.github.io/MailFathom/users/installation.html
+  DocumentUrl: https://krzysztof318.github.io/MailFathom/docs/users/installation.html
 ManifestType: defaultLocale
 ManifestVersion: $manifest_schema_version
 YAML

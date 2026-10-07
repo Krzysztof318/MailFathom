@@ -19,8 +19,8 @@ set -euo pipefail
 #                   naming no version — which is what the repository-root README links to
 #   llms.txt        that version's map of the documentation, at the address an agent looks for it, with every link in
 #                   it resolved into the version directory it came from
-#   .nojekyll       what stops GitHub Pages from running the whole site through Jekyll first
 #
+# The directory is `docs/` of the tree GitHub Pages serves; `scripts/compose-pages-site.sh` adds what sits beside it.
 # **The site opens on the newest release, not on `latest`.** Somebody arriving at the documentation is running a
 # release or about to install one, and `latest` describes the default branch — where a page can document a setting no
 # published version accepts. `latest` stays in the selector, one click away, and every page outside the default version
@@ -113,8 +113,8 @@ done
 } > "$site_directory/versions.json"
 
 # The addresses that outlive a release. Every page of the default version is mirrored at the site root as a redirect,
-# so `…/MailFathom/operations/mcp-endpoint.html` names a page without naming a version and lands on whichever version
-# the site currently opens on. The root `README.md` links that way: a link carrying a version would be wrong the day
+# so `…/MailFathom/docs/operations/mcp-endpoint.html` names a page without naming a version and lands on whichever
+# version the site currently opens on. The root `README.md` links that way: a link carrying a version would be wrong the day
 # the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site opens on.
 #
 # The API reference is left out. It is a thousand generated pages whose names are type names, nothing links into it by
@@ -158,7 +158,7 @@ while IFS= read -r page_path; do
   [[ "$page_path" == 'index.html' ]] && continue
 
   # One `../` per directory the page sits in, because a static site has no root-relative form that survives being
-  # served from a project subpath — `/operations/…` would resolve above `…/MailFathom/` on GitHub Pages.
+  # served from a project subpath — `/operations/…` would resolve above `…/MailFathom/docs/` on GitHub Pages.
   ascent=''
   for ((depth = $(tr --delete --complement '/' <<< "$page_path" | wc --chars); depth > 0; depth--)); do
     ascent+='../'
@@ -194,10 +194,6 @@ if [[ -f "$site_directory/$default_version/$map_file" ]]; then
     < "$site_directory/$default_version/$map_file" > "$site_directory/$map_file"
   map_at_root='yes'
 fi
-
-# Jekyll is what GitHub Pages runs by default, and it drops every path beginning with an underscore. Nothing docfx
-# generates needs building, so the whole pass is skipped rather than configured around.
-touch "$site_directory/.nojekyll"
 
 printf 'Composed %d version(s) in %s, opening on %s, with %d version-agnostic address(es):\n' \
   "${#ordered_versions[@]}" "$site_directory" "$default_version" "$stub_count"

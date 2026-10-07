@@ -2368,7 +2368,7 @@ address:
 $ mfctl status --endpoint production
 'production' (https://mail.example.test:8443) accepts the stored credential as 'alice' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
-Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
+Documentation for that version: https://krzysztof318.github.io/MailFathom/docs/v0.2.0/
 ```
 
 The order is the option, then `MAILFATHOM_ENDPOINT`, then the profile last switched to: what you typed beats what your

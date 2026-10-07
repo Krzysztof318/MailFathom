@@ -8,7 +8,7 @@
 
 *One question, answered from the local copy in an ordinary chat client. The `***` were blacked out by hand before the file entered a public repository — until you turn `SensitiveContent` on, MailFathom redacts nothing on its way to a client.*
 
-This page describes the container image. **[github.com/Krzysztof318/MailFathom](https://github.com/Krzysztof318/MailFathom) is the project**, and [the documentation site](https://krzysztof318.github.io/MailFathom/) is where everything below is stated in full.
+This page describes the container image. **[github.com/Krzysztof318/MailFathom](https://github.com/Krzysztof318/MailFathom) is the project**, and [the documentation site](https://krzysztof318.github.io/MailFathom/docs/) is where everything below is stated in full.
 
 MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Nothing depends on somebody else's service: the copy is yours, the database is yours, and the deployment is yours.
 
@@ -43,7 +43,7 @@ The other six are MailFathom's own contact book — `list_contacts`, `get_contac
 | --- | --- |
 | `<major>.<minor>.<patch>` | A release. It never moves. |
 | `latest` | The newest release, and never a nightly |
-| `nightly` | Built from `main`. **Not a release** — its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://krzysztof318.github.io/MailFathom/operations/container-image.html#what-a-nightly-build-risks) states the whole of it. |
+| `nightly` | Built from `main`. **Not a release** — its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://krzysztof318.github.io/MailFathom/docs/operations/container-image.html#what-a-nightly-build-risks) states the whole of it. |
 
 The same manifest list is published to **`ghcr.io/krzysztof318/mailfathom`** and **`docker.io/krzysztof318/mailfathom`** under the same digest, so the registry you pull from is not part of what you have to trust. GHCR is the canonical reference; this one is the convenience mirror.
 
@@ -89,7 +89,7 @@ docker compose up -d postgres    # creates the role, the database, and the vecto
 docker compose up -d
 ```
 
-[Deploying with Docker Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/krzysztof318/charts/mailfathom`, which meets the Restricted Pod Security Standard. [Deploying with Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html) runs the same single-machine stack as rootless systemd units, which is what lets this image take its secrets as encrypted systemd credentials instead of as plaintext files.
+[Deploying with Docker Compose](https://krzysztof318.github.io/MailFathom/docs/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/docs/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/krzysztof318/charts/mailfathom`, which meets the Restricted Pod Security Standard. [Deploying with Podman Quadlet](https://krzysztof318.github.io/MailFathom/docs/operations/deployment-quadlet.html) runs the same single-machine stack as rootless systemd units, which is what lets this image take its secrets as encrypted systemd credentials instead of as plaintext files.
 
 ## How the image runs
 
@@ -105,9 +105,9 @@ docker compose up -d
 
 **Chiseled: there is no shell, no package manager, and no HTTP client**, and no tool that could apply a migration. The image carries the published application, MailFathom's own client under `/app/wwwroot`, `/app/LICENSE`, and `/app/NOTICE` — no SDK, no source tree, no build cache, no credential, and no certificate. `DOTNET_EnableDiagnostics=0` is set, so no diagnostic IPC socket is created. Both supported deployments run it on a read-only root filesystem with every Linux capability dropped.
 
-**The container speaks plain HTTP and terminates no TLS.** A certificate belongs to the reverse proxy or the ingress in front of it. An MCP endpoint reached over plain HTTP hands its API key and every message it serves to anything on the network path — and the public scheme and host are read from any peer until you name your proxy in `ReverseProxy:TrustedProxies`. [Behind a TLS-terminating reverse proxy](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html#behind-a-tls-terminating-reverse-proxy) states what that costs and how to close it.
+**The container speaks plain HTTP and terminates no TLS.** A certificate belongs to the reverse proxy or the ingress in front of it. An MCP endpoint reached over plain HTTP hands its API key and every message it serves to anything on the network path — and the public scheme and host are read from any peer until you name your proxy in `ReverseProxy:TrustedProxies`. [Behind a TLS-terminating reverse proxy](https://krzysztof318.github.io/MailFathom/docs/operations/mcp-endpoint.html#behind-a-tls-terminating-reverse-proxy) states what that costs and how to close it.
 
-**MailFathom's own client is inside the image and is not served.** The bundle under `/app/wwwroot` is about 230 kB of the image's size and answers nothing until a deployment writes `ClientEndpoint__Application__Enabled=true`, which needs `ClientEndpoint__Enabled` beside it and serves the page from that surface's own listeners. Serving it changes no authorization — a browser is an untrusted client wherever it was served from, and whatever `ClientEndpoint:Authentication` requires is still required of it — and it is refused over a clear-text socket unless `ClientEndpoint__Application__AllowClearText=true` states that the proxy in front of this container terminates TLS. [Serving the client from the deployment](https://krzysztof318.github.io/MailFathom/operations/client-endpoint.html#serving-the-client-from-the-deployment) is the page.
+**MailFathom's own client is inside the image and is not served.** The bundle under `/app/wwwroot` is about 230 kB of the image's size and answers nothing until a deployment writes `ClientEndpoint__Application__Enabled=true`, which needs `ClientEndpoint__Enabled` beside it and serves the page from that surface's own listeners. Serving it changes no authorization — a browser is an untrusted client wherever it was served from, and whatever `ClientEndpoint:Authentication` requires is still required of it — and it is refused over a clear-text socket unless `ClientEndpoint__Application__AllowClearText=true` states that the proxy in front of this container terminates TLS. [Serving the client from the deployment](https://krzysztof318.github.io/MailFathom/docs/operations/client-endpoint.html#serving-the-client-from-the-deployment) is the page.
 
 ## Verification
 
@@ -117,19 +117,19 @@ Every published image carries a signed build provenance statement tying the dige
 gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
 ```
 
-Before a release is pushed it is built, unit-tested, format-checked, proven against its migrations, run through the integration suite, started and required to report the version and revision its labels claim, and scanned by Trivy — which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding. [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification) records the whole order.
+Before a release is pushed it is built, unit-tested, format-checked, proven against its migrations, run through the integration suite, started and required to report the version and revision its labels claim, and scanned by Trivy — which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding. [Verification](https://krzysztof318.github.io/MailFathom/docs/operations/container-image.html#verification) records the whole order.
 
 ## Where to go next
 
 | | |
 | --- | --- |
-| [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) | Which deployment shape fits, and what each one needs |
-| [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) | From an installed instance to a first successful tool call |
-| [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) | What each tool does, what they bound, and how to read a failure |
-| [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, grouped by what it configures, with its default and whether changing it needs a restart |
-| [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
-| [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html) | This page's subject, in full |
-| [Changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) | What each release promises across the four public surfaces |
+| [Installing MailFathom](https://krzysztof318.github.io/MailFathom/docs/users/installation.html) | Which deployment shape fits, and what each one needs |
+| [Getting started](https://krzysztof318.github.io/MailFathom/docs/users/getting-started.html) | From an installed instance to a first successful tool call |
+| [Using the tools](https://krzysztof318.github.io/MailFathom/docs/users/usage.html) | What each tool does, what they bound, and how to read a failure |
+| [Configuration reference](https://krzysztof318.github.io/MailFathom/docs/operations/configuration-reference.html) | Every user-settable option, grouped by what it configures, with its default and whether changing it needs a restart |
+| [The MCP endpoint](https://krzysztof318.github.io/MailFathom/docs/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
+| [The container image](https://krzysztof318.github.io/MailFathom/docs/operations/container-image.html) | This page's subject, in full |
+| [Changelog](https://krzysztof318.github.io/MailFathom/docs/CHANGELOG.html) | What each release promises across the four public surfaces |
 
 ## Security and license
 

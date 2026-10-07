@@ -1,5 +1,5 @@
 {{- $documentation := include "mailfathom.documentationAddress" . -}}
-{{- $documentationRoot := $documentation | default "https://krzysztof318.github.io/MailFathom/" -}}
+{{- $documentationRoot := $documentation | default "https://krzysztof318.github.io/MailFathom/docs/" -}}
 MailFathom {{ include "mailfathom.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
 Image:    {{ include "mailfathom.image" . }}

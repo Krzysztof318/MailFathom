@@ -1,14 +1,18 @@
 # The documentation site
 
-<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, context7.json, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
+<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, context7.json, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/compose-pages-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
 
 The pages under `docs/` are published as a browsable site at
-<https://krzysztof318.github.io/MailFathom/>. The site is generated from this repository by
+<https://krzysztof318.github.io/MailFathom/docs/>. The site is generated from this repository by
 [docfx](https://dotnet.github.io/docfx/), deployed by GitHub Pages, and rebuilt in full by two pushes: a merge to
 `main`, which moves `latest`, and a release tag, which adds that release's version to the selector. It is the tag
 rather than the release, because the version list below is read from the tags in the checkout rather than from GitHub's
 releases — and because a `release: published` trigger cannot start a run at all, the release being created by `Release`
 with `GITHUB_TOKEN` and GitHub starting no workflow from an event that token generated.
+
+The documentation is one of two things on the repository's Pages site, which is why it sits under `docs/` rather than
+at the root: [the design](#the-design-beside-it) is published beside it under `design/`, and the bare address
+<https://krzysztof318.github.io/MailFathom/> redirects to `docs/`.
 
 Nothing is authored on the site. A page is written here, reviewed in the same pull request as the behavior it
 describes, and published by the merge — which is the whole reason the site is generated from `docs/` rather than kept
@@ -201,9 +205,9 @@ file behind it.
 
 ### The addresses that outlive a release
 
-A page has two addresses. `…/MailFathom/v<version>/operations/mcp-endpoint.html` is where it is served, and
-`…/MailFathom/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the site root that
-lands on whichever version the site opens on, carrying the heading anchor with it.
+A page has two addresses. `…/MailFathom/docs/v<version>/operations/mcp-endpoint.html` is where it is served, and
+`…/MailFathom/docs/operations/mcp-endpoint.html` — the same path without the version — is a redirect at the site root
+that lands on whichever version the site opens on, carrying the heading anchor with it.
 
 The second is what anything outside the site links to, the root `README.md` above all. A link carrying a version would
 be wrong the day the next one ships, and one carrying `latest` would quietly opt a reader out of the release the site
@@ -305,6 +309,20 @@ to nearly every pull request the repository sees and catch nothing.
 Pages itself is enabled once, in the repository settings, with **Build and deployment → Source** set to **GitHub
 Actions**. The workflow cannot enable it: the action that would needs a token with administration rights, which is
 exactly the kind of credential this workflow is built not to hold.
+
+### The design beside it
+
+The same deployment carries [`design/`](https://github.com/Krzysztof318/MailFathom/tree/main/design) at
+<https://krzysztof318.github.io/MailFathom/design/>. GitHub Pages serves one tree per repository and a deployment
+replaces all of it, so the design cannot be published by a workflow of its own without each publish erasing the other's
+half; it rides on this one instead. Every push to `main` publishes, so a merge that changes the design is live once that
+run deploys, and a release tag publishes the design of the tagged commit — the same commit `latest` is built from.
+
+`scripts/compose-pages-site.sh` copies the directory unchanged, because an artboard loads its runtime, its data, its
+logic, and its styles by relative path and copying the whole directory is what keeps each of those paths true. It then
+writes `design/index.html`, a plain list of every `.html` page at the top of the directory, each linking to the page
+itself, and the redirect `…/MailFathom/` answers with. A pull request that changes only `design/` builds nothing here:
+the copy has nothing to verify that opening the artboard from a clone does not already show.
 
 ### Recovering a failed publish
 

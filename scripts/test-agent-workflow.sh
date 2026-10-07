@@ -4938,7 +4938,7 @@ every_published_documentation_page_is_in_a_table_of_contents() {
 # repository. Each half fails in a way nobody would notice from the file — a site address that names no page is a 404
 # only a reader meets, and a repository link to a published page silently sends somebody to a Markdown file in a tree
 # instead of to the readable form.
-documentation_site_address='https://krzysztof318.github.io/MailFathom/'
+documentation_site_address='https://krzysztof318.github.io/MailFathom/docs/'
 repository_blob_address='https://github.com/Krzysztof318/MailFathom/blob/main/'
 
 # The root README is the page a reader deciding whether to adopt the project meets; `deploy/docker/README.md` is the

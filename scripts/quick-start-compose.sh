@@ -60,7 +60,7 @@ set -euo pipefail
 
 readonly repository='Krzysztof318/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
-readonly documentation_base='https://krzysztof318.github.io/MailFathom'
+readonly documentation_base='https://krzysztof318.github.io/MailFathom/docs'
 
 # The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint,
 # the client's routes, and the page a browser downloads.

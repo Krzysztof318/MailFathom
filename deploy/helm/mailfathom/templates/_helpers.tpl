@@ -60,9 +60,9 @@ the notes then say nothing about documentation instead of offering an address as
 */}}
 {{- define "mailfathom.documentationAddress" -}}
 {{- if eq .Values.image.channel "nightly" -}}
-https://krzysztof318.github.io/MailFathom/latest/
+https://krzysztof318.github.io/MailFathom/docs/latest/
 {{- else if .Chart.AppVersion -}}
-{{- printf "https://krzysztof318.github.io/MailFathom/v%s/" .Chart.AppVersion -}}
+{{- printf "https://krzysztof318.github.io/MailFathom/docs/v%s/" .Chart.AppVersion -}}
 {{- end -}}
 {{- end -}}
 

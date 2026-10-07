@@ -220,7 +220,7 @@ An unpackaged directory states no `appVersion`, because it is not a release of a
 below stands down for it.
 
 The notes an install prints carry the documentation for the version they installed, as a `Docs:` line naming that
-version's own directory on the documentation site — `https://krzysztof318.github.io/MailFathom/v<version>/`, or
+version's own directory on the documentation site — `https://krzysztof318.github.io/MailFathom/docs/v<version>/`, or
 `latest` on the nightly channel, which is what a nightly actually carries. It is an address rather than a repository
 path because somebody reading `helm install` output has no checkout to resolve one against, which is why the notes'
 pointer to [applying the schema](database-schema.md) is an address as well. The unpackaged directory states no version

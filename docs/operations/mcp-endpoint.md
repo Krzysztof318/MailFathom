@@ -2020,7 +2020,7 @@ it is talking to, and not the source revision, which is build provenance an oper
 record](host-startup-telemetry.md) instead.
 
 Beside that, the handshake carries **instructions**: one sentence naming where the documentation for that running
-version is published, at `https://krzysztof318.github.io/MailFathom/v<version>/`. A client that connected over MCP may
+version is published, at `https://krzysztof318.github.io/MailFathom/docs/v<version>/`. A client that connected over MCP may
 be the only way its user meets MailFathom at all, so the session itself is what says where to read — otherwise an agent
 asked to consult the documentation reaches whichever version a search engine ranked first. The address is derived from
 the version the same handshake reports and is not configurable, so the pages it names cannot come to describe a
