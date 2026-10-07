@@ -17,7 +17,7 @@ MailFathomDesign.artboards.notificationGesture = (DCLogic, React) => {
 
     bar = (activeIdx) => ["explore", "mail", "topic", "auto_awesome", "notifications", "more_horiz"].map((ic, i) => ({
       icon: ic,
-      style: "flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:100%;border-radius:9px;" +
+      style: "flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:100%;border-radius:8px;" +
         (i === activeIdx ? "background:var(--accent-soft);color:var(--accent-d)" : "color:var(--muted)"),
     }));
 

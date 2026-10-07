@@ -16,8 +16,9 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/base.css" />
 <link rel="stylesheet" href="styles/ai-blocks.css" />
 </helmet>
 <div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" style="{{ outerStyle }}">
@@ -26,7 +27,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <div style="{{ headerRowStyle }}">
       <div style="display:flex;flex-direction:column;gap:3px">
         <div style="{{ pageTitleStyle }}">AI blocks</div>
-        <div style="font-size:13px;color:var(--muted)">One catalogue for both surfaces — Discover renders these read-only, the Agent renders the same blocks with controls</div>
+        <div style="font-size:13px;color:var(--muted)">One catalogue for both surfaces - Discover renders these read-only, the Agent renders the same blocks with controls</div>
       </div>
       <div style="{{ badgeRowStyle }}">
         <div style="{{ chipStyle }}">theme: {{ themeAttr }}</div>
@@ -40,16 +41,16 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
         <div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ schemaBannerText }}</div>
 
-        <div style="{{ crossHeadingStyle }}">Shared — Discover and the Agent draw these identically</div>
+        <div style="{{ crossHeadingStyle }}">Shared - Discover and the Agent draw these identically</div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">ANSWER</div><div style="{{ metaStyle }}">{{ answerMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Answer</div><div style="{{ metaStyle }}">{{ answerMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
           <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-              <div style="font-size:11px;background:var(--ok-soft);color:var(--ok-text);border-radius:11px;padding:3px 9px">high confidence</div>
+              <div style="font-size:11px;background:var(--ok-soft);color:var(--ok-text);border-radius:12px;padding:3px 9px">high confidence</div>
             </div>
             <div style="font-size:16px;line-height:1.55;text-wrap:pretty">
               <sc-for list="{{ answerParts }}" as="p" hint-placeholder-count="2">
@@ -70,7 +71,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">EVIDENCE</div><div style="{{ metaStyle }}">{{ evidenceMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Evidence</div><div style="{{ metaStyle }}">{{ evidenceMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -83,8 +84,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               </div>
             </sc-for>
             <div role="button" tabIndex="0" aria-label="{{ evidencePrivate.ariaLabel }}" style="display:flex;flex-direction:column;gap:5px;padding:10px 0;cursor:pointer" style-hover="background:var(--hover)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:13.5px;font-weight:600">{{ evidencePrivate.source }}</div><span title="{{ evidencePrivate.badgeTitle }}" style="{{ evidencePrivate.badgeStyle }}"><span style="{{ evidencePrivate.badgeIconStyle }}">{{ evidencePrivate.badgeIcon }}</span>{{ evidencePrivate.badgeLabel }}</span><div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:11px;padding:3px 9px;display:flex;align-items:center;gap:4px"><span style="{{ noteIconStyle }}">lock</span>private source</div></div>
-              <div style="font-size:13px;color:var(--faint);font-style:italic">Content not available for review — the conclusion drawn from this source is kept in the result.</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:13.5px;font-weight:600">{{ evidencePrivate.source }}</div><span title="{{ evidencePrivate.badgeTitle }}" style="{{ evidencePrivate.badgeStyle }}"><span style="{{ evidencePrivate.badgeIconStyle }}">{{ evidencePrivate.badgeIcon }}</span>{{ evidencePrivate.badgeLabel }}</span><div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:12px;padding:3px 9px;display:flex;align-items:center;gap:4px"><span style="{{ noteIconStyle }}">lock</span>private source</div></div>
+              <div style="font-size:13px;color:var(--faint);font-style:italic">Content not available for review - the conclusion drawn from this source is kept in the result.</div>
               <div style="display:flex;gap:10px;font-size:11.5px;color:var(--faint)"><span>relevance {{ evidencePrivate.relevance }}</span><span>{{ evidencePrivate.freshness }}</span></div>
             </div>
             <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ evidencePartialNote }}</div></sc-if>
@@ -95,7 +96,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">TIMELINE</div><div style="{{ metaStyle }}">{{ timelineMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Timeline</div><div style="{{ metaStyle }}">{{ timelineMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -103,7 +104,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="{{ timelineRowStyle }}">
               <sc-for list="{{ timelineItems }}" as="t" hint-placeholder-count="4">
                 <div role="button" tabIndex="0" aria-label="{{ t.ariaLabel }}" style="{{ tlItemStyle }}" style-hover="border-top-color:var(--accent);cursor:pointer" style-focus="outline:2px solid var(--accent);outline-offset:2px">
-                  <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:12px;color:var(--muted)">{{ t.date }}</div>
+                  <div style="font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--muted)">{{ t.date }}</div>
                   <div style="font-size:14px;font-weight:600">{{ t.title }}</div>
                   <div style="font-size:12px;color:var(--muted)">{{ t.detail }}</div>
                 </div>
@@ -117,7 +118,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">FACT TABLE</div><div style="{{ metaStyle }}">{{ tableMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Fact table</div><div style="{{ metaStyle }}">{{ tableMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -144,7 +145,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">PEOPLE</div><div style="{{ metaStyle }}">{{ peopleMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">People</div><div style="{{ metaStyle }}">{{ peopleMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -153,7 +154,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               <div role="button" tabIndex="0" aria-label="{{ p.ariaLabel }}" style="display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line2);padding:10px 0;cursor:pointer" style-hover="background:var(--hover)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
                 <div style="width:32px;height:32px;flex:0 0 32px;border-radius:50%;background:var(--accent-soft);color:var(--accent-d);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ p.initials }}</div>
                 <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><div style="font-size:14px;font-weight:600">{{ p.name }}</div><div style="font-size:12px;color:var(--muted)">{{ p.role }}</div></div>
-                <div style="margin-left:auto;font-family:'Instrument Sans',system-ui,sans-serif;font-size:12px;color:var(--faint);white-space:nowrap">{{ p.last }}</div>
+                <div style="margin-left:auto;font-family:'Geist',system-ui,sans-serif;font-size:12px;color:var(--faint);white-space:nowrap">{{ p.last }}</div>
               </div>
             </sc-for>
             <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ peoplePartialNote }}</div></sc-if>
@@ -164,7 +165,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">THREAD STATE</div><div style="{{ metaStyle }}">{{ threadMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Thread state</div><div style="{{ metaStyle }}">{{ threadMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -177,16 +178,16 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </div>
             <div style="{{ threadColsStyle }}">
               <div style="display:flex;flex-direction:column;gap:6px">
-                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">AGREED</div>
+                <div style="font-size:11px;color:var(--muted);font-weight:600">Agreed</div>
                 <sc-for list="{{ threadAgreed }}" as="a" hint-placeholder-count="2"><div style="font-size:13px;color:var(--text2)">{{ a.text }}</div></sc-for>
               </div>
               <div style="display:flex;flex-direction:column;gap:6px">
-                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">OPEN QUESTIONS</div>
+                <div style="font-size:11px;color:var(--muted);font-weight:600">Open questions</div>
                 <sc-for list="{{ threadOpenQuestions }}" as="q" hint-placeholder-count="1"><div style="font-size:13px;color:var(--text2)">{{ q.text }}</div></sc-for>
               </div>
               <div style="display:flex;flex-direction:column;gap:6px">
-                <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">COMMITMENTS</div>
-                <sc-for list="{{ threadCommitments }}" as="c" hint-placeholder-count="2"><div style="font-size:13px;color:var(--text2)"><strong>{{ c.who }}</strong> — {{ c.what }} <span style="color:var(--faint)">· {{ c.when }}</span></div></sc-for>
+                <div style="font-size:11px;color:var(--muted);font-weight:600">Commitments</div>
+                <sc-for list="{{ threadCommitments }}" as="c" hint-placeholder-count="2"><div style="font-size:13px;color:var(--text2)"><strong>{{ c.who }}</strong> - {{ c.what }} <span style="color:var(--faint)">· {{ c.when }}</span></div></sc-for>
               </div>
             </div>
             <sc-if value="{{ isPartial }}" hint-placeholder-val="{{ false }}"><div style="{{ noteStyle }}"><span style="{{ noteIconStyle }}">hourglass_top</span>{{ threadPartialNote }}</div></sc-if>
@@ -197,7 +198,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">ATTACHMENTS</div><div style="{{ metaStyle }}">{{ galleryMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Attachments</div><div style="{{ metaStyle }}">{{ galleryMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
@@ -205,7 +206,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="{{ galleryGridStyle }}">
               <sc-for list="{{ galleryItems }}" as="g" hint-placeholder-count="3">
                 <div role="button" tabIndex="0" aria-label="{{ g.ariaLabel }}" style="display:flex;flex-direction:column;gap:7px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:13px 14px;cursor:pointer" style-hover="border-color:var(--accent)" style-focus="outline:2px solid var(--accent);outline-offset:2px">
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--muted)">{{ g.type }}</div><div style="{{ g.availStyle }}">{{ g.avail }}</div></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><div style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--muted)">{{ g.type }}</div><div style="{{ g.availStyle }}">{{ g.avail }}</div></div>
                   <div style="font-size:14px;font-weight:600;line-height:1.3">{{ g.name }}</div>
                   <div style="font-size:12px;color:var(--muted)">{{ g.meta }}</div>
                 </div>
@@ -219,12 +220,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">DRAFT</div><div style="{{ metaStyle }}">{{ draftMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Draft</div><div style="{{ metaStyle }}">{{ draftMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
           <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
-            <div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:11px;padding:3px 9px;align-self:flex-start">{{ draftStatusLabel }}</div>
+            <div style="font-size:11px;background:var(--rail);color:var(--muted);border-radius:12px;padding:3px 9px;align-self:flex-start">{{ draftStatusLabel }}</div>
             <div style="display:flex;flex-direction:column;gap:8px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:13px 15px">
               <div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--muted);flex:0 0 56px">To:</span><span>{{ draftTo }}</span></div>
               <div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--muted);flex:0 0 56px">Subject:</span><span style="font-weight:600">{{ draftSubject }}</span></div>
@@ -241,13 +242,13 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </div>
 
         <div style="{{ cardStyle }}">
-          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">SUGGESTED ACTION</div><div style="{{ metaStyle }}">{{ actionMeta }}</div></div>
+          <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Suggested action</div><div style="{{ metaStyle }}">{{ actionMeta }}</div></div>
           <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ skelRows }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
           </sc-if>
           <sc-if value="{{ bodyReady }}" hint-placeholder-val="{{ true }}">
             <div style="{{ actionRowStyle }}">
-              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.06em;color:var(--onaccent);background:var(--accent);border-radius:4px;padding:3px 7px">AI</span>
+              <span style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--onaccent);background:var(--accent);border-radius:4px;padding:3px 7px;font-weight:600">AI</span>
               <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
                 <div style="font-size:14px;font-weight:600">{{ actionTitle }}</div>
                 <div style="font-size:13px;color:var(--text2)">{{ actionReason }}</div>
@@ -265,11 +266,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         <div style="{{ crossHeadingStyle }}">Cross-cutting states</div>
         <div style="{{ crossRowStyle }}">
           <div style="{{ cardStyle }};flex:1">
-            <div style="{{ headStyle }}"><div style="{{ labelStyle }}">UNKNOWN BLOCK</div><div style="{{ metaStyle }}">type: {{ unknownBlockName }}</div></div>
+            <div style="{{ headStyle }}"><div style="{{ labelStyle }}">Unknown block</div><div style="{{ metaStyle }}">type: {{ unknownBlockName }}</div></div>
             <div style="display:flex;gap:11px;align-items:flex-start">
               <span style="{{ emptyIconStyle }};flex:0 0 auto">extension_off</span>
               <div style="display:flex;flex-direction:column;gap:5px">
-                <div style="font-size:13.5px;color:var(--text2);text-wrap:pretty">This client does not recognise the block type “{{ unknownBlockName }}”. The block was skipped — the rest of the result rendered normally.</div>
+                <div style="font-size:13.5px;color:var(--text2);text-wrap:pretty">This client does not recognise the block type “{{ unknownBlockName }}”. The block was skipped - the rest of the result rendered normally.</div>
                 <div style="{{ emptyReasonStyle }}">Updating the app may unlock this block type.</div>
               </div>
             </div>
@@ -281,9 +282,9 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <div style="{{ evidenceColStyle }}">
         <div style="{{ legendCardStyle }}">
           <div style="font-size:13px;font-weight:600">Citations and source honesty</div>
-          <div style="font-size:12px;color:var(--muted);text-wrap:pretty">A citation is always an activatable element with its own name (aria-label) — never a bare superscript.</div>
+          <div style="font-size:12px;color:var(--muted);text-wrap:pretty">A citation is always an activatable element with its own name (aria-label) - never a bare superscript.</div>
           <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px;border-top:1px solid var(--line2)">
-            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">CITATION CHIP STATE</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600">Citation chip state</div>
             <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
               <sc-for list="{{ citationSamples }}" as="c" hint-placeholder-count="3">
                 <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
@@ -294,7 +295,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px;border-top:1px solid var(--line2)">
-            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">VERDICT ON A FACT</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600">Verdict on a fact</div>
             <sc-for list="{{ verdictLegend }}" as="v" hint-placeholder-count="4">
               <div style="display:flex;align-items:center;gap:9px">
                 <div style="{{ v.chipStyle }}"><span style="{{ v.iconStyle }}">{{ v.icon }}</span>{{ v.label }}</div>
@@ -303,7 +304,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </sc-for>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--line2)">
-            <div style="font-size:11px;letter-spacing:0.06em;color:var(--muted)">PRIVATE SOURCE</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600">Private source</div>
             <div style="display:flex;align-items:flex-start;gap:8px">
               <span style="{{ noteIconStyle }};font-size:16px">lock</span>
               <div style="font-size:12.5px;color:var(--text2);text-wrap:pretty">The source content is not visible, but the conclusion drawn from it stays in the result. This is not an error.</div>
@@ -316,8 +317,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
     <div style="{{ propSectionStyle }}">
       <div style="display:flex;flex-direction:column;gap:5px">
-        <div style="{{ crossHeadingStyle }}">Proposal blocks — the Agent's three phases</div>
-        <div style="font-size:12.5px;color:var(--muted);text-wrap:pretty;max-width:760px">In Discover these read as a static “needs confirmation” badge. In a conversation the same blocks carry real controls, so approving, sending and scheduling happen where the person is reading. EVENT PROPOSAL and TASK PROPOSAL exist only where something has to be seen and corrected before it is approved — everything else stays a one-line SUGGESTED ACTION.</div>
+        <div style="{{ crossHeadingStyle }}">Proposal blocks - the Agent's three phases</div>
+        <div style="font-size:12.5px;color:var(--muted);text-wrap:pretty;max-width:760px">In Discover these read as a static “needs confirmation” badge. In a conversation the same blocks carry real controls, so approving, sending and scheduling happen where the person is reading. EVENT PROPOSAL and TASK PROPOSAL exist only where something has to be seen and corrected before it is approved - everything else stays a one-line SUGGESTED ACTION.</div>
       </div>
       <div style="{{ propGridStyle }}">
         <sc-for list="{{ propCards }}" as="pc" hint-placeholder-count="4">
@@ -332,7 +333,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               <div style="{{ pc.declinedStyle }}">
                 <span style="{{ pc.declinedIconStyle }}">block</span>
                 <span style="{{ pc.strikeStyle }}">{{ pc.title }}</span>
-                <span>Declined — nothing was done</span>
+                <span>Declined - nothing was done</span>
               </div>
             </sc-if>
 

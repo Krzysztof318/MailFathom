@@ -35,8 +35,8 @@ body {
 }
 .sheet { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 34px; }
 h1 { font-size: 24px; letter-spacing: -0.015em; margin: 0; }
-h2 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
-     font-family: 'Instrument Sans', system-ui, sans-serif; font-weight: 600; margin: 0; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted);
+     font-family: 'Geist', system-ui, sans-serif; font-weight: 600; margin: 0; }
 .lede { color: var(--text-soft); max-width: 72ch; text-wrap: pretty; margin: 0; }
 .state { display: flex; flex-direction: column; gap: 10px; }
 .note { color: var(--muted); font-size: 13px; max-width: 78ch; text-wrap: pretty; margin: 0; }
@@ -46,12 +46,12 @@ h2 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: v
 .pill { display: flex; align-items: center; gap: 8px; background: var(--rail); border: 1px solid var(--line);
         border-radius: 999px; padding: 8px 13px; color: var(--faint); font-size: 14px; }
 .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text-soft);
-       border-radius: 7px; padding: 5px 11px; font-size: 13px; white-space: nowrap; }
+       border-radius: 8px; padding: 5px 11px; font-size: 13px; white-space: nowrap; }
 .row-actions { display: flex; align-items: center; gap: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; }
 .chip { display: flex; align-items: center; gap: 5px; background: var(--accent-soft); color: var(--accent-strong);
         border-radius: 6px; padding: 3px 8px; font-size: 13px; }
-.chip button { all: unset; line-height: 1; padding: 1px 3px; border-radius: 3px; cursor: pointer; }
+.chip button { all: unset; line-height: 1; padding: 1px 3px; border-radius: 4px; cursor: pointer; }
 .fold { color: var(--muted); font-size: 13px; }
 .rows { background: var(--panel); }
 .row { height: var(--row); border-bottom: 1px solid var(--line-soft); padding: 0 12px;
@@ -60,7 +60,7 @@ h2 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: v
 .line1 { display: flex; align-items: baseline; gap: 8px; }
 .who { font-size: 14px; font-weight: 600; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .org { font-size: 12px; color: var(--faint); }
-.when { margin-left: auto; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 11px; color: var(--faint); }
+.when { margin-left: auto; font-family: 'Geist', system-ui, sans-serif; font-size: 11px; color: var(--faint); }
 .line2 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
 .subject { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

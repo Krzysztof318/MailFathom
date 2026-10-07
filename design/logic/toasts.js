@@ -145,7 +145,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
         hasBar: !t.sticky && !t.out,
         barStyle: "position:absolute;left:0;right:0;bottom:0;height:2px;transform-origin:left;opacity:0.55;background:" + K.bar +
           (live ? ";animation:mftbar " + (t.ms || this.ms()) + "ms linear both" : ";transform:scaleX(0.62)"),
-        iconWrapStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:" + K.soft,
+        iconWrapStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:" + K.soft,
         iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:21px;line-height:1;color:" + K.c + (loading ? ";animation:mfspin 1.1s linear infinite" : ""),
         style: "position:relative;overflow:hidden;display:flex;align-items:flex-start;gap:12px;padding:13px 12px 15px 13px;border-radius:15px;background:var(--panel);border:1px solid var(--line);" +
           (live
@@ -163,7 +163,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
       const isMobile = w < 700;
       /* In frame mode the overlays are absolute inside the frame so they do not spill past the phone screen. */
       const ovBase = (z) => (FR ? "position:absolute" : "position:fixed") + ";inset:0;z-index:" + z + ";display:flex;align-items:center;justify-content:center;padding:" + (isMobile ? 18 : 24) + "px;background:var(--scrim);";
-      const btn = "display:flex;align-items:center;gap:8px;height:38px;padding:0 15px;border:1px solid var(--border2);border-radius:10px;font-size:13px;font-weight:500;color:var(--text2)";
+      const btn = "display:flex;align-items:center;gap:8px;height:38px;padding:0 15px;border:1px solid var(--border2);border-radius:12px;font-size:13px;font-weight:500;color:var(--text2)";
       const bar = this.props.showProgressBar ?? true;
 
       return {
@@ -171,7 +171,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
         themeAttr: theme,
         themeIcon: theme === "dark" ? "dark_mode" : "light_mode",
         toggleTheme: () => this.setState({ theme: theme === "dark" ? "light" : "dark" }),
-        outerStyle: "min-height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;padding:" + (FR ? "26px 20px 40px" : isMobile ? "20px 14px 44px" : "34px 28px 60px"),
+        outerStyle: "min-height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;padding:" + (FR ? "26px 20px 40px" : isMobile ? "20px 14px 44px" : "34px 28px 60px"),
         frameStyle: FR
           ? "box-sizing:border-box;width:" + FR.w + "px;max-width:100%;height:" + FR.h + "px;max-height:calc(100vh - 66px);position:relative;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--border2);border-radius:" + (isMobile ? 20 : 16) + "px;box-shadow:0 20px 60px var(--sh-3)"
           : "width:100%;max-width:1180px;position:relative;display:flex;flex-direction:column",
@@ -187,7 +187,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
           {
             name: "Toast", where: "Top right corner, fleeting", icon: "bolt", c: "var(--accent-2)", soft: "var(--accent-soft)",
             points: [
-              "A response to my own action — I sent, deleted, downloaded.",
+              "A response to my own action - I sent, deleted, downloaded.",
               "Lives " + Math.round(this.ms() / 1000) + " seconds and leaves no trace.",
               "Has no read state and no history.",
               "At most one action: Undo, Retry, Show.",
@@ -196,7 +196,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
           {
             name: "Notification", where: "Badge in the rail and the notification centre", icon: "notifications", c: "var(--warn-text)", soft: "var(--warn-soft)",
             points: [
-              "An event from outside — new mail, calendar, a change in a case.",
+              "An event from outside - new mail, calendar, a change in a case.",
               "Stays until read and has an unread counter.",
               "Can be marked as read or unread.",
               "A click leads to the thread, event or case.",
@@ -204,8 +204,8 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
           },
         ].map(c => ({
           name: c.name, where: c.where, icon: c.icon,
-          cardStyle: "display:flex;flex-direction:column;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 16px 16px",
-          iconWrapStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:" + c.soft,
+          cardStyle: "display:flex;flex-direction:column;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px 16px",
+          iconWrapStyle: "flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:" + c.soft,
           iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:20px;line-height:1;color:" + c.c,
           points: c.points.map(t => ({
             text: t,
@@ -223,7 +223,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
           return {
             name: s.name, kind: s.kind, desc: s.desc, title: s.title, body: s.body,
             hasBody: !!s.body, hasAction: !!s.action, actionLabel: s.action,
-            chipStyle: "font-size:11px;letter-spacing:0.04em;padding:3px 9px;border-radius:11px;background:" + K.soft + ";color:" + K.c,
+            chipStyle: "font-size:11px;padding:3px 9px;border-radius:12px;background:;font-weight:600;" + K.soft + ";color:" + K.c,
             demo: Object.assign({}, v, { hasBar: v.hasBar && bar }),
             spawn: () => {
               if (s.kind === "loading") {
@@ -261,7 +261,7 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
         specs: [
           { k: "Position", v: "Top right corner, 18 px from the edge. On a narrow screen, full width at the top." },
           { k: "Timing", v: "Auto-close after " + Math.round(this.ms() / 1000) + " s; the bar at the bottom shows the time left." },
-          { k: "Transparency", v: "0.8 at rest, 1.0 under the cursor — content beneath the stack stays readable." },
+          { k: "Transparency", v: "0.8 at rest, 1.0 under the cursor - content beneath the stack stays readable." },
           { k: "Close button", v: "Always present. For a running operation it means abort and asks for confirmation." },
         ],
 
@@ -270,15 +270,15 @@ MailFathomDesign.artboards.toasts = (DCLogic, React) => {
         blockOpen: !!st.block,
         blockTitle: st.block ? st.block.title : "",
         blockBody: st.block ? st.block.body : "",
-        blockPctLabel: st.block ? (st.block.det ? st.block.pct + "% — do not close the tab" : "No known completion time") : "",
-        blockFillStyle: "height:100%;border-radius:3px;background:var(--accent);" +
+        blockPctLabel: st.block ? (st.block.det ? st.block.pct + "% - do not close the tab" : "No known completion time") : "",
+        blockFillStyle: "height:100%;border-radius:4px;background:var(--accent);" +
           (st.block && st.block.det
             ? "width:" + (st.block ? st.block.pct : 0) + "%;transition:width .45s linear"
             : "width:38%;animation:mfslide 1.4s ease-in-out infinite"),
         askBlockCancel: () => { clearInterval(this._blockI); clearTimeout(this._blockI); this.setState({ blockAsk: true }); },
         blockAskOpen: !!st.blockAsk,
         blockAskText: st.block && st.block.det
-          ? "The migration is " + (st.block ? st.block.pct : 0) + "% done. Aborting leaves some messages on the old server — the migration will have to be run again."
+          ? "The migration is " + (st.block ? st.block.pct : 0) + "% done. Aborting leaves some messages on the old server - the migration will have to be run again."
           : "The index rebuild is not finished. Until it completes, search runs on the old index.",
         keepBlocking: () => { this.setState({ blockAsk: false }); this.runBlock(!!(st.block && st.block.det)); },
         abortBlocking: this.abortBlock,

@@ -10,15 +10,15 @@ MailFathomDesign.data.threads = [
     from: "Anna Kowalska",
     org: "Contoso",
     time: "09:14",
-    subject: "Contract addendum — signatures",
+    subject: "Contract addendum - signatures",
     ai: "Needs a decision by Friday · SLA change",
     meta: "Anna Kowalska <a.kowalska@contoso.example> · today 09:14 · thread: 6 messages",
     state: [
-      { label: "AGREED", value: "SLA 2 h · price +8% from 2027" },
-      { label: "OPEN QUESTION", value: "Upper cap on CPI indexation" },
-      { label: "COMMITMENT", value: "Decision on our side by 28.08" },
+      { label: "Agreed", value: "SLA 2 h · price +8% from 2027" },
+      { label: "Open question", value: "Upper cap on CPI indexation" },
+      { label: "Commitment", value: "Decision on our side by 28.08" },
       {
-        label: "VERSION DIFFERENCE",
+        label: "Version difference",
         value: "The revised addendum of 25.08 no longer carries the 5% indexation cap that the first draft of 18.08 still had.",
       },
     ],
@@ -60,9 +60,9 @@ After 28 August we send the document for signature as it stands. Full text: [SLA
     ai: "Payment due: 29.08",
     meta: "invoices@company.example · today 08:02 · thread: 1 message",
     state: [
-      { label: "AGREED", value: "€1,452 net" },
-      { label: "DEADLINE", value: "Payment by 29.08" },
-      { label: "COMMITMENT", value: "No action on our side" },
+      { label: "Agreed", value: "€1,452 net" },
+      { label: "Deadline", value: "Payment by 29.08" },
+      { label: "Commitment", value: "No action on our side" },
     ],
     body: [
       { text: "Attached is invoice 08/2026 for August. Amount due: €1,452.00 net, €1,786.00 gross." },
@@ -82,23 +82,23 @@ After 28 August we send the document for signature as it stands. Full text: [SLA
     ai: "Confirmed phase two",
     meta: "p.zielinski@company.example · yesterday 16:41 · thread: 5 messages",
     state: [
-      { label: "AGREED", value: "Phase two confirmed" },
-      { label: "OPEN QUESTION", value: "UAT test dates" },
-      { label: "COMMITMENT", value: "Piotr will prepare the test plan" },
+      { label: "Agreed", value: "Phase two confirmed" },
+      { label: "Open question", value: "UAT test dates" },
+      { label: "Commitment", value: "Piotr will prepare the test plan" },
       {
-        label: "VERSION DIFFERENCE",
+        label: "Version difference",
         value: "The corrected schedule of 21.08 closes phase two at 41 of 58 tasks instead of the earlier “all tasks done”.",
       },
     ],
     body: [
       {
-        text: "Confirming that phase two is closed — the Exchange integration is ready for acceptance, we closed 41 of 58 tasks.",
+        text: "Confirming that phase two is closed - the Exchange integration is ready for acceptance, we closed 41 of 58 tasks.",
       },
       {
         text: "Two tasks remain blocked on the Graph API side, but they do not affect acceptance. No critical bugs open.",
       },
       {
-        text: "The UAT window is still to be agreed. I suggest 15–19 September so we finish before the October training. I rate the schedule risk as medium.",
+        text: "The UAT window is still to be agreed. I suggest 15-19 September so we finish before the October training. I rate the schedule risk as medium.",
       },
     ],
     attachments: [],
@@ -112,9 +112,9 @@ After 28 August we send the document for signature as it stands. Full text: [SLA
     ai: "Commitment: reply by 27.08",
     meta: "m.nowak@company.example · yesterday 11:20 · thread: 4 messages",
     state: [
-      { label: "AGREED", value: "CPI forecast 4.1%" },
-      { label: "OPEN QUESTION", value: "Do we propose a 5% cap" },
-      { label: "COMMITMENT", value: "Reply by 27.08" },
+      { label: "Agreed", value: "CPI forecast 4.1%" },
+      { label: "Open question", value: "Do we propose a 5% cap" },
+      { label: "Commitment", value: "Reply by 27.08" },
     ],
     body: [
       {
@@ -133,7 +133,7 @@ Year on year that is **+€29,582** in the base scenario.
 ## Recommendation
 - negotiate an upper indexation cap of **5% per year**
 - in the worst case that saves about €11.6k
-- ~~dropping the monthly report~~ — Contoso will not budge on that
+- ~~dropping the monthly report~~ - Contoso will not budge on that
 
 Formula used in the sheet:
 
@@ -151,17 +151,17 @@ Answer needed by **27 August**.`,
     from: "Jacek Wrona",
     org: "",
     time: "24.08",
-    subject: "Legal opinion — indexation cap",
+    subject: "Legal opinion - indexation cap",
     ai: "",
     meta: "j.wrona@lawoffice.example · 24.08.2026 · thread: 2 messages",
     state: [
-      { label: "AGREED", value: "A cap is contractually permissible" },
-      { label: "OPEN QUESTION", value: "None" },
-      { label: "COMMITMENT", value: "None" },
+      { label: "Agreed", value: "A cap is contractually permissible" },
+      { label: "Open question", value: "None" },
+      { label: "Commitment", value: "None" },
     ],
     body: [
       {
-        md: `## Legal opinion — indexation cap
+        md: `## Legal opinion - indexation cap
 
 Introducing an upper cap on indexation is **permissible** under freedom of contract and requires no change to the other provisions of the master agreement.
 
@@ -192,13 +192,13 @@ I rate the litigation risk as *low*. An uncapped clause with CPI above 8% could,
     ai: "Waiting on our reply",
     meta: "a.kowalska@contoso.example · today 08:47 · thread: 3 messages",
     state: [
-      { label: "AGREED", value: "Three options on the table" },
-      { label: "OPEN QUESTION", value: "Do we accept option B" },
-      { label: "COMMITMENT", value: "Reply by 28.08" },
+      { label: "Agreed", value: "Three options on the table" },
+      { label: "Open question", value: "Do we accept option B" },
+      { label: "Commitment", value: "Reply by 28.08" },
     ],
     body: [
       {
-        text: "A reminder about our proposal of 26 August. We prepared three options for 2027 — unchanged, recommended, and extended to weekends.",
+        text: "A reminder about our proposal of 26 August. We prepared three options for 2027 - unchanged, recommended, and extended to weekends.",
       },
       {
         text: "The recommended option shortens the response time to two hours, adds a dedicated technical account manager for two days a month and a monthly availability report. Annual price: €257,040 net.",
@@ -214,17 +214,17 @@ I rate the litigation risk as *low*. An uncapped clause with CPI above 8% could,
     from: "HR Department",
     org: "",
     time: "07:55",
-    subject: "Satisfaction survey — due 05.09",
+    subject: "Satisfaction survey - due 05.09",
     ai: "Due: 05.09",
     meta: "hr@company.example · today 07:55 · thread: 1 message",
     state: [
-      { label: "AGREED", value: "Anonymous survey, 7 minutes" },
-      { label: "OPEN QUESTION", value: "None" },
-      { label: "COMMITMENT", value: "Complete by 05.09" },
+      { label: "Agreed", value: "Anonymous survey, 7 minutes" },
+      { label: "Open question", value: "None" },
+      { label: "Commitment", value: "Complete by 05.09" },
     ],
     body: [
       {
-        text: "Please fill in the annual satisfaction survey. It takes about seven minutes and is fully anonymous — an external platform collects the answers and we only see aggregate results.",
+        text: "Please fill in the annual satisfaction survey. It takes about seven minutes and is fully anonymous - an external platform collects the answers and we only see aggregate results.",
       },
       {
         text: "The survey covers six areas plus two open questions. Last year 78% of the team completed it; that is what the training budget and flexible start hours came from.",
@@ -242,13 +242,13 @@ I rate the litigation risk as *low*. An uncapped clause with CPI above 8% could,
     ai: "Needs a decision · quote valid 30 days",
     meta: "r.lis@northwind.example · today 07:12 · thread: 2 messages",
     state: [
-      { label: "AGREED", value: "€24,000 net, 6-week rollout" },
-      { label: "OPEN QUESTION", value: "Scope of custom reports" },
-      { label: "COMMITMENT", value: "Decision by 30.09" },
+      { label: "Agreed", value: "€24,000 net, 6-week rollout" },
+      { label: "Open question", value: "Scope of custom reports" },
+      { label: "Commitment", value: "Decision by 30.09" },
     ],
     body: [
       {
-        md: `# Quote — reporting module
+        md: `# Quote - reporting module
 
 ## Scope
 - 12 standard reports (sales, SLA, licence usage)
@@ -268,9 +268,9 @@ I rate the litigation risk as *low*. An uncapped clause with CPI above 8% could,
 Maintenance: *€1,200 per month* from the second month after acceptance.
 
 ## Schedule
-1. Data source configuration — 2 weeks
-2. Report build — 2 weeks
-3. Testing and training — 2 weeks
+1. Data source configuration - 2 weeks
+2. Report build - 2 weeks
+3. Testing and training - 2 weeks
 
 ---
 
@@ -288,16 +288,16 @@ Quote valid until **30 September**. Details: [northwind.example/reports](https:/
     ai: "",
     meta: "noreply@bank.example · today 06:58 · thread: 1 message",
     state: [
-      { label: "AGREED", value: "Transfer completed 01.09" },
-      { label: "OPEN QUESTION", value: "None" },
-      { label: "COMMITMENT", value: "None" },
+      { label: "Agreed", value: "Transfer completed 01.09" },
+      { label: "Open question", value: "None" },
+      { label: "Commitment", value: "None" },
     ],
     body: [
       {
         text: "A transfer of €18,400.00 has been completed. Beneficiary: Contoso Ltd, account DE61 1090 1014 0000 0712 19.",
       },
       {
-        text: "Reference: addendum — August 2026 settlement. Booking date: 1 September 2026, 06:58. Operation reference: TRN-8841-220916.",
+        text: "Reference: addendum - August 2026 settlement. Booking date: 1 September 2026, 06:58. Operation reference: TRN-8841-220916.",
       },
       { text: "This message only confirms the operation and needs no reply." },
     ],
@@ -312,13 +312,13 @@ Quote valid until **30 September**. Details: [northwind.example/reports](https:/
     ai: "Date change · November",
     meta: "t.bak@fabrikam.example · yesterday 17:05 · thread: 7 messages",
     state: [
-      { label: "AGREED", value: "Delivery moved to 12.11" },
-      { label: "OPEN QUESTION", value: "Do we accept the delay" },
-      { label: "COMMITMENT", value: "Confirm by 02.09" },
+      { label: "Agreed", value: "Delivery moved to 12.11" },
+      { label: "Open question", value: "Do we accept the delay" },
+      { label: "Commitment", value: "Confirm by 02.09" },
     ],
     body: [
       {
-        text: "Because of a line stoppage at the component manufacturer, delivery of order ORD-2026-0914 moves from 28 October to 12 November, window 08:00–14:00.",
+        text: "Because of a line stoppage at the component manufacturer, delivery of order ORD-2026-0914 moves from 28 October to 12 November, window 08:00-14:00.",
       },
       {
         text: "Scope unchanged: four pallets, 1,240 kg. Component production finishes on 2 September, picking and quality control by 5 November.",
@@ -338,13 +338,13 @@ Quote valid until **30 September**. Details: [northwind.example/reports](https:/
     ai: "Needs a decision · data by 03.09",
     meta: "audit@company.example · yesterday 16:12 · thread: 3 messages",
     state: [
-      { label: "AGREED", value: "Scope: IT contracts 2024–2026" },
-      { label: "OPEN QUESTION", value: "Who prepares the list" },
-      { label: "COMMITMENT", value: "List due 03.09" },
+      { label: "Agreed", value: "Scope: IT contracts 2024-2026" },
+      { label: "Open question", value: "Who prepares the list" },
+      { label: "Commitment", value: "List due 03.09" },
     ],
     body: [
       {
-        md: `## Request for the IT contract register 2024–2026
+        md: `## Request for the IT contract register 2024-2026
 
 As part of the periodic review, please send a **complete list of IT contracts** including addenda.
 
@@ -362,7 +362,7 @@ As part of the periodic review, please send a **complete list of IT contracts** 
 | Audit follow-up questions | 08.09 |
 | Review closed | 15.09 |
 
-> The request needs no formal reply — just send the file to the audit address, copying the board office.`,
+> The request needs no formal reply - just send the file to the audit address, copying the board office.`,
       },
     ],
     attachments: [],
@@ -372,13 +372,13 @@ As part of the periodic review, please send a **complete list of IT contracts** 
     from: "Wrona Law Office",
     org: "",
     time: "yest.",
-    subject: "Draft NDA — Northwind",
+    subject: "Draft NDA - Northwind",
     ai: "For signature",
     meta: "j.wrona@lawoffice.example · yesterday 15:40 · thread: 2 messages",
     state: [
-      { label: "AGREED", value: "3-year NDA, €50k penalty" },
-      { label: "OPEN QUESTION", value: "Will the other side accept the lower penalty" },
-      { label: "COMMITMENT", value: "Signature by 05.09" },
+      { label: "Agreed", value: "3-year NDA, €50k penalty" },
+      { label: "Open question", value: "Will the other side accept the lower penalty" },
+      { label: "Commitment", value: "Signature by 05.09" },
     ],
     body: [
       {
@@ -398,17 +398,17 @@ As part of the periodic review, please send a **complete list of IT contracts** 
     from: "Travel Desk",
     org: "",
     time: "yest.",
-    subject: "Tickets Kraków–Berlin 12.09",
+    subject: "Tickets Kraków-Berlin 12.09",
     ai: "Check-in from: 11.09",
     meta: "bookings@travel.example · yesterday 14:02 · thread: 1 message",
     state: [
-      { label: "AGREED", value: "Flight 12.09, 07:40, PNR 7QX4MB" },
-      { label: "OPEN QUESTION", value: "None" },
-      { label: "COMMITMENT", value: "Online check-in 11.09" },
+      { label: "Agreed", value: "Flight 12.09, 07:40, PNR 7QX4MB" },
+      { label: "Open question", value: "None" },
+      { label: "Commitment", value: "Online check-in 11.09" },
     ],
     body: [
       {
-        md: `## Booking confirmed — \`7QX4MB\`
+        md: `## Booking confirmed - \`7QX4MB\`
 
 | | Departure | Arrival |
 | --- | --- | --- |
@@ -425,7 +425,7 @@ Direct flight, flying time *1 h 25 min*. Seat **14C**, aisle.
 
 ---
 
-Online check-in: **11.09 from 07:40**, closes 2 h before departure — [check in online](https://travel.example/checkin/7QX4MB).`,
+Online check-in: **11.09 from 07:40**, closes 2 h before departure - [check in online](https://travel.example/checkin/7QX4MB).`,
       },
     ],
     attachments: [{ type: "PDF", name: "Tickets.pdf", size: "120 kB" }],
@@ -439,22 +439,22 @@ Online check-in: **11.09 from 07:40**, closes 2 h before departure — [check in
     ai: "Deadline: 10.09",
     meta: "marketing@company.example · yesterday 12:30 · thread: 5 messages",
     state: [
-      { label: "AGREED", value: "Stand C18, 18 m²" },
-      { label: "OPEN QUESTION", value: "Who runs the demo" },
-      { label: "COMMITMENT", value: "Materials by 10.09" },
+      { label: "Agreed", value: "Stand C18, 18 m²" },
+      { label: "Open question", value: "Who runs the demo" },
+      { label: "Commitment", value: "Materials by 10.09" },
     ],
     body: [
       {
-        md: `# Trade show Poznań, 24–26.09
+        md: `# Trade show Poznań, 24-26.09
 
 Stand **C18**, 18 m². Coordination: Piotr Zieliński, print: Nord agency.
 
 ## Material status
 - [x] stand build design
-- [x] roll-up 1 — print-ready file
-- [ ] roll-up 2 — no English version
+- [x] roll-up 1 - print-ready file
+- [ ] roll-up 2 - no English version
 - [ ] product leaflet \`PL\` / \`EN\`
-- [ ] **demo presenter** — not assigned
+- [ ] **demo presenter** - not assigned
 
 | Item | Owner | Due |
 | --- | --- | --- |
@@ -476,25 +476,25 @@ Stand **C18**, 18 m². Coordination: Piotr Zieliński, print: Nord agency.
     ai: "Needs a reply",
     meta: "e.sikora@adventure.example · yesterday 10:15 · thread: 4 messages",
     state: [
-      { label: "AGREED", value: "Today: support Mon–Fri 8:00–18:00" },
-      { label: "OPEN QUESTION", value: "Do we offer Saturdays, and at what price" },
-      { label: "COMMITMENT", value: "Reply by 01.09" },
+      { label: "Agreed", value: "Today: support Mon-Fri 8:00-18:00" },
+      { label: "Open question", value: "Do we offer Saturdays, and at what price" },
+      { label: "Commitment", value: "Reply by 01.09" },
     ],
     body: [
       {
-        md: `Coming back to **weekend support** — from October we are starting Saturday cover for three of our clients.
+        md: `Coming back to **weekend support** - from October we are starting Saturday cover for three of our clients.
 
 ## What we need
 
 | Scope | Today | Target |
 | --- | --- | --- |
-| Days | Mon–Fri | Mon–**Sat** |
-| Hours | 8:00–18:00 | 8:00–16:00 (Sat) |
+| Days | Mon-Fri | Mon-**Sat** |
+| Hours | 8:00-18:00 | 8:00-16:00 (Sat) |
 | Response (critical) | 2 h | 4 h |
 | Channel | portal | portal + on-call phone |
 
 1. Does the current contract cover Saturdays?
-2. If not — what is the price range for the add-on?
+2. If not - what is the price range for the add-on?
 3. How soon could we start?
 
 > We take the budget decision next week, so even a ballpark figure helps.`,
@@ -507,17 +507,17 @@ Stand **C18**, 18 m². Coordination: Piotr Zieliński, print: Nord agency.
     from: "Nordwind CI",
     org: "",
     time: "06:20",
-    subject: "Nightly report — build #2418",
+    subject: "Nightly report - build #2418",
     ai: "Build green · 2 warnings",
     meta: "ci@nordwind.example · today 06:20 · thread: 1 message",
     state: [
-      { label: "AGREED", value: "Build green, 2 warnings" },
-      { label: "OPEN QUESTION", value: "Do we ship to production" },
-      { label: "COMMITMENT", value: "Decision by 09:00" },
+      { label: "Agreed", value: "Build green, 2 warnings" },
+      { label: "Open question", value: "Do we ship to production" },
+      { label: "Commitment", value: "Decision by 09:00" },
     ],
     body: [
       {
-        md: `# Nightly report — build **#2418**
+        md: `# Nightly report - build **#2418**
 
 Branch \`release/2.4\` · commit \`8f31c0d\` · duration 14 min 22 s
 
@@ -529,7 +529,7 @@ Branch \`release/2.4\` · commit \`8f31c0d\` · duration 14 min 22 s
 | Security scan | **2 warnings** | 1 min 42 s |
 
 ## Warnings
-1. \`libxml2 2.9.14\` — *medium* severity, fixed in 2.9.15
+1. \`libxml2 2.9.14\` - *medium* severity, fixed in 2.9.15
 2. Unused API key in \`config/staging.yml\`
 
 > Neither warning blocks the release. Team recommendation: **ship it**, take the libxml fix into the next patch.
@@ -558,13 +558,13 @@ Full log: [ci.nordwind.example/2418](https://ci.nordwind.example/2418). Decision
     from: "Anna Bielska",
     org: "HR",
     time: "yest.",
-    subject: "Hiring summary — Frontend",
+    subject: "Hiring summary - Frontend",
     ai: "3 candidates awaiting a decision",
     meta: "a.bielska@company.example · yesterday 13:50 · thread: 6 messages",
     state: [
-      { label: "AGREED", value: "Three finalists" },
-      { label: "OPEN QUESTION", value: "Who goes to the final round" },
-      { label: "COMMITMENT", value: "Decision by 04.09" },
+      { label: "Agreed", value: "Three finalists" },
+      { label: "Open question", value: "Who goes to the final round" },
+      { label: "Commitment", value: "Decision by 04.09" },
     ],
     body: [
       {
@@ -579,15 +579,15 @@ Full log: [ci.nordwind.example/2418](https://ci.nordwind.example/2418). Decision
 | J. Sowa | 4 | 3 | 5 | 4.0 |
 
 ### Interviewer notes
-- **K. Adamiak** — best practical task, expectations 12% above the band
-- **M. Rutkowski** — strong architecture, weaker in pairing; available immediately
-- **J. Sowa** — excellent team fit, *needs support* on testing
+- **K. Adamiak** - best practical task, expectations 12% above the band
+- **M. Rutkowski** - strong architecture, weaker in pairing; available immediately
+- **J. Sowa** - excellent team fit, *needs support* on testing
 
-> Band for this role: €3,600–4,300 per month, contract. Going above the top of the band needs board approval.
+> Band for this role: €3,600-4,300 per month, contract. Going above the top of the band needs board approval.
 
 ### Next steps
 1. Pick two people for the final round by **4 September**
-2. Final interviews 8–10 September
+2. Final interviews 8-10 September
 3. Offer by 15 September
 
 - [x] references checked (all three)
@@ -621,7 +621,7 @@ MailFathomDesign.data.earlierMessages = {
       when: "25.08, 11:15",
       paras: [
         {
-          text: "Thank you. Let me know when the calendar mappings are done — that decides when we can invite users to test.",
+          text: "Thank you. Let me know when the calendar mappings are done - that decides when we can invite users to test.",
         },
       ],
     },
@@ -630,7 +630,7 @@ MailFathomDesign.data.earlierMessages = {
       when: "26.08, 14:05",
       paras: [
         {
-          text: "Calendar mappings are done. Along the way we found a time-zone problem with recurring meetings — the fix ships on Wednesday.",
+          text: "Calendar mappings are done. Along the way we found a time-zone problem with recurring meetings - the fix ships on Wednesday.",
         },
         {
           text: "Two tasks are blocked on the Graph API side. Unblocking depends on Microsoft; we have a priority B ticket open.",
@@ -658,7 +658,7 @@ MailFathomDesign.data.earlierMessages = {
       when: "21.08, 10:02",
       paras: [
         {
-          text: "Hello, here is an outline of the changes to the 2021 master agreement. The key areas are service level and fees — details in the formal version we will prepare this week.",
+          text: "Hello, here is an outline of the changes to the 2021 master agreement. The key areas are service level and fees - details in the formal version we will prepare this week.",
         },
       ],
     },
@@ -667,7 +667,7 @@ MailFathomDesign.data.earlierMessages = {
       when: "21.08, 15:38",
       paras: [
         {
-          text: "Thank you. Please send a version with changes marked against the current contract — otherwise it is hard for us to judge the cost impact.",
+          text: "Thank you. Please send a version with changes marked against the current contract - otherwise it is hard for us to judge the cost impact.",
         },
       ],
     },
@@ -687,7 +687,7 @@ MailFathomDesign.data.earlierMessages = {
       when: "25.08, 12:24",
       paras: [
         {
-          text: "I calculated the impact of the 8% increase at a 4.1% CPI forecast — about €19k more per year. Worth asking for an upper indexation cap.",
+          text: "I calculated the impact of the 8% increase at a 4.1% CPI forecast - about €19k more per year. Worth asking for an upper indexation cap.",
         },
       ],
       attachments: [{ type: "XLSX", name: "CPI_2027.xlsx", size: "34 kB" }],

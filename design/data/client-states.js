@@ -5,7 +5,7 @@
 MailFathomDesign.data.clientStatesSample = {
   accounts: {
     work: "Nordwind · work",
-    workHeading: "NORDWIND · WORK",
+    workHeading: "Nordwind · work",
     personal: "Personal mail",
     workSynced: "synced 2 min ago",
     personalSynced: "synced 5 min ago",
@@ -23,10 +23,10 @@ MailFathomDesign.data.clientStatesSample = {
     question: "What did we agree with Contoso about weekend cover?",
     questionNothingComposed: "Did Nordwind ever agree to penalty clauses?",
     scopeAllMailboxes: "All mailboxes",
-    scopePeriod: "2019–2026",
+    scopePeriod: "2019-2026",
     plan: "plan: contract terms",
     syncStatus: "Synced 2 min ago · 2 accounts",
-    answerWeekendCover: "Weekend cover is a 4 h response on Saturdays and Sundays, 08:00–20:00",
+    answerWeekendCover: "Weekend cover is a 4 h response on Saturdays and Sundays, 08:00-20:00",
     answerWeekendCoverShort: "Weekend cover is a 4 h response on Saturdays and Sundays",
     answerAddendum: ", added by addendum 3 on 14 March",
     twoSourcesAgree: "2 sources agree",
@@ -43,11 +43,11 @@ MailFathomDesign.data.clientStatesSample = {
     positionSecond: "2 / 5",
     positionThird: "3 / 5",
     positionFourth: "4 / 5",
-    addendumThreadSubject: "Re: Weekend cover — addendum 3",
+    addendumThreadSubject: "Re: Weekend cover - addendum 3",
     addendumByline: "Frida Iversen · 14 March 2026 · Nordwind · work",
     quotedPassage: "“Weekend cover applies Saturday and Sunday, 08:00 to 20:00, with a four-hour response.”",
     privateAnswer: "Legal signed off on the weekend rate in April",
-    privateTitle: "Weekend rate — approval",
+    privateTitle: "Weekend rate - approval",
     privateByline: "Legal · shared · 22 April 2026",
     privateMailbox: "Legal · shared",
     privateAccessHint: "To read it, ask your administrator for access to Legal · shared.",
@@ -60,7 +60,7 @@ MailFathomDesign.data.clientStatesSample = {
     wholeMessageSignature: "Frida",
     attachmentName: "Addendum-3-signed.pdf",
     attachmentMeta: "PDF · 412 KB · page 2",
-    attachmentQuote: "“§2.1 Weekend cover: Saturday and Sunday, 08:00–20:00.”",
+    attachmentQuote: "“§2.1 Weekend cover: Saturday and Sunday, 08:00-20:00.”",
     archiveQuote: "“Weekend support is out of scope for this agreement.”",
     imageName: "scan-page-2.jpg",
     imageQuote: "“Response within 4 hours on weekends.”",
@@ -76,18 +76,18 @@ MailFathomDesign.data.clientStatesSample = {
     bankDetailsSubject: "Updated bank details for invoice 114",
     bankDetailsThreadCount: "1 message · Nordwind · work",
     bankDetailsTime: "10:42",
-    bankDetailsVerdict: "This may not be from Tomasz Bąk — authenticating its author failed.",
-    bankDetailsVerdictDetail: "Authenticated by sendwave.example — that is who actually sent it, not the name above.",
+    bankDetailsVerdict: "This may not be from Tomasz Bąk - authenticating its author failed.",
+    bankDetailsVerdictDetail: "Authenticated by sendwave.example - that is who actually sent it, not the name above.",
     bankDetailsBody: "Hello, please note our bank account has changed. Use the details below for invoice 2026/08/114 from today.",
     healthySenderTime: "Mon",
     healthyVerdictDetail: "Authenticated by contoso.example.",
-    unauthenticatedVerdict: "This may not be from Jacek Wrona — authenticating its author failed.",
+    unauthenticatedVerdict: "This may not be from Jacek Wrona - authenticating its author failed.",
     longThreadCount: "31 messages · Nordwind · work",
     longThreadParticipants: "Frida Iversen, Marta Nowak, you · 31 messages",
     longThreadReadCount: "12 of 31 messages read",
     messageFridaText: "Attaching the signed copy as promised.",
     messageDayFriday: "Fri",
-    messageKarolinaText: "Thanks — filing it with the contract.",
+    messageKarolinaText: "Thanks - filing it with the contract.",
     messageMartaText: "Budget covers the weekend rate.",
     messageMartaDay: "Wed",
     folderNameExample: "e.g. Contracts 2027",
@@ -99,14 +99,14 @@ MailFathomDesign.data.clientStatesSample = {
     searchFilterMailbox: "Mailbox: Work",
     searchRankUnpaid: "not yet paid",
     searchRankDueDate: "nearest due date",
-    pendingMoveRefused: "Moving “Budget line for Q4 renewals” to Clients was refused — Clients was renamed on the server.",
+    pendingMoveRefused: "Moving “Budget line for Q4 renewals” to Clients was refused - Clients was renamed on the server.",
     pendingNotArchived: "2 messages were not archived.",
     pendingNotArchivedToast: "2 messages were not archived",
     pendingFlag: "Flag on “Invoice 2026/08/114”.",
   },
 
   work: {
-    eventTitle: "Call with Frida — addendum 3",
+    eventTitle: "Call with Frida - addendum 3",
     eventDay: "Fri 2 Oct",
     eventStartTime: "13:30",
     eventEndTime: "14:15",
@@ -137,15 +137,15 @@ MailFathomDesign.data.clientStatesSample = {
 };
 
 MailFathomDesign.data.clientStatesMessageRows = [
-  { initials: "FI", from: "Frida Iversen", subject: "Re: Weekend cover — addendum 3", time: "10:42" },
+  { initials: "FI", from: "Frida Iversen", subject: "Re: Weekend cover - addendum 3", time: "10:42" },
   { initials: "MN", from: "Marta Nowak", subject: "Budget line for Q4 renewals", time: "09:15" },
   { initials: "JW", from: "Jacek Wrona", subject: "Wording of §7.2 indexation", time: "Mon" },
   { initials: "TB", from: "Tomasz Bąk", subject: "Invoice 2026/08/114", time: "Mon" },
 ];
 
 MailFathomDesign.data.clientStatesSearchResultRows = [
-  { subject: "Invoice 2026/08/114 — reminder, due 5 Oct", time: "Mon" },
-  { subject: "Invoice 2026/08/102 — second notice", time: "12 Sep" },
+  { subject: "Invoice 2026/08/114 - reminder, due 5 Oct", time: "Mon" },
+  { subject: "Invoice 2026/08/102 - second notice", time: "12 Sep" },
   { subject: "Invoice 2026/07/088", time: "3 Aug" },
 ];
 
@@ -171,10 +171,10 @@ MailFathomDesign.data.clientStatesTasksToday = [
 ];
 
 MailFathomDesign.data.clientStatesPlacements = [
-  { at: "10:30–11:00", title: "Reply to Frida about the SLA" },
-  { at: "11:00–11:20", title: "Check Marta's budget line" },
-  { at: "14:15–15:15", title: "Collect weekend-cover rates" },
-  { at: "16:00–16:30", title: "Send the signed addendum to Legal" },
+  { at: "10:30-11:00", title: "Reply to Frida about the SLA" },
+  { at: "11:00-11:20", title: "Check Marta's budget line" },
+  { at: "14:15-15:15", title: "Collect weekend-cover rates" },
+  { at: "16:00-16:30", title: "Send the signed addendum to Legal" },
 ];
 
 MailFathomDesign.data.clientStatesPeople = [

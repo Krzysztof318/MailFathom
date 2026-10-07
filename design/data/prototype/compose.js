@@ -13,7 +13,7 @@ MailFathomDesign.data.composeDrafts = {
   ],
   short: [
     "Hello,",
-    "we accept the 2 h SLA. We ask for a 5% annual cap on CPI indexation — then we can close the decision by 28.08.",
+    "we accept the 2 h SLA. We ask for a 5% annual cap on CPI indexation - then we can close the decision by 28.08.",
     "Best regards,<br />Karolina Kowalska",
   ],
 };

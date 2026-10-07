@@ -12,9 +12,9 @@ MailFathomDesign.data.documentPreviews = {
     { text: "§ 2. In return for the higher service level, the flat fee increases by 8% from the settlement period beginning 01.01.2027." },
     { text: "§ 3. The rules for indexing the fee to CPI remain unchanged from § 11 of the master agreement. The parties do not set an upper cap on indexation." },
     { text: "§ 4. All other provisions remain unchanged. The addendum takes effect on the date both parties sign." },
-    { s: true, text: "SIGNATURES OF THE PARTIES" },
-    { text: "Contoso Ltd — Anna Kowalska, Chief Operating Officer" },
-    { text: "Nordwind Ltd — ......................................" },
+    { s: true, text: "Signatures of the parties" },
+    { text: "Contoso Ltd - Anna Kowalska, Chief Operating Officer" },
+    { text: "Nordwind Ltd - ......................................" },
   ],
   spreadsheet: [
     { h: true, text: "Annual cost calculation 2027" },
@@ -25,7 +25,7 @@ MailFathomDesign.data.documentPreviews = {
     { text: "Difference versus 2026: +€29,328" },
   ],
   other: [
-    { text: "Document preview opened in the app — no file downloaded to disk. The content comes from the message attachment and is indexed by MailFathom for citations." },
+    { text: "Document preview opened in the app - no file downloaded to disk. The content comes from the message attachment and is indexed by MailFathom for citations." },
     { text: "Passages cited in “Discover” results are highlighted where they came from." },
   ],
 };

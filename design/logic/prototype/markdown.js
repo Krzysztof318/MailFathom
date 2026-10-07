@@ -82,7 +82,7 @@ MailFathomDesign.markdown = (() => {
     b: "font-weight:650;color:var(--text)",
     i: "font-style:italic",
     s: "text-decoration:line-through;color:var(--muted)",
-    c: "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.88em;background:var(--hover);border:1px solid var(--line);border-radius:5px;padding:1px 5px",
+    c: "font-family:'Geist Mono',ui-monospace,monospace;font-size:0.88em;background:var(--hover);border:1px solid var(--line);border-radius:6px;padding:1px 5px",
     a: "color:var(--accent-d);text-decoration:underline",
   };
   const mdRuns = (text) => mdInline(text).map(r => ({
@@ -96,11 +96,11 @@ MailFathomDesign.markdown = (() => {
       ? "font-size:19px;font-weight:650;letter-spacing:-0.015em;color:var(--text);text-wrap:pretty;margin-top:2px"
       : b.lvl === 2
       ? "font-size:16px;font-weight:650;color:var(--text);text-wrap:pretty;margin-top:2px"
-      : "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:2px" };
+      : "font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--muted);margin-top:2px;font-weight:600" };
     if (b.k === "quote") return { isText: true, runs: mdRuns(b.text),
       style: "font-size:15px;line-height:1.6;color:var(--text2);background:var(--hl);border-left:3px solid var(--hl-line);border-radius:0 8px 8px 0;padding:11px 15px;text-wrap:pretty" };
     if (b.k === "code") return { isCode: true, text: b.text,
-      style: "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--text2);background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:12px 14px;overflow:auto" };
+      style: "font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;color:var(--text2);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto" };
     if (b.k === "hr") return { isHr: true, style: "height:1px;background:var(--line);margin:2px 0" };
     if (b.k === "ul" || b.k === "ol") return { isList: true, style: "display:flex;flex-direction:column;gap:6px",
       items: b.items.map((it, n) => ({
@@ -122,7 +122,7 @@ MailFathomDesign.markdown = (() => {
             (head ? ";font-weight:650;color:var(--text)" : ";color:var(--text2)"),
         })),
       });
-      return { isTable: true, style: "display:flex;flex-direction:column;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)",
+      return { isTable: true, style: "display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)",
         rows: [row(b.head, true, false)].concat(b.rows.map((r, ri) => row(r, false, ri === b.rows.length - 1))) };
     }
     return { isText: true, runs: mdRuns(b.text), style: MDTXT };

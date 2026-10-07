@@ -116,7 +116,7 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
       return "display:flex;align-items:center;gap:10px;min-height:" + (h || 44) + "px;background:var(--panel);border:1px solid " +
         (on ? "var(--accent)" : "var(--border2)") +
         ";box-shadow:" + (on ? "0 0 0 3px var(--accent-soft)" : "none") +
-        ";border-radius:10px;padding:0 13px;transition:border-color 0.12s,box-shadow 0.12s";
+        ";border-radius:12px;padding:0 13px;transition:border-color 0.12s,box-shadow 0.12s";
     }
 
     themeChoice() { return this.state.theme ?? this.props.theme ?? "light"; }
@@ -171,20 +171,20 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         langPicks: [["en", "English", "EN"], ["pl", "Polski", "PL"]].map(([v, label, short]) => ({
           label, short,
           pick: () => this.setState({ lang: v }),
-          style: pickBase + "border-radius:6px;font-size:11.5px;line-height:1.35;letter-spacing:0.04em;" +
+          style: pickBase + "border-radius:6px;font-size:11.5px;line-height:1.35;font-weight:600;" +
             ((s.lang ?? "en") === v
               ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
               : "color:var(--muted);"),
         })),
         rootStyle: "display:flex;" + (stacked ? "flex-direction:column;" : "") +
-          "background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;overflow:hidden;" + (FR
+          "background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;overflow:hidden;" + (FR
             ? "width:" + FR.w + "px;max-width:100%;height:" + FR.h + "px;max-height:100%;margin:0 auto;border:1px solid var(--border2);border-radius:" + (phone ? 20 : 14) + "px;box-shadow:0 20px 50px var(--sh-2)"
             : "min-height:100vh"),
         brandStyle: stacked
           ? "flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:" + (phone ? "18px 18px 12px 18px" : "22px 34px 14px 34px") + ";background:var(--rail);border-bottom:1px solid var(--line)"
           : "flex:1 1 44%;min-width:0;display:flex;flex-direction:column;gap:40px;padding:44px 46px;background:var(--rail);border-right:1px solid var(--line)",
         brandRowStyle: stacked ? "display:contents" : "display:flex;align-items:center;gap:12px",
-        logoStyle: "width:" + (stacked ? 34 : 40) + "px;height:" + (stacked ? 34 : 40) + "px;border-radius:10px;display:block;flex:0 0 auto",
+        logoStyle: "width:" + (stacked ? 34 : 40) + "px;height:" + (stacked ? 34 : 40) + "px;border-radius:12px;display:block;flex:0 0 auto",
         wordmarkStyle: "font-size:" + (stacked ? 16 : 17) + "px;font-weight:600;letter-spacing:-0.01em",
         showPitch: !stacked,
         formPaneStyle: "flex:" + (stacked ? "1 1 auto" : "1 1 56%") + ";min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:" + (stacked ? "flex-start" : "center") +
@@ -193,11 +193,11 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         sectionGap: phone ? 18 : 20,
         titleStyle: "font-size:" + (phone ? 24 : 22) + "px;font-weight:600;letter-spacing:-0.01em",
         fieldStyle: "flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:" + (phone ? 16 : 14) + "px;color:var(--text)",
-        revealStyle: "display:flex;align-items:center;justify-content:center;min-height:" + (phone ? 48 : 32) + "px;padding:0 " + (phone ? 12 : 6) + "px;margin-right:-7px;border-radius:10px;font-size:" + (phone ? 13 : 12) + "px;color:var(--muted);white-space:nowrap;user-select:none",
-        advancedBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 28) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 5px;margin-left:-5px") + ";border-radius:10px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
-        backBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 30) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 6px;margin-left:-6px") + ";border-radius:10px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
+        revealStyle: "display:flex;align-items:center;justify-content:center;min-height:" + (phone ? 48 : 32) + "px;padding:0 " + (phone ? 12 : 6) + "px;margin-right:-7px;border-radius:12px;font-size:" + (phone ? 13 : 12) + "px;color:var(--muted);white-space:nowrap;user-select:none",
+        advancedBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 28) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 5px;margin-left:-5px") + ";border-radius:12px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
+        backBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 30) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 6px;margin-left:-6px") + ";border-radius:12px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
         ghostBtnStyle: "display:flex;align-items:center;justify-content:center;gap:8px;min-height:" + (phone ? 52 : 44) + "px;border:1px solid var(--line);background:var(--panel);color:var(--accent);border-radius:" + (phone ? 26 : 10) + "px;padding:0 16px;font-size:" + (phone ? 15 : 13.5) + "px;font-weight:600;user-select:none",
-        restoreBtnStyle: "display:flex;align-items:center;gap:8px;min-height:" + (phone ? 50 : 42) + "px;border:1px dashed var(--border2);background:transparent;color:var(--text2);border-radius:10px;padding:0 14px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;user-select:none",
+        restoreBtnStyle: "display:flex;align-items:center;gap:8px;min-height:" + (phone ? 50 : 42) + "px;border:1px dashed var(--border2);background:transparent;color:var(--text2);border-radius:12px;padding:0 14px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;user-select:none",
         helpRowStyle: "display:flex;align-items:center;min-height:" + (phone ? 48 : 24) + "px;font-size:" + (phone ? 13 : 12) + "px;color:var(--muted)",
 
         isLogin: !onServer,
@@ -207,7 +207,7 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         openServer: locked ? () => {} : () => this.setState({ view: "server", error: "", focus: null }),
         closeServer: () => this.setState({ view: "login", error: "", focus: null }),
 
-        serverLabel: this.server() || "—",
+        serverLabel: this.server() || "-",
         defaultServerLabel: this.defaultServer(),
         customized: this.customized(),
         restoreDefaults: this.restoreDefaults,
@@ -220,7 +220,7 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         ssoIdle: !s.sso,
         ssoLabel: s.sso ? "Opening " + ssoName + "…" : "Sign in",
         ssoNote: s.sso
-          ? "Finish signing in in the browser window — this screen picks up the session when it returns."
+          ? "Finish signing in in the browser window - this screen picks up the session when it returns."
           : ssoName + " opens in your browser.",
         goSso: this.goSso,
         ssoBtnStyle: "display:flex;align-items:center;justify-content:center;gap:8px;min-height:" + (phone ? 52 : 44) + "px;border-radius:" + (phone ? 26 : 10) + "px;background:var(--accent);color:var(--onaccent);border:1px solid var(--accent);padding:0 16px;font-size:" + (phone ? 15 : 14) + "px;font-weight:600;user-select:none" + (s.sso ? ";opacity:0.85" : ""),
@@ -236,13 +236,13 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
           iconStyle: "width:17px;height:17px;display:block;flex:0 0 auto;background-repeat:no-repeat;background-position:center;background-size:contain;background-image:url(https://cdn.simpleicons.org/" +
             o.slug + "/" + (dark ? o.dark : o.light) + ")" + (s.oauth === o.id ? ";opacity:0.5" : ""),
           style: "display:flex;align-items:center;justify-content:center;gap:7px;min-height:" + (phone ? 52 : 44) + "px;padding:0 10px;border:1px solid " +
-            (s.oauth === o.id ? "var(--accent)" : "var(--line)") + ";background:var(--panel);border-radius:10px;color:var(--text2);user-select:none;overflow:hidden",
+            (s.oauth === o.id ? "var(--accent)" : "var(--line)") + ";background:var(--panel);border-radius:12px;color:var(--text2);user-select:none;overflow:hidden",
         })),
 
         host: this.server(), user: s.user, pass: s.pass,
         userPlaceholder: SERVER_SAMPLES.userPlaceholder,
         serverPlaceholder: SERVER_SAMPLES.serverPlaceholder,
-        hostNote: "Port optional — without it we " + (secure ? "use 7443 (MFP over TLS)" : "use 7080 (MFP)") + ". Stored locally on this device.",
+        hostNote: "Port optional - without it we " + (secure ? "use 7443 (MFP over TLS)" : "use 7080 (MFP)") + ". Stored locally on this device.",
         onHost: this.setServer,
         onUser: e => this.setState({ user: e.target.value, error: "" }),
         onPass: e => this.setState({ pass: e.target.value, error: "" }),
@@ -259,10 +259,10 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         /* Remember me is a basic-auth affordance only — OAuth sessions are governed by the provider. */
         toggleRemember: () => this.setState({ remember: !s.remember }),
         rememberRowStyle: "display:flex;align-items:flex-start;gap:9px;padding:" + (phone ? "4px 0 2px" : "2px 0 0") + ";user-select:none",
-        rememberBoxStyle: "width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;flex:0 0 " + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:5px;display:flex;align-items:center;justify-content:center;border:1px solid " +
+        rememberBoxStyle: "width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;flex:0 0 " + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px solid " +
           (s.remember ? "var(--accent)" : "var(--line)") + ";background:" + (s.remember ? "var(--accent)" : "var(--panel)"),
         rememberTickStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 500;font-size:13px;line-height:1;color:var(--onaccent);opacity:" + (s.remember ? "1" : "0"),
-        rememberHint: s.remember ? "This device stays signed in for 30 days. Applies to password sign-in only." : "Applies to password sign-in only — provider sessions follow their own rules.",
+        rememberHint: s.remember ? "This device stays signed in for 30 days. Applies to password sign-in only." : "Applies to password sign-in only - provider sessions follow their own rules.",
 
         passType: s.reveal ? "text" : "password",
         revealLabel: s.reveal ? "Hide" : "Show",
@@ -271,13 +271,13 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         insecure: notls,
         insecureRowStyle: "display:flex;align-items:flex-start;gap:11px;min-height:" + (phone ? 56 : 0) + "px;border:1px solid " +
           (notls ? "var(--warn)" : "var(--line)") + ";background:" +
-          (notls ? "var(--warn-soft)" : "var(--panel)") + ";border-radius:10px;padding:" + (phone ? "14px 14px" : "12px 13px"),
-        checkboxStyle: "flex:0 0 auto;width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:14px;line-height:1;border:1px solid " +
+          (notls ? "var(--warn-soft)" : "var(--panel)") + ";border-radius:12px;padding:" + (phone ? "14px 14px" : "12px 13px"),
+        checkboxStyle: "flex:0 0 auto;width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:14px;line-height:1;border:1px solid " +
           (notls ? "var(--warn)" : "var(--border2)") + ";background:" +
           (notls ? "var(--warn)" : "transparent") + ";color:var(--onaccent)",
         checkMark: notls ? "check" : "",
         insecureNote: notls
-          ? "TLS off — sign-in and messages will travel in plain text."
+          ? "TLS off - sign-in and messages will travel in plain text."
           : "Lets you connect to a server without a valid TLS certificate.",
 
         hasError: !!s.error,
@@ -297,7 +297,7 @@ MailFathomDesign.artboards.signIn = (DCLogic, React) => {
         appVersion: APP_VERSION,
         toggleAdvanced: () => this.setState({ advanced: !s.advanced }),
         protoLabel: secure ? "MFP over TLS" : "MFP unencrypted",
-        parsedHost: p.host || "—",
+        parsedHost: p.host || "-",
         parsedPort: port + (p.port ? "" : " (default)"),
         certLabel: secure ? "Required" : "Skipped",
         certColor: secure ? "var(--ok-text)" : "var(--warn-text)",

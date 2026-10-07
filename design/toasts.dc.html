@@ -16,8 +16,9 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/base.css" />
 <link rel="stylesheet" href="styles/toasts.css" />
 </helmet>
 <div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" style="{{ outerStyle }}">
@@ -26,13 +27,13 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
     <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:4px">
-        <div style="font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:var(--muted)">MailFathom — system</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:600">MailFathom - system</div>
         <div style="font-size:27px;font-weight:600;letter-spacing:-0.02em">Toasts</div>
-        <div style="font-size:13.5px;color:var(--muted);max-width:62ch;text-wrap:pretty">The system's fleeting response to what the user just did. Top right corner, gone after {{ secLabel }}, stacked newest first, each with a close button. A toast for a running operation does not vanish on its own — closing it aborts the operation.</div>
+        <div style="font-size:13.5px;color:var(--muted);max-width:62ch;text-wrap:pretty">The system's fleeting response to what the user just did. Top right corner, gone after {{ secLabel }}, stacked newest first, each with a close button. A toast for a running operation does not vanish on its own - closing it aborts the operation.</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <div onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">{{ themeIcon }}</span>{{ themeAttr }}</div>
-        <div onClick="{{ clearAll }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">layers_clear</span>Clear the stack</div>
+        <div onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:12px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">{{ themeIcon }}</span>{{ themeAttr }}</div>
+        <div onClick="{{ clearAll }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:12px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">layers_clear</span>Clear the stack</div>
       </div>
     </div>
 
@@ -80,15 +81,15 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                 <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ s.body }}</div>
               </sc-if>
               <sc-if value="{{ s.hasAction }}" hint-placeholder-val="{{ false }}">
-                <div style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;color:var(--text)">{{ s.actionLabel }}</div>
+                <div style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:8px;font-size:13px;font-weight:600;color:var(--text)">{{ s.actionLabel }}</div>
               </sc-if>
             </div>
-            <div style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">close</div>
+            <div style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">close</div>
             <sc-if value="{{ s.demo.hasBar }}" hint-placeholder-val="{{ true }}">
               <div style="{{ s.demo.barStyle }}"></div>
             </sc-if>
           </div>
-          <div onClick="{{ s.spawn }}" style="display:flex;align-items:center;justify-content:center;gap:8px;height:36px;border:1px solid var(--accent-line);border-radius:10px;background:var(--accent-soft);font-size:13px;font-weight:600;color:var(--accent-d)" style-hover="cursor:pointer;background:var(--accent);color:var(--onaccent);border-color:var(--accent)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">north_east</span>Show on screen</div>
+          <div onClick="{{ s.spawn }}" style="display:flex;align-items:center;justify-content:center;gap:8px;height:36px;border:1px solid var(--accent-line);border-radius:12px;background:var(--accent-soft);font-size:13px;font-weight:600;color:var(--accent-d)" style-hover="cursor:pointer;background:var(--accent);color:var(--onaccent);border-color:var(--accent)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">north_east</span>Show on screen</div>
         </div>
       </sc-for>
     </div>
@@ -106,7 +107,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:2px">
         <sc-for list="{{ specs }}" as="sp" hint-placeholder-count="4">
           <div style="display:flex;flex-direction:column;gap:3px;background:var(--sub);border:1px solid var(--line2);border-radius:12px;padding:12px 13px">
-            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">{{ sp.k }}</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600">{{ sp.k }}</div>
             <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ sp.v }}</div>
           </div>
         </sc-for>
@@ -116,7 +117,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <div style="display:flex;flex-direction:column;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 18px 20px">
       <div style="display:flex;flex-direction:column;gap:3px">
         <div style="font-size:15px;font-weight:600">Blocking overlay</div>
-        <div style="font-size:13px;color:var(--muted);text-wrap:pretty">For operations that must not be interrupted halfway by a stray click in the background: mailbox migration, bulk change, export. It covers the whole app and does not close on an outside click — only via Cancel, which asks for confirmation.</div>
+        <div style="font-size:13px;color:var(--muted);text-wrap:pretty">For operations that must not be interrupted halfway by a stray click in the background: mailbox migration, bulk change, export. It covers the whole app and does not close on an outside click - only via Cancel, which asks for confirmation.</div>
       </div>
       <div style="display:flex;gap:9px;flex-wrap:wrap">
         <div onClick="{{ startBlocking }}" style="{{ btnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">hourglass_top</span>Overlay with progress</div>
@@ -125,7 +126,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:2px">
         <sc-for list="{{ blockSpecs }}" as="bs" hint-placeholder-count="3">
           <div style="display:flex;flex-direction:column;gap:3px;background:var(--sub);border:1px solid var(--line2);border-radius:12px;padding:12px 13px">
-            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)">{{ bs.k }}</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600">{{ bs.k }}</div>
             <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ bs.v }}</div>
           </div>
         </sc-for>
@@ -144,10 +145,10 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="font-size:13.5px;line-height:1.45;color:var(--text2);text-wrap:pretty">{{ t.body }}</div>
           </sc-if>
           <sc-if value="{{ t.hasAction }}" hint-placeholder-val="{{ false }}">
-            <div onClick="{{ t.action }}" style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;color:var(--text)" style-hover="cursor:pointer;background:var(--hover)">{{ t.actionLabel }}</div>
+            <div onClick="{{ t.action }}" style="align-self:flex-start;display:flex;align-items:center;min-height:32px;margin-top:5px;padding:0 13px;border:1px solid var(--border2);border-radius:8px;font-size:13px;font-weight:600;color:var(--text)" style-hover="cursor:pointer;background:var(--hover)">{{ t.actionLabel }}</div>
           </sc-if>
         </div>
-        <div onClick="{{ t.close }}" title="{{ t.closeTitle }}" style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">close</div>
+        <div onClick="{{ t.close }}" title="{{ t.closeTitle }}" style="flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">close</div>
         <sc-if value="{{ t.hasBar }}" hint-placeholder-val="{{ false }}">
           <div style="{{ t.barStyle }}"></div>
         </sc-if>
@@ -157,23 +158,23 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
   <sc-if value="{{ blockOpen }}" hint-placeholder-val="{{ false }}">
     <div style="{{ ovBlockStyle }}">
-      <div style="box-sizing:border-box;width:min(420px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px 22px 22px;box-shadow:0 28px 70px var(--sh-3)">
+      <div style="box-sizing:border-box;width:min(420px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px 22px 22px;box-shadow:0 28px 70px var(--sh-3)">
         <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:42px;line-height:1;color:var(--accent-2);animation:mfspin 1.2s linear infinite">progress_activity</span>
         <div style="font-size:17px;font-weight:600;text-align:center;text-wrap:pretty">{{ blockTitle }}</div>
         <div style="font-size:13.5px;line-height:1.5;color:var(--text2);text-align:center;text-wrap:pretty">{{ blockBody }}</div>
-        <div style="width:100%;height:6px;border-radius:3px;background:var(--hover);overflow:hidden;margin-top:2px">
+        <div style="width:100%;height:6px;border-radius:4px;background:var(--hover);overflow:hidden;margin-top:2px">
           <div style="{{ blockFillStyle }}"></div>
         </div>
         <div style="font-size:12px;color:var(--muted)">{{ blockPctLabel }}</div>
-        <div onClick="{{ askBlockCancel }}" style="margin-top:5px;display:flex;align-items:center;justify-content:center;height:38px;padding:0 20px;border:1px solid var(--border2);border-radius:10px;font-size:13px;font-weight:600;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">Cancel</div>
-        <div style="font-size:11.5px;color:var(--faint);text-align:center;text-wrap:pretty">Do not close the app — the operation is running.</div>
+        <div onClick="{{ askBlockCancel }}" style="margin-top:5px;display:flex;align-items:center;justify-content:center;height:38px;padding:0 20px;border:1px solid var(--border2);border-radius:12px;font-size:13px;font-weight:600;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">Cancel</div>
+        <div style="font-size:11.5px;color:var(--faint);text-align:center;text-wrap:pretty">Do not close the app - the operation is running.</div>
       </div>
     </div>
   </sc-if>
 
   <sc-if value="{{ blockAskOpen }}" hint-placeholder-val="{{ false }}">
     <div style="{{ ovAskStyle }}">
-      <div style="box-sizing:border-box;width:min(380px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 20px;box-shadow:0 24px 56px var(--sh-3)">
+      <div style="box-sizing:border-box;width:min(380px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 20px;box-shadow:0 24px 56px var(--sh-3)">
         <div style="font-size:16px;font-weight:600">Really abort?</div>
         <div style="font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ blockAskText }}</div>
         <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:2px">
@@ -186,7 +187,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
   <sc-if value="{{ cancelAskOpen }}" hint-placeholder-val="{{ false }}">
     <div style="{{ ovCancelStyle }}">
-      <div style="box-sizing:border-box;width:min(370px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 20px;box-shadow:0 20px 48px var(--sh-3)">
+      <div style="box-sizing:border-box;width:min(370px,100%);display:flex;flex-direction:column;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 20px;box-shadow:0 20px 48px var(--sh-3)">
         <div style="font-size:16px;font-weight:600">Abort the operation?</div>
         <div style="font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ cancelAskText }}</div>
         <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:2px">

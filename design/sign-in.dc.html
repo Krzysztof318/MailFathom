@@ -18,7 +18,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <!--
   ICONS — Material Symbols (Rounded), Google.  LICENCE: Apache License 2.0.
   Web font: https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded
@@ -29,6 +29,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
   Trademarks belong to their owners; in the product swap these for files supplied by the brand team.
 -->
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<link rel="stylesheet" href="styles/base.css" />
 <link rel="stylesheet" href="styles/sign-in.css" />
 </helmet>
 <div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" data-screen-label="Sign in" style="{{ rootStyle }}">
@@ -41,7 +42,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <sc-if value="{{ showPitch }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-direction:column;justify-content:center;flex:1;gap:18px;max-width:400px;padding-bottom:40px">
         <div style="font-size:34px;font-weight:600;line-height:1.15;letter-spacing:-0.02em;text-wrap:pretty">Your mail stays on your server.</div>
-        <div style="font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">You connect to your organisation's MailFathom server. Indexing and analysis happen on its side — nothing goes to the cloud without your consent.</div>
+        <div style="font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">You connect to your organisation's MailFathom server. Indexing and analysis happen on its side - nothing goes to the cloud without your consent.</div>
       </div>
     </sc-if>
   </div>
@@ -75,9 +76,9 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <div style="{{ titleStyle }}">Connect your mailbox</div>
             <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:{{ lockColor }}">{{ lockIcon }}</span>
-              <span style="font-family:'Instrument Sans',system-ui,sans-serif;color:var(--text2)">{{ serverLabel }}</span>
+              <span style="font-family:'Geist',system-ui,sans-serif;color:var(--text2)">{{ serverLabel }}</span>
               <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
-                <span style="font-size:10.5px;font-weight:500;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">no TLS</span>
+                <span style="font-size:10.5px;font-weight:500;color:var(--warn-text);background:var(--warn-soft);border-radius:6px;padding:2px 7px">no TLS</span>
               </sc-if>
             </div>
           </div>
@@ -171,7 +172,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           </sc-if>
 
           <sc-if value="{{ noMethods }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:11px 13px">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:11px 13px">
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">block</span>
               <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">This server offers no sign-in method. Check the address or contact your administrator.</div>
             </div>
@@ -179,23 +180,23 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
           <div style="display:flex;flex-direction:column;gap:11px">
             <div onClick="{{ toggleAdvanced }}" style="{{ advancedBtnStyle }}" style-hover="cursor:pointer;color:var(--accent-2);background:var(--hover)">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;{{ chevronRotate }}">chevron_right</span>Advanced<sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}"><span style="margin-left:2px;font-size:11px;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">no TLS</span></sc-if>
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;{{ chevronRotate }}">chevron_right</span>Advanced<sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}"><span style="margin-left:2px;font-size:11px;color:var(--warn-text);background:var(--warn-soft);border-radius:6px;padding:2px 7px">no TLS</span></sc-if>
             </div>
 
             <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;flex-direction:column;gap:11px">
-                <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+                <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:12px;padding:13px 15px">
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
                     <span style="color:var(--muted)">Protocol</span>
                     <span style="font-weight:500">{{ protoLabel }}</span>
                   </div>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
                     <span style="color:var(--muted)">Host</span>
-                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+                    <span style="font-weight:500;font-family:'Geist',system-ui,sans-serif">{{ parsedHost }}</span>
                   </div>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
                     <span style="color:var(--muted)">Port</span>
-                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+                    <span style="font-weight:500;font-family:'Geist',system-ui,sans-serif">{{ parsedPort }}</span>
                   </div>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
                     <span style="color:var(--muted)">Certificate verification</span>
@@ -231,7 +232,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <label style="font-size:12px;font-weight:500;color:var(--text2)">Server</label>
             <div style="{{ hostBoxStyle }}">
               <input value="{{ host }}" onChange="{{ onHost }}" onFocus="{{ focusHost }}" onBlur="{{ blurAny }}" onKeyDown="{{ onServerKey }}" placeholder="{{ serverPlaceholder }}" style="{{ fieldStyle }}" />
-              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap">{{ portHint }}</span>
+              <span style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap">{{ portHint }}</span>
             </div>
             <div style="font-size:11px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ hostNote }}</div>
           </div>
@@ -246,29 +247,29 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
           <sc-if value="{{ customized }}" hint-placeholder-val="{{ false }}">
             <div onClick="{{ restoreDefaults }}" style="{{ restoreBtnStyle }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover);color:var(--text)">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">restart_alt</span>Restore defaults<span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ defaultServerLabel }}</span>
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">restart_alt</span>Restore defaults<span style="font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ defaultServerLabel }}</span>
             </div>
           </sc-if>
 
           <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:10px 12px">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:10px 12px">
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">warning</span>
               <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">The server certificate will not be verified. Use only on an internal network or over VPN.</div>
             </div>
           </sc-if>
 
-          <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+          <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:12px;padding:13px 15px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
               <span style="color:var(--muted)">Protocol</span>
               <span style="font-weight:500">{{ protoLabel }}</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
               <span style="color:var(--muted)">Host</span>
-              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+              <span style="font-weight:500;font-family:'Geist',system-ui,sans-serif">{{ parsedHost }}</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
               <span style="color:var(--muted)">Port</span>
-              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+              <span style="font-weight:500;font-family:'Geist',system-ui,sans-serif">{{ parsedPort }}</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
               <span style="color:var(--muted)">Certificate verification</span>
@@ -292,7 +293,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
       <div style="{{ footRowStyle }}">
         <span style="{{ helpRowStyle }}">Forgot your password?&nbsp;<a href="#">IT help</a></span>
-        <span style="font-size:10.5px;color:var(--faint);white-space:nowrap">MailFathom v<span style="font-family:'Instrument Sans',system-ui,sans-serif">{{ appVersion }}</span></span>
+        <span style="font-size:10.5px;color:var(--faint);white-space:nowrap">MailFathom v<span style="font-family:'Geist',system-ui,sans-serif">{{ appVersion }}</span></span>
       </div>
 
     </div>

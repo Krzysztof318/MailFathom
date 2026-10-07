@@ -24,7 +24,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
 
   const FRAMES = { tablet: { w: 1024, h: 768 }, fold: { w: 884, h: 832 }, phone: { w: 390, h: 844 } };
 
-  const PROP_LABEL = { event: "EVENT PROPOSAL", task: "TASK PROPOSAL", draft: "DRAFT", action: "SUGGESTED ACTION" };
+  const PROP_LABEL = { event: "Event proposal", task: "Task proposal", draft: "Draft", action: "Suggested action" };
 
   function srcTypeInfo(type) {
     const M = {
@@ -36,7 +36,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
     };
     return M[type] || M.mail;
   }
-  const SRC_BADGE_STYLE = "display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--muted);background:var(--rail);border-radius:10px;padding:2px 8px;white-space:nowrap;cursor:default";
+  const SRC_BADGE_STYLE = "display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--muted);background:var(--rail);border-radius:12px;padding:2px 8px;white-space:nowrap;cursor:default";
   const SRC_BADGE_ICON_STYLE = "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:12px;line-height:1";
   function srcBadge(item) {
     const types = item.srcTypes && item.srcTypes.length > 1 ? item.srcTypes : [item.srcType || "mail"];
@@ -58,7 +58,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
   }
   function verdictChipStyle(v) {
     const i = verdictInfo(v);
-    return "display:flex;align-items:center;gap:4px;font-size:10.5px;background:" + i.bg + ";color:" + i.color + ";border-radius:10px;padding:2px 8px";
+    return "display:flex;align-items:center;gap:4px;font-size:10.5px;background:" + i.bg + ";color:" + i.color + ";border-radius:12px;padding:2px 8px";
   }
   const CELL_CITE_STYLE = "font-size:11px;color:var(--accent-d);background:var(--accent-soft);border-radius:4px;padding:2px 7px;cursor:pointer";
   function tableCell(row, fieldLabel, value, cite, verdict, isLast) {
@@ -114,18 +114,18 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
       const isOffline = stan === "offline";
       const bodyReady = isReady || isPartial;
 
-      const cardStyle = "display:flex;flex-direction:column;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:16px 18px";
+      const cardStyle = "display:flex;flex-direction:column;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px";
       const headStyle = "display:flex;align-items:center;gap:10px;flex-wrap:wrap";
-      const labelStyle = "font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;color:var(--muted)";
+      const labelStyle = "font-family:'Geist',system-ui,sans-serif;font-size:11px;color:var(--muted);font-weight:600";
       const metaStyle = "margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap";
-      const noteStyle = "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;line-height:1.5;color:var(--warn-text);background:var(--warn-soft);border-radius:7px;padding:8px 11px";
+      const noteStyle = "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;line-height:1.5;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:8px 11px";
       const noteIconStyle = "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1.3";
       const emptyBodyStyle = "display:flex;flex-direction:column;align-items:center;gap:7px;padding:22px 10px;text-align:center;color:var(--muted)";
       const emptyIconStyle = "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:26px;line-height:1;color:var(--faint)";
       const errorIconStyle = "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:26px;line-height:1;color:var(--warn)";
       const emptyTextStyle = "font-size:13px;color:var(--text2);max-width:380px;text-wrap:pretty";
       const emptyReasonStyle = "font-size:12px;color:var(--faint)";
-      const retryBtnStyle = "font-size:12.5px;color:var(--onaccent);background:var(--accent);border-radius:7px;padding:7px 14px;margin-top:2px";
+      const retryBtnStyle = "font-size:12.5px;color:var(--onaccent);background:var(--accent);border-radius:8px;padding:7px 14px;margin-top:2px";
       const skelRows = [92, 78, 55].map(pct => ({ style: "height:13px;border-radius:6px;background:var(--hover);animation:mfpulse 1.4s ease-in-out infinite;width:" + pct + "%" }));
 
       const answerParts = (isPartial ? ANSWER_PARTS_FULL.slice(0, 2) : ANSWER_PARTS_FULL).map(p => Object.assign({}, p, {
@@ -135,14 +135,14 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
         const vi = verdictInfo(e.verdict);
         const sb = srcBadge(e);
         return Object.assign({}, e, {
-          ariaLabel: "Evidence: " + e.source + " — " + sb.title + " — relevance " + e.relevance + ", verdict " + vi.label,
+          ariaLabel: "Evidence: " + e.source + " - " + sb.title + " - relevance " + e.relevance + ", verdict " + vi.label,
           verdictLabel: vi.label, verdictIcon: vi.icon, verdictChipStyle: verdictChipStyle(e.verdict),
           verdictIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:12px;line-height:1",
           badgeStyle: SRC_BADGE_STYLE, badgeIconStyle: SRC_BADGE_ICON_STYLE, badgeIcon: sb.icon, badgeLabel: sb.label, badgeTitle: sb.title,
         });
       });
       const timelineItems = (isPartial ? TIMELINE_FULL.slice(0, 3) : TIMELINE_FULL).map(t => Object.assign({}, t, {
-        ariaLabel: "Event: " + t.title + ", " + t.date + " — citation " + t.cite,
+        ariaLabel: "Event: " + t.title + ", " + t.date + " - citation " + t.cite,
       }));
       const tableRows = (isPartial ? TABLE_FULL.slice(0, 2) : TABLE_FULL).map(r => ({
         version: tableCell(r, "Version", r.version, r.versionCite),
@@ -155,14 +155,14 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
       }));
       const galleryItems = (isPartial ? GALLERY_FULL.slice(0, 2) : GALLERY_FULL).map(g => Object.assign({}, g, {
         ariaLabel: "Attachment: " + g.name + ", " + g.avail,
-        availStyle: "font-size:10px;border-radius:9px;padding:2px 7px;" + (g.avail === "available" ? "background:var(--ok-soft);color:var(--ok-text)" : "background:var(--warn-soft);color:var(--warn-text)"),
+        availStyle: "font-size:10px;border-radius:8px;padding:2px 7px;" + (g.avail === "available" ? "background:var(--ok-soft);color:var(--ok-text)" : "background:var(--warn-soft);color:var(--warn-text)"),
       }));
       const threadCommitments = isPartial ? [] : COMMITMENTS_FULL;
       const threadAgreed = AGREED_FULL;
       const threadOpenQuestions = isPartial ? [] : OPEN_Q_FULL;
 
       const mIcon = (size, color) => "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + size + "px;line-height:1;flex:0 0 auto;color:" + color;
-      const propBtn = (primary) => "display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;font-size:13.5px;white-space:nowrap;" +
+      const propBtn = (primary) => "display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:8px;font-size:13.5px;white-space:nowrap;" +
         (isMobile ? "width:100%;min-height:44px;padding:0 16px;" : "padding:9px 15px;") +
         (primary ? "font-weight:600;color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);" : "color:var(--text2);background:var(--panel);border:1px solid var(--border2);");
       const propSpecs = bodyReady ? PROPOSAL_SPECS : ["event", "task", "draft", "action"].map(t => PROPOSAL_SPECS.filter(s => s.type === t && s.phase === "pending")[0]);
@@ -191,7 +191,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           label: PROP_LABEL[s.type],
           meta: s.meta || "",
           title: s.title,
-          cardStyle: "display:flex;flex-direction:column;gap:10px;border-radius:9px;padding:16px 18px;" +
+          cardStyle: "display:flex;flex-direction:column;gap:10px;border-radius:8px;padding:16px 18px;" +
             (declined ? "border:1px dashed var(--border2);background:transparent;"
               : pending ? "border:1px solid var(--accent-line);background:var(--accent-soft);"
               : "border:1px solid var(--line);background:var(--panel);"),
@@ -208,7 +208,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           declinedIconStyle: mIcon(16, "var(--muted)"),
           strikeStyle: "text-decoration:line-through;min-width:0",
           titleStyle: "font-size:15px;font-weight:600;letter-spacing:-0.01em;text-wrap:pretty",
-          kStyle: "flex:0 0 " + (isMobile ? 66 : 82) + "px;font-size:11.5px;letter-spacing:0.03em;color:var(--muted)",
+          kStyle: "flex:0 0 " + (isMobile ? 66 : 82) + "px;font-size:11.5px;color:var(--muted);font-weight:600",
           vStyle: "flex:1;min-width:0;font-size:13.5px;color:var(--text);text-wrap:pretty",
           fields: (s.fields || []).map(f => ({ k: f.name, v: f.value })),
           hasBody: (s.paras || []).length > 0,
@@ -216,11 +216,11 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           paraStyle: "font-size:13.5px;line-height:1.6;color:var(--text2);text-wrap:pretty",
           hasConflict: !!s.conflict,
           conflict: s.conflict || "",
-          conflictStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--warn-text);background:var(--warn-soft);border-radius:7px;padding:8px 11px;text-wrap:pretty",
+          conflictStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:8px 11px;text-wrap:pretty",
           conflictIconStyle: mIcon(16, "var(--warn)"),
           hasNoConflictNote: !!s.noConflict,
           noConflictNote: s.noConflict || "",
-          okStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ok-text);background:var(--ok-soft);border-radius:7px;padding:8px 11px;text-wrap:pretty",
+          okStyle: "display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ok-text);background:var(--ok-soft);border-radius:8px;padding:8px 11px;text-wrap:pretty",
           okIconStyle: mIcon(16, "var(--ok)"),
           hasReason: !!s.reason,
           reason: s.reason || "",
@@ -229,14 +229,14 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           effect: s.effect || "",
           effectStyle: "display:flex;align-items:flex-start;gap:7px;font-size:12.5px;color:var(--muted);text-wrap:pretty",
           effectIconStyle: mIcon(15, "var(--muted)"),
-          partialNote: s.type === "event" ? "One calendar has not answered — a conflict may still appear."
+          partialNote: s.type === "event" ? "One calendar has not answered - a conflict may still appear."
             : s.type === "draft" ? "The closing paragraph is still being written."
             : "Part of the source data is still being read.",
           emptyIcon: s.type === "draft" ? "edit_note" : s.type === "task" ? "task_alt" : s.type === "event" ? "event_busy" : "task_alt",
-          emptyText: s.type === "event" ? "No free slot long enough this week — nothing to propose."
+          emptyText: s.type === "event" ? "No free slot long enough this week - nothing to propose."
             : s.type === "task" ? "Nothing in this thread carries a date or an owner."
-            : s.type === "draft" ? "Nothing to draft — the last message in the thread is yours."
-            : "Nothing worth doing here — the thread needs no step.",
+            : s.type === "draft" ? "Nothing to draft - the last message in the thread is yours."
+            : "Nothing worth doing here - the thread needs no step.",
           errorText: "Could not build this proposal.",
           errorReason: s.type === "event" ? "The calendar did not answer." : s.type === "task" ? "The task list did not answer." : "The model timed out.",
           retryAria: "Try again: " + PROP_LABEL[s.type].toLowerCase(),
@@ -250,7 +250,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           controlsStyle: (isMobile ? "display:flex;flex-direction:column;gap:8px;" : "display:flex;gap:8px;flex-wrap:wrap;align-items:center;") + "border-top:1px solid var(--line2);padding-top:10px",
           hasNav: !declined && (s.nav || []).length > 0,
           nav: (s.nav || []).map(n => ({
-            label: n.label, icon: n.icon, aria: n.label + " — leaves the conversation, you can come straight back",
+            label: n.label, icon: n.icon, aria: n.label + " - leaves the conversation, you can come straight back",
             iconStyle: mIcon(16, "var(--muted)"),
             style: "display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text2);font-size:12.5px;white-space:nowrap;" +
               (isMobile ? "min-height:44px;padding:0 14px;" : "padding:6px 12px;"),
@@ -267,7 +267,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
           : "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start",
         rootRef: this.rootRef,
         themeAttr: theme,
-        outerStyle: "min-height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;padding:" + (isMobile ? "0" : "32px 24px"),
+        outerStyle: "min-height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;padding:" + (isMobile ? "0" : "32px 24px"),
         frameStyle: FR
           ? "width:" + FR.w + "px;max-width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px var(--sh-3);padding:" + (isMobile ? "20px 14px 40px" : "28px 30px 48px") + ";display:flex;flex-direction:column;gap:22px"
           : "width:100%;max-width:1520px;display:flex;flex-direction:column;gap:24px",
@@ -282,7 +282,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
         mainGridStyle: stacked ? "display:flex;flex-direction:column;gap:22px" : "display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:22px;align-items:start",
         resultColStyle: "display:flex;flex-direction:column;gap:16px;min-width:0",
         evidenceColStyle: stacked ? "display:flex;flex-direction:column;gap:16px;min-width:0" : "display:flex;flex-direction:column;gap:16px;min-width:0;position:sticky;top:24px",
-        legendCardStyle: "display:flex;flex-direction:column;gap:12px;background:var(--rail);border:1px solid var(--line);border-radius:9px;padding:16px 18px",
+        legendCardStyle: "display:flex;flex-direction:column;gap:12px;background:var(--rail);border:1px solid var(--line);border-radius:8px;padding:16px 18px",
 
         citeChipStyle: CELL_CITE_STYLE,
         cardStyle, headStyle, labelStyle, metaStyle, noteStyle, noteIconStyle,
@@ -290,33 +290,33 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
         isLoading, bodyReady, isPartial, isEmpty, isError, isOffline,
         skelRows,
         offlineIcon: "cloud_off",
-        offlineText: "No connection to the server — this block cannot be loaded.",
+        offlineText: "No connection to the server - this block cannot be loaded.",
         offlineActionLabel: "Try again",
 
         answerMeta: isPartial ? "processing" : "1 paragraph · 4 citations",
         answerParts,
-        answerPartialNote: "The paragraph about the 2027 proposal is missing — still processing.",
-        answerEmptyText: "The query does not touch any thread in this scope — there is nothing to build an answer from.",
+        answerPartialNote: "The paragraph about the 2027 proposal is missing - still processing.",
+        answerEmptyText: "The query does not touch any thread in this scope - there is nothing to build an answer from.",
         answerErrorText: "Could not assemble an answer.",
         answerErrorReason: "The model timed out while synthesising citations.",
 
         evidenceMeta: (isPartial ? EVIDENCE_FULL.slice(0, 2).length : EVIDENCE_FULL.length) + " items · sorted by relevance",
         evidenceItems, evidencePrivate: Object.assign({}, EVIDENCE_PRIVATE, (() => { const sb = srcBadge(EVIDENCE_PRIVATE); return {
-          ariaLabel: "Private evidence: " + EVIDENCE_PRIVATE.source + " — content unavailable",
+          ariaLabel: "Private evidence: " + EVIDENCE_PRIVATE.source + " - content unavailable",
           badgeStyle: SRC_BADGE_STYLE, badgeIconStyle: SRC_BADGE_ICON_STYLE, badgeIcon: sb.icon, badgeLabel: sb.label, badgeTitle: sb.title,
         }; })()),
-        evidencePartialNote: "1 item missing — still being indexed.",
+        evidencePartialNote: "1 item missing - still being indexed.",
         evidenceEmptyText: "No documents met the relevance threshold for this query.",
         evidenceErrorText: "Could not fetch the source passages.",
         evidenceErrorReason: "The search index did not respond.",
 
-        timelineMeta: timelineItems.length + " events · 2021–2026",
+        timelineMeta: timelineItems.length + " events · 2021-2026",
         timelineItems,
         timelineRowStyle: isMobile ? "display:flex;flex-direction:column;gap:0" : "display:flex;gap:0",
         tlItemStyle: isMobile
           ? "display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--border2);padding:9px 0 11px 0"
           : "flex:1;display:flex;flex-direction:column;gap:5px;border-top:2px solid var(--border2);padding:10px 14px 0 0",
-        timelinePartialNote: "The 2026 event is missing — its source is still being verified.",
+        timelinePartialNote: "The 2026 event is missing - its source is still being verified.",
         timelineEmptyText: "No events in the selected date range.",
         timelineErrorText: "Could not build the chronology.",
         timelineErrorReason: "Two sources give conflicting dates for the same event.",
@@ -325,7 +325,7 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
         tableGridStyle: "display:grid;grid-template-columns:1.3fr 1fr 0.8fr 1.4fr;gap:0" + (isMobile ? ";min-width:540px" : ""),
         tableRows,
         tablePartialNote: "2 versions with unconfirmed prices are missing.",
-        tableEmptyText: "No column had coverage in the sources — the table stays empty.",
+        tableEmptyText: "No column had coverage in the sources - the table stays empty.",
         tableErrorText: "Could not assemble the table.",
         tableErrorReason: "Mismatched column count between source rows.",
 
@@ -349,13 +349,13 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
         galleryMeta: galleryItems.length + " files · availability checked",
         galleryGridStyle: isMobile ? "display:grid;grid-template-columns:repeat(2,1fr);gap:10px" : "display:grid;grid-template-columns:repeat(3,1fr);gap:10px",
         galleryItems,
-        galleryPartialNote: "1 file is missing — still being virus-scanned.",
+        galleryPartialNote: "1 file is missing - still being virus-scanned.",
         galleryEmptyText: "Messages in this scope had no attachments.",
         galleryErrorText: "Could not check file availability.",
         galleryErrorReason: "The attachment store did not respond.",
 
         draftMeta: "local draft",
-        draftStatusLabel: "Local draft — nothing sent",
+        draftStatusLabel: "Local draft - nothing sent",
         draftTo: DRAFT.to,
         draftSubject: DRAFT.subject,
         draftBody: isPartial
@@ -369,14 +369,14 @@ MailFathomDesign.artboards.aiBlocks = (DCLogic, React) => {
 
         actionMeta: "1 action proposed",
         actionRowStyle: isMobile
-          ? "display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:14px 16px"
-          : "display:flex;align-items:flex-start;gap:14px;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:14px 18px",
+          ? "display:flex;flex-direction:column;align-items:flex-start;gap:12px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:14px 16px"
+          : "display:flex;align-items:flex-start;gap:14px;background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:14px 18px",
         actionTitle: SUGGESTED_ACTION.title,
         actionReason: SUGGESTED_ACTION.reason,
         actionEffect: isPartial ? SUGGESTED_ACTION.partialEffect : SUGGESTED_ACTION.effect,
         actionConfirmLabel: "needs confirmation",
-        actionConfirmStyle: (isMobile ? "" : "margin-left:auto;") + "flex:0 0 auto;font-size:11px;background:var(--warn-soft);color:var(--warn-text);border-radius:11px;padding:4px 10px;white-space:nowrap",
-        actionPartialNote: "The effect is undetermined — the simulation is still finishing.",
+        actionConfirmStyle: (isMobile ? "" : "margin-left:auto;") + "flex:0 0 auto;font-size:11px;background:var(--warn-soft);color:var(--warn-text);border-radius:12px;padding:4px 10px;white-space:nowrap",
+        actionPartialNote: "The effect is undetermined - the simulation is still finishing.",
         actionEmptyText: "No actions worth proposing in this context.",
         actionErrorText: "Could not prepare an action suggestion.",
         actionErrorReason: "A safety rule blocked automatic preparation of the send.",

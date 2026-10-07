@@ -8,10 +8,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MailFathom — Mail search</title>
+<title>MailFathom - Mail search</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles/base.css" />
 <link rel="stylesheet" href="styles/mail-search.css" />
 </head>
 <body>
@@ -22,7 +23,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <p class="lede">
       Finding a message sits on top of the mail someone is already looking at, not on a separate screen: one column,
       one row shape, and nothing you have to navigate to and back from. The search covers the scope someone is looking at,
-      and that scope is copied onto it as filters — visible and removable.
+      and that scope is copied onto it as filters - visible and removable.
     </p>
     <p class="note">
       The field now follows what the deployment can do. Where it reads phrases, the placeholder is
@@ -127,7 +128,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <p class="note">
         A server that cannot search by meaning says so separately from what the asker is not allowed to see: the first
         is a shortcoming of the server, the second a refusal towards a person. Recent searches live only in client
-        state and disappear with the credential — no typed phrase reaches a log or telemetry.
+        state and disappear with the credential - no typed phrase reaches a log or telemetry.
       </p>
     </section>
 
@@ -135,7 +136,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
   <footer class="note">
     This screen is implemented in <code>frontend/src/Client.App/src/search/</code>. Narrowing by folder currently
-    offers folder roles rather than the whole account tree — a folder outside those roles reaches the search through
+    offers folder roles rather than the whole account tree - a folder outside those roles reaches the search through
     whatever someone was looking at, and stands on it as a removable filter.
   </footer>
 
