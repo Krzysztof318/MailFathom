@@ -893,7 +893,9 @@ assert their absence and a periodic look is what catches a re-created one.
 
 Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
-or maintain a second skill tree.
+or maintain a second skill tree. `.agents/skills/README.md` lists every skill
+with its source and licence, which is where to tell the project's own skills
+from the ones vendored from another repository.
 
 ## Rules on the pull request
 

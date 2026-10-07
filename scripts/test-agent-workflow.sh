@@ -9135,15 +9135,27 @@ every_shell_script_carries_the_license_header() {
 # A skill vendored from elsewhere keeps its upstream's licence and names its upstream repository
 # instead, and is accepted only when `THIRD_PARTY_LICENSES.md` carries that repository — so naming a
 # foreign repository is a licensing review recorded rather than a way around this check.
+#
+# `.agents/skills/README.md` is the index that says which skills are the project's own and which are
+# vendored, and it is held against the same frontmatter: one row per skill, naming the source and the
+# licence that skill declares, and no row for a skill that is gone.
 every_skill_declares_its_license() {
-  local file frontmatter holder repository upstream failures=0
+  local file frontmatter holder repository upstream license_line skills=0 failures=0
+  local index="$source_repository_root/.agents/skills/README.md"
 
   holder="$(license_header_lines | sed -n '1s/^Copyright © [0-9]\{4\} //p')"
   repository="$(license_header_lines | sed -n '3s/^Project repository: //p')"
 
   while IFS= read -r file; do
+    skills=$(( skills + 1 ))
     frontmatter="$(awk 'NR == 1 { next } /^---$/ { exit } { print }' "$source_repository_root/$file")"
     upstream="$(sed -n 's/^  repository: //p' <<< "$frontmatter")"
+    license_line="$(sed -n 's/^license: //p' <<< "$frontmatter")"
+
+    if ! grep -qxF "| \`$(basename "$(dirname "$file")")\` | $upstream | $license_line |" "$index"; then
+      printf '%s has no row in .agents/skills/README.md naming its source and licence\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
 
     if [[ -n "$upstream" && "$upstream" != "$repository" ]]; then
       if ! grep -q '^license: ' <<< "$frontmatter" \
@@ -9165,6 +9177,11 @@ every_skill_declares_its_license() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- '.agents/skills/*/SKILL.md')
+
+  if (( $(grep -c '^| `' "$index") != skills )); then
+    printf '.agents/skills/README.md lists a skill that is not under .agents/skills/\n' >&2
+    failures=$(( failures + 1 ))
+  fi
 
   (( failures == 0 ))
 }
