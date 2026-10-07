@@ -1096,8 +1096,10 @@ jobs:
               "$REVIEW_DIRECTORY/files.json" > "$REVIEW_DIRECTORY/files.reviewable.json"
             mv "$REVIEW_DIRECTORY/files.reviewable.json" "$REVIEW_DIRECTORY/files.json"
 
-            printf '%s vendored files marked linguist-vendored in .gitattributes are not reviewed: they are copied from an upstream repository, and their licence is reviewed in THIRD_PARTY_LICENSES.md.\n' \
-              "$vendored_count" >> "$REVIEW_DIRECTORY/truncation.txt"
+            # Named rather than counted: nothing compares a vendored file with its upstream, so the
+            # list is what lets an edit that was not a refresh be noticed in the review body.
+            printf '%s vendored files marked linguist-vendored in .gitattributes are not reviewed: they are copied from an upstream repository, and their licence is reviewed in THIRD_PARTY_LICENSES.md. They are %s.\n' \
+              "$vendored_count" "$(jq -r 'join(", ")' <<< "$vendored")" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           # The second class, dropped for a reason of its own rather than by widening the one above.

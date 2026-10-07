@@ -482,7 +482,11 @@ under the shebang that has to stay first, a file under
 so the rendered manifest is unchanged, a `.js` module opens with them as `//`
 comments and a `.css` file as the one `/* ... */` block it has instead, and a
 `SKILL.md` declares `license` and a `metadata` block, which is where the Agent
-Skills format puts them. All of them are
+Skills format puts them. A skill vendored from another repository is the
+exception: it keeps its upstream's `license` and names the upstream author and
+repository in `metadata`, and the check accepts it only while
+`THIRD_PARTY_LICENSES.md` names that repository and `.gitattributes` marks it
+`linguist-vendored`. Every other surface is
 compared against the text parsed out of `.editorconfig`, so the header stays one
 decision written in one place: an edit to the template that leaves the other
 files behind fails as a disagreement rather than quietly splitting the mark in
@@ -1377,6 +1381,16 @@ from its upstream rather than an edit made here, and their licence is reviewed i
 head, so a change cannot mark its own files vendored and exempt them from its own
 review — which also means a pull request that adds the attribute is still read in
 full, and the files it marks stop being read from the next pull request on.
+
+Nothing compares a vendored file against its upstream, so the drop rests on who
+can change one rather than on what it contains. That is a decision rather than an
+oversight. Both `.agents/` and `.gitattributes` are protected paths, so a pull
+request from anyone but the owner that edits a vendored skill, adds a file beside
+one, or marks a new directory vendored fails `Protected paths` whatever the review
+says. What the drop gives up is a second opinion on the owner's own refresh. The
+note it leaves in the review names every file it dropped rather than only counting
+them, so an edit to vendored text that was not meant as a refresh is still visible
+in the review body.
 
 All three are dropped where the collection is frozen, once, ahead of the anchors, the
 head content and the groups that all read it, and each count joins the truncation

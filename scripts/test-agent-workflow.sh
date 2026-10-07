@@ -2978,6 +2978,10 @@ fathom_review_never_reads_a_vendored_file() {
     '[.[].filename] | sort' "$collect_review_directory/lines.json"
   assert_contains '2 vendored files marked linguist-vendored in .gitattributes are not reviewed' \
     "$collect_review_directory/truncation.txt"
+  # Named, because nothing compares the dropped text with its upstream and the names are what show
+  # an edit that was not a refresh.
+  assert_contains 'They are .agents/skills/brandkit/vendored0.md, .agents/skills/brandkit/vendored1.md.' \
+    "$collect_review_directory/truncation.txt"
   assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
 }
 
