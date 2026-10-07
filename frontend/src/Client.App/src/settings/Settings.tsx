@@ -28,7 +28,7 @@ import { MessageView, MessageViewWarning } from './MessageView';
 // The surface behind the account menu's own row, and the one place the client edits the person rather than the mail.
 //
 // One surface in two compositions, chosen by width exactly as every other pane in this client is: over the workspace
-// breakpoint the design project draws it as a card of a stated width and height over a scrim, and below it as the whole
+// breakpoint the design draws it as a card of a stated width and height over a scrim, and below it as the whole
 // screen with a larger head and a taller body. Nothing here branches on that. The difference is entirely what a card
 // looks like against what a screen looks like, so it is written as the width variant on the element itself — a
 // component asking which composition it is in would be the same defect as one asking which head it is running on.
@@ -41,11 +41,11 @@ import { MessageView, MessageViewWarning } from './MessageView';
 // It is mounted while it is open and unmounted when it closes, which is what makes "the tab last open is remembered
 // nowhere" a property of the tree rather than a reset somebody has to remember to write.
 //
-// The *message view* section holds two controls in the order the design project draws them: which of the two reading
+// The *message view* section holds two controls in the order the design draws them: which of the two reading
 // surfaces a message opens on, and whether a conversation opens with every message drawn. The first is a choice
-// between two named things and the second is a switch, which is what the project draws and what each of them is.
+// between two named things and the second is a switch, which is what the design draws and what each of them is.
 
-/** Which half of the surface is being read, in the order the design project puts the two tabs in. */
+/** Which half of the surface is being read, in the order the design puts the two tabs in. */
 const tabs = ['profile', 'application'] as const;
 
 type SettingsTab = (typeof tabs)[number];
@@ -151,7 +151,7 @@ export function Settings({
                 )}
             </div>
 
-            {/* Outside the scrolling panel and under both tabs, which is where the design project draws it: what is
+            {/* Outside the scrolling panel and under both tabs, which is where the design draws it: what is
                 running is about the client rather than about whichever half of this surface is open, and a line that
                 scrolled away with the profile would be one somebody has to go looking for. */}
             <VersionLine
@@ -163,7 +163,7 @@ export function Settings({
 }
 
 /**
- * The two halves of the surface as a tab list, which is what the design project draws and what a screen reader is owed.
+ * The two halves of the surface as a tab list, which is what the design draws and what a screen reader is owed.
  *
  * Buttons carrying the tab role rather than radio inputs, because a tab list has its own keyboard contract: one tab
  * stop for the whole list, the arrow keys moving between the tabs inside it, and Home and End reaching the ends. That
@@ -264,10 +264,10 @@ function SectionName({ children }: { readonly children: string }) {
     return <p className="text-2xs tracking-widest text-faint uppercase">{children}</p>;
 }
 
-// What the client is read in and how it draws a conversation, in the design project's own order: the language, then
+// What the client is read in and how it draws a conversation, in the design's own order: the language, then
 // the message view, then the privacy section carrying the telemetry decision. The notifications section between the
-// last two is the design project's on neither count — it draws neither row, because what one decides is whether an
-// operating system is spoken to and the project draws the client rather than the machine under it, and the other is how
+// last two is the design's on neither count — it draws neither row, because what one decides is whether an
+// operating system is spoken to and the design draws the client rather than the machine under it, and the other is how
 // long a notification stands rather than what one looks like. Both take the shape of the rows around them rather than
 // one of their own, which is what keeps that from being a second house style.
 function Application({
@@ -324,7 +324,7 @@ function Application({
 //
 // How long one of the client's own notifications stands, which is also how long the way back out of a permanent delete
 // is open — the toast carrying that offer is the whole of the window, so the two are one number rather than two that
-// have to agree. The design project draws no such row either: it settles what a notification looks like rather than how
+// have to agree. The design draws no such row either: it settles what a notification looks like rather than how
 // long somebody is given to read one, so this takes the shape of the rows around it exactly as the section below does.
 //
 // A field rather than a set of segments, because the bound is thirty whole seconds and a handful of segments over it
@@ -480,7 +480,7 @@ function SystemNotifications() {
 }
 
 // Whether a conversation opens with every message drawn. Stated as the choice rather than as its absence, which is the
-// way round the design project draws it: the switch being on is the conversation opening expanded, and the line under
+// way round the design draws it: the switch being on is the conversation opening expanded, and the line under
 // it says what the client does without it — which is what it does today and what an unset preference reads as.
 function ThreadExpansion({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
     const { translate } = useLocalization();
@@ -643,7 +643,7 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
 // answers disagree for anybody travelling or reading their mail from a second machine, and the disagreement shows up
 // as a message on the wrong day rather than as a failure.
 //
-// The design project draws no such row, which is stated here rather than worked around: it settles what the profile
+// The design draws no such row, which is stated here rather than worked around: it settles what the profile
 // tab looks like and not which values a deployment holds about somebody, so this takes the shape of the rows around it
 // exactly as the notification rows on the other tab do.
 //
@@ -737,10 +737,10 @@ function PictureNotice({
     ) : null;
 }
 
-// Whether this deployment may be told what the client is doing, drawn the way the design project states it: as the
+// Whether this deployment may be told what the client is doing, drawn the way the design states it: as the
 // decision to withhold rather than the decision to permit, so that the switch being on is the private answer.
 //
-// Three things stand beside the switch that the design project does not draw, all of them the acceptance of #1232 and
+// Three things stand beside the switch that the design does not draw, all of them the acceptance of #1232 and
 // all about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
 // go is named, because "telemetry" says nothing about who ends up holding it, and this client sends to the deployment
 // somebody signed in to rather than anywhere else. A deployment that forwards none is said out loud instead of being

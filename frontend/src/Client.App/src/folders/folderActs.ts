@@ -37,7 +37,7 @@ export interface ReportedFolderActs {
 export const nothingReported: ReportedFolderActs = { account: [], folder: null };
 
 /**
- * What one row offers, in the order the design project draws them.
+ * What one row offers, in the order the design draws them.
  *
  * @param row The row the gesture happened on.
  * @param reported What the service said the account and this row's folder allow.
@@ -45,7 +45,7 @@ export const nothingReported: ReportedFolderActs = { account: [], folder: null }
  */
 export function actsOffered(row: FolderTreeRow, reported: ReportedFolderActs): readonly FolderAct[] {
     // Every act names one mailbox, so the two rows that span them all — the whole workspace, and a role across it —
-    // carry none. That is the design project's *All accounts carries none*, and it falls out of the row rather than
+    // carry none. That is the design's *All accounts carries none*, and it falls out of the row rather than
     // being asked about the row's kind. A level of a path nothing is declared at scopes to nothing and has no identity
     // an act could name, so it offers nothing either.
     if (row.accountId === null || row.scope === null) {

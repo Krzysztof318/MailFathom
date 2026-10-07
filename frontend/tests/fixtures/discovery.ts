@@ -17,7 +17,7 @@ import { markupOnlyId, newsletterId } from './messages';
 // a revision ahead of this client are six screens somebody has to be able to draw and none of them can be reached from
 // a finished run by pressing anything.
 //
-// It states no plan name. The design project draws the plan the service chose as a chip beside the run, and the tail
+// It states no plan name. The design draws the plan the service chose as a chip beside the run, and the tail
 // carries no such field: which plan answered a question is not published on this surface, so a value here would be a
 // field the deployment does not have.
 

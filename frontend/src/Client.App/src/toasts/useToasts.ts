@@ -15,7 +15,7 @@ import { createContext, useContext, useMemo } from 'react';
 /**
  * How long a toast stands before it takes itself away, where the person has said nothing about it.
  *
- * It is the design project's value and the deployment's own unset answer, which is why the same number stands in on
+ * It is the design's value and the deployment's own unset answer, which is why the same number stands in on
  * both sides: a client with no session and one whose person has never chosen behave alike.
  */
 export const toastLifetime = 5_000;

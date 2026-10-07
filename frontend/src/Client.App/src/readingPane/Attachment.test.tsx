@@ -99,7 +99,7 @@ describe('Attachment', () => {
         expect(controls.onOpen).toHaveBeenCalledTimes(1);
     });
 
-    // What became of a download is said from the corner rather than under the row, which is where the design project
+    // What became of a download is said from the corner rather than under the row, which is where the design
     // puts it — so the row says nothing about it and this asserts that it does not.
     it('says nothing under the row about a download in flight', () => {
         drawing(invoice, true);

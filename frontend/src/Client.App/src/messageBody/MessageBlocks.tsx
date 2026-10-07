@@ -43,7 +43,7 @@ import {
 // The catalogue is closed, so this switch is exhaustive by its own type: a block added to the contract fails to
 // compile here until this file says how it is drawn.
 //
-// **How each of them is drawn is the design project's message body rather than a browser's defaults.** The measures
+// **How each of them is drawn is the design's message body rather than a browser's defaults.** The measures
 // below are that document read block by block: a quotation is the callout the design draws — highlighted, cut against
 // its own rule — a table stands in a bordered card with its header row on the sunken tint, a code block is a panel of
 // its own, and a heading a sender wrote climbs the same three steps the design gives one. The scale itself lives with

@@ -102,7 +102,7 @@ export const folderRoles: readonly MailFolderRole[] = Object.keys(roleOrder).fil
  * arrives, is answered, and is written in the same way whichever account it belongs to, so an inbox, a sent folder and
  * a drafts folder are one place each. Everything else is a folder one account keeps: what was archived, what a
  * provider called junk, and what was thrown away are each read in the account they happened in — and a list mixing
- * two accounts' trash is a list nobody asked for. That is the design project's own reading and its own three.
+ * two accounts' trash is a list nobody asked for. That is the design's own reading and its own three.
  *
  * It bounds what the tree draws under every account and what a remembered scope may still be, so a role no longer
  * offered falls back to the scope the client opens on rather than drawing a column the tree has no row for.

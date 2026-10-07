@@ -9,7 +9,7 @@ import { fragmentBeingRead } from '../workspace/askScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useReplyDrafting } from './replyDrafting';
 
-// The field at the foot of a correspondence, as the design project draws it there and nowhere else: a box with the
+// The field at the foot of a correspondence, as the design draws it there and nowhere else: a box with the
 // product's mark on it, a press that drafts a reply, and — where the composition has room — a row saying what the draft
 // is about and where it stays.
 //

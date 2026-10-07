@@ -9,7 +9,7 @@ import { isStatableReminderLead, isStatableReminderSet } from '@mailfathom/clien
 // why it is a module of its own rather than state inside the panel — a rule nothing can call on its own is a rule
 // nothing can be asserted about either.
 //
-// The numbers are the design project's own. A timed event offers the moment itself and the five leads somebody
+// The numbers are the design's own. A timed event offers the moment itself and the five leads somebody
 // reaches for around a meeting; a record stated as a day — an all-day event, and a task's due date — offers the
 // wider set, because a day names no hour to be five minutes ahead of.
 
@@ -39,7 +39,7 @@ export const datedReminderPresets: readonly number[] = [
     2 * minutesPerDay,
 ];
 
-/** The lead a new event starts with, which is the one the design project draws already pressed. */
+/** The lead a new event starts with, which is the one the design draws already pressed. */
 export const defaultReminderLeads: readonly number[] = [15];
 
 /** The units the custom entry states a lead in, in the order the design draws them. */
@@ -60,7 +60,7 @@ export interface ReminderLeadReading {
 /**
  * Reads one lead as the coarsest whole unit that states it exactly.
  *
- * The thresholds are the design project's: under an hour is minutes, under a day is hours where the lead divides into
+ * The thresholds are the design's: under an hour is minutes, under a day is hours where the lead divides into
  * them and minutes where it does not, and a whole number of days is days. A lead that divides into no coarser unit
  * stays in the finer one rather than being rounded, because a person who typed ninety minutes did not ask for an hour
  * and a half of anything.

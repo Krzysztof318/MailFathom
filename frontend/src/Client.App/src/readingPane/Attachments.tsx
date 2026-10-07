@@ -22,7 +22,7 @@ import { useAttachmentDownloads } from './downloadingAttachment';
 // deployment for a bundle: the route serves one part, and what a reader gets is the same files under the same names.
 // Waiting for each before starting the next is what keeps a message carrying twenty files from opening twenty requests
 // and holding twenty answers in memory at once. What that costs is that each file arrives as its own download, which is
-// where this differs from the design project — that draws one archive, which no route serves.
+// where this differs from the design — that draws one archive, which no route serves.
 
 export function Attachments({
     session,
@@ -69,7 +69,7 @@ export function Attachments({
             ))}
 
             {/* Offered where there is more than one file to download, which is where it saves a press: the design
-                project draws it on exactly that message and nothing else. */}
+                draws it on exactly that message and nothing else. */}
             {attachments.length > 1 ? (
                 <li>
                     <button

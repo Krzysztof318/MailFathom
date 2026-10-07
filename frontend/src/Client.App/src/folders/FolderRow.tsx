@@ -20,7 +20,7 @@ import type { FolderTreeRow } from './folderTreeRows';
 // is an inbox whatever the provider named the folder and in whatever language — and everything else is called what its
 // mail server calls it.
 //
-// Two shapes, as the design project draws them. The first level is the groups — the whole workspace and each mailbox —
+// Two shapes, as the design draws them. The first level is the groups — the whole workspace and each mailbox —
 // drawn as a small heading with a mark in front of it, and everything under a group is a folder drawn with the symbol
 // of what it is: the role's own where it plays one, and a folder's otherwise.
 //
@@ -67,7 +67,7 @@ function rowShape({
         }`;
     }
 
-    // A folder a drag is over draws the ring the design project draws for it, which is the only thing saying a drop
+    // A folder a drag is over draws the ring the design draws for it, which is the only thing saying a drop
     // lands here — so it wins over the selected folder's shape, whose background and colour it shares.
     return `${across} rounded-md ${folded ? 'py-1.25' : 'py-1.75 text-md'} ${
         droppedOn
@@ -230,7 +230,7 @@ function Twist({
 }: {
     readonly expanded: boolean | null;
 
-    /** What a pointer resting on it says, which is the design project's *Show* and *Collapse subfolders*. */
+    /** What a pointer resting on it says, which is the design's *Show* and *Collapse subfolders*. */
     readonly said: string;
 
     readonly onToggle: () => void;
@@ -256,7 +256,7 @@ function Twist({
 
 // What is unread here, of the deployment's own copy rather than of the mailbox, which is what the state beside it
 // says. The words a reader hears are carried, because a bare number on a row is a number of nothing to somebody who
-// cannot see the column it is in. A row with nothing unread carries no number, as the design project draws it.
+// cannot see the column it is in. A row with nothing unread carries no number, as the design draws it.
 //
 // Only an inbox carries one at all. A number on every folder is a column of numbers, and a column of numbers is one
 // nobody reads: what the count is for is the one row somebody is waiting on. Everything else — a sent folder, an

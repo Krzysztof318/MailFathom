@@ -186,7 +186,7 @@ describe('ThreadMessage', () => {
 
     // A message whose local copy the deployment could not open arrives without one. The reader is owed the gap rather
     // than a message drawn empty — and the gap alone, because the conversation is where every message of it is read
-    // and a second surface for one of them is not something the design project offers.
+    // and a second surface for one of them is not something the design offers.
     it('says a message the conversation could not carry, rather than drawing it empty', () => {
         drawing(unopened());
 
@@ -232,7 +232,7 @@ describe('ThreadMessage', () => {
     });
 
     // The conversation carries every message of itself, so there is nowhere else to open one: a control leading out of
-    // the screen a reader is already on is one the design project draws nothing for.
+    // the screen a reader is already on is one the design draws nothing for.
     it('offers no way out of the conversation to the message on its own', () => {
         drawing();
 

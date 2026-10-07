@@ -9,7 +9,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { looksLikeAnAddress, mostRecipientsInOneHeader } from './composition';
 import { searchContacts, suggestionsFor, type ContactLookup, type RecipientSuggestion } from './recipientSuggestions';
 
-// One header of a message being written, as the design project draws it: the header's name, a chip per address with a
+// One header of a message being written, as the design draws it: the header's name, a chip per address with a
 // way to take each one back off, and a field to write the next one in.
 //
 // **The name stands in the composer's own label column.** The design draws the whole header as one grid — a fixed

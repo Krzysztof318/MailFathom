@@ -1,8 +1,7 @@
 {
-  "stamp": "53b52ce074670f42",
   "screens": {
     "sign-in": {
-      "file": "MailFathom Sign-in.dc.html",
+      "file": "sign-in.dc.html",
       "properties": {
         "theme": null
       },
@@ -15,7 +14,7 @@
       ]
     },
     "mail-list": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -28,7 +27,7 @@
       ]
     },
     "mail-thread": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -46,7 +45,7 @@
       ]
     },
     "settings-profile": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -69,7 +68,7 @@
       ]
     },
     "settings-application": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -97,7 +96,7 @@
       ]
     },
     "notifications": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -115,7 +114,7 @@
       ]
     },
     "account-menu": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -138,7 +137,7 @@
       ]
     },
     "full-html": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -171,7 +170,7 @@
       ]
     },
     "full-html-ask": {
-      "file": "MailFathom Prototype.dc.html",
+      "file": "prototype.dc.html",
       "properties": {
         "theme": null
       },

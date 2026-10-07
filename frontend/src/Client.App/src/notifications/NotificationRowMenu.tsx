@@ -14,7 +14,7 @@ import { useLocalization } from '../localization/useLocalization';
 // key to hold on a touch screen, so the menu is where a selection starts.
 //
 // **An item the client cannot yet perform is left out rather than drawn inert**, which is the rule the message row's
-// own menu states. One item the design project draws is absent under it: *open the source*, on a notification that
+// own menu states. One item the design draws is absent under it: *open the source*, on a notification that
 // names no target, because there is nothing to open.
 //
 // **Deleting is last and drawn as what it is.** It takes a row out of the centre for good, so it sits apart from the

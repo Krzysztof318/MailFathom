@@ -20,11 +20,11 @@ import {
 // menu, and the head of the message being read — and a name or a symbol written twice is how *archive* comes to be two
 // different-looking things.
 //
-// The two orders below are both the design project's, and they differ on purpose rather than by oversight: a strip
+// The two orders below are both the design's, and they differ on purpose rather than by oversight: a strip
 // reads left to right and puts what destroys beside the act it is nearest to, while a menu reads down a column and
 // leaves what destroys until last, apart from everything reversible above it.
 
-/** What each act is called and what it is drawn as, which is the design project's own symbol for it. */
+/** What each act is called and what it is drawn as, which is the design's own symbol for it. */
 export const actsDrawn: Readonly<Record<MailboxAct, { readonly icon: IconName; readonly label: MessageKey }>> = {
     archive: { icon: 'archive', label: 'mail.archive' },
     delete: { icon: 'delete', label: 'mail.delete' },

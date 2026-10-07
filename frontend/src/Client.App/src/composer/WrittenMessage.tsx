@@ -10,7 +10,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useCoarsePointer } from '../shell/useWideWorkspace';
 import { followable, writtenIn, type WrittenNode } from './writtenText';
 
-// The words of a message being written, as the design project draws them: an editable region over a row of formatting
+// The words of a message being written, as the design draws them: an editable region over a row of formatting
 // controls, with the row replaced by a toggle where a finger is what drives the screen.
 //
 // **The region is the document's rather than React's.** What is inside a `contenteditable` is written by the browser

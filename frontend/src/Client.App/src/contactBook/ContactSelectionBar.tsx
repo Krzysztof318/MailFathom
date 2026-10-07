@@ -9,7 +9,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 
-// What stands where the toolbar stands while people are picked out, which is the design project's own bar: how many
+// What stands where the toolbar stands while people are picked out, which is the design's own bar: how many
 // are selected, the acts over the whole of them, and the way out.
 //
 // It replaces the toolbar rather than standing beside it, for the reason `mailSpace/SelectionBar.tsx` gives about its
@@ -59,7 +59,7 @@ export function ContactSelectionBar({
     const wide = useWideWorkspace();
 
     // Words beside the symbols where the composition has room for them, and the symbols alone where it has not, which
-    // is how the design project draws this bar on a phone. The name is on the control either way.
+    // is how the design draws this bar on a phone. The name is on the control either way.
     const shape = wide ? 'selected' : 'selectedSymbol';
 
     return (

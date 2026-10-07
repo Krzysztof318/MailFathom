@@ -6,7 +6,7 @@
 // because a module exporting a component exports nothing else, which is what keeps a development reload replacing a
 // component instead of reloading the page.
 //
-// The design project settles the iconography as Material Symbols Rounded at weight 300 with `FILL 0` and `GRAD 0`,
+// The design settles the iconography as Material Symbols Rounded at weight 300 with `FILL 0` and `GRAD 0`,
 // addressed by the ligature name Google's catalogue uses, and every glyph is that file committed under `assets/icons/`
 // rather than a font fetched from a CDN: a deployment that keeps mail on its own server does not hand
 // `fonts.gstatic.com` a request per reader, and the desktop head has to render with no route out at all.

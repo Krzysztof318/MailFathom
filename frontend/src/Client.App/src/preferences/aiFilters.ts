@@ -18,7 +18,7 @@ import { createContext, useContext } from 'react';
  * Whether the tree draws the standing views, which a tree with no provider above it reads as `true`.
  *
  * Drawn is the default for the reason the deployment's own unset answer is: the section is part of the tree the design
- * project draws, so it is something somebody turns off rather than something they go looking for.
+ * draws, so it is something somebody turns off rather than something they go looking for.
  */
 export const AiFiltersShownContext = createContext(true);
 

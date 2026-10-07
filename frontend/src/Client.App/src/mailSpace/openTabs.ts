@@ -33,7 +33,7 @@ export interface OpenedMail {
 }
 
 /**
- * The four things the design project gives a tab of its own.
+ * The four things the design gives a tab of its own.
  *
  * One of them has no screen behind it yet — a draft is the composer of #1210 — so nothing constructs one today. It is
  * named here rather than added later because the strip is what draws whichever kind a tab has, and a kind it could not
@@ -131,7 +131,7 @@ export function activated(state: OpenTabs, key: string, leaving: OpenedMail): Op
 /**
  * Everything open after one tab is closed.
  *
- * Closing the active one moves to the last remaining, which is where the design project leaves a reader; closing any
+ * Closing the active one moves to the last remaining, which is where the design leaves a reader; closing any
  * other leaves what is on the screen alone.
  */
 export function closed(state: OpenTabs, key: string): OpenTabs {

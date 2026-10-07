@@ -5,15 +5,14 @@
 
 set -euo pipefail
 
-# The design half of a parity pair. It serves the mirrored design project out of `design/files/` and captures
-# the named screens at the compositions `frontend/design-parity/screens.json` states, which is the same file
-# `scripts/capture-client.sh` reads — so the two sides cannot differ in size, pointer or device pixel ratio, whatever
-# either invocation asked for.
+# The design half of a parity pair. It serves the design out of `design/` and captures the named screens at the
+# compositions `frontend/design-parity/screens.json` states, which is the same file `scripts/capture-client.sh` reads —
+# so the two sides cannot differ in size, pointer or device pixel ratio, whatever either invocation asked for.
 #
 # The pairing itself is split in two on purpose. The client half is `frontend/design-parity/screens.json`, which
 # describes the client and says nothing about the design. The design half — which artboard a screen is drawn on, which
-# properties it takes, what is pressed to reach it — describes the design, so it lives beside the mirror in
-# `design/parity.json` and moves with it when a refresh moves an artboard.
+# properties it takes, what is pressed to reach it — describes the design, so it lives beside the artboards in
+# `design/parity.json` and moves with them when an artboard is renamed or a state is reached differently.
 
 usage() {
   cat <<'USAGE'
@@ -38,31 +37,18 @@ USAGE
 
 source "$(dirname "${BASH_SOURCE[0]}")/capture-plan.sh"
 
-design_root="$repository_root/design/files"
-pairing="$repository_root/design/parity.json"
+design_root="$repository_root/design"
+pairing="$design_root/parity.json"
 
-if [[ ! -f "$design_root/support.js" ]]; then
-  printf 'The mirror carries no design runtime at %s, so an artboard would never boot.\n' "$design_root/support.js" >&2
-  printf 'Refresh it with $mf-sync-design, which reads the runtime beside the screen sources.\n' >&2
+if [[ ! -f "$design_root/runtime/support.js" ]]; then
+  printf 'The design carries no runtime at %s, so an artboard would never boot.\n' "$design_root/runtime/support.js" >&2
   exit 1
 fi
 
 if [[ ! -f "$pairing" ]]; then
   printf 'No design pairing at %s.\n' "$pairing" >&2
-  printf 'It names, for each screen in %s, the mirrored artboard it is drawn on, the component properties it\n' "$manifest" >&2
-  printf 'takes and what is pressed to reach it. It sits beside the mirror under design/, and $mf-sync-design is\n' >&2
-  printf 'what writes it.\n' >&2
-  exit 1
-fi
-
-# A pairing written against an older design would point every capture at an artboard that has since moved, and the
-# comparison would report the design having changed as the client being wrong. The stamp is the mirror's own.
-recorded_stamp="$(jq -r '.stamp // ""' "$pairing")"
-mirror_stamp="$(bash "$capture_scripts_directory/design-mirror.sh" stamp)"
-
-if [[ "$recorded_stamp" != "$mirror_stamp" ]]; then
-  printf 'The pairing was written for stamp %s and the mirror is at %s.\n' "$recorded_stamp" "$mirror_stamp" >&2
-  printf 'Refresh the mirror and the pairing with $mf-sync-design before capturing anything.\n' >&2
+  printf 'It names, for each screen in %s, the artboard it is drawn on, the component properties it takes and\n' "$manifest" >&2
+  printf 'what is pressed to reach it, and it sits beside the artboards under design/.\n' >&2
   exit 1
 fi
 

@@ -7,7 +7,7 @@ import { longestDraftInstruction } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
-// Asking the deployment to write the message, as the design project draws it over the body: a field with the product's
+// Asking the deployment to write the message, as the design draws it over the body: a field with the product's
 // mark on it, the four acts beside it, the three tones after them, and a line saying what the draft is written against
 // and where it stays. It is the composer's own block rather than a screen somebody is sent to, which is the whole
 // point of it — a draft is a proposal inside the message being written, so nothing here navigates and nothing here

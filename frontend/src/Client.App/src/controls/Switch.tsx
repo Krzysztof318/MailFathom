@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The one on-or-off control the client draws, in both places the design project puts one: the tab mode in the account
+// The one on-or-off control the client draws, in both places the design puts one: the tab mode in the account
 // menu and the telemetry decision on the settings screen. One component rather than two similar arrangements of
 // utilities, because the second screen drawing the same shape from its own copy is how a client stops looking like one
 // product — and because the track and the knob are the same three decisions each time.

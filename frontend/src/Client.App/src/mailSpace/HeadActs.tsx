@@ -15,7 +15,7 @@ import { useAgentHandOver, type AgentHandOver } from '../routing/agentHandOver';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 
 // What stands at the end of the head of a message or a conversation, beside its subject: handing the thread to the
-// agent, and the three things the design project offers to do with it from there. One component because two heads
+// agent, and the three things the design offers to do with it from there. One component because two heads
 // draw it — a message opened from the list and the conversation it belongs to — and the acts have to be the same acts
 // from both.
 //

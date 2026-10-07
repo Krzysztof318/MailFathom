@@ -7,7 +7,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
 // The one control in the navigation that is not a place to go. It draws two things: whether anything is unread, which
-// is the symbol, and how much of it, which is the badge — and the design project caps the badge at *9+* because the
+// is the symbol, and how much of it, which is the badge — and the design caps the badge at *9+* because the
 // difference between ten and eleven is not what a badge is for.
 //
 // **The count is said as well as drawn.** A badge reading `9+` is a picture of a number, so the control's own name
@@ -16,9 +16,9 @@ import { useLocalization } from '../localization/useLocalization';
 //
 // It is drawn the two ways the navigation around it is: an item in the bottom bar of a narrow window, with its name
 // under it like every other item there, and a control of its own at the foot of the rail in a wide one, where the
-// design project stands it above the account.
+// design stands it above the account.
 
-/** Where the badge stops counting, which is the design project's own cap. */
+/** Where the badge stops counting, which is the design's own cap. */
 export const mostUnreadShown = 9;
 
 // How many stand unread, in the forms a language has for the noun. Selected rather than spelled for the reason the

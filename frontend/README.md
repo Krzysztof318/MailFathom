@@ -436,7 +436,7 @@ application rather than seven: `src/App.tsx` is the frame that holds them, and i
 question, their scope, and their selection across. **Discover**, **Mail**, **Agent**, **Tasks**, **Calendar**, and
 **People** are built — `src/routing/spaces.ts` names the six in `implementedSpaces` — and **Cases** is present, named as
 a placeholder, and says in a sentence that there is nothing behind it yet. They are drawn rather than hidden because the
-design project is what the client is measured against and it shows all seven; a rail with six destinations would be a
+design is what the client is measured against and it shows all seven; a rail with six destinations would be a
 different product from the one that was designed. A built space is also the only kind that is reached under a grant:
 **People** is offered to a credential that may read the address book, **Calendar** and **Tasks** to one that may read
 mail — which is the grant the calendar and task routes themselves are published under — **Discover** and **Agent** to
@@ -444,7 +444,7 @@ one that may ask questions of it, and a placeholder is reached by anybody, which
 second grant: arranging the day is a provider call, so the screen asks whether the credential may ask at all and
 whether this deployment arranges one, and draws that control only where both answer yes.
 The frame is one tree laid out by the width it is given, and nothing in it reads which head or which platform it is
-running on. Three `@theme` breakpoints decide it, and between them they give the four compositions the design project
+running on. Three `@theme` breakpoints decide it, and between them they give the four compositions the design
 frames: below `workspace` the destinations are a bottom bar under a single pane, and every side panel is a drawer;
 from `workspace` up they are the rail beside the workspace again; from `panes` up the list and the message stand side
 by side; and from `desktop` up the mailboxes gain a column of their own beside them. The fold is a composition of its
@@ -599,7 +599,7 @@ letting a call site suppress the rule.
 
 A file a message carries opens on a third surface, in the same place and by the same rule: `readingPane/Attachment.tsx`
 is the row that describes it, and `readingPane/AttachmentView.tsx` is what a press on it opens — a tab of its own where
-somebody works in tabs, and the same window over the message where they do not, drawn at the size the design project
+somebody works in tabs, and the same window over the message where they do not, drawn at the size the design
 gives a file rather than markup. Opening and downloading are two controls
 on that row rather than one, because they are two acts: the chip opens the file inside the client and the control at its
 end writes it to the person's machine, so looking at something never costs a trip to a downloads folder. It reads the one route the download
@@ -749,7 +749,7 @@ Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type s
 breakpoints the composition changes at, the safe-area insets, and the motion defaults are `@theme` tokens in
 `src/Client.App/src/styles.css`, and there is no JavaScript configuration file.
 
-Every value there is the design project's rather than this repository's, declared in OKLCH under two themes. What a
+Every value there is the design's, declared in OKLCH under two themes. What a
 screen composes against is never a hue but a **semantic** name — a page, a panel, a rail, a sunken region, three line
 weights, four text weights, an accent, a healthy state, a warning. A name means the same thing under both themes, which
 is what lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them —

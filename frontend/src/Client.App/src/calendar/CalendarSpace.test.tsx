@@ -166,7 +166,7 @@ describe('CalendarSpace', () => {
         const asked = windowsAsked(sent());
         expect(asked).toHaveLength(1);
 
-        // Monday to Monday, which is the week the design project draws and the window the deployment is asked for.
+        // Monday to Monday, which is the week the design draws and the window the deployment is asked for.
         expect(asked[0]?.path).toContain(`from=${encodeURIComponent(new Date(2026, 8, 21).toISOString())}`);
         expect(asked[0]?.path).toContain(`until=${encodeURIComponent(new Date(2026, 8, 28).toISOString())}`);
     });

@@ -18,7 +18,7 @@ import { password, userName } from '../tests/fixtures/deployment';
 // It is tooling rather than client source: it never reaches a bundle, `src/Client.App` does not import it, and it sits
 // beside `src-tauri/run-tauri.ts` in the workspace's own TypeScript that `tsconfig.json` type-checks and `jiti` runs.
 
-/** One of the design project's four framed sizes, and whether the pointer at it is coarse. */
+/** One of the design's four framed sizes, and whether the pointer at it is coarse. */
 interface Composition {
     name: string;
     width: number;
@@ -55,7 +55,7 @@ interface Capture {
     steps: Step[];
 }
 
-/** The design side: the mirrored artboard to open, and the component properties to set on it before anything else. */
+/** The design side: the artboard to open, and the component properties to set on it before anything else. */
 interface DesignCapture extends Capture {
     file: string;
     properties: Record<string, unknown>;
@@ -77,7 +77,7 @@ interface PlannedRun {
 }
 
 // The two sides are one type discriminated by `side` rather than one type with four optional fields, because the
-// fields are not optional: a design plan without a mirror directory and a client plan without an origin are each a
+// fields are not optional: a design plan without a design directory and a client plan without an origin are each a
 // plan that cannot run. Reading them apart at the boundary is what lets everything below take what it needs without a
 // fallback standing in for a value that was never allowed to be absent.
 type Plan =
@@ -112,10 +112,10 @@ const contentTypes: Readonly<Record<string, string>> = {
 /**
  * Serves one directory over the loopback, and remembers every path it had nothing for.
  *
- * The design mirror carries the project's screen sources and its runtime and none of its binary assets, because a
- * `read_file` result is text and an image is not. So a design capture legitimately asks for files that are not there,
- * and the honest thing is to name them: an unanswered asset is a region that will differ for a reason that is not a
- * defect in the client, and a report that did not say so would send somebody to fix the wrong thing.
+ * The design carries its artboards and their runtime and none of the images they name, so a design capture
+ * legitimately asks for files that are not there, and the honest thing is to name them: an unanswered asset is a
+ * region that will differ for a reason that is not a defect in the client, and a report that did not say so would send
+ * somebody to fix the wrong thing.
  */
 function serveDirectory(root: string): { server: Server; unanswered: string[] } {
     const unanswered: string[] = [];
@@ -125,8 +125,8 @@ function serveDirectory(root: string): { server: Server; unanswered: string[] } 
         const asked = decodeURIComponent(new URL(request.url ?? '/', 'http://served').pathname);
         const file = resolvePath(join(base, normalize(asked)));
 
-        // The paths come out of a design file rather than out of this repository, so one that walks out of the mirror
-        // is refused here rather than trusted to be well behaved.
+        // The paths come out of a page the browser is running rather than out of this script, so one that walks out of
+        // the served directory is refused here rather than trusted to be well behaved.
         if (file !== base && !file.startsWith(base + sep)) {
             response.writeHead(403).end();
 
@@ -169,7 +169,7 @@ function listening(server: Server): Promise<number> {
  * The proxy the browser has to go through, where this machine has one.
  *
  * An agent session runs behind an authenticating proxy, and Chromium fails every outbound request without it — which
- * arrives as a design artboard that never boots, because its runtime is fetched rather than mirrored. The bypass is
+ * arrives as a design artboard that never boots, because the React its runtime renders with is fetched from a CDN. The bypass is
  * the environment's own, so the loopback servers above are still reached directly.
  */
 function proxyFromEnvironment(): { server: string; username: string; password: string; bypass: string } | null {
@@ -342,7 +342,7 @@ function contextFor(browser: Browser, plan: PlannedRun, composition: Composition
         isMobile: composition.touch,
         colorScheme: plan.theme,
 
-        // The design project is written in English and reads no locale, so the client is asked for the same language:
+        // The design is written in English and reads no locale, so the client is asked for the same language:
         // a pair captured in two languages differs in every word and says nothing about the screen.
         locale: 'en-US',
     });

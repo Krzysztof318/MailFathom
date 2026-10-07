@@ -9,7 +9,7 @@ import { useScreenLayer } from '../shell/screenLayers';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { placedWithin, type MenuPoint } from './menuPlacement';
 
-// What a row answers a press with, which the design project draws on seven of its lists: a header naming the row, then
+// What a row answers a press with, which the design draws on seven of its lists: a header naming the row, then
 // the acts that row offers, the one that cannot be taken back drawn as what it is. It is one component for all seven
 // rather than a menu per screen, because a second arrangement of a header and a column of items is how a client comes
 // to have two menus that resemble each other — and because what a menu *is* has nothing to do with what a row holds.
@@ -17,7 +17,7 @@ import { placedWithin, type MenuPoint } from './menuPlacement';
 // So what a list supplies is its items, and everything else is here: where the menu stands, that it stays on the
 // screen, that it can be walked without a pointer, and that leaving it puts the reader back where they were.
 //
-// **The two compositions are the design project's own.** Given room, the menu opens at the point the gesture happened
+// **The two compositions are the design's own.** Given room, the menu opens at the point the gesture happened
 // and is pushed back inside the pane rather than off its edge; given a phone, it stands in the middle of the screen,
 // because a menu anchored under a thumb at the foot of a narrow window has nowhere to go. Neither is a question about
 // which head this is — it is the width the window has, asked once.
@@ -30,7 +30,7 @@ export interface ContextMenuItem {
     readonly icon: IconName;
     readonly label: string;
 
-    /** Whether this is the act that cannot be taken back, which the design project draws apart from the others. */
+    /** Whether this is the act that cannot be taken back, which the design draws apart from the others. */
     readonly destroys?: boolean;
 
     readonly choose: () => void;
@@ -201,7 +201,7 @@ export function ContextMenu({
                                 }}
                             >
                                 {/* The symbol keeps its own column so every label starts in the same place, which is
-                                    what the design project draws and what makes the list readable as a column. */}
+                                    what the design draws and what makes the list readable as a column. */}
                                 <span className="flex w-6 shrink-0 justify-center">
                                     <Icon name={item.icon} className="size-5" />
                                 </span>

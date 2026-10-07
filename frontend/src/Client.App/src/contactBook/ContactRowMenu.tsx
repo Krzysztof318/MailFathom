@@ -12,7 +12,7 @@ import { useLocalization } from '../localization/useLocalization';
 // stands, how it is walked, and how it is left are `contextMenu/ContextMenu.tsx`'s.
 //
 // **An item the client cannot yet perform is left out rather than drawn inert**, which is the rule
-// `messageRows/MessageRowMenu.tsx` states and the reason two of the design project's five items are absent here: *write
+// `messageRows/MessageRowMenu.tsx` states and the reason two of the design's five items are absent here: *write
 // a message* is absent where the credential may not write a draft, and *propose a meeting* is absent altogether,
 // because the Calendar space is a placeholder and a menu item that opens nothing is worse than no item at all. It
 // arrives with that screen rather than being drawn ahead of it.

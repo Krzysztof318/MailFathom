@@ -33,7 +33,7 @@ import {
 // not lists anybody asks for, and offering three states per filter would triple the controls to reach one nobody wants.
 //
 // The control that opens the panel stands at the end of the column's head row, beside the search field, which is where
-// the design project draws it; the panel opens underneath the row, across the column. The row is the search's and the
+// the design draws it; the panel opens underneath the row, across the column. The row is the search's and the
 // panel is this component's, so the control is rendered into the place the row offers — `mailSpace/listHeadRow.ts` —
 // and drawn here only where no row offers one. A button rather than a disclosure element for that reason: a `summary`
 // has to stand inside the `details` it opens, and the two stand in different components.
@@ -177,7 +177,7 @@ export function ListSettings({
         <>
             {headRow === null ? opener : createPortal(opener, headRow)}
 
-            {/* Drawn out to the edges of the column the way the design project draws it, rather than as a card inset
+            {/* Drawn out to the edges of the column the way the design draws it, rather than as a card inset
                 inside the header: what is disclosed is a band the list starts underneath, and the line along its foot
                 is what says where the list begins again. */}
             {open ? (
@@ -402,7 +402,7 @@ export function ListSettings({
 
 const dateField = 'rounded-md border border-line bg-panel px-2 py-1 text-sm text-text';
 
-// What each group inside the panel is headed with, in the size and the weight the design project sets those labels
+// What each group inside the panel is headed with, in the size and the weight the design sets those labels
 // in. Not the settings screen's own section label, which the design draws a shade fainter — two labels that differ in
 // the design are two shapes rather than one drifting.
 const sectionLabel = 'text-2xs tracking-widest text-muted uppercase';

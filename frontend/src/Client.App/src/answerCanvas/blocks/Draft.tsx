@@ -24,7 +24,7 @@ import { draftDispositions, supportVerdicts } from './blockWording';
 //
 // **It is editable, and the edit stays on this screen.** The draft is somebody's to correct before they put their name
 // to it, so the body opens in a text area on request; saving it anywhere is the mail surface's and is stated under the
-// area rather than implied by an absent control. That is what the design project draws too — its own editing state swaps
+// area rather than implied by an absent control. That is what the design draws too — its own editing state swaps
 // the paragraphs for a text area.
 //
 // **In a conversation it is a proposal, and sending is how it is accepted.** The conversation answers it with *Send*,

@@ -93,7 +93,7 @@ export function wordReminderRemaining(minutesBefore: number, locale: Locale, tra
 /**
  * Says how many reminders a record carries, which is what the count beside the panel's heading reads.
  *
- * A record carrying none reads as *off* rather than as none, which is the design project's own word: what it states
+ * A record carrying none reads as *off* rather than as none, which is the design's own word: what it states
  * is that nothing will be raised about it, and a zero would read as a number that might change on its own.
  */
 export function wordReminderCount(count: number, locale: Locale, translate: Translate): string {

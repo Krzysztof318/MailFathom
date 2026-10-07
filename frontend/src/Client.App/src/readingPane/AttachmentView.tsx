@@ -23,7 +23,7 @@ import { kindOf } from './fileKind';
 import { shownAttachment, type NotShown } from './shownAttachment';
 
 // One file a message carries, opened inside the client instead of saved. It stands with the message — in the reading
-// column as the fourth kind of tab the design project draws where somebody works in tabs, and over the message in
+// column as the fourth kind of tab the design draws where somebody works in tabs, and over the message in
 // `mailSpace/SurfaceWindow.tsx` where they do not — and closing it is a return to that message rather than a way out of
 // the client. Which of the two it is put in is the composition root's, so nothing here asks.
 //
@@ -61,7 +61,7 @@ const notShownMessages: Readonly<Record<NotShown, MessageKey>> = {
     largerThanShown: 'attachment.notShownSize',
 };
 
-// What an opened file stands as while its octets are on their way, which is the design project's own shape for a
+// What an opened file stands as while its octets are on their way, which is the design's own shape for a
 // document: a label, a title, and three paragraphs under them. Longer than a message's because a file is what somebody
 // opened this surface to read, and a block ending after four lines would say the file was nearly empty.
 const waitingFileLines: readonly SkeletonLine[] = [

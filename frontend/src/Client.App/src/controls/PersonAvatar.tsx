@@ -5,7 +5,7 @@
 import { Icon } from './Icon';
 import { initialsOf } from './initials';
 
-// The circle the signed-in person is drawn by, in the two places the design project puts it: the control that opens
+// The circle the signed-in person is drawn by, in the two places the design puts it: the control that opens
 // the account menu, and the profile section of the settings screen. Three states in one order — the picture they
 // chose, the letters of the name this deployment records them under, and the anonymous person while neither has
 // answered — because all three are the same circle in the same place and a screen switching between three components

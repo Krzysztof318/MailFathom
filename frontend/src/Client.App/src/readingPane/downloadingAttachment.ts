@@ -19,7 +19,7 @@ import { savedAs } from './savedFileName';
 // opens one inside the client and says so where it cannot. Both reach it through the one hook below, because they
 // differ in how many files they offer rather than in what one download is.
 //
-// **A download reports from the corner rather than from the message.** The design project raises a task for it — one
+// **A download reports from the corner rather than from the message.** The design raises a task for it — one
 // that says the file is on its way, carries the way out of it, and turns into what became of it — and the client
 // already has that surface in `toasts/useToasts.ts`. A line written under the words of the message instead was this
 // client's own arrangement, and it put the answer to *did that file arrive* in the middle of something being read.

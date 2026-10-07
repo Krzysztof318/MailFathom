@@ -12,7 +12,7 @@ import { kindOf } from './fileKind';
 // and how large it is — so that opening a message costs the same whether the sender attached a note or a video, and so
 // that a reader decides whether a file is worth having before it starts arriving.
 //
-// It is drawn as the design project draws it: a chip naming the kind of file, its name, and its size, with a control of
+// It is drawn as the design draws it: a chip naming the kind of file, its name, and its size, with a control of
 // its own at the end. **The two are separate controls because they are separate acts** — the chip opens the file inside
 // the client and the control beside it writes it to the person's machine — and a reader who wanted to look at something
 // should not have to find it in a downloads folder afterwards. A file this client cannot draw opens all the same: what

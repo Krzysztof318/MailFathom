@@ -15,7 +15,7 @@ import { PersonCorrespondence } from './PersonCorrespondence';
 import { RelationshipReading } from './RelationshipReading';
 import type { ContactCorrespondenceInForce } from './useContactCorrespondence';
 
-// One person as the design project draws them: who they are and how to reach them, the acts that belong to the record
+// One person as the design draws them: who they are and how to reach them, the acts that belong to the record
 // itself, and then what MailFathom and the mailbox have to say about them.
 //
 // **What the record admits is read off its origin rather than from a control being pressed.** A contact one of this

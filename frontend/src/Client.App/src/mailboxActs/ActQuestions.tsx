@@ -15,7 +15,7 @@ import { useMailboxActs, type ActedMessage } from './useMailboxActs';
 // them and so does a row's own menu, and the question has to read identically from both: *are you sure* wearing two
 // different sets of words is how a reader learns to agree without reading.
 //
-// **Only what cannot be taken back is asked about.** That is the design project's rule rather than a preference:
+// **Only what cannot be taken back is asked about.** That is the design's rule rather than a preference:
 // archiving, flagging, marking unread and filing happen on the press and report in a toast that offers the way back,
 // and deleting is the one that stands a question in front of it. Filing is here beside it because picking a folder *is*
 // the act rather than a confirmation of one — there is nowhere else for a choice to be made.
@@ -108,7 +108,7 @@ export function DeleteQuestion({
 
     // One control with one symbol, explained two ways: what *delete* does is read off where the mail already is, so a
     // message in the trash is told what destroying it costs rather than where it would be filed. Asked here rather than
-    // answered by a second control, which is the design project's own arrangement.
+    // answered by a second control, which is the design's own arrangement.
     const destroys = acts.deletesPermanently(messages);
     const counted = { count: new Intl.NumberFormat(locale).format(messages.length) };
     const form = new Intl.PluralRules(locale).select(messages.length);

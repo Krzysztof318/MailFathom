@@ -39,7 +39,7 @@ import { ProposedDates } from './ProposedDates';
 import { useCalendarWindow } from './useCalendarWindow';
 import { WeekView } from './WeekView';
 
-// The Calendar space as the design project composes it: a toolbar, the span somebody is looking at, one of four views
+// The Calendar space as the design composes it: a toolbar, the span somebody is looking at, one of four views
 // over it, and the dates their mail proposed down the side.
 //
 // **This screen draws; it does not derive.** Every fact on it comes from the deployment, which is why three regions the
@@ -52,8 +52,8 @@ import { WeekView } from './WeekView';
 // *Invitation*, *Export* and *Print*; *Today* is this screen's own navigation and stands where the reader moves
 // between spans, and the other four reach nothing this deployment publishes.
 //
-// **Below the width seven columns need, the week and the month are drawn as the agenda**, which is what the design
-// project's own one-pane composition is and what the screen says out loud rather than substituting quietly. The day
+// **Below the width seven columns need, the week and the month are drawn as the agenda**, which is what the design's
+// own one-pane composition is and what the screen says out loud rather than substituting quietly. The day
 // view needs one column and is unchanged at every width.
 //
 // **Every write is answered by reading the span again rather than by correcting what is held**, for the reason

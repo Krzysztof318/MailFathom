@@ -10,7 +10,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
 import { inTimeOrder } from './calendarSpan';
 
-// The dates the reader's mail named that are not on their calendar yet, which the design project draws down the side
+// The dates the reader's mail named that are not on their calendar yet, which the design draws down the side
 // of every view. Each one is accepted or let go of, and both are the deployment's own routes: accepting states that
 // the date is now a fact, and letting one go removes the row — a date nobody wanted is not worth keeping, which is why
 // the surface publishes no third answer.

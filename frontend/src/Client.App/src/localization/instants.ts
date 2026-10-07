@@ -103,7 +103,7 @@ export function wordInstantRange(
 }
 
 /**
- * An instant as the design project words one on a row of the list, against the reader's own clock and calendar: the
+ * An instant as the design words one on a row of the list, against the reader's own clock and calendar: the
  * time alone for something that arrived today, the language's own word for yesterday, the day and the month for
  * anything earlier this year, and the short date for anything older than that.
  *
@@ -152,7 +152,7 @@ export function wordRecentInstant(
 }
 
 /**
- * The day a task is due, as the design project words one on a row of the list.
+ * The day a task is due, as the design words one on a row of the list.
  *
  * It is the calendar day of {@link wordCalendarDay} written short: the language's own word for the day the reader is
  * on, the day and the month for anything else this year, and the short date for anything further out. The design

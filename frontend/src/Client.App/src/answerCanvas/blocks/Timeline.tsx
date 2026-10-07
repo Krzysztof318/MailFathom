@@ -21,7 +21,7 @@ import { citationOrder } from './citationOrder';
 //
 // **The composition turns with the window rather than with the number of events.** Wide, the events stand beside each
 // other under one rule, which is what makes a chronology readable at a glance; narrow, they stack into a column, each
-// under its own rule, which is the same reading in the only shape a phone has room for. Both are the design project's
+// under its own rule, which is the same reading in the only shape a phone has room for. Both are the design's
 // own, and neither is a horizontal axis a narrow window would have to be scrolled along.
 //
 // **Every event carries its own citations** rather than the block carrying one list for all of them, because the

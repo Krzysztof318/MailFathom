@@ -144,7 +144,7 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: 'What am I still owed an answer on?' })).toBeFocused();
 
-    // Then the bar's five places in the order the design project draws them: three spaces, then the bell, then the
+    // Then the bar's five places in the order the design draws them: three spaces, then the bell, then the
     // overflow that holds everything else — the account among it. Reached from the last question rather than by
     // tabbing through the two between, which would count the list instead of stating where it ends.
     await page
@@ -172,7 +172,7 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
 
     // 320 CSS pixels is the bar `frontend/src/AGENTS.md` sets, and what is asked of it is that the frame still holds
     // everything rather than that it looks the same: the space, the intent field, its scope, and every destination the
-    // design project shows. Nothing is dropped by width, and the window it is measured in is the width alone.
+    // design shows. Nothing is dropped by width, and the window it is measured in is the width alone.
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toBeVisible();
@@ -181,7 +181,7 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
     // destination. Reached rather than dropped is the whole of the claim, so both halves are counted and the sheet is
     // opened to count the second.
     //
-    // Six rather than the seven the design project draws, because this corpus states the two permissions the client
+    // Six rather than the seven the design draws, because this corpus states the two permissions the client
     // needs to open a frame at all and no more: People is reached under the grant that reads the address book, so a
     // credential without it meets six destinations at every width. What is being measured here is the width.
     const bar = page.getByRole('navigation', { name: 'Spaces' });
@@ -196,7 +196,7 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
 test('draws the mail screens at the phone composition, with its own row height and nothing over the question', async ({
     page,
 }) => {
-    // The design project's own phone frame, and the only composition in which the list is the whole screen. Everything
+    // The design's own phone frame, and the only composition in which the list is the whole screen. Everything
     // asked below is geometry, which is what puts it here: how tall a row is, what stands over what, and whether the
     // document has grown wider than the window are three things jsdom answers for nothing.
     await page.setViewportSize(phoneWindow);
@@ -260,7 +260,7 @@ test.describe('driven by a finger', () => {
         }
     });
 
-    // The three compositions a finger drives, each at the design project's own frame. What sets them apart is which of
+    // The three compositions a finger drives, each at the design's own frame. What sets them apart is which of
     // three regions stands beside which: the phone draws the list or the message and no toolbar, while the fold and the
     // tablet draw both panes under the toolbar. All three keep the mailboxes behind a drawer.
     const touchCompositions = [

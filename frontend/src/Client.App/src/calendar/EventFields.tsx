@@ -12,7 +12,7 @@ import type { EventDraft } from './eventDraft';
 //
 // **The day and the two times are the platform's own fields.** A date input and a time input already know the
 // reader's own calendar and clock, offer the platform's picker on a phone, and are reachable from a keyboard without
-// this client writing a line of it — which is the whole of what the design project's two free-text boxes, *Day (e.g.
+// this client writing a line of it — which is the whole of what the design's two free-text boxes, *Day (e.g.
 // 28)* and *Time (e.g. 14:00)*, were standing in for. That is a correction owed to the design rather than a pair of
 // text boxes to reproduce.
 

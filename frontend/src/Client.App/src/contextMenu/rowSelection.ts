@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 // What several rows at once means, as an operation on identities rather than as something a list draws. It sits beside
-// `rowPress.ts` for that module's own reason: the design project puts one selection gesture on seven of its lists, and
+// `rowPress.ts` for that module's own reason: the design puts one selection gesture on seven of its lists, and
 // the menu a press opens is where a selection with no modifier key to hold is started from. What differs between the
 // seven is where the selection is *kept* — the mail list's is the workspace's, because *select and ask* asks its
 // question somewhere the list is not, and a directory's is its own — and none of that is decided here.

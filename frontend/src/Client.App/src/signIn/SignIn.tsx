@@ -140,8 +140,8 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
 const silentDeployment: Refusal = { message: 'signIn.deploymentSilent', controls: [] };
 
 // What a store that keeps nothing beyond the tab has to say for itself, which is the sentence a person on a shared
-// machine is deciding from. The two places that do keep something say it under the checkbox instead, in the design
-// project's own words, because there the sentence is about a choice being made rather than about a limit being met.
+// machine is deciding from. The two places that do keep something say it under the checkbox instead, in the design's
+// own words, because there the sentence is about a choice being made rather than about a limit being met.
 const nothingKeptMessages: Readonly<Record<KeptBeyondTheTab, MessageKey>> = {
     inTheDeviceStore: 'signIn.keptOnThisDevice',
     inThisBrowser: 'signIn.keptInThisBrowser',
@@ -150,7 +150,7 @@ const nothingKeptMessages: Readonly<Record<KeptBeyondTheTab, MessageKey>> = {
     nowhereKeyInvalidated: 'signIn.notKeptKeyInvalidated',
 };
 
-// One shape for every field on this screen, stated once. The focus treatment is the design project's — the line goes
+// One shape for every field on this screen, stated once. The focus treatment is the design's — the line goes
 // to the accent and the tint widens behind it — and it is written with `focus-within` on the box rather than on the
 // input, because the box is what the reveal control and the port hint stand inside.
 //

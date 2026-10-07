@@ -37,12 +37,12 @@ import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 //
 // Its height is fixed by the token rather than by its contents, and that is load-bearing rather than cosmetic: the
 // window above it is arithmetic over one height, and a row that grew with a long subject would put every row below it
-// somewhere other than where the list drew the space for it. The three lines are the design project's: who wrote and
+// somewhere other than where the list drew the space for it. The three lines are the design's: who wrote and
 // when, what about, and a line for a sentence about the message rather than from it — why a search result is in the
 // list today, and what MailFathom made of the message when stage 3 lands. A row given none keeps the space, so the row
 // that gains one is this row rather than a taller one.
 //
-// It is the one measurement in the client a composition changes, and the change is the design project's own: the same
+// It is the one measurement in the client a composition changes, and the change is the design's own: the same
 // height at the desktop, the tablet and the fold, and a taller row with a larger circle at the phone, where the list
 // is the whole screen and the row is what a thumb lands on. Both come out of the same tree at the same breakpoint, so
 // the row that grows is this row and not a second one — and the window above it reads what was drawn rather than the
@@ -78,7 +78,7 @@ function actPendingWording(asked: AskedAct): MessageKey | null {
 // their way from the acts rather than from the drag, because a browser hands a target the data only once it lands.
 const carriedMailType = 'application/x-mailfathom-message';
 
-// What each direction of a swipe shows behind the row it is carrying, which is the design project's own: the act the
+// What each direction of a swipe shows behind the row it is carrying, which is the design's own: the act the
 // finger has asked for, named and drawn, against the edge it is uncovering. Filing takes its name and its symbol from
 // `mailboxActs/drawnActs.ts` rather than from a second table here, so a swipe says what the row's menu and the toolbar
 // say; answering is not one of the five acts and names its own.
@@ -250,13 +250,13 @@ export function MessageRow({
     // sees is a row travelling and fading without ever changing colour. The leaving stays on the row because that is
     // where it is reported from — `onAnimationEnd` below reads the row's own animation and nothing inside it.
     //
-    // Nothing lands on the row while it goes, which is the design project's own: a row already out of the folder is
+    // Nothing lands on the row while it goes, which is the design's own: a row already out of the folder is
     // not a row to open, and the half-second it is still drawn for is exactly long enough to be clicked on by
     // accident.
     const wash = !acting?.leaves ? null : acting.act === 'delete' ? 'animate-row-deleted' : 'animate-row-filed';
     const going = wash === null ? null : 'pointer-events-none animate-row-going';
 
-    // Every row a drag is carrying is drawn faded for as long as it lasts, which is the design project's own — the
+    // Every row a drag is carrying is drawn faded for as long as it lasts, which is the design's own — the
     // selection travelling with one row it was started on says so on each of them rather than only on that one.
     const carried = acts.carried.some((message) => message.storedEmailId === email.id);
 
@@ -363,7 +363,7 @@ export function MessageRow({
             // One animation at most, and going wins over both of the others: a row on its way out of the folder is not
             // also arriving in it or changing in place. Between those two the arrival wins, because a row that has only
             // just been drawn has nothing to have changed from, so washing it as well would be marking it against a
-            // version of itself the reader never saw. All three are the design project's, and `styles.css` holds why
+            // version of itself the reader never saw. All three are the design's, and `styles.css` holds why
             // neither the arrival nor the going here carries the height a flowing list's does.
             className={`relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row ${
                 going ?? (arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : '')
@@ -375,7 +375,7 @@ export function MessageRow({
                 // nothing here is reachable by a gesture alone — the same two acts are on the row's own menu and in
                 // the toolbar, which is where a keyboard and a screen reader meet them.
                 //
-                // Faint until the threshold is crossed and full once it is, which is how the design project says the
+                // Faint until the threshold is crossed and full once it is, which is how the design says the
                 // finger has gone far enough. It draws that partly by thickening the symbol's stroke, which a set of
                 // committed outlines has no equivalent for, so both the symbol and the word answer to the one signal
                 // this client can draw.
@@ -393,7 +393,7 @@ export function MessageRow({
 
             <div
                 // The row that is open, and the rows picked out for a question, are marked at the edge rather than by
-                // a ring around them, which is the design project's mark and keeps the row's own lines where they
+                // a ring around them, which is the design's mark and keeps the row's own lines where they
                 // were.
                 className={`flex h-full cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-s-4 ps-2.5 pe-3.5 ${
                     wash ?? ''
@@ -422,7 +422,7 @@ export function MessageRow({
 
                     <MessageMarkers email={email} flagged={flagged} />
 
-                    {/* Unread, and the whole of what says so. The design project draws the mark here — at the end of
+                    {/* Unread, and the whole of what says so. The design draws the mark here — at the end of
                         the marks, between the flag and the time, rather than ahead of the avatar, where it would inset
                         every unread row a little further than every read one, which is the one thing a column that has
                         to scan cannot afford — and draws the name and the subject of a read row in the same weight and
@@ -436,7 +436,7 @@ export function MessageRow({
                     ) : null}
 
                     {/* How long the correspondence is, drawn where it is longer than the one message. The design
-                        project puts it between the unread mark and the time and draws nothing at all for a message
+                        puts it between the unread mark and the time and draws nothing at all for a message
                         standing alone, so the pill says this row stands for an exchange rather than repeating what
                         every row already is. The number is the deployment's count over the whole conversation — a
                         client counting the rows it holds would answer differently depending on where the page was
@@ -454,7 +454,7 @@ export function MessageRow({
                         </span>
                     ) : null}
 
-                    {/* What MailFathom read from this message, opened from the row the design project draws it on and
+                    {/* What MailFathom read from this message, opened from the row the design draws it on and
                         offered only where there is a reading to open. It is a mark rather than a control, and that is
                         an accessibility obligation rather than a shortcut: a row is an `option` of a listbox and holds
                         no focusable descendant, so a button here would take the keyboard path off the list. The

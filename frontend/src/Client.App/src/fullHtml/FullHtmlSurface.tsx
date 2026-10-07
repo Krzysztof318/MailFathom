@@ -27,7 +27,7 @@ import { MessageMarkupFrame } from '../messageBody/MessageMarkupFrame';
 
 // The second surface ADR 0024 takes: what the sender actually sent, drawn away from the reading pane for the reader
 // whose message reduced badly. **It composes what stands in it and never where it stands** — the head the design
-// project draws, the frame beneath it, and the footer that says what is actually holding each promise. Where it is
+// draws, the frame beneath it, and the footer that says what is actually holding each promise. Where it is
 // drawn is the composition root's: a tab of its own where somebody works in tabs, and `mailSpace/SurfaceWindow.tsx`
 // over the message where they do not. So nothing here opens, closes, or traps anything; what it is handed is the way
 // out of wherever it was put, and it calls that.
@@ -63,7 +63,7 @@ const truncationNotes: Readonly<Record<MailBodyTruncation, MessageKey | null>> =
     InlineImageOctetLimit: 'fullHtml.picturesTruncated',
 };
 
-// What the sender's own markup stands as while it is being read, which is the design project's own shape for this
+// What the sender's own markup stands as while it is being read, which is the design's own shape for this
 // surface rather than the message column's: a heading and its line, a paragraph, the block a picture occupies, and
 // the two lines after it. A document is what a reader opened this surface for, so the wait is drawn as one.
 const waitingMarkupLines: readonly SkeletonLine[] = [

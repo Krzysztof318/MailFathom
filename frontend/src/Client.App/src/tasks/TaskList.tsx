@@ -14,10 +14,10 @@ import { TaskRow } from './TaskRow';
 import { TaskRowMenu } from './TaskRowMenu';
 import { groupedTasks, type TaskGroupName } from './taskGrouping';
 
-// The list the design project draws down the middle of the Tasks screen: work grouped by when it is due, each heading
+// The list the design draws down the middle of the Tasks screen: work grouped by when it is due, each heading
 // carrying how much stands under it.
 //
-// **A page is asked for from the scroll that reaches the end of what is read**, which is the design project's own
+// **A page is asked for from the scroll that reaches the end of what is read**, which is the design's own
 // scrolling rather than a control at the foot. The wait for it is drawn under the rows instead of replacing them,
 // because a reader who has scrolled to the end of what is read has not left what they were reading.
 //

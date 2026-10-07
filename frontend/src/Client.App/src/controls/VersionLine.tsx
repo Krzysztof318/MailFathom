@@ -4,12 +4,12 @@
 
 import { useLocalization } from '../localization/useLocalization';
 
-// What is running, drawn in the two places the design project puts it: the foot of the sign-in form, and the foot of
+// What is running, drawn in the two places the design puts it: the foot of the sign-in form, and the foot of
 // the settings screen. It is one component rather than a line written twice because the two say the same thing under
 // the same rule — the deployment's version stands beside the client's once the deployment has answered, and the
 // client's own stands alone before that, which is the only version anything on this machine knows.
 //
-// The product's name is part of it for the same reason the design project draws it there: a version with nothing in
+// The product's name is part of it for the same reason the design draws it there: a version with nothing in
 // front of it is a number, and the foot of a screen is where somebody reads what they are running rather than what
 // this particular pane is.
 //

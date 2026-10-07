@@ -7,7 +7,7 @@ import { useLocalization } from '../localization/useLocalization';
 
 // What Discover shows before anybody has asked anything: three questions somebody can press instead of typing one.
 //
-// **Nothing here runs on its own.** The design project also draws a greeting, a briefing of the day written by the model
+// **Nothing here runs on its own.** The design also draws a greeting, a briefing of the day written by the model
 // and a list of what needs this person today — all of it derived before anybody asked, which is mail read on nobody's
 // request and provider spend nobody authorized. #1174 defers that as a question about unattended work, so this screen
 // draws the part of the idle state that costs nothing until it is pressed.

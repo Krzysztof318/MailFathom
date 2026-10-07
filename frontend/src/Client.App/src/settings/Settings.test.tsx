@@ -488,7 +488,7 @@ describe('Settings', () => {
         expect(screen.getByRole('group', { name: 'Language' })).toBeDefined();
     });
 
-    it('opens on the person rather than on the client, which is the order the design project puts the two in', () => {
+    it('opens on the person rather than on the client, which is the order the design puts the two in', () => {
         renderSettings();
 
         expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Profile');

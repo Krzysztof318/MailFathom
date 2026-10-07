@@ -85,7 +85,7 @@ function theWindowBecomes(pixels: number): void {
     });
 }
 
-// The four widths the design project frames its compositions at, named here so a test says which composition it is
+// The four widths the design frames its compositions at, named here so a test says which composition it is
 // about rather than repeating a number.
 const phone = 390;
 const fold = 884;
@@ -593,7 +593,7 @@ describe('MailSpace, narrow', () => {
     });
 });
 
-// The four compositions the design project frames, each at the width it frames it at. Three separate questions decide
+// The four compositions the design frames, each at the width it frames it at. Three separate questions decide
 // them rather than one asked three ways, so the fold and the tablet are stated as cases of their own: both carry two
 // panes and keep the mailboxes behind a control, which is neither the phone's composition nor the desktop's.
 describe('MailSpace, in the four compositions', () => {

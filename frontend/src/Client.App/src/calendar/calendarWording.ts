@@ -13,7 +13,7 @@ import { addDays, daysOf, type CalendarSpan, type CalendarView } from './calenda
 // is a *day* the calendar computed rather than an instant the deployment sent, and a day read as an instant is the
 // defect that puts a reader west of Greenwich on the wrong date.
 
-/** The month and the year a view is anchored in, which is the heading the design project draws over every view. */
+/** The month and the year a view is anchored in, which is the heading the design draws over every view. */
 export function wordMonth(anchor: Date, locale: Locale): string {
     return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
 }
@@ -44,7 +44,7 @@ export function wordDayOfMonth(day: Date, locale: Locale): string {
     return new Intl.NumberFormat(locale).format(day.getDate());
 }
 
-/** The short weekday the design project draws over a column and over a month grid. */
+/** The short weekday the design draws over a column and over a month grid. */
 export function wordWeekday(day: Date, locale: Locale): string {
     return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(day);
 }

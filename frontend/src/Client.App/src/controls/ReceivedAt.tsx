@@ -7,7 +7,7 @@ import { wordRecentInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadingZone } from '../localization/useReadingZone';
 
-// The instant a message was recorded, as the design project words it on a row: the time alone for today, the word for
+// The instant a message was recorded, as the design words it on a row: the time alone for today, the word for
 // yesterday, and the day and month for anything older. The clock is read once, when the row is first drawn, because a
 // render is pure and the clock is not — so a row that stays on the screen across midnight words yesterday as today
 // until it is drawn again, which a windowed list does for every row it scrolls back to.

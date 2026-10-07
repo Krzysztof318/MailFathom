@@ -7,7 +7,7 @@
 // beside whichever surface reached for them first — a client where a finger has to travel further on a row than on a
 // card has two gesture vocabularies, and nobody can learn the second one.
 //
-// The numbers are the design project's own, taken from the gesture it draws on a message row, which is the surface
+// The numbers are the design's own, taken from the gesture it draws on a message row, which is the surface
 // that has all four of them. Nothing here is a dismissal or an archive: it is arithmetic over two distances — no
 // element, no event, no timer — so a surface reads its own pointer, asks this what the travel so far amounts to, and
 // decides for itself what that means.

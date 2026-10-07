@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 import type { IconName } from './icons';
 import { controlShapes, labelledShape, symbolShown, type ControlShape } from './controlShapes';
 
-// A control that does something, in the shapes the design project draws one. It is `PlannedControl`'s counterpart and
+// A control that does something, in the shapes the design draws one. It is `PlannedControl`'s counterpart and
 // the two share the shape table rather than a resemblance: what a reader sees when something becomes real is the same
 // button gaining an action, not a second button that looks nearly like the first.
 //

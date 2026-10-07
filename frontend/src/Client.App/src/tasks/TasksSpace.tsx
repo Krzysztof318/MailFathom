@@ -39,7 +39,7 @@ import { groupedTasks } from './taskGrouping';
 import { useTasks } from './useTasks';
 import { useTodayCalendar } from './useTodayCalendar';
 
-// The Tasks space as the design project composes it: the grouped list down the middle, the day's own calendar and the
+// The Tasks space as the design composes it: the grouped list down the middle, the day's own calendar and the
 // day's capacity beside it, and the acts that change the list held here rather than in any of them.
 //
 // **The sidebar stands beside the list where there is room and under it where there is not.** It is never dropped: a

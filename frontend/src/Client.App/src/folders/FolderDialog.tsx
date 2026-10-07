@@ -22,7 +22,7 @@ import {
     type FolderDraftRefusal,
 } from './folderDraft';
 
-// Making a folder and editing one, which the design project draws as a single dialog in two modes: the title and the
+// Making a folder and editing one, which the design draws as a single dialog in two modes: the title and the
 // button change, and nothing else does. It is one component for that reason — a second dialog for the edit is how a
 // client comes to have two ideas of what a folder is — and it is a dialog rather than a confirmation because what it
 // takes is values rather than an answer.

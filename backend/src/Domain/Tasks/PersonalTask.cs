@@ -35,7 +35,7 @@ public sealed record PersonalTask
 
     /// <summary>The hour on the due day a task's reminders are measured back from, in the offset the task states.</summary>
     /// <remarks>
-    /// The design project settles the hour, and it is the same nine o'clock an all-day calendar event is announced
+    /// The design settles the hour, and it is the same nine o'clock an all-day calendar event is announced
     /// from: a person who wrote down a day never chose midnight, and a reminder an hour before one would arrive in
     /// the night before anybody is awake to be told about it.
     /// </remarks>

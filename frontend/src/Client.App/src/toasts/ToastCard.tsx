@@ -15,7 +15,7 @@ import { toastLeaving, type StandingToast, type ToastAction, type ToastKind } fr
 // close control that is on every card in every composition. The bar along the bottom edge is the lifetime running out,
 // which is why the toast that is still following an operation has none — nothing is running out for it.
 //
-// Two ways to get rid of one, and both are here because both have to be. The close control is the design project's and
+// Two ways to get rid of one, and both are here because both have to be. The close control is the design's and
 // it never gives way to the gesture: a card whose only dismissal is a swipe is a card a mouse and a keyboard cannot
 // reach. The swipe is beside it where a finger is what is being used, and it is the same threshold and the same
 // vertical cancellation the rest of the client's swipes answer to, stated once in `controls/swipeAcross.ts`.
@@ -33,7 +33,7 @@ interface ToastMark {
 }
 
 // A lookup declared once rather than a chain inside the markup, exhaustive by its own type, so the six kinds the
-// design project draws are one table a reader sees the whole of. Colour reaches the symbol and the bar and nothing
+// design draws are one table a reader sees the whole of. Colour reaches the symbol and the bar and nothing
 // else: a card that took the colour of what it says would be six cards rather than one surface.
 const toastMarks: Readonly<Record<ToastKind | 'running', ToastMark>> = {
     neutral: { icon: 'info', tint: 'bg-hover text-text-soft', bar: 'bg-line-strong', said: 'toast.neutral' },
@@ -194,7 +194,7 @@ export function ToastCard({
                         type="button"
                         className="mt-1.25 self-start rounded-lg border border-line-strong px-3.25 py-1.5 text-base font-semibold text-text transition hover:bg-hover"
                         onClick={() => {
-                            // The card goes as the action is taken, which is the design project's own behaviour and
+                            // The card goes as the action is taken, which is the design's own behaviour and
                             // the honest one: a toast still offering to undo something already undone is a control
                             // somebody presses twice.
                             take(action);

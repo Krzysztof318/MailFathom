@@ -14,7 +14,7 @@ import type { ToastKind } from '../toasts/useToasts';
 // The service says which kind a notification is and nothing about how it looks: the symbol, the tint, and the weight a
 // toast is raised at are the application's, which is why they are here rather than beside the wire.
 
-/** The symbol and the tint a kind is drawn with, which is the design project's own pairing. */
+/** The symbol and the tint a kind is drawn with, which is the design's own pairing. */
 export interface NotificationTone {
     readonly icon: IconName;
 

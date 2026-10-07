@@ -14,7 +14,7 @@ import { useLocalization } from '../localization/useLocalization';
 // the person typing it, which is not a field on this form and never could be: the surface reads the origin off who is
 // writing rather than off what they send.
 //
-// **Two fields rather than the four the design project draws.** A name and an address are what a contact record holds
+// **Two fields rather than the four the design draws.** A name and an address are what a contact record holds
 // on this deployment; a company and a role are not fields of it, so a form offering them would be asking for values no
 // request could carry and no screen could ever draw back. That is a correction owed to the design rather than a pair
 // of inputs to add here.

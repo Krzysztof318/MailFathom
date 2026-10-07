@@ -4,7 +4,7 @@
 
 import { mailboxMarkHue } from './mailboxRamp';
 
-// The mark that tells one mailbox from the next, which the design project draws in two places: in front of a group in
+// The mark that tells one mailbox from the next, which the design draws in two places: in front of a group in
 // the folder tree, and beside each address in the account menu. It is shared rather than drawn twice because the whole
 // of its meaning is that the same mailbox carries the same colour wherever it appears — two implementations would be
 // two mailboxes as far as a reader is concerned.

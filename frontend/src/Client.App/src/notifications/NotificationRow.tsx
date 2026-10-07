@@ -14,7 +14,7 @@ import { wordNotificationAge } from './notificationAge';
 import { notificationKindLabels, notificationTones } from './notificationKinds';
 import { wordNotification } from './notificationWords';
 
-// One thing that happened, as the design project draws it: the kind's own symbol and tint, the headline — heavier and
+// One thing that happened, as the design draws it: the kind's own symbol and tint, the headline — heavier and
 // darker while it is unread — how long ago it was, what it says, where it came from, the unread mark, and the control
 // that changes the read state without opening anything.
 //
@@ -135,7 +135,7 @@ export function NotificationRow({
 
                 <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                     <span className="flex items-baseline gap-2.25">
-                        {/* Unread is weight and colour, which is how the design project draws it, and a word for a
+                        {/* Unread is weight and colour, which is how the design draws it, and a word for a
                             reader who is looking at neither. */}
                         <span
                             className={`min-w-0 flex-1 text-md text-pretty ${

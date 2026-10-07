@@ -6,7 +6,7 @@ import type { MailEnrichmentMark } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 import { readingNames } from './messageReadings';
 
-// What MailFathom made of a message, on the row that stands for it. It is the design project's own line: a small mark
+// What MailFathom made of a message, on the row that stands for it. It is the design's own line: a small mark
 // reading `AI` and then one sentence, clipped where it does not fit, in the line the row's height already reserves.
 //
 // **It never displaces the mail.** Who wrote, what about, and when are the two lines above it and are untouched by

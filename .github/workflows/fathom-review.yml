@@ -1054,31 +1054,29 @@ jobs:
             | jq -s --argjson limit "$file_limit" '.[0:$limit]' \
             > "$REVIEW_DIRECTORY/files.json"
 
-          # The one class of changed file a review has nothing to say about. `design/files/` is the
-          # design project's screen sources and its generated runtime copied byte for byte, and
-          # `scripts/design-mirror.sh record` checks each of them against the size the project
-          # states — so nobody here wrote a line of them, an edit to one is caught by that check
-          # rather than by a reader's judgement, and a single artboard is more added lines than a
-          # large change. Left in, they would take groups of the reader matrix, spend the coverage
-          # ledger on files the ledger cannot mean anything about, and push the files somebody did
-          # write past the ceiling above.
+          # The one class of changed file a review has nothing to say about. `design/runtime/` holds
+          # the generated runtime the design's artboards boot on — one minified bundle a design tool
+          # wrote, which nobody here wrote a line of and which is more added lines than a large
+          # change. Left in, it would take a group of the reader matrix, spend the coverage ledger on
+          # a file the ledger cannot mean anything about, and push the files somebody did write past
+          # the ceiling above.
           #
           # It is dropped here rather than filtered in each reader, so one decision reaches the
           # groups, the anchors, the head content and the coverage at once. Everything else under
-          # `design/` stays: the manifest, the state inventory, the pairing and the page are written
-          # in this repository and are read like anything else. The count joins the truncation notes
-          # because a reader of the review has to know the difference between a file nobody looked
-          # at and a file nobody was meant to.
-          mirrored_design="$(jq 'map(select(.filename | startswith("design/files/"))) | length' \
+          # `design/` stays: the artboards, their data, logic and styles, the state inventory and the
+          # pairing are written in this repository and are read like anything else. The count joins
+          # the truncation notes because a reader of the review has to know the difference between a
+          # file nobody looked at and a file nobody was meant to.
+          design_runtime="$(jq 'map(select(.filename | startswith("design/runtime/"))) | length' \
             "$REVIEW_DIRECTORY/files.json")"
 
-          if (( mirrored_design > 0 )); then
-            jq 'map(select(.filename | startswith("design/files/") | not))' \
+          if (( design_runtime > 0 )); then
+            jq 'map(select(.filename | startswith("design/runtime/") | not))' \
               "$REVIEW_DIRECTORY/files.json" > "$REVIEW_DIRECTORY/files.reviewable.json"
             mv "$REVIEW_DIRECTORY/files.reviewable.json" "$REVIEW_DIRECTORY/files.json"
 
-            printf '%s mirrored design sources under design/files/ are not reviewed: they are the design project copied byte for byte, and nothing in this repository writes them.\n' \
-              "$mirrored_design" >> "$REVIEW_DIRECTORY/truncation.txt"
+            printf '%s generated design runtime files under design/runtime/ are not reviewed: a design tool wrote them, and nothing in this repository writes them.\n' \
+              "$design_runtime" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           # The second class, dropped for a reason of its own rather than by widening the one above.
@@ -1374,13 +1372,13 @@ jobs:
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
-          # The mirrored design sources and the generated migrations dropped above are not files the
+          # The generated design runtime and the generated migrations dropped above are not files the
           # ceiling cut, and each already has a note of its own saying where it went. Counting them
-          # here would report a truncation that did not happen on every pull request that refreshes
-          # the mirror or adds a migration.
-          if (( changed_files - mirrored_design - migrations > collected_files )); then
+          # here would report a truncation that did not happen on every pull request that replaces
+          # the runtime or adds a migration.
+          if (( changed_files - design_runtime - migrations > collected_files )); then
             printf 'The pull request changes %s files and this review covers the first %s.\n' \
-              "$(( changed_files - mirrored_design - migrations ))" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
+              "$(( changed_files - design_runtime - migrations ))" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."

@@ -72,7 +72,7 @@ export interface ClientPreferencesInForce {
     /**
      * Whether the folder tree carries the standing views of what a derivation read in the mail.
      *
-     * Unset reads as on, which is the tree the design project draws: the section is one somebody turns off rather than
+     * Unset reads as on, which is the tree the design draws: the section is one somebody turns off rather than
      * one they go looking for, and a deployment deriving nothing answers each view as a folder narrowed to no mail.
      */
     readonly aiFiltersShown: boolean;
@@ -81,7 +81,7 @@ export interface ClientPreferencesInForce {
      * How long a notification stands before it takes itself away, in whole seconds.
      *
      * It is how long somebody is given to read what just happened, and — for the one act that offers it — how long the
-     * way back out of that act stays open. Unset reads as the design project's own five seconds.
+     * way back out of that act stays open. Unset reads as the design's own five seconds.
      */
     readonly notificationSeconds: number;
 

@@ -19,7 +19,7 @@ import type { MessageKey } from '../../localization/en';
 
 // What a block says about its own honesty, in one place. Every renderer in the catalogue reads it, so a verdict that
 // meant one thing on an answer and another on a list of messages is exactly what this exists to stop —
-// the design project draws one legend for the whole catalogue, and a legend is a promise that the chip means the same
+// the design draws one legend for the whole catalogue, and a legend is a promise that the chip means the same
 // thing wherever it appears.
 //
 // Every value here is a closed set the contract already carries, so each table is exhaustive by its own type: a member
@@ -78,7 +78,7 @@ export const supportVerdicts: Readonly<Record<BlockSupport, SupportVerdict>> = {
 /**
  * What each confidence band is called and drawn as.
  *
- * The design project draws the high band and no other, so the two beneath it are drawn in the shape it gives that one:
+ * The design draws the high band and no other, so the two beneath it are drawn in the shape it gives that one:
  * a chip in the same place, tinted by what the band actually says. Moderate is neutral rather than warned — a step of
  * inference somebody may want to check is not a defect — and low carries the warning tint, because the best reading of
  * partial sources is exactly the answer worth looking behind.
@@ -91,7 +91,7 @@ export const confidenceBands: Readonly<
     Low: { label: 'answer.confidenceLow', tint: warned },
 };
 
-/** What a source is, said as the design project's own two kinds: a message, or a file that came with one. */
+/** What a source is, said as the design's own two kinds: a message, or a file that came with one. */
 export const sourceKinds: Readonly<Record<CitedSourceKind, { readonly label: MessageKey; readonly icon: IconName }>> = {
     // A passage is part of a message rather than a third kind of thing, and the design names two kinds of source. So a
     // fragment is drawn as the message it was cut from, which is also where following it takes somebody.

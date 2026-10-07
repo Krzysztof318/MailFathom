@@ -6,7 +6,7 @@ import { useEffect, useRef, type MouseEvent, type PointerEvent } from 'react';
 import type { MenuPoint } from './menuPlacement';
 
 // The two ways a row is asked what it offers: the pointer's own menu gesture, and a finger held on it. They live here
-// rather than beside whichever list reached for one first, because the design project answers a press with a menu on
+// rather than beside whichever list reached for one first, because the design answers a press with a menu on
 // seven of its lists — and a client where a press has to be held a little longer on tasks than on mail has two gesture
 // vocabularies, and nobody can learn the second one.
 //
@@ -14,7 +14,7 @@ import type { MenuPoint } from './menuPlacement';
 // screen on a desktop gets the press and a mouse on a tablet gets its own menu gesture. A mouse held down over a row
 // opens nothing at all, which is what having a second button is for.
 //
-// The numbers are the design project's own, and the drift is the one place this differs from the prototype: it cancels
+// The numbers are the design's own, and the drift is the one place this differs from the prototype: it cancels
 // on any movement whatever, which a finger resting on glass cannot satisfy — a browser reports the jitter as movement.
 // So the press survives what a still finger actually does and ends the moment somebody starts scrolling with it.
 
@@ -114,7 +114,7 @@ export function useRowPress(open: ((at: MenuPoint) => void) | undefined): RowPre
             arming.current = window.setTimeout(() => {
                 arming.current = null;
 
-                // Said in the hand as well as drawn, which is how the design project answers a press: the menu appears
+                // Said in the hand as well as drawn, which is how the design answers a press: the menu appears
                 // under the finger that is covering the place it appears in.
                 if (typeof navigator.vibrate === 'function') {
                     navigator.vibrate(pressAcknowledgedFor);

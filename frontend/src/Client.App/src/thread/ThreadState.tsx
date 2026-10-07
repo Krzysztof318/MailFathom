@@ -21,7 +21,7 @@ import { sourceOf, type ThreadStateSource } from './threadStateSources';
 // statement carries the message it rests on, and following one reveals that message in the conversation below rather
 // than opening anything of its own.
 //
-// The design project draws it three ways and the composition decides which, from the width alone:
+// The design draws it three ways and the composition decides which, from the width alone:
 //
 // - **Desktop** — a row of cards above the conversation, each carrying its label, what it says, and its source.
 // - **Tablet and the fold** — the same statements as chips inside the body, tighter and without the source link,
@@ -192,7 +192,7 @@ export function ThreadState({
 }
 
 // The phone composition: one line of it, and the block itself a press away. The line says the first statement because
-// that is what the design project puts there — the block is ordered by aspect, so the first line is what the
+// that is what the design puts there — the block is ordered by aspect, so the first line is what the
 // conversation settled rather than whichever statement happened to be derived first.
 function StateLine({
     entries,
@@ -248,7 +248,7 @@ function StateLine({
     );
 }
 
-// The whole block as a sheet rising from the foot of the window, which is where the design project puts it on a phone.
+// The whole block as a sheet rising from the foot of the window, which is where the design puts it on a phone.
 // It is a `dialog` rather than a panel of its own so that the platform traps focus inside it, answers Escape, and puts
 // focus back on the control that opened it — none of which is worth a second implementation here.
 function StateSheet({
@@ -305,7 +305,7 @@ function StateSheet({
                 }
             }}
         >
-            {/* The handle the design project draws at the head of the sheet, which says a finger can push it away. */}
+            {/* The handle the design draws at the head of the sheet, which says a finger can push it away. */}
             <span aria-hidden="true" className="flex shrink-0 justify-center pb-1">
                 <span className="h-1 w-9.5 rounded-xs bg-line-strong" />
             </span>

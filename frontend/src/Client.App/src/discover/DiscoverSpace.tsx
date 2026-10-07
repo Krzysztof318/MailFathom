@@ -31,7 +31,7 @@ import { useStartedRun } from './useStartedRun';
 // inspector and the follower — so what this owns is the screen they stand on: which question is being answered, the run
 // answering it, and the way back to asking another.
 //
-// **The field stands under the head rather than at the foot**, where the design project draws it on this screen. It is
+// **The field stands under the head rather than at the foot**, where the design draws it on this screen. It is
 // this screen's own field rather than one the frame shares with the mail, because the design gives Discover a question
 // of its own: what somebody typed under a correspondence is about that correspondence and never arrives here.
 //

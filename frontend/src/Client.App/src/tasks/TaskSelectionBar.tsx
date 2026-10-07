@@ -8,7 +8,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 
-// What stands where the toolbar stands while tasks are picked out, which is the design project's own bar: how many are
+// What stands where the toolbar stands while tasks are picked out, which is the design's own bar: how many are
 // selected, the three acts over the whole of them, and the way out.
 //
 // It replaces the toolbar rather than standing beside it, for the reason `mailSpace/SelectionBar.tsx` and
@@ -20,7 +20,7 @@ import { useWideWorkspace } from '../shell/useWideWorkspace';
 // makes picking tasks out safe to do by accident.
 //
 // The design writes the first act's label in Polish where the rest of that prototype is English, which is a slip in
-// the project rather than a choice: the word here is the one the row's own menu uses for the same act, in the
+// the design rather than a choice: the word here is the one the row's own menu uses for the same act, in the
 // catalogue both read from.
 
 // How many tasks are picked out, in the forms a language has for the noun. The mail list and the address book count
@@ -59,7 +59,7 @@ export function TaskSelectionBar({
     const wide = useWideWorkspace();
 
     // Words beside the symbols where the composition has room for them, and the symbols alone where it has not, which
-    // is how the design project draws this bar on a phone. The name is on the control either way.
+    // is how the design draws this bar on a phone. The name is on the control either way.
     const shape = wide ? 'selected' : 'selectedSymbol';
 
     return (

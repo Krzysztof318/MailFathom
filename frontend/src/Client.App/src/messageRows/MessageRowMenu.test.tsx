@@ -93,7 +93,7 @@ function drawn(): (string | null)[] {
 }
 
 describe('MessageRowMenu', () => {
-    it('draws the row’s acts in the order the design project draws them', () => {
+    it('draws the row’s acts in the order the design draws them', () => {
         menuUnder();
 
         expect(drawn()).toStrictEqual([

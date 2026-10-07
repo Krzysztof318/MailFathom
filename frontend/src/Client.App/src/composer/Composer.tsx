@@ -41,7 +41,7 @@ import { useDraftAtDeployment, type AttachedFile, type DraftStanding } from './u
 import { WrittenMessage } from './WrittenMessage';
 import type { WrittenNode } from './writtenText';
 
-// Writing a message, as the design project composes it: one model in two shapes, decided by the width the client has
+// Writing a message, as the design composes it: one model in two shapes, decided by the width the client has
 // rather than by which head it runs on. Wide, it is the reading column — what is being written stands where what is
 // being read stands, with the mailboxes and the list still beside it, so a reply is written against a conversation one
 // press away rather than behind a window. Narrow, it is the screen, because a column that has to hold a header, four
@@ -424,7 +424,7 @@ export function Composer({
         return holder === null || holder === document.body || (frame.current?.contains(holder) ?? false);
     }
 
-    // Sending, said where the design project says it: a toast stands over whatever the person turned to next and
+    // Sending, said where the design says it: a toast stands over whatever the person turned to next and
     // follows the send until the deployment has answered it. **The composer closes once the deployment has the
     // message** — queued, or taken back into the drafts folder by a stop — rather than on the press, which is one round
     // trip later on a deployment that answers and the whole difference on one that refuses. A send can fail before it
@@ -975,7 +975,7 @@ function AttachedFiles({
 // saving, attaching, and what refused either. Nothing waits in silence, and every refusal names what would change it.
 //
 // **The send is not among them.** What became of a message somebody sent is said in a toast, which is where the design
-// project says it: it stands over whatever they turned to next rather than at the foot of a window they are finished
+// says it: it stands over whatever they turned to next rather than at the foot of a window they are finished
 // with. A refusal is the one the toast and this line both carry, and deliberately — the toast is what reaches somebody
 // who has looked away, and the line is what is still there when they come back to the words the deployment refused.
 function WhatIsHappening({ standing, online }: { readonly standing: DraftStanding; readonly online: boolean }) {

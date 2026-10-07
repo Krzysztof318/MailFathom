@@ -5,7 +5,7 @@
 import { useLocalization } from '../localization/useLocalization';
 import { ReceivedAt } from '../controls/ReceivedAt';
 
-// What MailFathom has made of a relationship, which is the card the design project draws at the head of a person's
+// What MailFathom has made of a relationship, which is the card the design draws at the head of a person's
 // page: the reading itself, the action it proposes, the patterns it noticed, and the figures beside them.
 //
 // **The reading is not built yet.** It is authored by the run that gives an opened contact a relationship note and a

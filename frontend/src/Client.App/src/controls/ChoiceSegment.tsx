@@ -14,7 +14,7 @@ import { segmentShapes, type SegmentShape } from './segmentShapes';
 // the label naming it carries both the accent that says which is chosen and the ring that says which has focus.
 //
 // What stands around the segments — the `fieldset`, its legend, and the pill they sit in — is the caller's, because
-// the design project draws that differently in each of the five places while the segment itself is one thing.
+// the design draws that differently in each of the five places while the segment itself is one thing.
 
 export function ChoiceSegment({
     shape,

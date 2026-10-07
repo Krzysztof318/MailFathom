@@ -21,7 +21,7 @@ import { citationOrder } from './citationOrder';
 // **A relationship is read out of the mail rather than known**, which is why every row carries the sources it was read
 // from. The contract gives each entry its own citations — the block's list is what the block as a whole rests on — so a
 // reader asking why the run thinks somebody is the person waiting for a reply has the messages that say so, at the row
-// that says it. The design project's own row draws no such chip, and this is the one element added to it: without the
+// that says it. The design's own row draws no such chip, and this is the one element added to it: without the
 // citations there is nowhere to check an assertion about a person, which is the promise the block exists to keep.
 //
 // **A row is not a control.** The design draws it as one because its prototype opens the person, and nothing on this

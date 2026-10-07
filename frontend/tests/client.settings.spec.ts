@@ -150,7 +150,7 @@ test('closes the settings screen on Escape, handing focus back to the row that o
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
 });
 
-// The two compositions the design project draws the settings surface in, and the one assertion only a browser can
+// The two compositions the design draws the settings surface in, and the one assertion only a browser can
 // make about them: jsdom computes no geometry, so what a unit test can prove is that the surface is one component
 // with one set of controls, and what is left is the composition itself.
 test('draws the settings surface as a card over the workspace in a wide window', async ({ page }) => {
@@ -162,8 +162,8 @@ test('draws the settings surface as a card over the workspace in a wide window',
 
     // The card's own measurements rather than merely "narrower than the window": a dialog the width utility failed to
     // reach would still be a few pixels off the viewport's width once a scrollbar is counted, so bounding it below the
-    // window would pass for exactly the regression this test exists to catch. Both numbers are the tokens the design
-    // project's card is drawn at, in pixels at the root size this suite runs under — 28.75rem, and 78% of a 720-pixel
+    // window would pass for exactly the regression this test exists to catch. Both numbers are the tokens the design's
+    // card is drawn at, in pixels at the root size this suite runs under — 28.75rem, and 78% of a 720-pixel
     // window, which is the lower of that token's two terms here.
     expect(panel?.width).toBeCloseTo(460, 0);
     expect(panel?.height).toBeCloseTo(0.78 * wideWindow.height, 0);

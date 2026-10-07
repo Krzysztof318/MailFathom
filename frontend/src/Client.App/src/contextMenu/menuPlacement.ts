@@ -7,7 +7,7 @@
 // the one thing that can go wrong here is invisible in a diff: a menu opened near the foot of a window is drawn off the
 // edge of it, and the acts nobody can reach are the ones furthest down the list.
 
-/** How close to the edge of the space it stands in a menu may be drawn. The design project's own margin. */
+/** How close to the edge of the space it stands in a menu may be drawn. The design's own margin. */
 export const menuEdge = 10;
 
 /** A point in the space a menu is placed in, measured from that space's own start corner. */

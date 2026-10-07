@@ -144,7 +144,7 @@ export function AgentSpace({
     const [composerFocusAsked, setComposerFocusAsked] = useState(0);
 
     // What the next question is asked about. It stays through the conversation and across switching to another until
-    // somebody clears it or another space hands something else over, which is how the design project holds it: the
+    // somebody clears it or another space hands something else over, which is how the design holds it: the
     // chip is visible above the field, so what a question is scoped to is never something the reader cannot see.
     const [context, setContext] = useState<AgentHandOver | null>(null);
 

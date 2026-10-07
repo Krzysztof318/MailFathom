@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 // One block standing in the space something that has not arrived will occupy. It is the whole of what a skeleton is
-// made of in this client: the four the design project draws — a folder's list, a message, the full HTML surface, and
+// made of in this client: the four the design draws — a folder's list, a message, the full HTML surface, and
 // an opened attachment — are four arrangements of this one block rather than four ways of drawing a placeholder, which
 // is what § *UI* means by a repeated structure having one shape.
 //
@@ -26,7 +26,7 @@ export function Skeleton({
      * How much of the line it fills, as a percentage.
      *
      * It is a number rather than a utility because it is data: a skeleton reads as words by its lines being ragged,
-     * and the raggedness is a list of lengths the design project chose rather than a size the theme holds.
+     * and the raggedness is a list of lengths the design chose rather than a size the theme holds.
      */
     readonly fills?: number;
 }) {
@@ -43,18 +43,18 @@ export function Skeleton({
  * One line of a block standing where words will be.
  *
  * A line filling nothing is the gap between two paragraphs rather than a line of no length, which is how the design
- * project writes them: a block of even lines reads as a loading bar, and what makes it read as prose is that it is
+ * writes them: a block of even lines reads as a loading bar, and what makes it read as prose is that it is
  * ragged and broken into paragraphs.
  */
 export interface SkeletonLine {
     /** How much of the width this line fills, as a percentage, or `0` where it is a gap. */
     readonly fills: number;
 
-    /** How tall it stands, as the utility the design project's measurement is written in. */
+    /** How tall it stands, as the utility the design's measurement is written in. */
     readonly height: string;
 }
 
-/** A block of lines standing where words will be, which three of the four waits the design project draws are. */
+/** A block of lines standing where words will be, which three of the four waits the design draws are. */
 export function SkeletonLines({
     lines,
     className,

@@ -13,7 +13,7 @@ import { wordMonth, wordSpan } from './calendarWording';
 // Where the reader is in their calendar and how they move: the span they are looking at, the three ways to another
 // one, and which of the four views is drawing it.
 //
-// The week number stands beside the week's own dates because the design project draws it there, and it is arithmetic
+// The week number stands beside the week's own dates because the design draws it there, and it is arithmetic
 // rather than a word `Intl` knows — `calendarSpan.ts` holds it, and the sentence around it is a catalogue entry with a
 // hole, because where a number falls in that sentence is the language's answer.
 

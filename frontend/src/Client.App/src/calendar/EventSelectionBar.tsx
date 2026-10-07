@@ -8,7 +8,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 
-// What stands where the toolbar stands while events are picked out, which is the design project's own bar: how many
+// What stands where the toolbar stands while events are picked out, which is the design's own bar: how many
 // are selected, the acts over the whole of them, and the way out.
 //
 // It replaces the toolbar rather than standing beside it, for the reason the address book's own bar gives: the two

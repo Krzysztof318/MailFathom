@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 // The arithmetic of the two gestures the notification panel is driven by on a phone, apart from the pointers that
-// produce it. Every number here is the design project's own and is stated once, because the two directions are one
+// produce it. Every number here is the design's own and is stated once, because the two directions are one
 // gesture read twice rather than two behaviours: an upward swipe on the bottom navigation pulls the panel up, a
 // downward swipe anywhere on the open panel pushes it away, and both follow the finger with no smoothing, no inertia,
 // and no delay.

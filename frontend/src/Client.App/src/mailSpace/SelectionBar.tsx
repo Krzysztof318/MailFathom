@@ -10,7 +10,7 @@ import { actedMessages, useListedMail } from '../messageList/useListedMail';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useStripFit } from './useStripFit';
 
-// What stands where the toolbar stands while messages are picked out, which is the design project's own bar: how many
+// What stands where the toolbar stands while messages are picked out, which is the design's own bar: how many
 // are selected, the five acts over the whole of them, a way to take the listing in at once, and the way out.
 //
 // It replaces the toolbar rather than standing beside it, because the two answer the same question — *what am I doing

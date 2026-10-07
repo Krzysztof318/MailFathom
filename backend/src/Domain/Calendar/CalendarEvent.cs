@@ -102,7 +102,7 @@ public sealed class CalendarEvent
     /// <see cref="Start" /> for an event that names a clock time, and <see cref="AllDayReminderHour" /> o'clock on the
     /// day it falls for one that does not. Measuring an all-day event from midnight would announce a day at the
     /// instant it begins, which is the middle of the night before anybody is awake to be told about it; the design
-    /// project settles the hour, and the day is read in the offset the event itself carries rather than in any
+    /// settles the hour, and the day is read in the offset the event itself carries rather than in any
     /// timezone this deployment would have to be told about.
     /// </remarks>
     public DateTimeOffset AnchorsRemindersAt => this.IsAllDay

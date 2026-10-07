@@ -19,7 +19,7 @@ import type { AnswerBlockState } from './answerBlocks';
 // block to block without walking every citation inside one, and it carries the block's own name so that landing on it
 // says which block it is.
 
-// The lines a block of prose stands as while it is being composed, which is the design project's own raggedness rather
+// The lines a block of prose stands as while it is being composed, which is the design's own raggedness rather
 // than three bars of one length.
 const waitingLines = [
     { fills: 92, height: 'h-3.25 mb-2' },

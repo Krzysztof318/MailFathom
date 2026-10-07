@@ -9,10 +9,10 @@ import { wordHour } from './calendarWording';
 import { EventEntry } from './EventEntry';
 import type { EventActs } from './eventActs';
 
-// One day down its own hours, which is the view the design project draws for a reader who has stopped on a day rather
+// One day down its own hours, which is the view the design draws for a reader who has stopped on a day rather
 // than scanning a week. It is the one view that works at every width, a single column being what a phone has.
 //
-// **Every hour of the day is drawn rather than the working ones.** The design project's own grid runs from eight to
+// **Every hour of the day is drawn rather than the working ones.** The design's own grid runs from eight to
 // five, which is what its mock data happens to hold; a client that drew only those would put an event at seven in the
 // morning nowhere at all, which is the one thing a calendar may not do. That is a correction owed to the design rather
 // than an hour range to copy.

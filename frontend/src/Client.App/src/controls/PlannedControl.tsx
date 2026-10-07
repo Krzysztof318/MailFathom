@@ -7,7 +7,7 @@ import type { IconName } from './icons';
 import { controlShapes, labelledShape, symbolShown, type ControlShape } from './controlShapes';
 import { useLocalization } from '../localization/useLocalization';
 
-// A control the design project draws that cannot act here. It is present because leaving it out would make the client
+// A control the design draws that cannot act here. It is present because leaving it out would make the client
 // a different product from the one that was designed, and it is inert because drawing it as though it worked would be
 // worse: its name says why it cannot, it refuses activation, and it is drawn at the weight of something that is not
 // there rather than at the weight of an action.

@@ -45,7 +45,7 @@ export interface MoveDestination {
 }
 
 /**
- * The destinations of one account, which is how the design project draws the choice.
+ * The destinations of one account, which is how the design draws the choice.
  *
  * A move stays inside the account the message is in, so exactly one group is offered today; the grouping is what says
  * *which mailbox these folders belong to* rather than a promise that two of them could be offered at once.
